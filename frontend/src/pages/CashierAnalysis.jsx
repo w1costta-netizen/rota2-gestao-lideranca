@@ -35,8 +35,8 @@ export default function CashierAnalysis({ userId }) {
     if (!userId) return;
     setLoading(true);
     setError(null);
-    api.get(`/cashier/scale-operators?user_id=${userId}&day_of_week=${selectedDay}`)
-      .then(setData)
+    api.get(`/schedule/operators?user_id=${userId}&day_of_week=${selectedDay}`)
+      .then(res => setData(res.data))
       .catch(() => setError('Erro ao carregar dados da escala'))
       .finally(() => setLoading(false));
   }, [userId, selectedDay]);

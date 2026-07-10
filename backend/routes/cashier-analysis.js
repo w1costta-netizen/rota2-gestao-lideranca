@@ -9,9 +9,9 @@ const CAIXA_KEYWORDS = [
   'frente caixa','op caixa','operação de caixa','pdv',
 ];
 
-function isCaixa(setor, funcao) {
-  const s = String(setor || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
-  const f = String(funcao || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+function isCaixa(sector, role) {
+  const s = String(sector || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+  const f = String(role   || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
   return CAIXA_KEYWORDS.some(k => s.includes(k) || f.includes(k));
 }
 
@@ -108,31 +108,31 @@ router.get('/scale-operators', async (req, res) => {
 
   let query = supabase
     .from('scale_entries')
-    .select('nome,setor,funcao,inicio,fim,dia_semana,data')
+    .select('employee_name,sector,role,start_time,end_time,day_of_week')
     .in('import_id', importIds);
 
-  if (day_of_week) query = query.eq('dia_semana', day_of_week);
+  if (day_of_week) query = query.eq('day_of_week', day_of_week);
 
   const { data: entries, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
   // filtrar apenas caixa
-  const caixaEntries = (entries || []).filter(e => isCaixa(e.setor, e.funcao));
+  const caixaEntries = (entries || []).filter(e => isCaixa(e.sector, e.role));
 
   // Para cada hora do dia (8–21), contar quantos operadores estão ativos
   const hours = Array.from({ length: 13 }, (_, i) => i + 8); // 8..20
   const result = hours.map(h => {
     const hMin = h * 60;
     const count = caixaEntries.filter(e => {
-      const s = parseTime(e.inicio);
-      const f = parseTime(e.fim);
+      const s = parseTime(e.start_time);
+      const f = parseTime(e.end_time);
       if (s === null || f === null) return false;
       return s <= hMin && f > hMin;
     });
     return {
       hour: h,
       operators: count.length,
-      names: [...new Set(count.map(e => e.nome))],
+      names: [...new Set(count.map(e => e.employee_name))],
     };
   });
 
@@ -169,10 +169,10 @@ router.get('/analysis', async (req, res) => {
   if (importIds.length) {
     const { data: entries } = await supabase
       .from('scale_entries')
-      .select('nome,setor,funcao,inicio,fim,dia_semana')
+      .select('employee_name,sector,role,start_time,end_time,day_of_week')
       .in('import_id', importIds)
-      .eq('dia_semana', day_of_week);
-    scaleEntries = (entries || []).filter(e => isCaixa(e.setor, e.funcao));
+      .eq('day_of_week', day_of_week);
+    scaleEntries = (entries || []).filter(e => isCaixa(e.sector, e.role));
   }
 
   const hours = Array.from({ length: 13 }, (_, i) => i + 8);
@@ -185,8 +185,8 @@ router.get('/analysis', async (req, res) => {
     const needed = avgTickets !== null ? Math.ceil(avgTickets / tp) : null;
 
     const availableOps = scaleEntries.filter(e => {
-      const s = parseTime(e.inicio);
-      const f = parseTime(e.fim);
+      const s = parseTime(e.start_time);
+      const f = parseTime(e.end_time);
       if (s === null || f === null) return false;
       return s <= hMin && f > hMin;
     });
@@ -210,7 +210,7 @@ router.get('/analysis', async (req, res) => {
       cashiers_available: available,
       cashiers_surplus: needed !== null ? available - needed : null,
       status,
-      operators: [...new Set(availableOps.map(e => e.nome))],
+      operators: [...new Set(availableOps.map(e => e.employee_name))],
     };
   });
 

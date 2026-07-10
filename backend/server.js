@@ -12,6 +12,8 @@ app.use('/api/pdf', require('./routes/pdf'));
 app.use('/api/profile', require('./routes/profile'));
 app.use('/api/scale', require('./routes/scale-import'));
 app.use('/api/cashier', require('./routes/cashier-analysis'));
+app.use('/api/team', require('./routes/team'));
+app.use('/api/schedule', require('./routes/schedule'));
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

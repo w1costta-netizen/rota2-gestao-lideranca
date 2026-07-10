@@ -1,12 +1,11 @@
 import React from 'react';
-import { Users, CalendarDays, LayoutGrid, ClipboardList, LogOut, UserCircle, ShoppingCart } from 'lucide-react';
+import { Users, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, UsersRound } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const NAV = [
   { id: 'dashboard', label: 'Dashboard',  icon: LayoutGrid },
-  { id: 'leaders',   label: 'Líderes',    icon: Users },
   { id: 'agenda',    label: 'Agenda',     icon: CalendarDays },
-  { id: 'scale',     label: 'Escala',     icon: ClipboardList },
+  { id: 'nscale',    label: 'Escala',     icon: CalendarRange },
   { id: 'cashier',   label: 'Caixas',     icon: ShoppingCart },
   { id: 'profile',   label: 'Meu Perfil', icon: UserCircle },
 ];
@@ -48,7 +47,7 @@ export default function Sidebar({ page, setPage }) {
         </div>
         <div className="user-info">
           <div className="user-name">{profile?.full_name || 'Usuário'}</div>
-          <div className="user-role">{profile?.company || profile?.role || ''}</div>
+          <div className="user-role">{profile?.sector || profile?.company || ''}</div>
         </div>
         <button className="btn-icon" onClick={signOut} title="Sair" style={{ color:'rgba(255,255,255,.5)' }}>
           <LogOut size={16}/>
