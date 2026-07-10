@@ -254,7 +254,7 @@ function TeamModal({ userId, userSector, onClose }) {
 }
 
 /* ── Página principal ── */
-const ELEVATED_ROLES = ['supervisor', 'gerente geral', 'gerente_geral', 'gerente', 'diretor'];
+const ELEVATED_ROLES = ['supervisor', 'supervisor(a)', 'gerente geral', 'gerente_geral', 'gerente', 'diretor', 'diretor(a)'];
 
 export default function NativeSchedule({ userId, profile }) {
   const now = new Date();
@@ -271,7 +271,7 @@ export default function NativeSchedule({ userId, profile }) {
   const todayMonth = parseInt(today.split('-')[1]);
   const todayYear  = parseInt(today.split('-')[0]);
 
-  const isElevated = ELEVATED_ROLES.includes((profile?.access_level || '').toLowerCase());
+  const isElevated = ELEVATED_ROLES.includes((profile?.role || '').toLowerCase());
   const [allProfiles,    setAllProfiles]    = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(null);
 
