@@ -344,7 +344,6 @@ export default function NativeSchedule({ userId, profile }) {
   };
 
   const reopenSchedule = async () => {
-    if (!window.confirm('Reabrir a escala? O fechamento será desfeito.')) return;
     try {
       await api.delete(`/schedule/submission?user_id=${effectiveUserId}&year=${year}&month=${month}`);
       setSubmission(null);
