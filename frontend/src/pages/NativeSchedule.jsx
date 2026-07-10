@@ -341,9 +341,9 @@ export default function NativeSchedule({ userId, profile }) {
 
     if (!entry) return (
       <td onClick={open} style={{ background:bg, cursor:'pointer', textAlign:'center',
-        verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'4px 1px',
-        opacity: isSun ? .4 : 1 }}>
-        <span style={{ color:'#d1d5db', fontSize:14, fontWeight:700, lineHeight:1 }}>+</span>
+        verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'3px 1px',
+        opacity: isSun ? .35 : 1 }}>
+        <span style={{ color:'#d1d5db', fontSize:13, fontWeight:700 }}>+</span>
       </td>
     );
 
@@ -351,20 +351,21 @@ export default function NativeSchedule({ userId, profile }) {
       const st = STATUS[entry.status] || STATUS.dsr;
       return (
         <td onClick={open} style={{ background:st.bg, cursor:'pointer', textAlign:'center',
-          verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'3px 1px' }}>
-          <span style={{ fontWeight:800, fontSize:9, color:st.color }}>{st.label}</span>
+          verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'2px 1px' }}>
+          <span style={{ fontWeight:800, fontSize:8, color:st.color }}>{st.label}</span>
         </td>
       );
     }
 
+    /* horários na horizontal: 2 colunas × 2 linhas */
     return (
-      <td onClick={open} style={{ background:bg, cursor:'pointer', textAlign:'center',
-        verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'2px 1px' }}>
-        <div style={{ fontSize:9, lineHeight:1.4 }}>
-          <div style={{ fontWeight:700, color:'#1d4ed8' }}>{entry.entrada||'—'}</div>
-          <div style={{ color:'#6b7280' }}>{entry.intervalo||'—'}</div>
-          <div style={{ color:'#6b7280' }}>{entry.retorno_intervalo||'—'}</div>
-          <div style={{ fontWeight:700, color:'#dc2626' }}>{entry.saida||'—'}</div>
+      <td onClick={open} style={{ background:bg, cursor:'pointer',
+        verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'2px 3px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 4px', fontSize:9, lineHeight:1.45 }}>
+          <span style={{ fontWeight:700, color:'#1d4ed8' }}>{entry.entrada||'—'}</span>
+          <span style={{ color:'#6b7280' }}>{entry.intervalo||'—'}</span>
+          <span style={{ color:'#6b7280' }}>{entry.retorno_intervalo||'—'}</span>
+          <span style={{ fontWeight:700, color:'#dc2626' }}>{entry.saida||'—'}</span>
         </div>
       </td>
     );
@@ -374,8 +375,8 @@ export default function NativeSchedule({ userId, profile }) {
   function WeekHeader({ week }) {
     return (
       <tr>
-        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 6px', fontSize:9, fontWeight:700, border:'1px solid #0c6482', width:46 }}>Matr.</th>
-        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 8px', fontSize:10, fontWeight:700, border:'1px solid #0c6482', textAlign:'left', minWidth:120 }}>Nome</th>
+        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 5px', fontSize:9, fontWeight:700, border:'1px solid #0c6482', width:38 }}>Mat.</th>
+        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 8px', fontSize:10, fontWeight:700, border:'1px solid #0c6482', textAlign:'left', width:160 }}>Nome</th>
         {week.map((date, i) => {
           if (!date) return <th key={i} style={{ background:'#374151', border:'1px solid #374151', width:'12%' }}/>;
           const d    = parseInt(date.split('-')[2]);
@@ -402,83 +403,72 @@ export default function NativeSchedule({ userId, profile }) {
 
   return (
     <>
-      {/* Alerta prazo */}
-      {alertDay && (
+      {/* Card — começa imediatamente, sem espaço morto */}
+      <div id="schedule-print" style={{ background:'#fff', color:'#111', borderRadius:10, border:'1px solid #e5e7eb', boxShadow:'0 2px 12px rgba(0,0,0,.08)', overflow:'hidden' }}>
+
+        {/* Barra única: tudo numa linha */}
         <div style={{
-          background: alertUrgent ? '#fee2e2' : '#fef9c3',
-          border:`1px solid ${alertUrgent ? '#fca5a5' : '#fde68a'}`,
-          borderRadius:7, padding:'6px 12px', marginBottom:6,
-          display:'flex', alignItems:'center', gap:8,
+          padding:'5px 10px', borderBottom:'1px solid #e5e7eb',
+          display:'flex', alignItems:'center', gap:10,
+          background:'#f8fafc',
         }}>
-          <AlertCircle size={14} color={alertUrgent ? '#dc2626' : '#92400e'}/>
-          <span style={{ fontWeight:700, fontSize:12, color: alertUrgent ? '#991b1b' : '#92400e' }}>
-            {alertUrgent ? '🚨 HOJE é o prazo!' : `⏰ Faltam ${daysLeft} dia${daysLeft!==1?'s':''}!`}
-            {' '}Escala de {MONTHS_PT[month-1]}/{year} não fechada. Clique em <b>"Fechar Escala"</b> até dia 26.
-          </span>
-        </div>
-      )}
+          {/* Título */}
+          <span style={{ fontWeight:800, fontSize:13, color:'#0f172a', whiteSpace:'nowrap' }}>Escala Mensal</span>
+          <span style={{ color:'#e2e8f0' }}>|</span>
 
-      {/* Confirmação */}
-      {submission && (
-        <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:7, padding:'5px 12px', marginBottom:6, display:'flex', alignItems:'center', gap:8 }}>
-          <CheckCircle size={13} color="#166534"/>
-          <span style={{ fontSize:12, color:'#166534', fontWeight:700 }}>
-            ✅ Escala de {MONTHS_PT[month-1]}/{year} fechada em {new Date(submission.submitted_at).toLocaleDateString('pt-BR')}
-          </span>
-        </div>
-      )}
+          {/* Depto / Gestor */}
+          <span style={{ fontSize:10, color:'#475569', whiteSpace:'nowrap' }}><b>{profile?.sector||'—'}</b> · {profile?.full_name||'—'}</span>
+          <span style={{ color:'#e2e8f0' }}>|</span>
 
-      {/* Barra de ações — compacta */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6, gap:8 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-          <h1 className="page-title" style={{ margin:0, fontSize:16 }}>Escala Mensal</h1>
-          {members.length > 0 && (
-            <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-              <div style={{ width:70, height:5, background:'#e5e7eb', borderRadius:3, overflow:'hidden' }}>
-                <div style={{ width:`${pct}%`, height:'100%', background: pct===100?'#16a34a':'#1d4ed8', borderRadius:3 }}/>
-              </div>
-              <span style={{ fontWeight:700, color: pct===100?'#16a34a':'#1d4ed8', fontSize:11 }}>{pct}%</span>
+          {/* Legenda de cores */}
+          <span style={{ fontSize:9, color:'#1d4ed8', fontWeight:700, whiteSpace:'nowrap' }}>■E</span>
+          <span style={{ fontSize:9, color:'#6b7280', whiteSpace:'nowrap' }}>■I/R</span>
+          <span style={{ fontSize:9, color:'#dc2626', fontWeight:700, whiteSpace:'nowrap' }}>■S</span>
+          <span style={{ fontSize:9, color:'#7c3aed', fontWeight:700, whiteSpace:'nowrap' }}>■26=Prazo</span>
+          <span style={{ color:'#e2e8f0' }}>|</span>
+
+          {/* Progresso */}
+          {members.length > 0 && (<>
+            <div style={{ width:60, height:4, background:'#e5e7eb', borderRadius:2, overflow:'hidden', flexShrink:0 }}>
+              <div style={{ width:`${pct}%`, height:'100%', background: pct===100?'#16a34a':'#1d4ed8' }}/>
             </div>
+            <span style={{ fontSize:10, fontWeight:700, color: pct===100?'#16a34a':'#1d4ed8', whiteSpace:'nowrap' }}>{pct}%</span>
+            <span style={{ color:'#e2e8f0' }}>|</span>
+          </>)}
+
+          {/* Alertas inline */}
+          {alertDay && (
+            <span style={{ fontSize:10, fontWeight:700, color: alertUrgent?'#991b1b':'#92400e', whiteSpace:'nowrap' }}>
+              {alertUrgent ? '🚨 HOJE prazo!' : `⏰ ${daysLeft}d p/ fechar`}
+            </span>
           )}
-        </div>
-        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-          <button className="btn btn-ghost" style={{ padding:'5px 10px', fontSize:12 }} onClick={() => setShowTeam(true)}><Users size={13}/> Time</button>
-          <button className="btn btn-ghost" style={{ padding:'5px 10px', fontSize:12 }} onClick={() => window.print()}><Printer size={13}/> Imprimir</button>
+          {submission && (
+            <span style={{ fontSize:10, fontWeight:700, color:'#166534', whiteSpace:'nowrap' }}>
+              ✅ Fechada {new Date(submission.submitted_at).toLocaleDateString('pt-BR')}
+            </span>
+          )}
+
+          {/* Espaço flexível */}
+          <div style={{ flex:1 }}/>
+
+          {/* Navegação mês */}
+          <button onClick={prevMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:4, cursor:'pointer', padding:'2px 5px', display:'flex', flexShrink:0 }}>
+            <ChevronLeft size={12}/>
+          </button>
+          <span style={{ fontWeight:800, fontSize:12, minWidth:100, textAlign:'center', whiteSpace:'nowrap' }}>{MONTHS_PT[month-1]} {year}</span>
+          <button onClick={nextMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:4, cursor:'pointer', padding:'2px 5px', display:'flex', flexShrink:0 }}>
+            <ChevronRight size={12}/>
+          </button>
+          <span style={{ color:'#e2e8f0' }}>|</span>
+
+          {/* Ações */}
+          <button onClick={() => setShowTeam(true)} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}><Users size={11}/> Time</button>
+          <button onClick={() => window.print()} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}><Printer size={11}/> Imprimir</button>
           {!submission && (
-            <button onClick={submitSchedule} disabled={submitting} style={{
-              display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:7,
-              background:'#16a34a', color:'#fff', border:'none', cursor:'pointer', fontWeight:700, fontSize:12,
-            }}>
-              <CheckCircle size={13}/> {submitting ? 'Fechando...' : 'Fechar Escala'}
+            <button onClick={submitSchedule} disabled={submitting} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:5, border:'none', background:'#16a34a', color:'#fff', cursor:'pointer', fontWeight:700, fontSize:11, whiteSpace:'nowrap', flexShrink:0 }}>
+              <CheckCircle size={11}/> {submitting ? 'Fechando...' : 'Fechar Escala'}
             </button>
           )}
-        </div>
-      </div>
-
-      {/* Card */}
-      <div id="schedule-print" style={{ background:'#fff', color:'#111', borderRadius:12, border:'1px solid #e5e7eb', boxShadow:'0 2px 16px rgba(0,0,0,.08)', overflow:'hidden' }}>
-
-        {/* Cabeçalho compacto — tudo em uma linha */}
-        <div style={{ padding:'6px 12px', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
-          <div style={{ display:'flex', gap:14, alignItems:'center', flexWrap:'wrap' }}>
-            <span style={{ fontSize:11, color:'#374151' }}><b>Depto:</b> {profile?.sector||'—'}</span>
-            <span style={{ fontSize:11, color:'#374151' }}><b>Gestor:</b> {profile?.full_name||'—'}</span>
-            <span style={{ fontSize:11, color:'#374151' }}><b>Unidade:</b> {profile?.company||'—'}</span>
-            <span style={{ color:'#d1d5db' }}>|</span>
-            <span style={{ fontSize:10, color:'#1d4ed8', fontWeight:600 }}>■ Entrada</span>
-            <span style={{ fontSize:10, color:'#6b7280', fontWeight:600 }}>■ Intervalo/Retorno</span>
-            <span style={{ fontSize:10, color:'#dc2626', fontWeight:600 }}>■ Saída</span>
-            <span style={{ fontSize:10, color:'#7c3aed', fontWeight:600 }}>■ Dia 26 = Prazo</span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-            <button onClick={prevMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:5, cursor:'pointer', padding:'3px 6px', display:'flex' }}>
-              <ChevronLeft size={14}/>
-            </button>
-            <span style={{ fontWeight:800, fontSize:13, minWidth:110, textAlign:'center' }}>{MONTHS_PT[month-1]} {year}</span>
-            <button onClick={nextMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:5, cursor:'pointer', padding:'3px 6px', display:'flex' }}>
-              <ChevronRight size={14}/>
-            </button>
-          </div>
         </div>
 
         {/* Semanas empilhadas */}
@@ -496,10 +486,10 @@ export default function NativeSchedule({ userId, profile }) {
                     const rowBg = ri%2===0 ? '#fff' : '#f9fafb';
                     return (
                       <tr key={m.id} style={{ background:rowBg }}>
-                        <td style={{ background:rowBg, padding:'2px 4px', textAlign:'center', fontSize:9,
+                        <td style={{ background:rowBg, padding:'2px 3px', textAlign:'center', fontSize:9,
                           color:'#6b7280', fontWeight:600, border:'1px solid #e5e7eb' }}>{m.matricula||'—'}</td>
                         <td style={{ background:rowBg, padding:'2px 8px', fontSize:10, fontWeight:700,
-                          color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:130 }}>{m.name}</td>
+                          color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</td>
                         {week.map((date, di) => <DayCell key={di} m={m} date={date}/>)}
                         <td style={{ background:rowBg, border:'2px solid #f97316' }}/>
                       </tr>
