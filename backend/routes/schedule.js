@@ -4,8 +4,7 @@ const supabase = require('../supabase');
 
 function getWeekStart(dateStr) {
   const d = new Date(dateStr + 'T12:00:00Z');
-  const day = d.getUTCDay(); // 0=dom
-  d.setUTCDate(d.getUTCDate() - day);
+  d.setUTCDate(d.getUTCDate() - d.getUTCDay());
   return d.toISOString().split('T')[0];
 }
 
@@ -14,7 +13,7 @@ function dayOfWeekPT(dateStr) {
   return ['domingo','segunda','terca','quarta','quinta','sexta','sabado'][d.getUTCDay()];
 }
 
-// GET /api/schedule?user_id=&week_start=YYYY-MM-DD
+// GET /api/schedule?user_id=&week_start=
 router.get('/', async (req, res) => {
   const { user_id, week_start } = req.query;
   const { data, error } = await supabase
@@ -27,23 +26,28 @@ router.get('/', async (req, res) => {
   res.json(data);
 });
 
-// POST /api/schedule/save — salvar/atualizar célula
+// POST /api/schedule/save
 router.post('/save', async (req, res) => {
-  const { user_id, team_member_id, work_date, start_time, end_time, status, notes } = req.body;
-  if (!user_id || !team_member_id || !work_date) {
+  const { user_id, team_member_id, work_date, status, entrada, intervalo, retorno_intervalo, saida } = req.body;
+  if (!user_id || !team_member_id || !work_date)
     return res.status(400).json({ error: 'user_id, team_member_id e work_date são obrigatórios' });
-  }
-  const week_start = getWeekStart(work_date);
+
+  const week_start  = getWeekStart(work_date);
   const day_of_week = dayOfWeekPT(work_date);
+  const isWork      = status === 'trabalha';
 
   const { data, error } = await supabase
     .from('schedule_entries')
     .upsert({
       user_id, team_member_id, work_date, week_start, day_of_week,
-      start_time: status === 'trabalha' ? start_time : null,
-      end_time:   status === 'trabalha' ? end_time   : null,
       status: status || 'trabalha',
-      notes: notes || null,
+      entrada:           isWork ? (entrada || null)           : null,
+      intervalo:         isWork ? (intervalo || null)         : null,
+      retorno_intervalo: isWork ? (retorno_intervalo || null) : null,
+      saida:             isWork ? (saida || null)             : null,
+      // manter compat com campos antigos
+      start_time: isWork ? (entrada || null) : null,
+      end_time:   isWork ? (saida   || null) : null,
     }, { onConflict: 'user_id,team_member_id,work_date' })
     .select().single();
 
@@ -58,13 +62,12 @@ router.delete('/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-// GET /api/schedule/operators?user_id=&day_of_week=segunda
-// Para análise de caixas — lê escala nativa
+// GET /api/schedule/operators?user_id=&day_of_week=
 router.get('/operators', async (req, res) => {
   const { user_id, day_of_week } = req.query;
   const { data, error } = await supabase
     .from('schedule_entries')
-    .select('start_time, end_time, status, team_members(name, sector, role)')
+    .select('entrada, saida, status, team_members(name,sector,role)')
     .eq('user_id', user_id)
     .eq('day_of_week', day_of_week)
     .eq('status', 'trabalha');
@@ -74,23 +77,17 @@ router.get('/operators', async (req, res) => {
   const result = hours.map(h => {
     const hMin = h * 60;
     const active = (data || []).filter(e => {
-      const [sh, sm] = (e.start_time || '').split(':').map(Number);
-      const [eh, em] = (e.end_time   || '').split(':').map(Number);
+      const [sh, sm] = (e.entrada || '').split(':').map(Number);
+      const [eh, em] = (e.saida   || '').split(':').map(Number);
       if (isNaN(sh) || isNaN(eh)) return false;
-      const s = sh * 60 + (sm || 0);
-      const f = eh * 60 + (em || 0);
-      return s <= hMin && f > hMin;
+      return (sh*60+(sm||0)) <= hMin && (eh*60+(em||0)) > hMin;
     });
-    return {
-      hour: h,
-      operators: active.length,
-      names: active.map(e => e.team_members?.name).filter(Boolean),
-    };
+    return { hour: h, operators: active.length, names: active.map(e => e.team_members?.name).filter(Boolean) };
   });
   res.json(result);
 });
 
-// GET /api/schedule/month?user_id=&year=2026&month=7
+// GET /api/schedule/month?user_id=&year=&month=
 router.get('/month', async (req, res) => {
   const { user_id, year, month } = req.query;
   const from = `${year}-${String(month).padStart(2,'0')}-01`;
@@ -99,8 +96,7 @@ router.get('/month', async (req, res) => {
     .from('schedule_entries')
     .select('*, team_members(name,matricula,role,sector)')
     .eq('user_id', user_id)
-    .gte('work_date', from)
-    .lte('work_date', to);
+    .gte('work_date', from).lte('work_date', to);
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
