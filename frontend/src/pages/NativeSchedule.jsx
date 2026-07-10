@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Printer, Users, X, Save, Trash2, Plus, CheckCircle, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { ChevronLeft, ChevronRight, Download, Users, X, Save, Trash2, Plus, CheckCircle, AlertCircle } from 'lucide-react';
 import api from '../api';
 
 const DAY_NAME  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
@@ -323,6 +323,29 @@ export default function NativeSchedule({ userId, profile }) {
     setSubmitting(false);
   };
 
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const downloadPDF = async () => {
+    const el = document.getElementById('schedule-print');
+    if (!el) return;
+    setGeneratingPdf(true);
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      await html2pdf()
+        .set({
+          margin: [4, 4, 4, 4],
+          filename: `Escala_${MONTHS_PT[month-1]}_${year}_${profile?.sector||'depto'}.pdf`,
+          image: { type:'jpeg', quality:0.95 },
+          html2canvas: { scale:2, useCORS:true },
+          jsPDF: { unit:'mm', format:'a4', orientation:'landscape' },
+        })
+        .from(el)
+        .save();
+    } catch (e) {
+      console.error(e);
+    }
+    setGeneratingPdf(false);
+  };
+
   // progresso
   const filled = entries.filter(e => e.work_date >= allDates[0] && e.work_date <= allDates[allDates.length-1]).length;
   const total  = members.length * allDates.filter(d => getDOW(d) !== 0).length;
@@ -464,7 +487,7 @@ export default function NativeSchedule({ userId, profile }) {
 
           {/* Ações */}
           <button onClick={() => setShowTeam(true)} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}><Users size={11}/> Time</button>
-          <button onClick={() => window.print()} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}><Printer size={11}/> Imprimir</button>
+          <button onClick={downloadPDF} disabled={generatingPdf} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0, opacity: generatingPdf ? .6 : 1 }}><Download size={11}/> {generatingPdf ? 'Gerando...' : 'Baixar PDF'}</button>
           {!submission && (
             <button onClick={submitSchedule} disabled={submitting} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:5, border:'none', background:'#16a34a', color:'#fff', cursor:'pointer', fontWeight:700, fontSize:11, whiteSpace:'nowrap', flexShrink:0 }}>
               <CheckCircle size={11}/> {submitting ? 'Fechando...' : 'Fechar Escala'}
