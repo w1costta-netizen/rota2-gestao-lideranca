@@ -362,22 +362,12 @@ export default function NativeSchedule({ userId, profile }) {
           scrollbarWidth:'thick', scrollbarColor:'#1d4ed8 #e2e8f0',
           paddingBottom:4,
         }}>
-            <table style={{ borderCollapse:'collapse', tableLayout:'fixed', minWidth:'max-content' }}>
-              <colgroup>
-                <col style={{ width:62 }}/>
-                <col style={{ width:160 }}/>
-                {weekDates.flatMap(d => [0,1,2,3].map(i => (
-                  <col key={d+i} style={{ width:56 }}/>
-                )))}
-                <col style={{ width:70 }}/>
-                <col style={{ width:70 }}/>
-              </colgroup>
-
+            <table style={{ borderCollapse:'collapse', minWidth:'max-content' }}>
               <thead>
                 {/* Linha 1: dias */}
                 <tr>
-                  <th rowSpan={3} style={{ ...TH(), ...STICKY_MAT, background:'#0e7490', color:'#fff', fontSize:10 }}>Matr.</th>
-                  <th rowSpan={3} style={{ ...TH(), ...STICKY_NAME, background:'#0e7490', color:'#fff', textAlign:'left', paddingLeft:8, fontSize:11 }}>Nome do Associado</th>
+                  <th rowSpan={3} style={{ ...TH(), ...STICKY_MAT, background:'#0e7490', color:'#fff', fontSize:10, width:62 }}>Matr.</th>
+                  <th rowSpan={3} style={{ ...TH(), ...STICKY_NAME, background:'#0e7490', color:'#fff', textAlign:'left', paddingLeft:8, fontSize:11, width:160 }}>Nome do Associado</th>
                   {weekDates.map((d,i) => (
                     <th key={d} colSpan={4} style={{ ...TH(), background: d===today?'#1d4ed8':'#1e40af', color:'#fff', fontSize:11 }}>
                       {DAY_NAME[i]}
