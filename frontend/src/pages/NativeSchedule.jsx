@@ -417,7 +417,7 @@ export default function NativeSchedule({ userId, profile }) {
                   return (
                     <tr key={m.id} style={{ background:rowBg }}>
                       <td style={{ ...TD(), ...STICKY_MAT, background:rowBg, color:'#555', fontSize:10, fontWeight:500 }}>{m.matricula||'—'}</td>
-                      <td style={{ ...TD(), ...STICKY_NAME, background:rowBg, textAlign:'left', paddingLeft:8, fontWeight:600, fontSize:11, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</td>
+                      <td style={{ ...TD(), ...STICKY_NAME, background:rowBg, textAlign:'left', paddingLeft:8, fontWeight:700, fontSize:11, color:'#111', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</td>
                       {weekDates.flatMap(date => renderDayCells(m, date, ri))}
                       <td style={{ ...TD(), borderLeft:'2px solid #f97316' }}></td>
                       <td style={{ ...TD() }}></td>
