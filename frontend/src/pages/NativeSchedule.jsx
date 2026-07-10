@@ -341,9 +341,9 @@ export default function NativeSchedule({ userId, profile }) {
 
     if (!entry) return (
       <td onClick={open} style={{ background:bg, cursor:'pointer', textAlign:'center',
-        verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'6px 2px',
-        opacity: isSun ? .45 : 1 }}>
-        <span style={{ color:'#9ca3af', fontSize:18, fontWeight:700 }}>+</span>
+        verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'4px 1px',
+        opacity: isSun ? .4 : 1 }}>
+        <span style={{ color:'#d1d5db', fontSize:14, fontWeight:700, lineHeight:1 }}>+</span>
       </td>
     );
 
@@ -351,19 +351,19 @@ export default function NativeSchedule({ userId, profile }) {
       const st = STATUS[entry.status] || STATUS.dsr;
       return (
         <td onClick={open} style={{ background:st.bg, cursor:'pointer', textAlign:'center',
-          verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'4px 2px' }}>
-          <span style={{ fontWeight:800, fontSize:10, color:st.color }}>{st.label}</span>
+          verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'3px 1px' }}>
+          <span style={{ fontWeight:800, fontSize:9, color:st.color }}>{st.label}</span>
         </td>
       );
     }
 
     return (
       <td onClick={open} style={{ background:bg, cursor:'pointer', textAlign:'center',
-        verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'3px 2px' }}>
-        <div style={{ fontSize:10, lineHeight:1.5 }}>
+        verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'2px 1px' }}>
+        <div style={{ fontSize:9, lineHeight:1.4 }}>
           <div style={{ fontWeight:700, color:'#1d4ed8' }}>{entry.entrada||'—'}</div>
-          <div style={{ color:'#6b7280', fontSize:9 }}>{entry.intervalo||'—'}</div>
-          <div style={{ color:'#6b7280', fontSize:9 }}>{entry.retorno_intervalo||'—'}</div>
+          <div style={{ color:'#6b7280' }}>{entry.intervalo||'—'}</div>
+          <div style={{ color:'#6b7280' }}>{entry.retorno_intervalo||'—'}</div>
           <div style={{ fontWeight:700, color:'#dc2626' }}>{entry.saida||'—'}</div>
         </div>
       </td>
@@ -374,8 +374,8 @@ export default function NativeSchedule({ userId, profile }) {
   function WeekHeader({ week }) {
     return (
       <tr>
-        <th style={{ background:'#0e7490', color:'#fff', padding:'5px 8px', fontSize:10, fontWeight:700, border:'1px solid #0c6482', width:58 }}>Matr.</th>
-        <th style={{ background:'#0e7490', color:'#fff', padding:'5px 10px', fontSize:11, fontWeight:700, border:'1px solid #0c6482', textAlign:'left', minWidth:140 }}>Nome</th>
+        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 6px', fontSize:9, fontWeight:700, border:'1px solid #0c6482', width:46 }}>Matr.</th>
+        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 8px', fontSize:10, fontWeight:700, border:'1px solid #0c6482', textAlign:'left', minWidth:120 }}>Nome</th>
         {week.map((date, i) => {
           if (!date) return <th key={i} style={{ background:'#374151', border:'1px solid #374151', width:'12%' }}/>;
           const d    = parseInt(date.split('-')[2]);
@@ -384,18 +384,18 @@ export default function NativeSchedule({ userId, profile }) {
           const isSun= i === 0;
           return (
             <th key={date} style={{
-              padding:'5px 4px', fontSize:11, fontWeight:700, textAlign:'center',
+              padding:'3px 2px', fontSize:10, fontWeight:700, textAlign:'center',
               border:'1px solid #1e3a8a', width:'12%',
               background: isT ? '#1d4ed8' : isD26 ? '#7c3aed' : isSun ? '#374151' : '#1e40af',
               color:'#fff',
             }}>
-              <div style={{ fontWeight:800 }}>{DAY_NAME[i]}</div>
-              <div style={{ fontSize:10, opacity:.85 }}>{d}</div>
-              {isD26 && <div style={{ fontSize:8, background:'#fbbf24', color:'#78350f', borderRadius:3, padding:'1px 3px', marginTop:1 }}>Prazo</div>}
+              <div style={{ fontWeight:800, fontSize:10 }}>{DAY_NAME[i]}</div>
+              <div style={{ fontSize:9, opacity:.85 }}>{d}</div>
+              {isD26 && <div style={{ fontSize:7, background:'#fbbf24', color:'#78350f', borderRadius:2, padding:'0 2px', marginTop:1 }}>Prazo</div>}
             </th>
           );
         })}
-        <th style={{ background:'#c2410c', color:'#fff', padding:'5px 4px', fontSize:9, fontWeight:700, border:'1px solid #9a3412', width:60, textAlign:'center' }}>Assinatura</th>
+        <th style={{ background:'#c2410c', color:'#fff', padding:'3px 4px', fontSize:8, fontWeight:700, border:'1px solid #9a3412', width:50, textAlign:'center' }}>Assinatura</th>
       </tr>
     );
   }
@@ -406,53 +406,50 @@ export default function NativeSchedule({ userId, profile }) {
       {alertDay && (
         <div style={{
           background: alertUrgent ? '#fee2e2' : '#fef9c3',
-          border:`1.5px solid ${alertUrgent ? '#fca5a5' : '#fde68a'}`,
-          borderRadius:10, padding:'12px 16px', marginBottom:14,
-          display:'flex', alignItems:'center', gap:12,
+          border:`1px solid ${alertUrgent ? '#fca5a5' : '#fde68a'}`,
+          borderRadius:7, padding:'6px 12px', marginBottom:6,
+          display:'flex', alignItems:'center', gap:8,
         }}>
-          <AlertCircle size={20} color={alertUrgent ? '#dc2626' : '#92400e'}/>
-          <div>
-            <div style={{ fontWeight:800, fontSize:13, color: alertUrgent ? '#991b1b' : '#92400e' }}>
-              {alertUrgent ? '🚨 HOJE é o prazo!' : `⏰ Faltam ${daysLeft} dia${daysLeft!==1?'s':''}!`}
-              {' '}Escala de {MONTHS_PT[month-1]}/{year} ainda não foi fechada.
-            </div>
-            <div style={{ fontSize:11, color:'#6b7280', marginTop:2 }}>
-              Preencha e clique em <b>"Fechar Escala"</b> até o dia 26.
-            </div>
-          </div>
+          <AlertCircle size={14} color={alertUrgent ? '#dc2626' : '#92400e'}/>
+          <span style={{ fontWeight:700, fontSize:12, color: alertUrgent ? '#991b1b' : '#92400e' }}>
+            {alertUrgent ? '🚨 HOJE é o prazo!' : `⏰ Faltam ${daysLeft} dia${daysLeft!==1?'s':''}!`}
+            {' '}Escala de {MONTHS_PT[month-1]}/{year} não fechada. Clique em <b>"Fechar Escala"</b> até dia 26.
+          </span>
         </div>
       )}
 
       {/* Confirmação */}
       {submission && (
-        <div style={{ background:'#f0fdf4', border:'1.5px solid #86efac', borderRadius:10, padding:'12px 16px', marginBottom:14, display:'flex', alignItems:'center', gap:10 }}>
-          <CheckCircle size={18} color="#166534"/>
-          <span style={{ fontSize:13, color:'#166534', fontWeight:700 }}>
+        <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:7, padding:'5px 12px', marginBottom:6, display:'flex', alignItems:'center', gap:8 }}>
+          <CheckCircle size={13} color="#166534"/>
+          <span style={{ fontSize:12, color:'#166534', fontWeight:700 }}>
             ✅ Escala de {MONTHS_PT[month-1]}/{year} fechada em {new Date(submission.submitted_at).toLocaleDateString('pt-BR')}
           </span>
         </div>
       )}
 
-      {/* Barra de ações */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14, flexWrap:'wrap', gap:8 }}>
-        <h1 className="page-title" style={{ margin:0 }}>Escala Mensal</h1>
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+      {/* Barra de ações — compacta */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:6, gap:8 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <h1 className="page-title" style={{ margin:0, fontSize:16 }}>Escala Mensal</h1>
           {members.length > 0 && (
-            <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:12 }}>
-              <div style={{ width:90, height:7, background:'#e5e7eb', borderRadius:4, overflow:'hidden' }}>
-                <div style={{ width:`${pct}%`, height:'100%', background: pct===100?'#16a34a':'#1d4ed8', borderRadius:4 }}/>
+            <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+              <div style={{ width:70, height:5, background:'#e5e7eb', borderRadius:3, overflow:'hidden' }}>
+                <div style={{ width:`${pct}%`, height:'100%', background: pct===100?'#16a34a':'#1d4ed8', borderRadius:3 }}/>
               </div>
-              <span style={{ fontWeight:700, color: pct===100?'#16a34a':'#1d4ed8', fontSize:12 }}>{pct}%</span>
+              <span style={{ fontWeight:700, color: pct===100?'#16a34a':'#1d4ed8', fontSize:11 }}>{pct}%</span>
             </div>
           )}
-          <button className="btn btn-ghost" onClick={() => setShowTeam(true)}><Users size={14}/> Time</button>
-          <button className="btn btn-ghost" onClick={() => window.print()}><Printer size={14}/> Imprimir</button>
+        </div>
+        <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+          <button className="btn btn-ghost" style={{ padding:'5px 10px', fontSize:12 }} onClick={() => setShowTeam(true)}><Users size={13}/> Time</button>
+          <button className="btn btn-ghost" style={{ padding:'5px 10px', fontSize:12 }} onClick={() => window.print()}><Printer size={13}/> Imprimir</button>
           {!submission && (
             <button onClick={submitSchedule} disabled={submitting} style={{
-              display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8,
-              background:'#16a34a', color:'#fff', border:'none', cursor:'pointer', fontWeight:700, fontSize:13,
+              display:'flex', alignItems:'center', gap:5, padding:'6px 14px', borderRadius:7,
+              background:'#16a34a', color:'#fff', border:'none', cursor:'pointer', fontWeight:700, fontSize:12,
             }}>
-              <CheckCircle size={15}/> {submitting ? 'Fechando...' : 'Fechar Escala'}
+              <CheckCircle size={13}/> {submitting ? 'Fechando...' : 'Fechar Escala'}
             </button>
           )}
         </div>
@@ -461,30 +458,27 @@ export default function NativeSchedule({ userId, profile }) {
       {/* Card */}
       <div id="schedule-print" style={{ background:'#fff', color:'#111', borderRadius:12, border:'1px solid #e5e7eb', boxShadow:'0 2px 16px rgba(0,0,0,.08)', overflow:'hidden' }}>
 
-        {/* Cabeçalho */}
-        <div style={{ padding:'12px 18px', borderBottom:'1px solid #e5e7eb', display:'flex', flexWrap:'wrap', gap:12, alignItems:'center', justifyContent:'space-between' }}>
-          <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
-            <span style={{ fontSize:13 }}><b>Departamento:</b> {profile?.sector||'—'}</span>
-            <span style={{ fontSize:13 }}><b>Gestor:</b> {profile?.full_name||'—'}</span>
-            <span style={{ fontSize:13 }}><b>Unidade:</b> {profile?.company||'—'}</span>
+        {/* Cabeçalho compacto — tudo em uma linha */}
+        <div style={{ padding:'6px 12px', borderBottom:'1px solid #e5e7eb', display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
+          <div style={{ display:'flex', gap:14, alignItems:'center', flexWrap:'wrap' }}>
+            <span style={{ fontSize:11, color:'#374151' }}><b>Depto:</b> {profile?.sector||'—'}</span>
+            <span style={{ fontSize:11, color:'#374151' }}><b>Gestor:</b> {profile?.full_name||'—'}</span>
+            <span style={{ fontSize:11, color:'#374151' }}><b>Unidade:</b> {profile?.company||'—'}</span>
+            <span style={{ color:'#d1d5db' }}>|</span>
+            <span style={{ fontSize:10, color:'#1d4ed8', fontWeight:600 }}>■ Entrada</span>
+            <span style={{ fontSize:10, color:'#6b7280', fontWeight:600 }}>■ Intervalo/Retorno</span>
+            <span style={{ fontSize:10, color:'#dc2626', fontWeight:600 }}>■ Saída</span>
+            <span style={{ fontSize:10, color:'#7c3aed', fontWeight:600 }}>■ Dia 26 = Prazo</span>
           </div>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <button onClick={prevMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:6, cursor:'pointer', padding:'5px 8px', display:'flex' }}>
-              <ChevronLeft size={16}/>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <button onClick={prevMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:5, cursor:'pointer', padding:'3px 6px', display:'flex' }}>
+              <ChevronLeft size={14}/>
             </button>
-            <span style={{ fontWeight:800, fontSize:15, minWidth:150, textAlign:'center' }}>{MONTHS_PT[month-1]} {year}</span>
-            <button onClick={nextMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:6, cursor:'pointer', padding:'5px 8px', display:'flex' }}>
-              <ChevronRight size={16}/>
+            <span style={{ fontWeight:800, fontSize:13, minWidth:110, textAlign:'center' }}>{MONTHS_PT[month-1]} {year}</span>
+            <button onClick={nextMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:5, cursor:'pointer', padding:'3px 6px', display:'flex' }}>
+              <ChevronRight size={14}/>
             </button>
           </div>
-        </div>
-
-        {/* Legenda */}
-        <div style={{ padding:'5px 18px', background:'#f0f9ff', borderBottom:'1px solid #bae6fd', display:'flex', gap:16, fontSize:11, flexWrap:'wrap', alignItems:'center' }}>
-          <span><b style={{ color:'#1d4ed8' }}>Azul</b> = Entrada</span>
-          <span><b style={{ color:'#6b7280' }}>Cinza</b> = Intervalo / Retorno</span>
-          <span><b style={{ color:'#dc2626' }}>Vermelho</b> = Saída</span>
-          <span style={{ marginLeft:'auto', color:'#7c3aed', fontWeight:700 }}>■ Roxo = dia 26 (prazo)</span>
         </div>
 
         {/* Semanas empilhadas */}
@@ -502,10 +496,10 @@ export default function NativeSchedule({ userId, profile }) {
                     const rowBg = ri%2===0 ? '#fff' : '#f9fafb';
                     return (
                       <tr key={m.id} style={{ background:rowBg }}>
-                        <td style={{ background:rowBg, padding:'3px 6px', textAlign:'center', fontSize:10,
+                        <td style={{ background:rowBg, padding:'2px 4px', textAlign:'center', fontSize:9,
                           color:'#6b7280', fontWeight:600, border:'1px solid #e5e7eb' }}>{m.matricula||'—'}</td>
-                        <td style={{ background:rowBg, padding:'3px 10px', fontSize:11, fontWeight:700,
-                          color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</td>
+                        <td style={{ background:rowBg, padding:'2px 8px', fontSize:10, fontWeight:700,
+                          color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', maxWidth:130 }}>{m.name}</td>
                         {week.map((date, di) => <DayCell key={di} m={m} date={date}/>)}
                         <td style={{ background:rowBg, border:'2px solid #f97316' }}/>
                       </tr>
