@@ -10,16 +10,18 @@ const NAV = [
   { id: 'profile',   label: 'Meu Perfil', icon: UserCircle },
 ];
 
-export default function Sidebar({ page, setPage }) {
+export default function Sidebar({ page, setPage, width }) {
   const { profile, signOut } = useAuth();
   const initials = profile?.full_name?.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase() || '?';
   const avatarUrl = profile?.avatar_url;
+  const collapsed = width !== undefined && width < 100;
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-logo">
-        <h1>Rota 2.0</h1>
-        <p>Gestão de Liderança</p>
+    <aside className="sidebar" style={width ? { width } : undefined}>
+      <div className="sidebar-logo" style={collapsed ? { padding:'16px 8px', textAlign:'center' } : undefined}>
+        {!collapsed && <h1>Rota 2.0</h1>}
+        {!collapsed && <p>Gestão de Liderança</p>}
+        {collapsed && <h1 style={{ fontSize:12, margin:0 }}>R2</h1>}
       </div>
       <nav className="sidebar-nav">
         {NAV.map(({ id, label, icon: Icon }) => (
@@ -27,29 +29,33 @@ export default function Sidebar({ page, setPage }) {
             key={id}
             className={`nav-item${page === id ? ' active' : ''}`}
             onClick={() => setPage(id)}
+            title={collapsed ? label : undefined}
+            style={collapsed ? { justifyContent:'center', padding:'12px 0' } : undefined}
           >
             <Icon size={18} />
-            <span>{label}</span>
+            {!collapsed && <span>{label}</span>}
           </button>
         ))}
       </nav>
 
-      <div className="user-menu">
+      <div className="user-menu" style={collapsed ? { flexDirection:'column', gap:6, padding:'12px 8px', alignItems:'center' } : undefined}>
         <div
           className="user-avatar"
-          style={{ cursor:'pointer', overflow:'hidden', padding: avatarUrl ? 0 : undefined }}
+          style={{ cursor:'pointer', overflow:'hidden', padding: avatarUrl ? 0 : undefined, flexShrink:0 }}
           onClick={() => setPage('profile')}
-          title="Ver perfil"
+          title={collapsed ? (profile?.full_name || 'Ver perfil') : 'Ver perfil'}
         >
           {avatarUrl
             ? <img src={avatarUrl} alt="avatar" style={{ width:'100%', height:'100%', objectFit:'cover', borderRadius:'50%' }}/>
             : initials}
         </div>
-        <div className="user-info">
-          <div className="user-name">{profile?.full_name || 'Usuário'}</div>
-          <div className="user-role">{profile?.sector || profile?.company || ''}</div>
-        </div>
-        <button className="btn-icon" onClick={signOut} title="Sair" style={{ color:'rgba(255,255,255,.5)' }}>
+        {!collapsed && (
+          <div className="user-info">
+            <div className="user-name">{profile?.full_name || 'Usuário'}</div>
+            <div className="user-role">{profile?.sector || profile?.company || ''}</div>
+          </div>
+        )}
+        <button className="btn-icon" onClick={signOut} title="Sair" style={{ color:'rgba(255,255,255,.5)', flexShrink:0 }}>
           <LogOut size={16}/>
         </button>
       </div>
