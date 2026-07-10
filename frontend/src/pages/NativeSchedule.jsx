@@ -328,6 +328,7 @@ export default function NativeSchedule({ userId, profile }) {
     const el = document.getElementById('schedule-print');
     if (!el) return;
     setGeneratingPdf(true);
+    el.classList.add('pdf-generating');
     try {
       const html2pdf = (await import('html2pdf.js')).default;
       await html2pdf()
@@ -335,7 +336,7 @@ export default function NativeSchedule({ userId, profile }) {
           margin: [4, 4, 4, 4],
           filename: `Escala_${MONTHS_PT[month-1]}_${year}_${profile?.sector||'depto'}.pdf`,
           image: { type:'jpeg', quality:0.95 },
-          html2canvas: { scale:2, useCORS:true },
+          html2canvas: { scale:2, useCORS:true, logging:false },
           jsPDF: { unit:'mm', format:'a4', orientation:'landscape' },
         })
         .from(el)
@@ -343,6 +344,7 @@ export default function NativeSchedule({ userId, profile }) {
     } catch (e) {
       console.error(e);
     }
+    el.classList.remove('pdf-generating');
     setGeneratingPdf(false);
   };
 
@@ -419,8 +421,9 @@ export default function NativeSchedule({ userId, profile }) {
             </th>
           );
         })}
-        {/* Assinatura: só aparece na impressão */}
-        <th className="print-only" style={{ background:'#c2410c', color:'#fff', padding:'3px 4px', fontSize:8, fontWeight:700, border:'1px solid #9a3412', width:60, textAlign:'center' }}>Assinatura</th>
+        {/* Assinatura e Data de Ciência: só aparecem no PDF */}
+        <th className="print-only" style={{ background:'#c2410c', color:'#fff', padding:'3px 4px', fontSize:8, fontWeight:700, border:'1px solid #9a3412', width:70, textAlign:'center' }}>Assinatura</th>
+        <th className="print-only" style={{ background:'#c2410c', color:'#fff', padding:'3px 4px', fontSize:8, fontWeight:700, border:'1px solid #9a3412', width:55, textAlign:'center' }}>Data Ciência</th>
       </tr>
     );
   }
@@ -515,7 +518,8 @@ export default function NativeSchedule({ userId, profile }) {
                         <td style={{ background:rowBg, padding:'2px 8px', fontSize:10, fontWeight:700,
                           color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</td>
                         {week.map((date, di) => <DayCell key={di} m={m} date={date}/>)}
-                        <td className="print-only" style={{ background:rowBg, border:'2px solid #f97316' }}/>
+                        <td className="print-only" style={{ background:rowBg, border:'1px solid #f97316' }}/>
+                        <td className="print-only" style={{ background:rowBg, border:'1px solid #f97316' }}/>
                       </tr>
                     );
                   })}
@@ -543,6 +547,7 @@ export default function NativeSchedule({ userId, profile }) {
 
       <style>{`
         .print-only { display: none; }
+        .pdf-generating .print-only { display: table-cell !important; }
         @media print {
           .print-only { display: table-cell !important; }
           body * { visibility:hidden !important; }
