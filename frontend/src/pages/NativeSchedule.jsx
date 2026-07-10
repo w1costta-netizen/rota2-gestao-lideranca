@@ -343,6 +343,14 @@ export default function NativeSchedule({ userId, profile }) {
     setSubmitting(false);
   };
 
+  const reopenSchedule = async () => {
+    if (!window.confirm('Reabrir a escala? O fechamento será desfeito.')) return;
+    try {
+      await api.delete(`/schedule/submission?user_id=${effectiveUserId}&year=${year}&month=${month}`);
+      setSubmission(null);
+    } catch {}
+  };
+
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const downloadPDF = async () => {
     const el = document.getElementById('schedule-print');
@@ -502,11 +510,14 @@ export default function NativeSchedule({ userId, profile }) {
               {alertUrgent ? '🚨 HOJE prazo!' : `⏰ ${daysLeft}d p/ fechar`}
             </span>
           )}
-          {submission && (
+          {submission && (<>
             <span style={{ fontSize:10, fontWeight:700, color:'#166534', whiteSpace:'nowrap' }}>
               ✅ Fechada {new Date(submission.submitted_at).toLocaleDateString('pt-BR')}
             </span>
-          )}
+            <button onClick={reopenSchedule} style={{ display:'flex', alignItems:'center', gap:3, padding:'2px 7px', borderRadius:4, border:'1px solid #fca5a5', background:'#fff7f7', cursor:'pointer', fontSize:10, color:'#b91c1c', whiteSpace:'nowrap', flexShrink:0 }}>
+              🔓 Reabrir
+            </button>
+          </>)}
 
           {/* Espaço flexível */}
           <div style={{ flex:1 }}/>

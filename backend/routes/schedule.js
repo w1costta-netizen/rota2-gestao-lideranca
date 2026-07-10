@@ -127,4 +127,17 @@ router.post('/submit', async (req, res) => {
   res.json(data);
 });
 
+// DELETE /api/schedule/submission — reabre a escala
+router.delete('/submission', async (req, res) => {
+  const { user_id, year, month } = req.query;
+  const { error } = await supabase
+    .from('schedule_submissions')
+    .delete()
+    .eq('user_id', user_id)
+    .eq('year', year)
+    .eq('month', month);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 module.exports = router;
