@@ -376,9 +376,9 @@ export default function NativeSchedule({ userId, profile }) {
     return (
       <tr>
         <th style={{ background:'#0e7490', color:'#fff', padding:'3px 5px', fontSize:9, fontWeight:700, border:'1px solid #0c6482', width:38 }}>Mat.</th>
-        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 8px', fontSize:10, fontWeight:700, border:'1px solid #0c6482', textAlign:'left', width:160 }}>Nome</th>
+        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 8px', fontSize:10, fontWeight:700, border:'1px solid #0c6482', textAlign:'left', width:130 }}>Nome</th>
         {week.map((date, i) => {
-          if (!date) return <th key={i} style={{ background:'#374151', border:'1px solid #374151', width:'12%' }}/>;
+          if (!date) return <th key={i} style={{ background:'#374151', border:'1px solid #374151' }}/>;
           const d    = parseInt(date.split('-')[2]);
           const isT  = date === today;
           const isD26= d === 26;
@@ -386,7 +386,7 @@ export default function NativeSchedule({ userId, profile }) {
           return (
             <th key={date} style={{
               padding:'3px 2px', fontSize:10, fontWeight:700, textAlign:'center',
-              border:'1px solid #1e3a8a', width:'12%',
+              border:'1px solid #1e3a8a',
               background: isT ? '#1d4ed8' : isD26 ? '#7c3aed' : isSun ? '#374151' : '#1e40af',
               color:'#fff',
             }}>
@@ -396,7 +396,8 @@ export default function NativeSchedule({ userId, profile }) {
             </th>
           );
         })}
-        <th style={{ background:'#c2410c', color:'#fff', padding:'3px 4px', fontSize:8, fontWeight:700, border:'1px solid #9a3412', width:50, textAlign:'center' }}>Assinatura</th>
+        {/* Assinatura: só aparece na impressão */}
+        <th className="print-only" style={{ background:'#c2410c', color:'#fff', padding:'3px 4px', fontSize:8, fontWeight:700, border:'1px solid #9a3412', width:60, textAlign:'center' }}>Assinatura</th>
       </tr>
     );
   }
@@ -491,7 +492,7 @@ export default function NativeSchedule({ userId, profile }) {
                         <td style={{ background:rowBg, padding:'2px 8px', fontSize:10, fontWeight:700,
                           color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</td>
                         {week.map((date, di) => <DayCell key={di} m={m} date={date}/>)}
-                        <td style={{ background:rowBg, border:'2px solid #f97316' }}/>
+                        <td className="print-only" style={{ background:rowBg, border:'2px solid #f97316' }}/>
                       </tr>
                     );
                   })}
@@ -518,7 +519,9 @@ export default function NativeSchedule({ userId, profile }) {
       </div>
 
       <style>{`
+        .print-only { display: none; }
         @media print {
+          .print-only { display: table-cell !important; }
           body * { visibility:hidden !important; }
           #schedule-print, #schedule-print * { visibility:visible !important; }
           #schedule-print { position:fixed; top:0; left:0; width:100%; }
