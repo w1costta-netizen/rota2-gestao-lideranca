@@ -254,7 +254,8 @@ function TeamModal({ userId, userSector, onClose }) {
 }
 
 /* ── Página principal ── */
-const ELEVATED_ROLES = ['supervisor', 'supervisor(a)', 'gerente geral', 'gerente_geral', 'gerente', 'diretor', 'diretor(a)'];
+const ELEVATED_ROLES = ['supervisor', 'supervisor(a)', 'gerente geral', 'gerente geral & digital', 'gerente geral & digital(a)', 'gerente_geral', 'gerente'];
+const CARREFOUR_SECTORS = ['Frente Loja', 'Recebimento', 'Mercearia', 'Não Alimentar', 'Perecíveis', 'Liderança', 'Plantonistas'];
 
 export default function NativeSchedule({ userId, profile }) {
   const now = new Date();
@@ -272,8 +273,8 @@ export default function NativeSchedule({ userId, profile }) {
   const todayYear  = parseInt(today.split('-')[0]);
 
   const isElevated = ELEVATED_ROLES.includes((profile?.role || '').toLowerCase());
-  const [allProfiles,    setAllProfiles]    = useState([]);
-  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [allProfiles,     setAllProfiles]     = useState([]);
+  const [selectedSector,  setSelectedSector]  = useState('');
 
   // Para perfis elevados: carrega lista de todos os líderes com setor
   useEffect(() => {
@@ -281,13 +282,16 @@ export default function NativeSchedule({ userId, profile }) {
     api.get('/profile/all').then(r => setAllProfiles(r.data)).catch(() => {});
   }, [isElevated]);
 
-  // O userId efetivo: supervisor pode trocar, líder usa o próprio
-  const effectiveUserId = isElevated && selectedUserId ? selectedUserId : userId;
+  // Acha o perfil do líder responsável pelo setor selecionado
+  const sectorProfile = selectedSector
+    ? allProfiles.find(p => p.sector?.toLowerCase() === selectedSector.toLowerCase())
+    : null;
 
-  // Perfil do usuário sendo visualizado (para mostrar setor/nome correto no cabeçalho)
-  const viewedProfile = isElevated && selectedUserId
-    ? allProfiles.find(p => p.id === selectedUserId) || profile
-    : profile;
+  // O userId efetivo: usa o do líder do setor selecionado, senão o próprio
+  const effectiveUserId = sectorProfile ? sectorProfile.id : userId;
+
+  // Perfil sendo visualizado (para cabeçalho e PDF)
+  const viewedProfile = sectorProfile || profile;
 
   const weeks   = buildWeeks(year, month);
   const allDates = Array.from({ length: daysInMonth(year, month) }, (_, i) => fmtDate(year, month, i + 1));
@@ -470,16 +474,16 @@ export default function NativeSchedule({ userId, profile }) {
           <span style={{ fontWeight:800, fontSize:13, color:'#0f172a', whiteSpace:'nowrap' }}>Escala Mensal</span>
           <span style={{ color:'#e2e8f0' }}>|</span>
 
-          {/* Seletor de setor (apenas supervisor/gerente) */}
+          {/* Seletor de setor (apenas supervisor/gerente geral) */}
           {isElevated ? (
             <select
-              value={selectedUserId || ''}
-              onChange={e => { setSelectedUserId(e.target.value || null); setMembers([]); setEntries([]); }}
-              style={{ fontSize:10, padding:'2px 5px', borderRadius:4, border:'1px solid #cbd5e1', background:'#fff', color:'#0f172a', maxWidth:180, cursor:'pointer' }}
+              value={selectedSector}
+              onChange={e => { setSelectedSector(e.target.value); setMembers([]); setEntries([]); setSubmission(null); }}
+              style={{ fontSize:10, padding:'2px 5px', borderRadius:4, border:'1px solid #0e7490', background:'#f0fdff', color:'#0e7490', fontWeight:700, maxWidth:200, cursor:'pointer' }}
             >
               <option value="">Meu setor ({profile?.sector||'—'})</option>
-              {allProfiles.filter(p => p.id !== userId && p.sector).map(p => (
-                <option key={p.id} value={p.id}>{p.sector} · {p.full_name}</option>
+              {CARREFOUR_SECTORS.filter(s => s !== profile?.sector).map(s => (
+                <option key={s} value={s}>{s}</option>
               ))}
             </select>
           ) : (
