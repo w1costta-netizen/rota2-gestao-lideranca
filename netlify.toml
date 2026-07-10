@@ -5,7 +5,7 @@
 
 [[redirects]]
   from   = "/api/*"
-  to     = "https://rota2-backend.onrender.com/api/:splat"
+  to     = "https://rota2-gestao-lideranca.onrender.com/api/:splat"
   status = 200
   force  = true
 
