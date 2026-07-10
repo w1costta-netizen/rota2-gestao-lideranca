@@ -254,6 +254,8 @@ function TeamModal({ userId, userSector, onClose }) {
 }
 
 /* ── Página principal ── */
+const ELEVATED_ROLES = ['supervisor', 'gerente geral', 'gerente_geral', 'gerente'];
+
 export default function NativeSchedule({ userId, profile }) {
   const now = new Date();
   const [year,       setYear]       = useState(now.getFullYear());
@@ -269,6 +271,24 @@ export default function NativeSchedule({ userId, profile }) {
   const todayMonth = parseInt(today.split('-')[1]);
   const todayYear  = parseInt(today.split('-')[0]);
 
+  const isElevated = ELEVATED_ROLES.includes((profile?.access_level || '').toLowerCase());
+  const [allProfiles,    setAllProfiles]    = useState([]);
+  const [selectedUserId, setSelectedUserId] = useState(null);
+
+  // Para perfis elevados: carrega lista de todos os líderes com setor
+  useEffect(() => {
+    if (!isElevated) return;
+    api.get('/profile/all').then(r => setAllProfiles(r.data)).catch(() => {});
+  }, [isElevated]);
+
+  // O userId efetivo: supervisor pode trocar, líder usa o próprio
+  const effectiveUserId = isElevated && selectedUserId ? selectedUserId : userId;
+
+  // Perfil do usuário sendo visualizado (para mostrar setor/nome correto no cabeçalho)
+  const viewedProfile = isElevated && selectedUserId
+    ? allProfiles.find(p => p.id === selectedUserId) || profile
+    : profile;
+
   const weeks   = buildWeeks(year, month);
   const allDates = Array.from({ length: daysInMonth(year, month) }, (_, i) => fmtDate(year, month, i + 1));
 
@@ -278,16 +298,16 @@ export default function NativeSchedule({ userId, profile }) {
   const daysLeft    = 26 - todayDay;
 
   const load = useCallback(async () => {
-    if (!userId) return;
+    if (!effectiveUserId) return;
     const [mRes, eRes, sRes] = await Promise.all([
-      api.get(`/team?user_id=${userId}&active=true`),
-      api.get(`/schedule/month?user_id=${userId}&year=${year}&month=${month}`),
-      api.get(`/schedule/submission?user_id=${userId}&year=${year}&month=${month}`).catch(() => ({ data: null })),
+      api.get(`/team?user_id=${effectiveUserId}&active=true`),
+      api.get(`/schedule/month?user_id=${effectiveUserId}&year=${year}&month=${month}`),
+      api.get(`/schedule/submission?user_id=${effectiveUserId}&year=${year}&month=${month}`).catch(() => ({ data: null })),
     ]);
     setMembers(mRes.data);
     setEntries(eRes.data);
     setSubmission(sRes.data);
-  }, [userId, year, month]);
+  }, [effectiveUserId, year, month]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -301,7 +321,7 @@ export default function NativeSchedule({ userId, profile }) {
     if (!openCell) return;
     const dates   = [openCell.date, ...copyToDays];
     const results = await Promise.all(
-      dates.map(date => api.post('/schedule/save', { user_id:userId, team_member_id:openCell.memberId, work_date:date, ...payload }))
+      dates.map(date => api.post('/schedule/save', { user_id:effectiveUserId, team_member_id:openCell.memberId, work_date:date, ...payload }))
     );
     setEntries(prev => {
       let next = [...prev];
@@ -317,7 +337,7 @@ export default function NativeSchedule({ userId, profile }) {
   const submitSchedule = async () => {
     setSubmitting(true);
     try {
-      const res = await api.post('/schedule/submit', { user_id:userId, year, month });
+      const res = await api.post('/schedule/submit', { user_id:effectiveUserId, year, month });
       setSubmission(res.data);
     } catch {}
     setSubmitting(false);
@@ -334,7 +354,7 @@ export default function NativeSchedule({ userId, profile }) {
       await html2pdf()
         .set({
           margin: [4, 4, 4, 4],
-          filename: `Escala_${MONTHS_PT[month-1]}_${year}_${profile?.sector||'depto'}.pdf`,
+          filename: `Escala_${MONTHS_PT[month-1]}_${year}_${viewedProfile?.sector||'depto'}.pdf`,
           image: { type:'jpeg', quality:0.95 },
           html2canvas: { scale:2, useCORS:true, logging:false },
           jsPDF: { unit:'mm', format:'a4', orientation:'landscape' },
@@ -443,8 +463,21 @@ export default function NativeSchedule({ userId, profile }) {
           <span style={{ fontWeight:800, fontSize:13, color:'#0f172a', whiteSpace:'nowrap' }}>Escala Mensal</span>
           <span style={{ color:'#e2e8f0' }}>|</span>
 
-          {/* Depto / Gestor */}
-          <span style={{ fontSize:10, color:'#475569', whiteSpace:'nowrap' }}><b>{profile?.sector||'—'}</b> · {profile?.full_name||'—'}</span>
+          {/* Seletor de setor (apenas supervisor/gerente) */}
+          {isElevated ? (
+            <select
+              value={selectedUserId || ''}
+              onChange={e => { setSelectedUserId(e.target.value || null); setMembers([]); setEntries([]); }}
+              style={{ fontSize:10, padding:'2px 5px', borderRadius:4, border:'1px solid #cbd5e1', background:'#fff', color:'#0f172a', maxWidth:180, cursor:'pointer' }}
+            >
+              <option value="">Meu setor ({profile?.sector||'—'})</option>
+              {allProfiles.filter(p => p.id !== userId && p.sector).map(p => (
+                <option key={p.id} value={p.id}>{p.sector} · {p.full_name}</option>
+              ))}
+            </select>
+          ) : (
+            <span style={{ fontSize:10, color:'#475569', whiteSpace:'nowrap' }}><b>{viewedProfile?.sector||'—'}</b> · {viewedProfile?.full_name||'—'}</span>
+          )}
           <span style={{ color:'#e2e8f0' }}>|</span>
 
           {/* Legenda de cores */}
@@ -569,7 +602,7 @@ export default function NativeSchedule({ userId, profile }) {
       )}
 
       {showTeam && (
-        <TeamModal userId={userId} userSector={profile?.sector}
+        <TeamModal userId={effectiveUserId} userSector={viewedProfile?.sector}
           onClose={() => { setShowTeam(false); load(); }}/>
       )}
     </>

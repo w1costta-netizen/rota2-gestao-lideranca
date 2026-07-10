@@ -2,6 +2,16 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../supabase');
 
+// Lista todos os perfis (id, full_name, sector) — para seletores de setor
+router.get('/all', async (req, res) => {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, full_name, sector, access_level')
+    .order('sector');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 // Salva ou atualiza perfil — usa a chave secreta para bypassar RLS
 // chamado logo após o signUp, antes do e-mail ser confirmado
 router.post('/upsert', async (req, res) => {
