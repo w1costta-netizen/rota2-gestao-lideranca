@@ -362,16 +362,15 @@ export default function NativeSchedule({ userId, profile }) {
           scrollbarWidth:'thick', scrollbarColor:'#1d4ed8 #e2e8f0',
           paddingBottom:4,
         }}>
-          <div>
             <table style={{ borderCollapse:'collapse', tableLayout:'fixed', minWidth:'max-content' }}>
               <colgroup>
-                <col style={{ width:62 }}/>   {/* Matrícula */}
-                <col style={{ width:160 }}/>  {/* Nome */}
-                {weekDates.map(d => [0,1,2,3].map(i => (
+                <col style={{ width:62 }}/>
+                <col style={{ width:160 }}/>
+                {weekDates.flatMap(d => [0,1,2,3].map(i => (
                   <col key={d+i} style={{ width:56 }}/>
                 )))}
-                <col style={{ width:70 }}/>   {/* Assinatura */}
-                <col style={{ width:70 }}/>   {/* Data ciência */}
+                <col style={{ width:70 }}/>
+                <col style={{ width:70 }}/>
               </colgroup>
 
               <thead>
@@ -426,7 +425,6 @@ export default function NativeSchedule({ userId, profile }) {
                 })}
               </tbody>
             </table>
-          </div>
         </div>
 
         {/* Rodapé */}
