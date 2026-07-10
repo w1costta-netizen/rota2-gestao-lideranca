@@ -24,15 +24,25 @@ function AppContent() {
   const [sidebarW, setSidebarW] = useState(
     () => parseInt(localStorage.getItem('sidebarWidth') || SIDEBAR_DEFAULT)
   );
-  const dragging = useRef(false);
-  const startX   = useRef(0);
-  const startW   = useRef(0);
+  const dragging    = useRef(false);
+  const startX      = useRef(0);
+  const startW      = useRef(0);
+  const sidebarRef  = useRef(null);
+  const handleRef   = useRef(null);
+  const mainRef     = useRef(null);
+
+  const applyWidth = useCallback((w) => {
+    // Atualiza DOM diretamente — sem re-render React
+    if (sidebarRef.current) sidebarRef.current.style.width = w + 'px';
+    if (handleRef.current)  handleRef.current.style.left   = (w - 3) + 'px';
+    if (mainRef.current)    mainRef.current.style.marginLeft = w + 'px';
+  }, []);
 
   const onMouseDown = useCallback((e) => {
     dragging.current = true;
     startX.current   = e.clientX;
     startW.current   = sidebarW;
-    document.body.style.cursor    = 'col-resize';
+    document.body.style.cursor     = 'col-resize';
     document.body.style.userSelect = 'none';
   }, [sidebarW]);
 
@@ -40,19 +50,24 @@ function AppContent() {
     const onMove = (e) => {
       if (!dragging.current) return;
       const w = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, startW.current + e.clientX - startX.current));
-      setSidebarW(w);
+      applyWidth(w);
     };
     const onUp = () => {
       if (!dragging.current) return;
       dragging.current = false;
-      document.body.style.cursor    = '';
+      document.body.style.cursor     = '';
       document.body.style.userSelect = '';
-      setSidebarW(w => { localStorage.setItem('sidebarWidth', w); return w; });
+      // Lê o width atual do DOM e sincroniza com React state (1 único re-render)
+      const finalW = sidebarRef.current
+        ? parseInt(sidebarRef.current.style.width) || sidebarW
+        : sidebarW;
+      localStorage.setItem('sidebarWidth', finalW);
+      setSidebarW(finalW);
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup',   onUp);
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-  }, []);
+  }, [applyWidth, sidebarW]);
 
   if (session === undefined) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0D0D0D' }}>
@@ -86,12 +101,13 @@ function AppContent() {
 
   return (
     <div className="layout">
-      <Sidebar page={page} setPage={setPage} width={sidebarW} />
+      <Sidebar page={page} setPage={setPage} width={sidebarW} sidebarRef={sidebarRef} />
 
-      {/* Divisor arrastável */}
+      {/* Divisor arrastável — manipulado via DOM sem re-render */}
       <div
+        ref={handleRef}
         onMouseDown={onMouseDown}
-        title="Arraste para redimensionar"
+        title="Arraste para redimensionar o menu"
         style={{
           position: 'fixed',
           top: 0, bottom: 0,
@@ -104,7 +120,6 @@ function AppContent() {
           justifyContent: 'center',
         }}
       >
-        {/* Alça visual */}
         <div style={{
           width: 3,
           height: '100%',
@@ -116,7 +131,7 @@ function AppContent() {
         />
       </div>
 
-      <main className="main-content" style={{ marginLeft: sidebarW }}>
+      <main ref={mainRef} className="main-content" style={{ marginLeft: sidebarW }}>
         <PageComponent />
       </main>
     </div>

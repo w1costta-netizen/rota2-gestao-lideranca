@@ -10,14 +10,14 @@ const NAV = [
   { id: 'profile',   label: 'Meu Perfil', icon: UserCircle },
 ];
 
-export default function Sidebar({ page, setPage, width }) {
+export default function Sidebar({ page, setPage, width, sidebarRef }) {
   const { profile, signOut } = useAuth();
   const initials = profile?.full_name?.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase() || '?';
   const avatarUrl = profile?.avatar_url;
   const collapsed = width !== undefined && width < 100;
 
   return (
-    <aside className="sidebar" style={width ? { width } : undefined}>
+    <aside ref={sidebarRef} className="sidebar" style={width ? { width } : undefined}>
       <div className="sidebar-logo" style={collapsed ? { padding:'16px 8px', textAlign:'center' } : undefined}>
         {!collapsed && <h1>Rota 2.0</h1>}
         {!collapsed && <p>Gestão de Liderança</p>}
