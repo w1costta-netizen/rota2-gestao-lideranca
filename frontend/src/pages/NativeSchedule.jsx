@@ -254,7 +254,7 @@ function TeamModal({ userId, userSector, onClose }) {
 }
 
 /* ── Página principal ── */
-const ELEVATED_ROLES = ['supervisor', 'gerente geral', 'gerente_geral', 'gerente'];
+const ELEVATED_ROLES = ['supervisor', 'gerente geral', 'gerente_geral', 'gerente', 'diretor'];
 
 export default function NativeSchedule({ userId, profile }) {
   const now = new Date();
