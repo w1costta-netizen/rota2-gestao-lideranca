@@ -289,7 +289,7 @@ export default function NativeSchedule({ userId, profile }) {
         <td key={date+fi} style={{ ...TD(), background:cellBg, cursor:'pointer', minWidth:52 }} onClick={openCell_}>
           {val
             ? <span style={{ fontWeight:bold?700:400, fontSize:10, color:bold?'#111':'#444' }}>{val}</span>
-            : <span style={{ color:'#d1d5db', fontSize:14 }}>+</span>
+            : <span style={{ color:'#6b7280', fontSize:16, fontWeight:700 }}>+</span>
           }
         </td>
       );
@@ -362,7 +362,7 @@ export default function NativeSchedule({ userId, profile }) {
           scrollbarWidth:'thick', scrollbarColor:'#1d4ed8 #e2e8f0',
           paddingBottom:4,
         }}>
-          <div style={{ display:'contents' }}>
+          <div>
             <table style={{ borderCollapse:'collapse', tableLayout:'fixed', minWidth:'max-content' }}>
               <colgroup>
                 <col style={{ width:62 }}/>   {/* Matrícula */}
@@ -460,13 +460,17 @@ export default function NativeSchedule({ userId, profile }) {
       `}</style>
 
       {openCell && (
-        <CellEditor
-          entry={getEntry(openCell.memberId, openCell.date)}
-          memberName={members.find(m => m.id===openCell.memberId)?.name || ''}
-          dateStr={openCell.date}
-          onSave={saveCell}
-          onClose={() => setOpenCell(null)}
-        />
+        <>
+          <div onClick={() => setOpenCell(null)}
+            style={{ position:'fixed', inset:0, zIndex:9998, background:'rgba(0,0,0,.35)' }}/>
+          <CellEditor
+            entry={getEntry(openCell.memberId, openCell.date)}
+            memberName={members.find(m => m.id===openCell.memberId)?.name || ''}
+            dateStr={openCell.date}
+            onSave={saveCell}
+            onClose={() => setOpenCell(null)}
+          />
+        </>
       )}
 
       {showTeam && (
