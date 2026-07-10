@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Printer, Plus, Users, X, Save, Trash2, Calendar } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Printer, Users, X, Save, Trash2, Plus, CheckCircle, AlertCircle, Calendar } from 'lucide-react';
 import api from '../api';
 
 const DAY_NAME  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const DAY_FULL  = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const ROLES     = ['Operador(a) de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
 
 const STATUS = {
   trabalha: { label:'Trabalha', bg:'#e0f2fe', color:'#0369a1' },
@@ -14,27 +16,15 @@ const STATUS = {
   folga:    { label:'FOLGA',    bg:'#f3e8ff', color:'#6b21a8' },
 };
 
-const ROLES = ['Operador(a) de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
-
-function getWeekStartFromDate(dateStr) {
-  const d = new Date(dateStr + 'T12:00:00Z');
-  d.setUTCDate(d.getUTCDate() - d.getUTCDay());
-  return d.toISOString().split('T')[0];
-}
-function addDaysUTC(dateStr, n) {
-  const d = new Date(dateStr + 'T12:00:00Z');
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().split('T')[0];
-}
-function fmtBR(dateStr) {
-  if (!dateStr) return '';
-  const [,m,d] = dateStr.split('-');
-  return `${d}/${m}`;
-}
 function todayISO() { return new Date().toISOString().split('T')[0]; }
+function fmtDate(y, m, d) {
+  return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+}
+function daysInMonth(year, month) { return new Date(year, month, 0).getDate(); }
+function dayOfWeek(year, month, day) { return new Date(year, month-1, day).getDay(); }
 
-/* ── Editor de célula (modal central) ── */
-function CellEditor({ entry, memberName, dateStr, dayName, currentDayIdx, weekDates, onSave, onClose }) {
+/* ── Editor de célula ── */
+function CellEditor({ entry, memberName, dateStr, dayName, currentDayIdx, allDatesOfMonth, onSave, onClose }) {
   const [status,    setStatus]    = useState(entry?.status || 'trabalha');
   const [entrada,   setEntrada]   = useState(entry?.entrada || '');
   const [intervalo, setIntervalo] = useState(entry?.intervalo || '');
@@ -43,37 +33,31 @@ function CellEditor({ entry, memberName, dateStr, dayName, currentDayIdx, weekDa
   const [copyDays,  setCopyDays]  = useState([]);
   const [showCopy,  setShowCopy]  = useState(false);
 
-  const toggleDay = (idx) =>
-    setCopyDays(prev => prev.includes(idx) ? prev.filter(d => d!==idx) : [...prev, idx]);
+  const otherDates = allDatesOfMonth.filter(d => d !== dateStr);
+  const toggleDay  = (d) => setCopyDays(p => p.includes(d) ? p.filter(x=>x!==d) : [...p,d]);
+  const selectAll  = () => setCopyDays(p => p.length===otherDates.length ? [] : [...otherDates]);
 
-  const selectAllOthers = () => {
-    const others = weekDates.map((_,i) => i).filter(i => i !== currentDayIdx);
-    setCopyDays(prev => prev.length === others.length ? [] : others);
-  };
+  const handleSave = () => onSave({ status, entrada, intervalo, retorno_intervalo:retorno, saida, copyToDays:copyDays });
 
-  const handleSave = () => {
-    onSave({ status, entrada, intervalo, retorno_intervalo:retorno, saida, copyToDays: copyDays.map(i => weekDates[i]) });
-  };
+  const [,mStr,dStr] = dateStr.split('-');
+  const label = `${dStr}/${mStr}`;
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:9998, background:'rgba(0,0,0,.4)' }}/>
+      <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:9998, background:'rgba(0,0,0,.45)' }}/>
       <div style={{
-        position:'fixed', zIndex:9999,
-        top:'50%', left:'50%', transform:'translate(-50%,-50%)',
+        position:'fixed', zIndex:9999, top:'50%', left:'50%', transform:'translate(-50%,-50%)',
         background:'#fff', borderRadius:14, padding:22, width:340,
-        boxShadow:'0 24px 64px rgba(0,0,0,.3)', color:'#111',
-        maxHeight:'90vh', overflowY:'auto',
+        boxShadow:'0 24px 64px rgba(0,0,0,.3)', color:'#111', maxHeight:'90vh', overflowY:'auto',
       }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
           <div>
             <div style={{ fontWeight:800, fontSize:14 }}>{memberName}</div>
-            <div style={{ fontSize:11, color:'#64748b' }}>{dayName} · {fmtBR(dateStr)}</div>
+            <div style={{ fontSize:11, color:'#64748b' }}>{dayName} · {label}</div>
           </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:22, lineHeight:1, padding:'0 4px' }}>×</button>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:22, lineHeight:1 }}>×</button>
         </div>
 
-        {/* Status */}
         <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:14 }}>
           {Object.entries(STATUS).map(([k,v]) => (
             <button key={k} onClick={() => setStatus(k)} style={{
@@ -81,22 +65,20 @@ function CellEditor({ entry, memberName, dateStr, dayName, currentDayIdx, weekDa
               background: status===k ? v.color : '#f1f5f9',
               color:      status===k ? '#fff'   : '#475569',
               border:`1.5px solid ${status===k ? v.color : '#e2e8f0'}`,
-              transition:'all .12s',
             }}>{v.label}</button>
           ))}
         </div>
 
-        {/* Horários */}
         {status === 'trabalha' && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
             {[
-              { label:'Entrada',           val:entrada,   set:setEntrada },
-              { label:'Saída p/ intervalo',val:intervalo, set:setIntervalo },
-              { label:'Retorno intervalo', val:retorno,   set:setRetorno },
-              { label:'Saída',             val:saida,     set:setSaida },
+              { label:'Entrada',            val:entrada,   set:setEntrada },
+              { label:'Saída p/ intervalo', val:intervalo, set:setIntervalo },
+              { label:'Retorno intervalo',  val:retorno,   set:setRetorno },
+              { label:'Saída',              val:saida,     set:setSaida },
             ].map(f => (
               <div key={f.label}>
-                <div style={{ fontSize:10, color:'#64748b', marginBottom:4, fontWeight:700, textTransform:'uppercase', letterSpacing:.4 }}>{f.label}</div>
+                <div style={{ fontSize:10, color:'#64748b', marginBottom:4, fontWeight:700, textTransform:'uppercase' }}>{f.label}</div>
                 <input type="time" value={f.val} onChange={e => f.set(e.target.value)}
                   style={{ width:'100%', padding:'8px 10px', border:'1.5px solid #e2e8f0', borderRadius:8, fontSize:14, color:'#111', outline:'none', boxSizing:'border-box' }}/>
               </div>
@@ -106,7 +88,7 @@ function CellEditor({ entry, memberName, dateStr, dayName, currentDayIdx, weekDa
 
         {/* Copiar para outros dias */}
         <div style={{ marginBottom:14 }}>
-          <button onClick={() => setShowCopy(s => !s)} style={{
+          <button onClick={() => setShowCopy(s=>!s)} style={{
             width:'100%', padding:'8px 12px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700,
             background: showCopy ? '#eff6ff' : '#f8fafc',
             border:`1.5px solid ${showCopy ? '#93c5fd' : '#e2e8f0'}`,
@@ -115,30 +97,27 @@ function CellEditor({ entry, memberName, dateStr, dayName, currentDayIdx, weekDa
           }}>
             📋 {showCopy ? 'Ocultar' : 'Copiar horário para outros dias'}
           </button>
-
           {showCopy && (
-            <div style={{ marginTop:10, background:'#f0f9ff', borderRadius:8, padding:12, border:'1px solid #bae6fd' }}>
+            <div style={{ marginTop:8, background:'#f0f9ff', borderRadius:8, padding:12, border:'1px solid #bae6fd' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-                <span style={{ fontSize:11, fontWeight:700, color:'#0369a1' }}>Selecione os dias:</span>
-                <button onClick={selectAllOthers} style={{
+                <span style={{ fontSize:11, fontWeight:700, color:'#0369a1' }}>Selecione os dias do mês:</span>
+                <button onClick={selectAll} style={{
                   fontSize:10, padding:'3px 8px', borderRadius:5, border:'1px solid #93c5fd',
                   background:'#dbeafe', color:'#1d4ed8', cursor:'pointer', fontWeight:700,
-                }}>
-                  {copyDays.length === weekDates.length - 1 ? 'Desmarcar todos' : 'Selecionar todos'}
-                </button>
+                }}>{copyDays.length===otherDates.length ? 'Desmarcar' : 'Todos'}</button>
               </div>
-              <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
-                {DAY_NAME.map((d, i) => {
-                  if (i === currentDayIdx) return null;
-                  const sel = copyDays.includes(i);
+              <div style={{ display:'flex', gap:4, flexWrap:'wrap', maxHeight:120, overflowY:'auto' }}>
+                {otherDates.map(d => {
+                  const [,mm,dd] = d.split('-');
+                  const dow = new Date(d+'T12:00:00Z').getUTCDay();
+                  const sel = copyDays.includes(d);
                   return (
-                    <button key={i} onClick={() => toggleDay(i)} style={{
-                      padding:'5px 10px', borderRadius:6, fontSize:12, fontWeight:700, cursor:'pointer',
+                    <button key={d} onClick={() => toggleDay(d)} style={{
+                      padding:'4px 7px', borderRadius:5, fontSize:11, fontWeight:700, cursor:'pointer',
                       background: sel ? '#1d4ed8' : '#fff',
                       color:      sel ? '#fff'    : '#374151',
                       border:`1.5px solid ${sel ? '#1d4ed8' : '#d1d5db'}`,
-                      transition:'all .1s',
-                    }}>{d}</button>
+                    }}>{dd}/{mm} <span style={{ fontWeight:400, fontSize:9 }}>{DAY_NAME[dow]}</span></button>
                   );
                 })}
               </div>
@@ -187,16 +166,14 @@ function TeamModal({ userId, userSector, onClose }) {
     try {
       await api.post('/team', { user_id:userId, ...form });
       setForm({ matricula:'', name:'', role:'', sector:userSector||'' });
-      setAdding(false);
-      load();
+      setAdding(false); load();
     } catch {}
     setSaving(false);
   };
 
   const remove = async (id, name) => {
     if (!confirm(`Excluir ${name}?`)) return;
-    await api.delete(`/team/${id}`);
-    load();
+    await api.delete(`/team/${id}`); load();
   };
 
   return (
@@ -208,15 +185,13 @@ function TeamModal({ userId, userSector, onClose }) {
           <h3 style={{ fontWeight:700, fontSize:16 }}>Colaboradores do Time</h3>
           <button className="btn-icon" onClick={onClose}><X size={16}/></button>
         </div>
-
         {adding ? (
           <div style={{ background:'#111', borderRadius:8, padding:14, marginBottom:14, border:'1px solid #2a2a2a' }}>
             <div style={{ display:'grid', gridTemplateColumns:'100px 1fr', gap:8, marginBottom:8 }}>
               <input className="input" placeholder="Matrícula" value={form.matricula}
                 onChange={e => setForm(f => ({...f, matricula:e.target.value}))} style={{ fontSize:12 }}/>
               <input className="input" placeholder="NOME COMPLETO" value={form.name}
-                onChange={e => setForm(f => ({...f, name:e.target.value.toUpperCase()}))}
-                style={{ fontSize:12, textTransform:'uppercase' }}/>
+                onChange={e => setForm(f => ({...f, name:e.target.value.toUpperCase()}))} style={{ fontSize:12 }}/>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:10 }}>
               <select className="select" value={form.role} onChange={e => setForm(f => ({...f, role:e.target.value}))} style={{ fontSize:12 }}>
@@ -238,7 +213,6 @@ function TeamModal({ userId, userSector, onClose }) {
             <Plus size={13}/> Adicionar colaborador
           </button>
         )}
-
         {members.length === 0
           ? <p style={{ color:'var(--text-muted)', fontSize:13, textAlign:'center', padding:'20px 0' }}>Nenhum colaborador cadastrado.</p>
           : <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
@@ -270,44 +244,56 @@ function TeamModal({ userId, userSector, onClose }) {
 
 /* ── Página principal ── */
 export default function NativeSchedule({ userId, profile }) {
-  const [weekStart, setWeekStart] = useState(() => getWeekStartFromDate(todayISO()));
-  const [members,   setMembers]   = useState([]);
-  const [entries,   setEntries]   = useState([]);
-  const [openCell,  setOpenCell]  = useState(null);
-  const [showTeam,  setShowTeam]  = useState(false);
+  const now = new Date();
+  const [year,     setYear]     = useState(now.getFullYear());
+  const [month,    setMonth]    = useState(now.getMonth() + 1);
+  const [members,  setMembers]  = useState([]);
+  const [entries,  setEntries]  = useState([]);
+  const [openCell, setOpenCell] = useState(null);
+  const [showTeam, setShowTeam] = useState(false);
+  const [submission, setSubmission] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const scrollRef = useRef();
   const today = todayISO();
+  const todayDay = parseInt(today.split('-')[2]);
+  const todayMonth = parseInt(today.split('-')[1]);
+  const todayYear  = parseInt(today.split('-')[0]);
 
-  const weekDates = Array.from({ length:7 }, (_, i) => addDaysUTC(weekStart, i));
-  const weekEnd   = weekDates[6];
+  const totalDays = daysInMonth(year, month);
+  const allDates  = Array.from({ length:totalDays }, (_,i) => fmtDate(year, month, i+1));
+
+  // Alerta: está no mês atual e está entre dia 24-26?
+  const isCurrentMonth = year===todayYear && month===todayMonth;
+  const alertDay = isCurrentMonth && todayDay >= 24 && todayDay <= 26;
+  const alertUrgent = isCurrentMonth && todayDay === 26;
+  const daysLeft = 26 - todayDay;
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const [mRes, eRes] = await Promise.all([
+    const [mRes, eRes, sRes] = await Promise.all([
       api.get(`/team?user_id=${userId}&active=true`),
-      api.get(`/schedule?user_id=${userId}&week_start=${weekStart}`),
+      api.get(`/schedule/month?user_id=${userId}&year=${year}&month=${month}`),
+      api.get(`/schedule/submission?user_id=${userId}&year=${year}&month=${month}`).catch(() => ({ data: null })),
     ]);
     setMembers(mRes.data);
     setEntries(eRes.data);
-  }, [userId, weekStart]);
+    setSubmission(sRes.data);
+  }, [userId, year, month]);
 
   useEffect(() => { load(); }, [load]);
+
+  const prevMonth = () => { if (month===1) { setMonth(12); setYear(y=>y-1); } else setMonth(m=>m-1); };
+  const nextMonth = () => { if (month===12) { setMonth(1); setYear(y=>y+1); } else setMonth(m=>m+1); };
 
   const getEntry = (memberId, date) =>
     entries.find(e => e.team_member_id === memberId && e.work_date === date);
 
-  const saveCell = async ({ copyToDays = [], ...payload }) => {
+  const saveCell = async ({ copyToDays=[], ...payload }) => {
     if (!openCell) return;
-
-    // salva o dia atual
-    const saves = [
-      api.post('/schedule/save', { user_id:userId, team_member_id:openCell.memberId, work_date:openCell.date, ...payload }),
-      // copia para os dias selecionados
-      ...copyToDays.map(date =>
-        api.post('/schedule/save', { user_id:userId, team_member_id:openCell.memberId, work_date:date, ...payload })
-      ),
-    ];
-
-    const results = await Promise.all(saves);
+    const dates = [openCell.date, ...copyToDays];
+    const results = await Promise.all(
+      dates.map(date => api.post('/schedule/save', { user_id:userId, team_member_id:openCell.memberId, work_date:date, ...payload }))
+    );
     setEntries(prev => {
       let next = [...prev];
       results.forEach(res => {
@@ -319,44 +305,58 @@ export default function NativeSchedule({ userId, profile }) {
     setOpenCell(null);
   };
 
-  /* ── Célula de dia: mostra 4 horários empilhados ── */
-  function DayCell({ m, date, dayIdx, ri }) {
+  const submitSchedule = async () => {
+    setSubmitting(true);
+    try {
+      const res = await api.post('/schedule/submit', { user_id:userId, year, month });
+      setSubmission(res.data);
+    } catch {}
+    setSubmitting(false);
+  };
+
+  // % de preenchimento do mês
+  const workDays = allDates.filter(d => dayOfWeek(year, month, parseInt(d.split('-')[2])) !== 0).length;
+  const filled   = members.length > 0
+    ? entries.filter(e => e.work_date >= allDates[0] && e.work_date <= allDates[allDates.length-1]).length
+    : 0;
+  const total    = members.length * workDays;
+  const pct      = total > 0 ? Math.round(filled/total*100) : 0;
+
+  function DayCell({ m, date }) {
     const entry  = getEntry(m.id, date);
     const isOpen = openCell?.memberId===m.id && openCell?.date===date;
     const isToday= date===today;
-    const rowBg  = ri%2===0 ? '#fff' : '#f9fafb';
+    const dow    = new Date(date+'T12:00:00Z').getUTCDay();
+    const isSun  = dow===0;
+    const rowBg  = isSun ? '#fafafa' : '#fff';
     const bg     = isToday ? '#eff6ff' : rowBg;
-    const border = isToday ? '1px solid #bfdbfe' : '1px solid #e5e7eb';
 
-    const open = () => setOpenCell(isOpen ? null : { memberId:m.id, date, dayIdx });
+    const open = () => setOpenCell(isOpen ? null : { memberId:m.id, date, dow });
 
     if (!entry) {
       return (
-        <td onClick={open} style={{ border, background:bg, cursor:'pointer', textAlign:'center',
-          verticalAlign:'middle', padding:'6px 4px', minWidth:0 }}>
-          <span style={{ color:'#9ca3af', fontSize:18, fontWeight:700, lineHeight:1 }}>+</span>
+        <td onClick={open} style={{ background:bg, cursor:'pointer', textAlign:'center',
+          verticalAlign:'middle', padding:'3px 2px', border:'1px solid #e5e7eb',
+          opacity: isSun ? .4 : 1 }}>
+          <span style={{ color:'#9ca3af', fontSize:16, fontWeight:700 }}>+</span>
         </td>
       );
     }
-
     if (entry.status !== 'trabalha') {
       const st = STATUS[entry.status] || STATUS.dsr;
       return (
-        <td onClick={open} style={{ border, background:st.bg, cursor:'pointer', textAlign:'center',
-          verticalAlign:'middle', padding:'6px 4px' }}>
-          <span style={{ fontWeight:800, fontSize:11, color:st.color }}>{st.label}</span>
+        <td onClick={open} style={{ background:st.bg, cursor:'pointer', textAlign:'center',
+          verticalAlign:'middle', padding:'3px 2px', border:'1px solid #e5e7eb' }}>
+          <span style={{ fontWeight:800, fontSize:9, color:st.color }}>{st.label}</span>
         </td>
       );
     }
-
     return (
-      <td onClick={open} style={{ border, background:bg, cursor:'pointer',
-        textAlign:'center', verticalAlign:'middle', padding:'4px 3px' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1px 4px', fontSize:11 }}>
-          <span style={{ fontWeight:700, color:'#1d4ed8' }}>{entry.entrada||'—'}</span>
-          <span style={{ color:'#6b7280' }}>{entry.intervalo||'—'}</span>
-          <span style={{ color:'#6b7280' }}>{entry.retorno_intervalo||'—'}</span>
-          <span style={{ fontWeight:700, color:'#dc2626' }}>{entry.saida||'—'}</span>
+      <td onClick={open} style={{ background:bg, cursor:'pointer', textAlign:'center',
+        verticalAlign:'middle', padding:'2px', border:'1px solid #e5e7eb' }}>
+        <div style={{ fontSize:9, lineHeight:1.4 }}>
+          <div style={{ fontWeight:700, color:'#1d4ed8' }}>{entry.entrada||'—'}</div>
+          <div style={{ color:'#dc2626', fontWeight:700 }}>{entry.saida||'—'}</div>
         </div>
       </td>
     );
@@ -364,103 +364,150 @@ export default function NativeSchedule({ userId, profile }) {
 
   return (
     <>
+      {/* Alerta prazo */}
+      {alertDay && !submission && (
+        <div style={{
+          background: alertUrgent ? '#fee2e2' : '#fef9c3',
+          border:`1.5px solid ${alertUrgent ? '#fca5a5' : '#fde68a'}`,
+          borderRadius:10, padding:'12px 16px', marginBottom:14,
+          display:'flex', alignItems:'center', gap:12,
+        }}>
+          <AlertCircle size={20} color={alertUrgent ? '#dc2626' : '#92400e'}/>
+          <div>
+            <div style={{ fontWeight:800, fontSize:13, color: alertUrgent ? '#991b1b' : '#92400e' }}>
+              {alertUrgent ? '🚨 HOJE é o prazo! Escala de ' : `⏰ Faltam ${daysLeft} dia${daysLeft!==1?'s':''} para o prazo! Escala de `}
+              {MONTHS_PT[month-1]}/{year} ainda não foi fechada.
+            </div>
+            <div style={{ fontSize:11, color:'#6b7280', marginTop:2 }}>
+              Preencha e clique em <b>"Fechar Escala"</b> até o dia 26.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação de escala fechada */}
+      {submission && (
+        <div style={{ background:'#f0fdf4', border:'1.5px solid #86efac', borderRadius:10, padding:'12px 16px', marginBottom:14, display:'flex', alignItems:'center', gap:10 }}>
+          <CheckCircle size={18} color="#166534"/>
+          <span style={{ fontSize:13, color:'#166534', fontWeight:700 }}>
+            ✅ Escala de {MONTHS_PT[month-1]}/{year} fechada em {new Date(submission.submitted_at).toLocaleDateString('pt-BR')}
+          </span>
+        </div>
+      )}
+
       {/* Barra de ações */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14, flexWrap:'wrap', gap:8 }}>
-        <h1 className="page-title" style={{ margin:0 }}>Escala de Trabalho Semanal</h1>
-        <div style={{ display:'flex', gap:8 }}>
-          <button className="btn btn-ghost" onClick={() => setShowTeam(true)}><Users size={14}/> Gerenciar time</button>
+        <h1 className="page-title" style={{ margin:0 }}>Escala Mensal</h1>
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          <button className="btn btn-ghost" onClick={() => setShowTeam(true)}><Users size={14}/> Time</button>
           <button className="btn btn-ghost" onClick={() => window.print()}><Printer size={14}/> Imprimir</button>
+          {!submission && (
+            <button onClick={submitSchedule} disabled={submitting} style={{
+              display:'flex', alignItems:'center', gap:6, padding:'8px 16px', borderRadius:8,
+              background:'#16a34a', color:'#fff', border:'none', cursor:'pointer', fontWeight:700, fontSize:13,
+            }}>
+              <CheckCircle size={15}/> {submitting ? 'Fechando...' : 'Fechar Escala'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Card */}
+      {/* Card principal */}
       <div id="schedule-print" style={{ background:'#fff', color:'#111', borderRadius:12, border:'1px solid #e5e7eb', boxShadow:'0 2px 16px rgba(0,0,0,.08)', overflow:'hidden' }}>
 
-        {/* Cabeçalho info + seletor */}
-        <div style={{ padding:'12px 18px', borderBottom:'1px solid #e5e7eb', display:'flex', flexWrap:'wrap', gap:16, alignItems:'center', justifyContent:'space-between' }}>
+        {/* Cabeçalho */}
+        <div style={{ padding:'12px 18px', borderBottom:'1px solid #e5e7eb', display:'flex', flexWrap:'wrap', gap:12, alignItems:'center', justifyContent:'space-between' }}>
           <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
             <span style={{ fontSize:13 }}><b>Departamento:</b> {profile?.sector||'—'}</span>
             <span style={{ fontSize:13 }}><b>Gestor:</b> {profile?.full_name||'—'}</span>
-            <span style={{ fontSize:13 }}><b>Unidade:</b> {profile?.company||'—'}</span>
           </div>
 
-          {/* Seletor semana */}
-          <div style={{ display:'flex', alignItems:'center', gap:4, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'5px 10px' }}>
-            <button onClick={() => setWeekStart(addDaysUTC(weekStart,-7))}
-              style={{ background:'none', border:'none', cursor:'pointer', padding:'2px 4px', color:'#374151', display:'flex' }}>
+          {/* Seletor mês */}
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <button onClick={prevMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:6, cursor:'pointer', padding:'5px 8px', display:'flex' }}>
               <ChevronLeft size={16}/>
             </button>
-            <label style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer' }}>
-              <Calendar size={13} color="#1d4ed8"/>
-              <span style={{ fontSize:12, fontWeight:700 }}>
-                {fmtBR(weekStart).replace('/','/20').slice(0,8)} à {fmtBR(weekEnd).replace('/','/20')}
-              </span>
-              <input type="date" value={weekStart}
-                onChange={e => e.target.value && setWeekStart(getWeekStartFromDate(e.target.value))}
-                style={{ position:'absolute', opacity:0, width:0, height:0 }}/>
-            </label>
-            <button onClick={() => setWeekStart(addDaysUTC(weekStart,7))}
-              style={{ background:'none', border:'none', cursor:'pointer', padding:'2px 4px', color:'#374151', display:'flex' }}>
+            <span style={{ fontWeight:800, fontSize:15, minWidth:150, textAlign:'center' }}>
+              {MONTHS_PT[month-1]} {year}
+            </span>
+            <button onClick={nextMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:6, cursor:'pointer', padding:'5px 8px', display:'flex' }}>
               <ChevronRight size={16}/>
             </button>
           </div>
+
+          {/* Progresso */}
+          {members.length > 0 && (
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ fontSize:11, color:'#6b7280' }}>Preenchimento:</div>
+              <div style={{ width:120, height:8, background:'#e5e7eb', borderRadius:4, overflow:'hidden' }}>
+                <div style={{ width:`${pct}%`, height:'100%', background: pct===100?'#16a34a':'#1d4ed8', borderRadius:4, transition:'width .3s' }}/>
+              </div>
+              <div style={{ fontSize:11, fontWeight:700, color: pct===100?'#16a34a':'#1d4ed8' }}>{pct}%</div>
+            </div>
+          )}
         </div>
 
-        {/* Legenda horários */}
-        <div style={{ padding:'6px 18px', background:'#f0f9ff', borderBottom:'1px solid #bae6fd', display:'flex', gap:20, fontSize:11, color:'#0369a1', flexWrap:'wrap' }}>
-          <span><b style={{ color:'#1d4ed8' }}>Azul</b> = Entrada</span>
-          <span><b style={{ color:'#6b7280' }}>Cinza</b> = Int. / Retorno</span>
-          <span><b style={{ color:'#dc2626' }}>Vermelho</b> = Saída</span>
-          <span style={{ marginLeft:'auto', color:'#64748b' }}>Clique em qualquer célula para editar</span>
+        {/* Legenda */}
+        <div style={{ padding:'5px 18px', background:'#f0f9ff', borderBottom:'1px solid #bae6fd', display:'flex', gap:16, fontSize:11, color:'#0369a1', flexWrap:'wrap', alignItems:'center' }}>
+          <span><b style={{ color:'#1d4ed8' }}>Azul</b> = Entrada &nbsp;|&nbsp; <b style={{ color:'#dc2626' }}>Vermelho</b> = Saída</span>
+          <span style={{ marginLeft:'auto', color:'#64748b' }}>Clique em qualquer célula para editar · Dom = domingo (cinza)</span>
         </div>
 
-        {/* Tabela */}
-        <div style={{ overflowX:'auto' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse' }}>
+        {/* Tabela mensal */}
+        <div ref={scrollRef} style={{ overflowX:'auto', scrollbarWidth:'thick', scrollbarColor:'#1d4ed8 #e2e8f0' }}>
+          <table style={{ borderCollapse:'collapse', minWidth:'max-content', width:'100%' }}>
             <thead>
               <tr>
-                <th style={{ background:'#0e7490', color:'#fff', padding:'8px 10px', fontSize:11, fontWeight:700,
-                  textAlign:'center', border:'1px solid #0c6482', width:'5%' }}>Matr.</th>
-                <th style={{ background:'#0e7490', color:'#fff', padding:'8px 10px', fontSize:12, fontWeight:700,
-                  textAlign:'left', border:'1px solid #0c6482', width:'16%' }}>Nome do Associado</th>
-                {weekDates.map((d, i) => (
-                  <th key={d} style={{
-                    background: d===today ? '#1d4ed8' : '#1e40af',
-                    color:'#fff', padding:'7px 4px', fontSize:11, fontWeight:700,
-                    textAlign:'center', border:'1px solid #1e3a8a',
-                    width:`${79/7}%`,
-                  }}>
-                    <div style={{ fontWeight:800 }}>{DAY_NAME[i]}</div>
-                    <div style={{ fontSize:10, opacity:.85, fontWeight:400 }}>{fmtBR(d)}</div>
-                    <div style={{ fontSize:9, opacity:.7, marginTop:2 }}>Ent · Int · Ret · Saí</div>
-                  </th>
-                ))}
-                <th style={{ background:'#c2410c', color:'#fff', padding:'8px 4px', fontSize:10, fontWeight:700,
-                  textAlign:'center', border:'1px solid #9a3412', width:'5%' }}>Assinatura</th>
-                <th style={{ background:'#c2410c', color:'#fff', padding:'8px 4px', fontSize:10, fontWeight:700,
-                  textAlign:'center', border:'1px solid #9a3412', width:'5%' }}>Data<br/>ciência</th>
+                {/* Cabeçalho fixo */}
+                <th style={{ background:'#0e7490', color:'#fff', padding:'6px 8px', fontSize:10, fontWeight:700,
+                  border:'1px solid #0c6482', position:'sticky', left:0, zIndex:10, minWidth:60 }}>Matr.</th>
+                <th style={{ background:'#0e7490', color:'#fff', padding:'6px 10px', fontSize:11, fontWeight:700,
+                  border:'1px solid #0c6482', textAlign:'left', position:'sticky', left:60, zIndex:10, minWidth:150 }}>Nome</th>
+                {/* Dias do mês */}
+                {allDates.map(date => {
+                  const d   = parseInt(date.split('-')[2]);
+                  const dow = new Date(date+'T12:00:00Z').getUTCDay();
+                  const isSun = dow===0;
+                  const isTod = date===today;
+                  const isD26 = d===26;
+                  return (
+                    <th key={date} style={{
+                      padding:'4px 2px', fontSize:10, fontWeight:700, textAlign:'center',
+                      border:'1px solid #1e3a8a', minWidth:44,
+                      background: isTod ? '#1d4ed8' : isD26 ? '#7c3aed' : isSun ? '#374151' : '#1e40af',
+                      color:'#fff',
+                    }}>
+                      <div style={{ fontWeight:800 }}>{d}</div>
+                      <div style={{ fontSize:9, opacity:.8 }}>{DAY_NAME[dow]}</div>
+                      {isD26 && <div style={{ fontSize:8, background:'#fbbf24', color:'#78350f', borderRadius:3, padding:'1px 2px', marginTop:1 }}>Prazo</div>}
+                    </th>
+                  );
+                })}
+                <th style={{ background:'#c2410c', color:'#fff', padding:'6px 4px', fontSize:9, fontWeight:700,
+                  border:'1px solid #9a3412', minWidth:60, textAlign:'center' }}>Assinatura</th>
               </tr>
             </thead>
             <tbody>
               {members.length === 0 ? (
                 <tr>
-                  <td colSpan={11} style={{ textAlign:'center', padding:'36px', color:'#6b7280', fontSize:13 }}>
-                    Clique em <b>Gerenciar time</b> para adicionar colaboradores.
+                  <td colSpan={allDates.length+3} style={{ textAlign:'center', padding:'36px', color:'#6b7280', fontSize:13 }}>
+                    Clique em <b>Time</b> para adicionar colaboradores.
                   </td>
                 </tr>
               ) : members.map((m, ri) => {
                 const rowBg = ri%2===0 ? '#fff' : '#f9fafb';
                 return (
                   <tr key={m.id}>
-                    <td style={{ background:rowBg, padding:'4px 6px', textAlign:'center', fontSize:11,
-                      color:'#6b7280', fontWeight:600, border:'1px solid #e5e7eb' }}>{m.matricula||'—'}</td>
-                    <td style={{ background:rowBg, padding:'4px 10px', fontSize:12, fontWeight:700,
-                      color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap' }}>{m.name}</td>
-                    {weekDates.map((date, dayIdx) => (
-                      <DayCell key={date} m={m} date={date} dayIdx={dayIdx} ri={ri}/>
+                    <td style={{ background:rowBg, padding:'4px 6px', textAlign:'center', fontSize:10,
+                      color:'#6b7280', fontWeight:600, border:'1px solid #e5e7eb',
+                      position:'sticky', left:0, zIndex:5 }}>{m.matricula||'—'}</td>
+                    <td style={{ background:rowBg, padding:'4px 10px', fontSize:11, fontWeight:700,
+                      color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap',
+                      position:'sticky', left:60, zIndex:5 }}>{m.name}</td>
+                    {allDates.map(date => (
+                      <DayCell key={date} m={m} date={date}/>
                     ))}
                     <td style={{ background:rowBg, border:'2px solid #f97316' }}></td>
-                    <td style={{ background:rowBg, border:'1px solid #e5e7eb' }}></td>
                   </tr>
                 );
               })}
@@ -469,9 +516,9 @@ export default function NativeSchedule({ userId, profile }) {
         </div>
 
         {/* Rodapé */}
-        <div style={{ padding:'8px 18px', borderTop:'1px solid #e5e7eb', background:'#f9fafb', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+        <div style={{ padding:'8px 18px', borderTop:'1px solid #e5e7eb', background:'#f9fafb', display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:8, alignItems:'center' }}>
           <p style={{ fontSize:10, color:'#6b7280', fontStyle:'italic', margin:0 }}>
-            ** Escala deverá contemplar horário de entrega ao trabalho, início e retorno do descanso e saída do trabalho (Ex.: 8h/12h–13h/16h20)
+            ** Escala deverá ser fechada até o dia <b>26</b> de cada mês. Prazo marcado em roxo na tabela.
           </p>
           <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
             {Object.entries(STATUS).map(([k,v]) => (
@@ -484,24 +531,26 @@ export default function NativeSchedule({ userId, profile }) {
         </div>
       </div>
 
-      {/* Impressão */}
       <style>{`
         @media print {
           body * { visibility:hidden !important; }
           #schedule-print, #schedule-print * { visibility:visible !important; }
-          #schedule-print { position:fixed; top:0; left:0; width:100%; box-shadow:none !important; }
+          #schedule-print { position:fixed; top:0; left:0; width:100%; }
         }
+        div[ref]::-webkit-scrollbar { height:12px; }
+        div::-webkit-scrollbar { height:12px; }
+        div::-webkit-scrollbar-track { background:#e2e8f0; border-radius:6px; }
+        div::-webkit-scrollbar-thumb { background:#1d4ed8; border-radius:6px; }
       `}</style>
 
-      {/* Editor modal */}
       {openCell && (
         <CellEditor
           entry={getEntry(openCell.memberId, openCell.date)}
-          memberName={members.find(m => m.id===openCell.memberId)?.name || ''}
+          memberName={members.find(m => m.id===openCell.memberId)?.name||''}
           dateStr={openCell.date}
-          dayName={DAY_FULL[openCell.dayIdx]}
-          currentDayIdx={openCell.dayIdx}
-          weekDates={weekDates}
+          dayName={DAY_FULL[openCell.dow]}
+          currentDayIdx={openCell.dow}
+          allDatesOfMonth={allDates}
           onSave={saveCell}
           onClose={() => setOpenCell(null)}
         />

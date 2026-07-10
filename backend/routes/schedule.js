@@ -101,4 +101,30 @@ router.get('/month', async (req, res) => {
   res.json(data);
 });
 
+// GET /api/schedule/submission?user_id=&year=&month=
+router.get('/submission', async (req, res) => {
+  const { user_id, year, month } = req.query;
+  const { data, error } = await supabase
+    .from('schedule_submissions')
+    .select('*')
+    .eq('user_id', user_id)
+    .eq('year', year)
+    .eq('month', month)
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// POST /api/schedule/submit
+router.post('/submit', async (req, res) => {
+  const { user_id, year, month } = req.body;
+  const { data, error } = await supabase
+    .from('schedule_submissions')
+    .upsert({ user_id, year, month, submitted_at: new Date().toISOString() },
+      { onConflict: 'user_id,year,month' })
+    .select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 module.exports = router;
