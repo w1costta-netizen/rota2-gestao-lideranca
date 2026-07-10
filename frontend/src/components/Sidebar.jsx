@@ -10,14 +10,21 @@ const NAV = [
   { id: 'profile',   label: 'Meu Perfil', icon: UserCircle },
 ];
 
-export default function Sidebar({ page, setPage, width, sidebarRef }) {
+export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, isMobile }) {
   const { profile, signOut } = useAuth();
   const initials = profile?.full_name?.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase() || '?';
   const avatarUrl = profile?.avatar_url;
-  const collapsed = width !== undefined && width < 100;
+  const collapsed = !isMobile && width !== undefined && width < 100;
+
+  const mobileStyle = isMobile ? {
+    width: 260,
+    transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
+    transition: 'transform .25s ease',
+    zIndex: 300,
+  } : (width ? { width } : undefined);
 
   return (
-    <aside ref={sidebarRef} className="sidebar" style={width ? { width } : undefined}>
+    <aside ref={sidebarRef} className="sidebar" style={mobileStyle}>
       <div className="sidebar-logo" style={collapsed ? { padding:'16px 8px', textAlign:'center' } : undefined}>
         {!collapsed && <h1>Rota 2.0</h1>}
         {!collapsed && <p>Gestão de Liderança</p>}

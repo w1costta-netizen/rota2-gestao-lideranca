@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './components/Toast';
 import Sidebar from './components/Sidebar';
@@ -17,10 +17,22 @@ const SIDEBAR_MIN = 60;
 const SIDEBAR_MAX = 400;
 const SIDEBAR_DEFAULT = 240;
 
+function useIsMobile() {
+  const [mobile, setMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const fn = () => setMobile(window.innerWidth < 768);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+  return mobile;
+}
+
 function AppContent() {
   const { session, profile } = useAuth();
   const [page, setPage] = useState('dashboard');
   const [authPage, setAuthPage] = useState('login');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [sidebarW, setSidebarW] = useState(
     () => parseInt(localStorage.getItem('sidebarWidth') || SIDEBAR_DEFAULT)
   );
@@ -99,39 +111,73 @@ function AppContent() {
 
   const PageComponent = pages[page] || pages.dashboard;
 
+  const handleNavMobile = (p) => { setPage(p); setMobileMenuOpen(false); };
+
   return (
     <div className="layout">
-      <Sidebar page={page} setPage={setPage} width={sidebarW} sidebarRef={sidebarRef} />
+      {/* Botão hamburguer — só no mobile */}
+      {isMobile && (
+        <button
+          onClick={() => setMobileMenuOpen(o => !o)}
+          style={{
+            position: 'fixed', top: 12, left: 12, zIndex: 400,
+            width: 42, height: 42, borderRadius: 10,
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            justifyContent: 'center', gap: 5, cursor: 'pointer', padding: 0,
+          }}
+          aria-label="Menu"
+        >
+          <span style={{ display:'block', width:18, height:2, background:'var(--text)', borderRadius:2, transition:'all .2s',
+            transform: mobileMenuOpen ? 'rotate(45deg) translate(4px,4px)' : 'none' }}/>
+          <span style={{ display:'block', width:18, height:2, background:'var(--text)', borderRadius:2, transition:'all .2s',
+            opacity: mobileMenuOpen ? 0 : 1 }}/>
+          <span style={{ display:'block', width:18, height:2, background:'var(--text)', borderRadius:2, transition:'all .2s',
+            transform: mobileMenuOpen ? 'rotate(-45deg) translate(4px,-4px)' : 'none' }}/>
+        </button>
+      )}
 
-      {/* Divisor arrastável — manipulado via DOM sem re-render */}
-      <div
-        ref={handleRef}
-        onMouseDown={onMouseDown}
-        title="Arraste para redimensionar o menu"
-        style={{
-          position: 'fixed',
-          top: 0, bottom: 0,
-          left: sidebarW - 3,
-          width: 6,
-          cursor: 'col-resize',
-          zIndex: 200,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <div style={{
-          width: 3,
-          height: '100%',
-          background: 'transparent',
-          transition: 'background .15s',
-        }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--primary)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+      {/* Overlay escuro quando drawer aberto */}
+      {isMobile && mobileMenuOpen && (
+        <div onClick={() => setMobileMenuOpen(false)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.6)', zIndex:250, backdropFilter:'blur(2px)' }}
         />
-      </div>
+      )}
 
-      <main ref={mainRef} className="main-content" style={{ marginLeft: sidebarW }}>
+      <Sidebar
+        page={page}
+        setPage={isMobile ? handleNavMobile : setPage}
+        width={isMobile ? undefined : sidebarW}
+        sidebarRef={isMobile ? undefined : sidebarRef}
+        mobileOpen={mobileMenuOpen}
+        isMobile={isMobile}
+      />
+
+      {/* Divisor arrastável — só no desktop */}
+      {!isMobile && (
+        <div
+          ref={handleRef}
+          onMouseDown={onMouseDown}
+          title="Arraste para redimensionar o menu"
+          style={{
+            position: 'fixed', top: 0, bottom: 0,
+            left: sidebarW - 3, width: 6,
+            cursor: 'col-resize', zIndex: 200,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <div style={{ width:3, height:'100%', background:'transparent', transition:'background .15s' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--primary)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          />
+        </div>
+      )}
+
+      <main
+        ref={isMobile ? undefined : mainRef}
+        className="main-content"
+        style={isMobile ? { marginLeft: 0 } : { marginLeft: sidebarW }}
+      >
         <PageComponent />
       </main>
     </div>

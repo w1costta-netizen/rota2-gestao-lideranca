@@ -713,11 +713,82 @@ tbody td { padding: 12px 14px; font-size: 13.5px; color: var(--text); }
 .user-name { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .user-role { font-size: 11px; color: var(--text-muted); }
 
-/* ── Responsive ──────────────────────────────────────── */
-@media (max-width: 900px) {
+/* ── Responsive desktop médio ────────────────────────── */
+@media (max-width: 900px) and (min-width: 768px) {
   .sidebar { width: 60px; }
   .sidebar-logo p, .sidebar-logo h1, .nav-item span { display: none; }
   .nav-item { justify-content: center; padding: 10px; }
   .main-content { margin-left: 60px; padding: 20px; }
   .scale-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ── Mobile (< 768px) ────────────────────────────────── */
+@media (max-width: 767px) {
+  /* Conteúdo principal sem margem lateral */
+  .main-content {
+    margin-left: 0 !important;
+    padding: 64px 14px 24px;
+    min-height: 100vh;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  /* Page header empilhado */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .page-title { font-size: 18px; }
+
+  /* Cards sem padding excessivo */
+  .card { padding: 16px; }
+
+  /* Stats em 2 colunas no mobile */
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+  .stat-card { padding: 14px 12px; gap: 10px; }
+  .stat-icon { width: 38px; height: 38px; border-radius: 10px; }
+  .stat-value { font-size: 20px; }
+  .stat-label { font-size: 10px; }
+
+  /* Tabelas com scroll horizontal */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 500px; }
+
+  /* Agenda em 1 coluna */
+  .agenda-grid { grid-template-columns: 1fr; }
+
+  /* Escala em 2 colunas */
+  .scale-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+  /* Modal full-screen no mobile */
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal {
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    max-height: 92vh;
+  }
+
+  /* Botões com área de toque adequada */
+  .btn { padding: 11px 16px; font-size: 14px; }
+  .btn-sm { padding: 9px 14px; font-size: 13px; }
+
+  /* Toast no topo no mobile */
+  .toast-container { bottom: auto; top: 70px; right: 12px; left: 12px; }
+  .toast { min-width: unset; width: 100%; }
+
+  /* Auth card full-width */
+  .auth-card { padding: 28px 20px; border-radius: 16px; }
+
+  /* Inputs e selects maiores para toque */
+  .input, .select { padding: 12px 14px; font-size: 15px; }
+
+  /* Formulários de perfil */
+  .form-group { margin-bottom: 14px; }
 }
