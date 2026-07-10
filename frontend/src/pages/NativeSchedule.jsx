@@ -2,17 +2,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Printer, Plus, Users, X, Save, Trash2, Calendar } from 'lucide-react';
 import api from '../api';
 
-/* ── Helpers ─────────────────────────────────────────────────────────────── */
-const DAYS_PT  = ['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
 const DAY_NAME = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 
 const STATUS = {
-  trabalha: { label: 'Trabalha',  bg:'#e0f2fe', color:'#0369a1' },
-  dsr:      { label: 'DSR',       bg:'#dbeafe', color:'#1d4ed8' },
-  ferias:   { label: 'FÉRIAS',    bg:'#fef9c3', color:'#92400e' },
-  feriado:  { label: 'FERIADO',   bg:'#f0fdf4', color:'#166534' },
-  falta:    { label: 'FALTA',     bg:'#fee2e2', color:'#991b1b' },
-  folga:    { label: 'FOLGA',     bg:'#f3e8ff', color:'#6b21a8' },
+  trabalha: { label: 'Trabalha', bg:'#e0f2fe', color:'#0369a1' },
+  dsr:      { label: 'DSR',      bg:'#dbeafe', color:'#1d4ed8' },
+  ferias:   { label: 'FÉRIAS',   bg:'#fef9c3', color:'#92400e' },
+  feriado:  { label: 'FERIADO',  bg:'#f0fdf4', color:'#166534' },
+  falta:    { label: 'FALTA',    bg:'#fee2e2', color:'#991b1b' },
+  folga:    { label: 'FOLGA',    bg:'#f3e8ff', color:'#6b21a8' },
 };
 
 const ROLES = ['Operador(a) de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
@@ -34,13 +32,13 @@ function fmtBR(dateStr) {
 }
 function todayISO() { return new Date().toISOString().split('T')[0]; }
 
-/* ── Editor de célula ────────────────────────────────────────────────────── */
+/* ── Editor de célula ── */
 function CellEditor({ entry, memberName, dateStr, onSave, onClose }) {
-  const [status, setStatus] = useState(entry?.status || 'trabalha');
-  const [entrada,  setEntrada]  = useState(entry?.entrada  || '');
-  const [intervalo,setIntervalo]= useState(entry?.intervalo|| '');
-  const [retorno,  setRetorno]  = useState(entry?.retorno_intervalo || '');
-  const [saida,    setSaida]    = useState(entry?.saida    || '');
+  const [status,    setStatus]    = useState(entry?.status || 'trabalha');
+  const [entrada,   setEntrada]   = useState(entry?.entrada || '');
+  const [intervalo, setIntervalo] = useState(entry?.intervalo || '');
+  const [retorno,   setRetorno]   = useState(entry?.retorno_intervalo || '');
+  const [saida,     setSaida]     = useState(entry?.saida || '');
   const ref = useRef();
 
   useEffect(() => {
@@ -49,65 +47,62 @@ function CellEditor({ entry, memberName, dateStr, onSave, onClose }) {
     return () => document.removeEventListener('mousedown', h);
   }, [onClose]);
 
-  const handleSave = () => {
-    onSave({ status, entrada, intervalo, retorno_intervalo: retorno, saida });
-  };
-
   return (
     <div ref={ref} style={{
-      position:'absolute', zIndex:400, top:'calc(100% + 2px)', left:'50%', transform:'translateX(-50%)',
-      background:'#fff', border:'1px solid #cbd5e1', borderRadius:10, padding:16, minWidth:280,
-      boxShadow:'0 12px 40px rgba(0,0,0,.2)', color:'#111',
+      position:'fixed', zIndex:9999,
+      background:'#fff', border:'1px solid #cbd5e1', borderRadius:12, padding:18, width:300,
+      boxShadow:'0 20px 60px rgba(0,0,0,.25)', color:'#111',
+      top:'50%', left:'50%', transform:'translate(-50%,-50%)',
     }}>
-      <div style={{ fontSize:11, fontWeight:700, color:'#64748b', marginBottom:10 }}>
-        {memberName} · {fmtBR(dateStr)}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+        <span style={{ fontSize:12, fontWeight:700, color:'#64748b' }}>{memberName} · {fmtBR(dateStr)}</span>
+        <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:18, lineHeight:1 }}>×</button>
       </div>
 
-      {/* Status */}
-      <div style={{ display:'flex', flexWrap:'wrap', gap:4, marginBottom:12 }}>
+      <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:14 }}>
         {Object.entries(STATUS).map(([k,v]) => (
           <button key={k} onClick={() => setStatus(k)} style={{
-            padding:'4px 10px', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer',
+            padding:'5px 11px', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer',
             background: status===k ? v.color : '#f1f5f9',
             color: status===k ? '#fff' : '#475569',
             border:`1.5px solid ${status===k ? v.color : '#e2e8f0'}`,
+            transition:'all .15s',
           }}>{v.label}</button>
         ))}
       </div>
 
-      {/* Horários — só quando "trabalha" */}
       {status === 'trabalha' && (
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14 }}>
           {[
-            { label:'Entrada',              val: entrada,   set: setEntrada },
-            { label:'Intervalo (saída)',    val: intervalo, set: setIntervalo },
-            { label:'Retorno intervalo',   val: retorno,   set: setRetorno },
-            { label:'Saída',               val: saida,     set: setSaida },
+            { label:'Entrada',           val:entrada,   set:setEntrada },
+            { label:'Saída intervalo',   val:intervalo, set:setIntervalo },
+            { label:'Retorno intervalo', val:retorno,   set:setRetorno },
+            { label:'Saída',             val:saida,     set:setSaida },
           ].map(f => (
             <div key={f.label}>
-              <div style={{ fontSize:10, color:'#64748b', marginBottom:3, fontWeight:600 }}>{f.label.toUpperCase()}</div>
+              <div style={{ fontSize:10, color:'#64748b', marginBottom:3, fontWeight:600, textTransform:'uppercase' }}>{f.label}</div>
               <input type="time" value={f.val} onChange={e => f.set(e.target.value)}
-                style={{ width:'100%', padding:'6px 8px', border:'1px solid #cbd5e1', borderRadius:6, fontSize:13, color:'#111' }}/>
+                style={{ width:'100%', padding:'7px 8px', border:'1.5px solid #e2e8f0', borderRadius:7, fontSize:13, color:'#111', outline:'none' }}/>
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ display:'flex', gap:6 }}>
+      <div style={{ display:'flex', gap:8 }}>
         <button onClick={onClose} style={{
-          flex:1, padding:'7px', borderRadius:6, border:'1px solid #e2e8f0',
-          background:'#f8fafc', cursor:'pointer', fontSize:12, color:'#475569'
+          flex:1, padding:'9px', borderRadius:8, border:'1.5px solid #e2e8f0',
+          background:'#f8fafc', cursor:'pointer', fontSize:13, color:'#475569', fontWeight:600,
         }}>Cancelar</button>
-        <button onClick={handleSave} style={{
-          flex:1, padding:'7px', borderRadius:6, border:'none',
-          background:'#1d4ed8', color:'#fff', cursor:'pointer', fontSize:12, fontWeight:700
+        <button onClick={() => onSave({ status, entrada, intervalo, retorno_intervalo:retorno, saida })} style={{
+          flex:1, padding:'9px', borderRadius:8, border:'none',
+          background:'#1d4ed8', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:700,
         }}>✓ Salvar</button>
       </div>
     </div>
   );
 }
 
-/* ── Modal Gerenciar Time ────────────────────────────────────────────────── */
+/* ── Modal Time ── */
 function TeamModal({ userId, userSector, onClose }) {
   const [members, setMembers] = useState([]);
   const [form, setForm]       = useState({ matricula:'', name:'', role:'', sector:'' });
@@ -154,18 +149,18 @@ function TeamModal({ userId, userSector, onClose }) {
           <div style={{ background:'#111', borderRadius:8, padding:14, marginBottom:14, border:'1px solid #2a2a2a' }}>
             <div style={{ display:'grid', gridTemplateColumns:'110px 1fr', gap:8, marginBottom:8 }}>
               <input className="input" placeholder="Matrícula" value={form.matricula}
-                onChange={e => setForm(f => ({...f, matricula: e.target.value}))} style={{ fontSize:12 }}/>
+                onChange={e => setForm(f => ({...f, matricula:e.target.value}))} style={{ fontSize:12 }}/>
               <input className="input" placeholder="NOME COMPLETO" value={form.name}
-                onChange={e => setForm(f => ({...f, name: e.target.value.toUpperCase()}))}
+                onChange={e => setForm(f => ({...f, name:e.target.value.toUpperCase()}))}
                 style={{ fontSize:12, textTransform:'uppercase' }}/>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:10 }}>
-              <select className="select" value={form.role} onChange={e => setForm(f => ({...f, role: e.target.value}))} style={{ fontSize:12 }}>
+              <select className="select" value={form.role} onChange={e => setForm(f => ({...f, role:e.target.value}))} style={{ fontSize:12 }}>
                 <option value="">Função...</option>
                 {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
               <input className="input" placeholder="Setor" value={form.sector}
-                onChange={e => setForm(f => ({...f, sector: e.target.value}))} style={{ fontSize:12 }}/>
+                onChange={e => setForm(f => ({...f, sector:e.target.value}))} style={{ fontSize:12 }}/>
             </div>
             <div style={{ display:'flex', gap:6 }}>
               <button className="btn btn-ghost btn-sm" onClick={() => setAdding(false)}>Cancelar</button>
@@ -185,10 +180,9 @@ function TeamModal({ userId, userSector, onClose }) {
           : <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <thead>
                 <tr style={{ background:'#111', borderBottom:'1px solid #2a2a2a' }}>
-                  <th style={{ padding:'7px 10px', textAlign:'left', color:'var(--text-muted)', fontWeight:600 }}>Matrícula</th>
-                  <th style={{ padding:'7px 10px', textAlign:'left', color:'var(--text-muted)', fontWeight:600 }}>Nome</th>
-                  <th style={{ padding:'7px 10px', textAlign:'left', color:'var(--text-muted)', fontWeight:600 }}>Função</th>
-                  <th></th>
+                  {['Matrícula','Nome','Função',''].map(h => (
+                    <th key={h} style={{ padding:'7px 10px', textAlign:'left', color:'var(--text-muted)', fontWeight:600 }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -210,16 +204,16 @@ function TeamModal({ userId, userSector, onClose }) {
   );
 }
 
-/* ── Página principal ────────────────────────────────────────────────────── */
+/* ── Página principal ── */
 export default function NativeSchedule({ userId, profile }) {
   const [weekStart, setWeekStart] = useState(() => getWeekStartFromDate(todayISO()));
   const [members,   setMembers]   = useState([]);
   const [entries,   setEntries]   = useState([]);
   const [openCell,  setOpenCell]  = useState(null);
   const [showTeam,  setShowTeam]  = useState(false);
+  const scrollRef = useRef();
   const today = todayISO();
 
-  // 7 datas da semana
   const weekDates = Array.from({ length:7 }, (_, i) => addDaysUTC(weekStart, i));
   const weekEnd   = weekDates[6];
 
@@ -254,242 +248,196 @@ export default function NativeSchedule({ userId, profile }) {
     setOpenCell(null);
   };
 
-  // Navegar semana pelo calendário
-  const handleCalendar = (e) => {
-    const picked = e.target.value; // YYYY-MM-DD
-    if (picked) setWeekStart(getWeekStartFromDate(picked));
-  };
+  /* scroll horizontal por botões */
+  const scrollBy = (px) => scrollRef.current?.scrollBy({ left:px, behavior:'smooth' });
 
-  /* ── Estilos da tabela — fundo branco (impressão) ── */
   const TH = (extra={}) => ({
-    border:'1px solid #999', padding:'4px 6px', fontSize:11, fontWeight:700,
-    textAlign:'center', whiteSpace:'nowrap', ...extra
+    border:'1px solid #bbb', padding:'4px 3px', fontSize:10, fontWeight:700,
+    textAlign:'center', whiteSpace:'nowrap', userSelect:'none', ...extra,
   });
   const TD = (extra={}) => ({
-    border:'1px solid #ccc', padding:'3px 4px', fontSize:11,
-    textAlign:'center', verticalAlign:'middle', position:'relative', ...extra
+    border:'1px solid #ddd', padding:'2px 3px', fontSize:10,
+    textAlign:'center', verticalAlign:'middle', ...extra,
   });
 
-  function renderCell(m, date) {
+  const STICKY_MAT  = { position:'sticky', left:0,   zIndex:10, background:'#fff', boxShadow:'2px 0 4px rgba(0,0,0,.08)' };
+  const STICKY_NAME = { position:'sticky', left:62,  zIndex:10, background:'#fff', boxShadow:'2px 0 4px rgba(0,0,0,.08)' };
+
+  function renderDayCells(m, date, ri) {
     const entry  = getEntry(m.id, date);
     const isOpen = openCell?.memberId===m.id && openCell?.date===date;
+    const rowBg  = ri%2===0 ? '#fff' : '#f8fafc';
     const isToday= date===today;
+    const cellBg = isToday ? '#fffbeb' : rowBg;
+    const openCell_ = () => setOpenCell(isOpen ? null : { memberId:m.id, date });
 
-    const cellBg = isToday ? '#fffbeb' : 'transparent';
-
-    const content = () => {
-      if (!entry) return <span style={{ color:'#ccc', fontSize:16 }}>+</span>;
-      if (entry.status !== 'trabalha') {
-        const st = STATUS[entry.status] || STATUS.dsr;
-        return (
-          <span style={{ fontWeight:800, fontSize:10, color:st.color, background:st.bg, padding:'2px 6px', borderRadius:4 }}>
+    if (entry && entry.status !== 'trabalha') {
+      const st = STATUS[entry.status] || STATUS.dsr;
+      return (
+        <td key={date+'s'} colSpan={4} style={{ ...TD(), background:cellBg, cursor:'pointer' }} onClick={openCell_}>
+          <span style={{ fontWeight:800, fontSize:10, color:st.color, background:st.bg, padding:'2px 7px', borderRadius:4 }}>
             {st.label}
           </span>
-        );
-      }
-      return (
-        <div style={{ lineHeight:1.4, fontSize:10 }}>
-          {entry.entrada   && <div style={{ fontWeight:700 }}>{entry.entrada}</div>}
-          {entry.intervalo && <div style={{ color:'#555' }}>{entry.intervalo}</div>}
-          {entry.retorno_intervalo && <div style={{ color:'#555' }}>{entry.retorno_intervalo}</div>}
-          {entry.saida     && <div style={{ fontWeight:700 }}>{entry.saida}</div>}
-        </div>
+        </td>
       );
-    };
+    }
 
-    return (
-      <td key={date} style={{ ...TD(), background: cellBg, cursor:'pointer', minWidth:88, padding:0 }}>
-        <div onClick={() => setOpenCell(isOpen ? null : { memberId:m.id, date })}
-          style={{ padding:'4px 6px', minHeight:44, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          {content()}
-        </div>
-        {isOpen && (
-          <CellEditor
-            entry={entry}
-            memberName={m.name}
-            dateStr={date}
-            onSave={saveCell}
-            onClose={() => setOpenCell(null)}
-          />
-        )}
-      </td>
-    );
+    return ['entrada','intervalo','retorno_intervalo','saida'].map((field, fi) => {
+      const val = entry?.[field];
+      const bold = fi===0 || fi===3;
+      return (
+        <td key={date+fi} style={{ ...TD(), background:cellBg, cursor:'pointer', minWidth:52 }} onClick={openCell_}>
+          {val
+            ? <span style={{ fontWeight:bold?700:400, fontSize:10, color:bold?'#111':'#444' }}>{val}</span>
+            : <span style={{ color:'#d1d5db', fontSize:14 }}>+</span>
+          }
+        </td>
+      );
+    });
   }
 
   return (
     <>
-      {/* Botões de ação */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
-        <h1 className="page-title">Escala de Trabalho Semanal</h1>
+      {/* Barra de ações */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14, flexWrap:'wrap', gap:8 }}>
+        <h1 className="page-title" style={{ margin:0 }}>Escala de Trabalho Semanal</h1>
         <div style={{ display:'flex', gap:8 }}>
-          <button className="btn btn-ghost" onClick={() => setShowTeam(true)}>
-            <Users size={15}/> Gerenciar time
-          </button>
-          <button className="btn btn-ghost" onClick={() => window.print()}>
-            <Printer size={15}/> Imprimir
-          </button>
+          <button className="btn btn-ghost" onClick={() => setShowTeam(true)}><Users size={14}/> Gerenciar time</button>
+          <button className="btn btn-ghost" onClick={() => window.print()}><Printer size={14}/> Imprimir</button>
         </div>
       </div>
 
-      {/* ── TABELA — fundo branco estilo planilha ── */}
-      <div id="schedule-print" style={{ background:'#fff', color:'#111', borderRadius:10, overflow:'hidden', border:'1px solid #d1d5db', boxShadow:'0 2px 12px rgba(0,0,0,.08)' }}>
+      {/* Card branco */}
+      <div id="schedule-print" style={{ background:'#fff', color:'#111', borderRadius:10, border:'1px solid #d1d5db', boxShadow:'0 2px 12px rgba(0,0,0,.08)', overflow:'hidden' }}>
 
-        {/* Cabeçalho */}
-        <div style={{ padding:'16px 20px 12px', borderBottom:'2px solid #bbb' }}>
-          <h2 style={{ textAlign:'center', fontWeight:800, fontSize:18, marginBottom:14, letterSpacing:.5 }}>
-            ESCALA DE TRABALHO SEMANAL
-          </h2>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:16, alignItems:'start' }}>
-            <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-              <div style={{ fontSize:13 }}>
-                <span style={{ fontWeight:600 }}>Departamento: </span>
-                <strong>{profile?.sector || '—'}</strong>
-              </div>
-              <div style={{ fontSize:13 }}>
-                <span style={{ fontWeight:600 }}>Gestor: </span>
-                <strong>{profile?.full_name || '—'}</strong>
-              </div>
-              <div style={{ fontSize:13 }}>
-                <span style={{ fontWeight:600 }}>Unidade: </span>
-                <strong>{profile?.company || '—'}</strong>
-              </div>
-            </div>
+        {/* Cabeçalho info + seletor de semana */}
+        <div style={{ padding:'12px 16px 10px', borderBottom:'2px solid #bbb', display:'flex', flexWrap:'wrap', gap:12, alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display:'flex', gap:20, flexWrap:'wrap' }}>
+            <span style={{ fontSize:12 }}><b>Departamento:</b> {profile?.sector||'—'}</span>
+            <span style={{ fontSize:12 }}><b>Gestor:</b> {profile?.full_name||'—'}</span>
+            <span style={{ fontSize:12 }}><b>Unidade:</b> {profile?.company||'—'}</span>
+          </div>
 
-            {/* Seletor de período */}
-            <div style={{ border:'1px solid #999', borderRadius:6, padding:'8px 14px', textAlign:'center', minWidth:240 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:'#555', marginBottom:6 }}>Período (Domingo a Sábado)</div>
-              <div style={{ display:'flex', alignItems:'center', gap:8, justifyContent:'center' }}>
-                <button onClick={() => setWeekStart(addDaysUTC(weekStart,-7))}
-                  style={{ background:'none', border:'1px solid #ccc', borderRadius:4, cursor:'pointer', padding:'2px 6px', lineHeight:1 }}>
-                  <ChevronLeft size={14} color="#444"/>
-                </button>
-                <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                  <label style={{ position:'relative', cursor:'pointer' }} title="Escolher data">
-                    <Calendar size={14} color="#1d4ed8" style={{ verticalAlign:'middle', marginRight:4 }}/>
-                    <input type="date" value={weekStart} onChange={handleCalendar}
-                      style={{ position:'absolute', opacity:0, width:0, height:0, pointerEvents:'none' }}/>
-                  </label>
-                  <span style={{ fontWeight:800, fontSize:14 }}>{fmtBR(weekStart)}</span>
-                  <span style={{ fontWeight:600, color:'#555' }}>À</span>
-                  <span style={{ fontWeight:800, fontSize:14 }}>{fmtBR(weekEnd)}</span>
-                </div>
-                <button onClick={() => setWeekStart(addDaysUTC(weekStart,7))}
-                  style={{ background:'none', border:'1px solid #ccc', borderRadius:4, cursor:'pointer', padding:'2px 6px', lineHeight:1 }}>
-                  <ChevronRight size={14} color="#444"/>
-                </button>
-              </div>
-            </div>
+          {/* Navegação de semana */}
+          <div style={{ display:'flex', alignItems:'center', gap:6, background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:8, padding:'6px 12px' }}>
+            <button onClick={() => setWeekStart(addDaysUTC(weekStart,-7))}
+              style={{ background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', padding:4, borderRadius:4, color:'#374151' }}>
+              <ChevronLeft size={16}/>
+            </button>
+            <label style={{ display:'flex', alignItems:'center', gap:5, cursor:'pointer' }} title="Escolher semana">
+              <Calendar size={13} color="#1d4ed8"/>
+              <span style={{ fontSize:12, fontWeight:700, color:'#111' }}>{fmtBR(weekStart)}</span>
+              <span style={{ fontSize:11, color:'#6b7280' }}>à</span>
+              <span style={{ fontSize:12, fontWeight:700, color:'#111' }}>{fmtBR(weekEnd)}</span>
+              <input type="date" value={weekStart} onChange={e => e.target.value && setWeekStart(getWeekStartFromDate(e.target.value))}
+                style={{ position:'absolute', opacity:0, width:0, height:0, pointerEvents:'none' }}/>
+            </label>
+            <button onClick={() => setWeekStart(addDaysUTC(weekStart,7))}
+              style={{ background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', padding:4, borderRadius:4, color:'#374151' }}>
+              <ChevronRight size={16}/>
+            </button>
           </div>
         </div>
 
-        {/* Tabela */}
-        <div style={{ overflowX:'auto' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'auto' }}>
-            <thead>
-              {/* Linha 1: grupos de dia */}
-              <tr>
-                <th rowSpan={3} style={{ ...TH(), background:'#0e7490', color:'#fff', width:80 }}>Matrícula</th>
-                <th rowSpan={3} style={{ ...TH(), background:'#0e7490', color:'#fff', minWidth:170, textAlign:'left', paddingLeft:10 }}>Nome do Associado</th>
-                {weekDates.map((d, i) => (
-                  <th key={d} colSpan={4} style={{ ...TH(), background: d===today ? '#1d4ed8' : '#1e40af', color:'#fff', minWidth:200 }}>
-                    {DAY_NAME[i]}
-                  </th>
-                ))}
-                <th rowSpan={3} style={{ ...TH(), background:'#c2410c', color:'#fff', width:72 }}>Assinatura</th>
-                <th rowSpan={3} style={{ ...TH(), background:'#c2410c', color:'#fff', width:72 }}>Data ciência</th>
-              </tr>
-              {/* Linha 2: datas */}
-              <tr>
-                {weekDates.map(d => (
-                  <th key={d} colSpan={4} style={{ ...TH(), background: d===today ? '#2563eb' : '#2563eb99', color:'#fff', fontSize:10 }}>
-                    {fmtBR(d)}
-                  </th>
-                ))}
-              </tr>
-              {/* Linha 3: sub-colunas */}
-              <tr>
-                {weekDates.map(d => (
-                  ['Entrada','Intervalo','Ret. Intervalo','Saída'].map(sub => (
-                    <th key={d+sub} style={{ ...TH(), background:'#dbeafe', color:'#1e3a8a', fontSize:9, minWidth:48 }}>
-                      {sub}
-                    </th>
-                  ))
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {members.length === 0 ? (
-                <tr>
-                  <td colSpan={30} style={{ textAlign:'center', padding:'32px', color:'#888', fontSize:13 }}>
-                    Clique em <strong>Gerenciar time</strong> para adicionar colaboradores.
-                  </td>
-                </tr>
-              ) : members.map((m, ri) => {
-                const rowBg = ri%2===0 ? '#fff' : '#f8fafc';
-                return (
-                  <tr key={m.id} style={{ background: rowBg }}>
-                    <td style={{ ...TD(), color:'#555', fontWeight:500 }}>{m.matricula||'—'}</td>
-                    <td style={{ ...TD(), textAlign:'left', paddingLeft:10, fontWeight:600, fontSize:12 }}>{m.name}</td>
-                    {weekDates.map(date => {
-                      const entry  = getEntry(m.id, date);
-                      const isOpen = openCell?.memberId===m.id && openCell?.date===date;
-                      const isToday= date===today;
-                      const cellBg = isToday ? '#fffbeb' : rowBg;
-
-                      if (entry && entry.status !== 'trabalha') {
-                        const st = STATUS[entry.status] || STATUS.dsr;
-                        return (
-                          <td key={date} colSpan={4} style={{ ...TD(), background: cellBg, cursor:'pointer', position:'relative' }}
-                            onClick={() => setOpenCell(isOpen ? null : { memberId:m.id, date })}>
-                            <span style={{ fontWeight:800, fontSize:11, color:st.color, background:st.bg, padding:'3px 8px', borderRadius:4 }}>
-                              {st.label}
-                            </span>
-                            {isOpen && (
-                              <CellEditor entry={entry} memberName={m.name} dateStr={date}
-                                onSave={saveCell} onClose={() => setOpenCell(null)}/>
-                            )}
-                          </td>
-                        );
-                      }
-
-                      const fields = [
-                        entry?.entrada, entry?.intervalo, entry?.retorno_intervalo, entry?.saida
-                      ];
-                      return fields.map((val, fi) => {
-                        const isFirst = fi === 0;
-                        return (
-                          <td key={date+fi} style={{ ...TD(), background: cellBg, cursor:'pointer', minWidth:50, position: isFirst ? 'relative' : undefined }}
-                            onClick={() => setOpenCell(isOpen ? null : { memberId:m.id, date })}>
-                            {val
-                              ? <span style={{ fontWeight: (fi===0||fi===3) ? 700 : 400, fontSize:11 }}>{val}</span>
-                              : <span style={{ color:'#ddd', fontSize:14 }}>+</span>
-                            }
-                            {isFirst && isOpen && (
-                              <CellEditor entry={entry} memberName={m.name} dateStr={date}
-                                onSave={saveCell} onClose={() => setOpenCell(null)}/>
-                            )}
-                          </td>
-                        );
-                      });
-                    })}
-                    <td style={{ ...TD(), borderLeft:'2px solid #f97316' }}></td>
-                    <td style={{ ...TD() }}></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        {/* Botões de scroll horizontal */}
+        <div style={{ display:'flex', justifyContent:'flex-end', gap:6, padding:'6px 12px', background:'#f8fafc', borderBottom:'1px solid #e5e7eb' }}>
+          <span style={{ fontSize:11, color:'#9ca3af', alignSelf:'center', marginRight:4 }}>Navegar:</span>
+          <button onClick={() => scrollBy(-200)} style={{
+            background:'#1d4ed8', color:'#fff', border:'none', borderRadius:6,
+            padding:'5px 14px', cursor:'pointer', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:4,
+          }}>
+            <ChevronLeft size={14}/> Esquerda
+          </button>
+          <button onClick={() => scrollBy(200)} style={{
+            background:'#1d4ed8', color:'#fff', border:'none', borderRadius:6,
+            padding:'5px 14px', cursor:'pointer', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', gap:4,
+          }}>
+            Direita <ChevronRight size={14}/>
+          </button>
         </div>
 
-        {/* Rodapé / nota */}
-        <div style={{ padding:'10px 16px', borderTop:'1px solid #e5e7eb', background:'#f9fafb', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
-          <p style={{ fontSize:11, color:'#555', fontStyle:'italic', margin:0 }}>
+        {/* Tabela com scroll */}
+        <div id="schedule-scroll" ref={scrollRef} style={{
+          overflowX:'auto', overflowY:'visible',
+          scrollbarWidth:'thick', scrollbarColor:'#1d4ed8 #e2e8f0',
+          paddingBottom:4,
+        }}>
+          <div style={{ display:'contents' }}>
+            <table style={{ borderCollapse:'collapse', tableLayout:'fixed', minWidth:'max-content' }}>
+              <colgroup>
+                <col style={{ width:62 }}/>   {/* Matrícula */}
+                <col style={{ width:160 }}/>  {/* Nome */}
+                {weekDates.map(d => [0,1,2,3].map(i => (
+                  <col key={d+i} style={{ width:56 }}/>
+                )))}
+                <col style={{ width:70 }}/>   {/* Assinatura */}
+                <col style={{ width:70 }}/>   {/* Data ciência */}
+              </colgroup>
+
+              <thead>
+                {/* Linha 1: dias */}
+                <tr>
+                  <th rowSpan={3} style={{ ...TH(), ...STICKY_MAT, background:'#0e7490', color:'#fff', fontSize:10 }}>Matr.</th>
+                  <th rowSpan={3} style={{ ...TH(), ...STICKY_NAME, background:'#0e7490', color:'#fff', textAlign:'left', paddingLeft:8, fontSize:11 }}>Nome do Associado</th>
+                  {weekDates.map((d,i) => (
+                    <th key={d} colSpan={4} style={{ ...TH(), background: d===today?'#1d4ed8':'#1e40af', color:'#fff', fontSize:11 }}>
+                      {DAY_NAME[i]}
+                    </th>
+                  ))}
+                  <th rowSpan={3} style={{ ...TH(), background:'#c2410c', color:'#fff', fontSize:9 }}>Assinatura</th>
+                  <th rowSpan={3} style={{ ...TH(), background:'#c2410c', color:'#fff', fontSize:9 }}>Data<br/>ciência</th>
+                </tr>
+                {/* Linha 2: datas */}
+                <tr>
+                  {weekDates.map(d => (
+                    <th key={d} colSpan={4} style={{ ...TH(), background: d===today?'#2563eb':'#3b82f6', color:'#fff', fontSize:10 }}>
+                      {fmtBR(d)}
+                    </th>
+                  ))}
+                </tr>
+                {/* Linha 3: sub-colunas */}
+                <tr>
+                  {weekDates.flatMap(d =>
+                    ['Ent.','Int.','Ret.','Saí.'].map(sub => (
+                      <th key={d+sub} style={{ ...TH(), background:'#dbeafe', color:'#1e3a8a', fontSize:9 }}>{sub}</th>
+                    ))
+                  )}
+                </tr>
+              </thead>
+
+              <tbody>
+                {members.length === 0 ? (
+                  <tr>
+                    <td colSpan={32} style={{ textAlign:'center', padding:'28px', color:'#888', fontSize:13 }}>
+                      Clique em <b>Gerenciar time</b> para adicionar colaboradores.
+                    </td>
+                  </tr>
+                ) : members.map((m, ri) => {
+                  const rowBg = ri%2===0 ? '#fff' : '#f8fafc';
+                  return (
+                    <tr key={m.id} style={{ background:rowBg }}>
+                      <td style={{ ...TD(), ...STICKY_MAT, background:rowBg, color:'#555', fontSize:10, fontWeight:500 }}>{m.matricula||'—'}</td>
+                      <td style={{ ...TD(), ...STICKY_NAME, background:rowBg, textAlign:'left', paddingLeft:8, fontWeight:600, fontSize:11, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</td>
+                      {weekDates.flatMap(date => renderDayCells(m, date, ri))}
+                      <td style={{ ...TD(), borderLeft:'2px solid #f97316' }}></td>
+                      <td style={{ ...TD() }}></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Rodapé */}
+        <div style={{ padding:'8px 14px', borderTop:'1px solid #e5e7eb', background:'#f9fafb', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+          <p style={{ fontSize:10, color:'#555', fontStyle:'italic', margin:0 }}>
             ** Escala deverá contemplar horário de entrega ao trabalho, início e retorno do descanso e saída do trabalho (Ex.: 8h/12h–13h/16h20)
           </p>
-          <div style={{ display:'flex', gap:12, flexWrap:'wrap' }}>
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
             {Object.entries(STATUS).map(([k,v]) => (
-              <div key={k} style={{ display:'flex', alignItems:'center', gap:4, fontSize:10, color:'#555' }}>
-                <span style={{ width:10, height:10, borderRadius:2, background:v.bg, border:`1px solid ${v.color}`, display:'inline-block' }}/>
+              <div key={k} style={{ display:'flex', alignItems:'center', gap:3, fontSize:10, color:'#555' }}>
+                <span style={{ width:9, height:9, borderRadius:2, background:v.bg, border:`1px solid ${v.color}`, display:'inline-block' }}/>
                 {v.label}
               </div>
             ))}
@@ -503,8 +451,23 @@ export default function NativeSchedule({ userId, profile }) {
           body * { visibility:hidden !important; }
           #schedule-print, #schedule-print * { visibility:visible !important; }
           #schedule-print { position:fixed; top:0; left:0; width:100%; box-shadow:none !important; border:none !important; }
+          #schedule-scroll { overflow:visible !important; }
         }
+        #schedule-scroll::-webkit-scrollbar { height:14px; }
+        #schedule-scroll::-webkit-scrollbar-track { background:#e2e8f0; border-radius:8px; }
+        #schedule-scroll::-webkit-scrollbar-thumb { background:#1d4ed8; border-radius:8px; border:2px solid #e2e8f0; }
+        #schedule-scroll::-webkit-scrollbar-thumb:hover { background:#1e40af; }
       `}</style>
+
+      {openCell && (
+        <CellEditor
+          entry={getEntry(openCell.memberId, openCell.date)}
+          memberName={members.find(m => m.id===openCell.memberId)?.name || ''}
+          dateStr={openCell.date}
+          onSave={saveCell}
+          onClose={() => setOpenCell(null)}
+        />
+      )}
 
       {showTeam && (
         <TeamModal userId={userId} userSector={profile?.sector}
