@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, CalendarDays, LayoutGrid, ClipboardList, LogOut, UserCircle } from 'lucide-react';
+import { Users, CalendarDays, LayoutGrid, ClipboardList, LogOut, UserCircle, ShoppingCart } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const NAV = [
@@ -7,6 +7,7 @@ const NAV = [
   { id: 'leaders',   label: 'Líderes',    icon: Users },
   { id: 'agenda',    label: 'Agenda',     icon: CalendarDays },
   { id: 'scale',     label: 'Escala',     icon: ClipboardList },
+  { id: 'cashier',   label: 'Caixas',     icon: ShoppingCart },
   { id: 'profile',   label: 'Meu Perfil', icon: UserCircle },
 ];
 

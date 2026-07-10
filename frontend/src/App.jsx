@@ -7,6 +7,7 @@ import Leaders from './pages/Leaders';
 import Agenda from './pages/Agenda';
 import Scale from './pages/Scale';
 import Profile from './pages/Profile';
+import CashierAnalysis from './pages/CashierAnalysis';
 import Login from './pages/Login';
 import Register from './pages/Register';
 
@@ -29,7 +30,8 @@ function AppContent() {
     </div>
   );
 
-  const Page = { dashboard: Dashboard, leaders: Leaders, agenda: Agenda, scale: Scale, profile: Profile }[page];
+  const userId = session?.user?.id;
+  const Page = { dashboard: Dashboard, leaders: Leaders, agenda: Agenda, scale: Scale, cashier: () => <CashierAnalysis userId={userId} />, profile: Profile }[page];
 
   return (
     <div className="layout">
