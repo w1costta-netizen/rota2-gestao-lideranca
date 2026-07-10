@@ -34,24 +34,36 @@ function fmtBR(dateStr) {
 function todayISO() { return new Date().toISOString().split('T')[0]; }
 
 /* ── Editor de célula (modal central) ── */
-function CellEditor({ entry, memberName, dateStr, dayName, onSave, onClose }) {
+function CellEditor({ entry, memberName, dateStr, dayName, currentDayIdx, weekDates, onSave, onClose }) {
   const [status,    setStatus]    = useState(entry?.status || 'trabalha');
   const [entrada,   setEntrada]   = useState(entry?.entrada || '');
   const [intervalo, setIntervalo] = useState(entry?.intervalo || '');
   const [retorno,   setRetorno]   = useState(entry?.retorno_intervalo || '');
   const [saida,     setSaida]     = useState(entry?.saida || '');
+  const [copyDays,  setCopyDays]  = useState([]);
+  const [showCopy,  setShowCopy]  = useState(false);
+
+  const toggleDay = (idx) =>
+    setCopyDays(prev => prev.includes(idx) ? prev.filter(d => d!==idx) : [...prev, idx]);
+
+  const selectAllOthers = () => {
+    const others = weekDates.map((_,i) => i).filter(i => i !== currentDayIdx);
+    setCopyDays(prev => prev.length === others.length ? [] : others);
+  };
+
+  const handleSave = () => {
+    onSave({ status, entrada, intervalo, retorno_intervalo:retorno, saida, copyToDays: copyDays.map(i => weekDates[i]) });
+  };
 
   return (
     <>
-      {/* overlay */}
       <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:9998, background:'rgba(0,0,0,.4)' }}/>
-
-      {/* modal */}
       <div style={{
         position:'fixed', zIndex:9999,
         top:'50%', left:'50%', transform:'translate(-50%,-50%)',
-        background:'#fff', borderRadius:14, padding:22, width:320,
+        background:'#fff', borderRadius:14, padding:22, width:340,
         boxShadow:'0 24px 64px rgba(0,0,0,.3)', color:'#111',
+        maxHeight:'90vh', overflowY:'auto',
       }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
           <div>
@@ -74,8 +86,9 @@ function CellEditor({ entry, memberName, dateStr, dayName, onSave, onClose }) {
           ))}
         </div>
 
+        {/* Horários */}
         {status === 'trabalha' && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
             {[
               { label:'Entrada',           val:entrada,   set:setEntrada },
               { label:'Saída p/ intervalo',val:intervalo, set:setIntervalo },
@@ -91,15 +104,62 @@ function CellEditor({ entry, memberName, dateStr, dayName, onSave, onClose }) {
           </div>
         )}
 
+        {/* Copiar para outros dias */}
+        <div style={{ marginBottom:14 }}>
+          <button onClick={() => setShowCopy(s => !s)} style={{
+            width:'100%', padding:'8px 12px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700,
+            background: showCopy ? '#eff6ff' : '#f8fafc',
+            border:`1.5px solid ${showCopy ? '#93c5fd' : '#e2e8f0'}`,
+            color: showCopy ? '#1d4ed8' : '#475569',
+            display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+          }}>
+            📋 {showCopy ? 'Ocultar' : 'Copiar horário para outros dias'}
+          </button>
+
+          {showCopy && (
+            <div style={{ marginTop:10, background:'#f0f9ff', borderRadius:8, padding:12, border:'1px solid #bae6fd' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+                <span style={{ fontSize:11, fontWeight:700, color:'#0369a1' }}>Selecione os dias:</span>
+                <button onClick={selectAllOthers} style={{
+                  fontSize:10, padding:'3px 8px', borderRadius:5, border:'1px solid #93c5fd',
+                  background:'#dbeafe', color:'#1d4ed8', cursor:'pointer', fontWeight:700,
+                }}>
+                  {copyDays.length === weekDates.length - 1 ? 'Desmarcar todos' : 'Selecionar todos'}
+                </button>
+              </div>
+              <div style={{ display:'flex', gap:5, flexWrap:'wrap' }}>
+                {DAY_NAME.map((d, i) => {
+                  if (i === currentDayIdx) return null;
+                  const sel = copyDays.includes(i);
+                  return (
+                    <button key={i} onClick={() => toggleDay(i)} style={{
+                      padding:'5px 10px', borderRadius:6, fontSize:12, fontWeight:700, cursor:'pointer',
+                      background: sel ? '#1d4ed8' : '#fff',
+                      color:      sel ? '#fff'    : '#374151',
+                      border:`1.5px solid ${sel ? '#1d4ed8' : '#d1d5db'}`,
+                      transition:'all .1s',
+                    }}>{d}</button>
+                  );
+                })}
+              </div>
+              {copyDays.length > 0 && (
+                <div style={{ marginTop:8, fontSize:11, color:'#0369a1', fontWeight:600 }}>
+                  ✓ Será copiado para {copyDays.length} dia{copyDays.length>1?'s':''}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <div style={{ display:'flex', gap:8 }}>
           <button onClick={onClose} style={{
             flex:1, padding:'10px', borderRadius:8, border:'1.5px solid #e2e8f0',
             background:'#f8fafc', cursor:'pointer', fontSize:13, color:'#475569', fontWeight:600,
           }}>Cancelar</button>
-          <button onClick={() => onSave({ status, entrada, intervalo, retorno_intervalo:retorno, saida })} style={{
+          <button onClick={handleSave} style={{
             flex:2, padding:'10px', borderRadius:8, border:'none',
             background:'#1d4ed8', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:700,
-          }}>✓ Salvar</button>
+          }}>✓ Salvar{copyDays.length > 0 ? ` + copiar (${copyDays.length})` : ''}</button>
         </div>
       </div>
     </>
@@ -235,18 +295,26 @@ export default function NativeSchedule({ userId, profile }) {
   const getEntry = (memberId, date) =>
     entries.find(e => e.team_member_id === memberId && e.work_date === date);
 
-  const saveCell = async (payload) => {
+  const saveCell = async ({ copyToDays = [], ...payload }) => {
     if (!openCell) return;
-    const res = await api.post('/schedule/save', {
-      user_id: userId,
-      team_member_id: openCell.memberId,
-      work_date: openCell.date,
-      ...payload,
-    });
+
+    // salva o dia atual
+    const saves = [
+      api.post('/schedule/save', { user_id:userId, team_member_id:openCell.memberId, work_date:openCell.date, ...payload }),
+      // copia para os dias selecionados
+      ...copyToDays.map(date =>
+        api.post('/schedule/save', { user_id:userId, team_member_id:openCell.memberId, work_date:date, ...payload })
+      ),
+    ];
+
+    const results = await Promise.all(saves);
     setEntries(prev => {
-      const idx = prev.findIndex(e => e.team_member_id===openCell.memberId && e.work_date===openCell.date);
-      if (idx >= 0) { const n=[...prev]; n[idx]=res.data; return n; }
-      return [...prev, res.data];
+      let next = [...prev];
+      results.forEach(res => {
+        const idx = next.findIndex(e => e.team_member_id===openCell.memberId && e.work_date===res.data.work_date);
+        if (idx >= 0) next[idx] = res.data; else next.push(res.data);
+      });
+      return next;
     });
     setOpenCell(null);
   };
@@ -432,6 +500,8 @@ export default function NativeSchedule({ userId, profile }) {
           memberName={members.find(m => m.id===openCell.memberId)?.name || ''}
           dateStr={openCell.date}
           dayName={DAY_FULL[openCell.dayIdx]}
+          currentDayIdx={openCell.dayIdx}
+          weekDates={weekDates}
           onSave={saveCell}
           onClose={() => setOpenCell(null)}
         />
