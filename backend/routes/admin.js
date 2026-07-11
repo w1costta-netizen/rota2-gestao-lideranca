@@ -137,4 +137,42 @@ router.delete('/roles/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── SETORES ──────────────────────────────────────────────────────
+
+// GET /api/admin/sectors?company=
+router.get('/sectors', async (req, res) => {
+  const { company } = req.query;
+  if (!company) return res.status(400).json({ error: 'company obrigatório' });
+  const { data, error } = await supabase.from('company_sectors').select('*').eq('company', company).order('sort_order');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// POST /api/admin/sectors
+router.post('/sectors', async (req, res) => {
+  const { requester_id, sector_name } = req.body;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
+  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (!sector_name) return res.status(400).json({ error: 'sector_name obrigatório' });
+
+  const { data, error } = await supabase.from('company_sectors')
+    .upsert({ company: me.company, sector_name: sector_name.trim() }, { onConflict: 'company,sector_name' })
+    .select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// DELETE /api/admin/sectors/:id
+router.delete('/sectors/:id', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const { data: me } = await supabase.from('profiles').select('access_level').eq('id', requester_id).single();
+  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+
+  const { error } = await supabase.from('company_sectors').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 module.exports = router;
