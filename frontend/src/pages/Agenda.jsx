@@ -22,7 +22,8 @@ export default function Agenda({ userId, profile }) {
   const isAdmin = profile?.access_level === 'admin' || profile?.access_level === 'supervisor';
   const [week, setWeek]       = useState(getWeekStart());
   const [items, setItems]     = useState([]);
-  const [leaders, setLeaders] = useState([]);
+  const [leaders, setLeaders] = useState([]);   // tabela antiga (pdf/whatsapp individual)
+  const [profiles, setProfiles] = useState([]); // usuários do novo sistema
   const [sectors, setSectors] = useState([]);
   const [modal, setModal]     = useState(false);
   const [editing, setEditing] = useState(null);
@@ -57,7 +58,13 @@ export default function Agenda({ userId, profile }) {
       setLeaders(r.data);
       setSectors([...new Set(r.data.map(l => l.sector))]);
     });
-  }, []);
+    // Carrega usuários do novo sistema para o modal de envio
+    if (userId) {
+      api.get(`/admin/users?requester_id=${userId}`)
+        .then(r => setProfiles(r.data || []))
+        .catch(() => {});
+    }
+  }, [userId]);
 
   const prevWeek = () => setWeek(addDays(week, -7));
   const nextWeek = () => setWeek(addDays(week, 7));
@@ -133,7 +140,7 @@ export default function Agenda({ userId, profile }) {
   };
 
   const openSendAllModal = () => {
-    setSelectedLeaders(leaders.map(l => l.id)); // todos selecionados por padrão
+    setSelectedLeaders(profiles.map(p => p.id)); // todos selecionados por padrão
     setSendAllModal(true);
   };
 
@@ -144,17 +151,48 @@ export default function Agenda({ userId, profile }) {
   };
 
   const toggleAll = () => {
-    setSelectedLeaders(prev => prev.length === leaders.length ? [] : leaders.map(l => l.id));
+    setSelectedLeaders(prev => prev.length === profiles.length ? [] : profiles.map(p => p.id));
+  };
+
+  // Constrói mensagem de WhatsApp para um perfil com base nos itens da semana
+  const buildMessageForProfile = (profile) => {
+    const userItems = items.filter(item => {
+      if (item.target_type === 'geral') return true;
+      if (item.target_type === 'setor') return item.target_value === profile.sector;
+      if (item.target_type === 'lider') return item.target_value === profile.id;
+      return false;
+    });
+    const firstName = profile.full_name?.split(' ')[0] || profile.full_name;
+    if (userItems.length === 0)
+      return `Olá ${firstName}! Não há itens de agenda para você esta semana.`;
+    const grouped = {};
+    userItems.forEach(i => {
+      if (!grouped[i.day_of_week]) grouped[i.day_of_week] = [];
+      grouped[i.day_of_week].push(i);
+    });
+    let msg = `📋 *Agenda da semana — ${formatDate(week)}*\nOlá, ${firstName}! Segue sua agenda:\n\n`;
+    DAYS.forEach(day => {
+      if (!grouped[day]) return;
+      msg += `*${DAY_LABELS[day]}*\n`;
+      grouped[day].forEach(i => {
+        msg += `• ${i.time ? i.time + ' — ' : ''}${i.title}${i.description ? '\n  _' + i.description + '_' : ''}\n`;
+      });
+      msg += '\n';
+    });
+    msg += '_Enviado via Rota 2.0_';
+    return msg;
   };
 
   const sendSelected = async () => {
-    const toSend = leaders.filter(l => selectedLeaders.includes(l.id));
+    const toSend = profiles.filter(p => selectedLeaders.includes(p.id));
     setSendAllModal(false);
-    for (const l of toSend) {
-      await openWA(l);
-      await new Promise(r => setTimeout(r, 600));
+    for (const p of toSend) {
+      const msg = buildMessageForProfile(p);
+      // Abre wa.me sem número — usuário escolhe o contato no WhatsApp
+      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+      await new Promise(r => setTimeout(r, 700));
     }
-    toast(`WhatsApp aberto para ${toSend.length} líder${toSend.length > 1 ? 'es' : ''}!`);
+    toast(`WhatsApp aberto para ${toSend.length} pessoa${toSend.length > 1 ? 's' : ''}!`);
   };
 
   const byDay = {};
@@ -260,7 +298,7 @@ export default function Agenda({ userId, profile }) {
           footer={<>
             <button className="btn btn-ghost" onClick={() => setSendAllModal(false)}>Cancelar</button>
             <button className="btn btn-primary" onClick={sendSelected} disabled={selectedLeaders.length === 0}>
-              <Send size={14}/> Enviar para {selectedLeaders.length} líder{selectedLeaders.length !== 1 ? 'es' : ''}
+              <Send size={14}/> Enviar para {selectedLeaders.length} pessoa{selectedLeaders.length !== 1 ? 's' : ''}
             </button>
           </>}
         >
@@ -268,38 +306,41 @@ export default function Agenda({ userId, profile }) {
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12,
             paddingBottom:12, borderBottom:'1px solid var(--border)' }}>
             <span style={{ fontSize:13, fontWeight:600 }}>
-              {selectedLeaders.length === leaders.length ? 'Todos selecionados' : `${selectedLeaders.length} de ${leaders.length} selecionados`}
+              {selectedLeaders.length === profiles.length ? 'Todos selecionados' : `${selectedLeaders.length} de ${profiles.length} selecionados`}
             </span>
             <button type="button" onClick={toggleAll}
               style={{ fontSize:12, color:'var(--primary)', background:'none', border:'none',
                 cursor:'pointer', fontWeight:600 }}>
-              {selectedLeaders.length === leaders.length ? 'Desmarcar todos' : 'Selecionar todos'}
+              {selectedLeaders.length === profiles.length ? 'Desmarcar todos' : 'Selecionar todos'}
             </button>
           </div>
 
-          {/* Lista de líderes */}
+          {/* Lista de usuários */}
           <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:320, overflowY:'auto' }}>
-            {leaders.length === 0 && (
+            {profiles.length === 0 && (
               <p style={{ fontSize:13, color:'var(--text-muted)', textAlign:'center', padding:'20px 0' }}>
-                Nenhum líder cadastrado.
+                Nenhum usuário cadastrado ainda.
               </p>
             )}
-            {leaders.map(l => {
-              const selected = selectedLeaders.includes(l.id);
+            {profiles.map(p => {
+              const selected = selectedLeaders.includes(p.id);
               return (
-                <label key={l.id} style={{
+                <label key={p.id} style={{
                   display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:8,
                   cursor:'pointer', border:`1px solid ${selected ? 'var(--primary)' : 'var(--border)'}`,
                   background: selected ? 'rgba(232,98,42,.06)' : 'var(--surface-2)',
                   transition:'all .15s',
                 }}>
-                  <input type="checkbox" checked={selected} onChange={() => toggleLeader(l.id)}
+                  <input type="checkbox" checked={selected} onChange={() => toggleLeader(p.id)}
                     style={{ accentColor:'var(--primary)', width:16, height:16, flexShrink:0 }}/>
                   <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:600, fontSize:13 }}>{l.name}</div>
-                    <div style={{ fontSize:11, color:'var(--text-muted)' }}>{l.sector}</div>
+                    <div style={{ fontWeight:600, fontSize:13 }}>{p.full_name}</div>
+                    <div style={{ fontSize:11, color:'var(--text-muted)' }}>{p.sector || p.role || '—'}</div>
                   </div>
-                  <div style={{ fontSize:11, color:'var(--text-muted)' }}>{l.whatsapp}</div>
+                  <span style={{ fontSize:10, padding:'2px 7px', borderRadius:99, fontWeight:600,
+                    background:'var(--surface)', border:'1px solid var(--border)', color:'var(--text-muted)' }}>
+                    {p.access_level}
+                  </span>
                 </label>
               );
             })}
