@@ -118,10 +118,12 @@ export default function Agenda({ userId, profile }) {
     const grouped = {};
     li.forEach(i => { if (!grouped[i.day_of_week]) grouped[i.day_of_week] = []; grouped[i.day_of_week].push(i); });
     let msg = `📋 *Agenda da semana*\nOlá, ${leader.name}! Segue sua agenda:\n\n`;
+    const [wy1, wm1, wd1] = week.split('-').map(Number);
     DAYS.forEach((day, idx) => {
       if (!grouped[day]) return;
-      const dayDate = addDays(week, idx);
-      const [, m, d] = dayDate.split('-');
+      const dt1 = new Date(Date.UTC(wy1, wm1 - 1, wd1 + idx));
+      const d = String(dt1.getUTCDate()).padStart(2, '0');
+      const m = String(dt1.getUTCMonth() + 1).padStart(2, '0');
       msg += `*${DAY_LABELS[day]}, ${d}/${m}*\n`;
       grouped[day].forEach(i => { const desc = i.description?.trim(); msg += `• ${i.time ? i.time + ' — ' : ''}${i.title}${desc ? '\n  _' + desc + '_' : ''}\n`; });
       msg += '\n';
@@ -175,10 +177,12 @@ export default function Agenda({ userId, profile }) {
       grouped[i.day_of_week].push(i);
     });
     let msg = `📋 *Agenda da semana*\nOlá, ${firstName}! Segue sua agenda:\n\n`;
+    const [wy2, wm2, wd2] = week.split('-').map(Number);
     DAYS.forEach((day, idx) => {
       if (!grouped[day]) return;
-      const dayDate = addDays(week, idx);
-      const [y, m, d] = dayDate.split('-');
+      const dt2 = new Date(Date.UTC(wy2, wm2 - 1, wd2 + idx));
+      const d = String(dt2.getUTCDate()).padStart(2, '0');
+      const m = String(dt2.getUTCMonth() + 1).padStart(2, '0');
       msg += `*${DAY_LABELS[day]}, ${d}/${m}*\n`;
       grouped[day].forEach(i => {
         const desc = i.description?.trim();
