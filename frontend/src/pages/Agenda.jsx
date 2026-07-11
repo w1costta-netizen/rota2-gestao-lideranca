@@ -34,6 +34,8 @@ export default function Agenda({ userId, profile }) {
   const [notify, setNotify]         = useState(null); // { item, affectedLeaders }
   const [sendAllModal, setSendAllModal] = useState(false);
   const [selectedLeaders, setSelectedLeaders] = useState([]);
+  const [sendQueue, setSendQueue] = useState([]); // modal sequencial
+  const [sendQueueIdx, setSendQueueIdx] = useState(0);
 
   // Registra push na primeira visita
   useEffect(() => {
@@ -183,17 +185,24 @@ export default function Agenda({ userId, profile }) {
     return msg;
   };
 
-  const sendSelected = async () => {
+  const sendSelected = () => {
     const toSend = profiles.filter(p => selectedLeaders.includes(p.id));
     setSendAllModal(false);
-    for (const p of toSend) {
-      const msg = buildMessageForProfile(p);
-      const digits = p.phone ? p.phone.replace(/\D/g, '') : '';
-      const phone = digits ? (digits.startsWith('55') ? digits : `55${digits}`) : '';
-      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
-      await new Promise(r => setTimeout(r, 700));
-    }
-    toast(`WhatsApp aberto para ${toSend.length} pessoa${toSend.length > 1 ? 's' : ''}!`);
+    setSendQueue(toSend);
+    setSendQueueIdx(0);
+  };
+
+  const sendQueueCurrent = sendQueue[sendQueueIdx] || null;
+  const sendQueueMsg = sendQueueCurrent ? (() => {
+    const msg = buildMessageForProfile(sendQueueCurrent);
+    const digits = sendQueueCurrent.phone ? sendQueueCurrent.phone.replace(/\D/g, '') : '';
+    const phone = digits ? (digits.startsWith('55') ? digits : `55${digits}`) : '';
+    return { url: `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, msg };
+  })() : null;
+
+  const sendQueueNext = () => {
+    if (sendQueueIdx < sendQueue.length - 1) setSendQueueIdx(i => i + 1);
+    else { setSendQueue([]); toast(`WhatsApp enviado para ${sendQueue.length} pessoa${sendQueue.length > 1 ? 's' : ''}!`); }
   };
 
   const byDay = {};
@@ -467,6 +476,37 @@ export default function Agenda({ userId, profile }) {
             onClick={() => setNotify(null)}>
             Fechar
           </button>
+        </Modal>
+      )}
+
+      {/* Modal sequencial de envio */}
+      {sendQueue.length > 0 && sendQueueCurrent && (
+        <Modal open title={`Enviar WhatsApp — ${sendQueueIdx + 1} de ${sendQueue.length}`}
+          onClose={() => setSendQueue([])}>
+          <div style={{ textAlign:'center', padding:'8px 0 20px' }}>
+            <div style={{ fontSize:40, marginBottom:8 }}>👤</div>
+            <div style={{ fontWeight:700, fontSize:17 }}>{sendQueueCurrent.full_name}</div>
+            <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:4 }}>{sendQueueCurrent.role} — {sendQueueCurrent.sector}</div>
+            {sendQueueCurrent.phone
+              ? <div style={{ fontSize:13, color:'#25d366', fontWeight:600 }}>{sendQueueCurrent.phone}</div>
+              : <div style={{ fontSize:12, color:'#f59e0b' }}>⚠ Sem número cadastrado</div>}
+          </div>
+          <div style={{ display:'flex', gap:10 }}>
+            <a href={sendQueueMsg.url} target="_blank" rel="noreferrer"
+              className="btn btn-primary" style={{ flex:1, justifyContent:'center', textDecoration:'none' }}
+              onClick={() => setTimeout(sendQueueNext, 600)}>
+              {WA_ICON}&nbsp; Abrir WhatsApp
+            </a>
+            <button className="btn btn-ghost" style={{ flex:1, justifyContent:'center' }} onClick={sendQueueNext}>
+              {sendQueueIdx < sendQueue.length - 1 ? 'Pular →' : 'Concluir'}
+            </button>
+          </div>
+          <div style={{ display:'flex', gap:4, justifyContent:'center', marginTop:14 }}>
+            {sendQueue.map((_, i) => (
+              <div key={i} style={{ width:8, height:8, borderRadius:'50%',
+                background: i === sendQueueIdx ? 'var(--primary)' : 'var(--border)' }} />
+            ))}
+          </div>
         </Modal>
       )}
     </div>
