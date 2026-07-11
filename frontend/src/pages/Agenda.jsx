@@ -172,10 +172,12 @@ export default function Agenda({ userId, profile }) {
       if (!grouped[i.day_of_week]) grouped[i.day_of_week] = [];
       grouped[i.day_of_week].push(i);
     });
-    let msg = `📋 *Agenda da semana — ${formatDate(week)}*\nOlá, ${firstName}! Segue sua agenda:\n\n`;
-    DAYS.forEach(day => {
+    let msg = `📋 *Agenda da semana*\nOlá, ${firstName}! Segue sua agenda:\n\n`;
+    DAYS.forEach((day, idx) => {
       if (!grouped[day]) return;
-      msg += `*${DAY_LABELS[day]}*\n`;
+      const dayDate = addDays(week, idx);
+      const [y, m, d] = dayDate.split('-');
+      msg += `*${DAY_LABELS[day]}, ${d}/${m}*\n`;
       grouped[day].forEach(i => {
         msg += `• ${i.time ? i.time + ' — ' : ''}${i.title}${i.description ? '\n  _' + i.description + '_' : ''}\n`;
       });
