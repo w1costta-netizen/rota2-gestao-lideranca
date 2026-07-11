@@ -31,6 +31,8 @@ export default function Agenda({ userId, profile }) {
   const [sendModal, setSendModal]   = useState(false);
   const [sendLeader, setSendLeader] = useState(null);
   const [notify, setNotify]         = useState(null); // { item, affectedLeaders }
+  const [sendAllModal, setSendAllModal] = useState(false);
+  const [selectedLeaders, setSelectedLeaders] = useState([]);
 
   // Registra push na primeira visita
   useEffect(() => {
@@ -130,13 +132,29 @@ export default function Agenda({ userId, profile }) {
     toast(`Abrindo WhatsApp para ${sendLeader.name}`);
   };
 
-  const sendAll = async () => {
-    if (!confirm(`Enviar agenda via WhatsApp para todos os ${leaders.length} líderes?`)) return;
-    for (const l of leaders) {
+  const openSendAllModal = () => {
+    setSelectedLeaders(leaders.map(l => l.id)); // todos selecionados por padrão
+    setSendAllModal(true);
+  };
+
+  const toggleLeader = (id) => {
+    setSelectedLeaders(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAll = () => {
+    setSelectedLeaders(prev => prev.length === leaders.length ? [] : leaders.map(l => l.id));
+  };
+
+  const sendSelected = async () => {
+    const toSend = leaders.filter(l => selectedLeaders.includes(l.id));
+    setSendAllModal(false);
+    for (const l of toSend) {
       await openWA(l);
       await new Promise(r => setTimeout(r, 600));
     }
-    toast('Links do WhatsApp abertos para todos os líderes!');
+    toast(`WhatsApp aberto para ${toSend.length} líder${toSend.length > 1 ? 'es' : ''}!`);
   };
 
   const byDay = {};
@@ -161,7 +179,7 @@ export default function Agenda({ userId, profile }) {
           <span style={{ fontWeight: 600, fontSize: 13 }}>{formatDate(week)}</span>
           <button className="btn btn-ghost btn-sm" onClick={nextWeek}><ChevronRight size={15} /></button>
           {isAdmin && <>
-            <button className="btn btn-ghost btn-sm" onClick={sendAll} title="Enviar para todos"><Send size={15} /> Enviar tudo</button>
+            <button className="btn btn-ghost btn-sm" onClick={openSendAllModal} title="Enviar para líderes"><Send size={15} /> Enviar</button>
             <button className="btn btn-primary btn-sm" onClick={() => openNew()}><Plus size={15} /> Novo item</button>
           </>}
         </div>
@@ -234,6 +252,60 @@ export default function Agenda({ userId, profile }) {
           </div>
         ))}
       </div>
+
+      {/* Modal — Selecionar líderes para envio */}
+      {sendAllModal && (
+        <Modal open={sendAllModal} onClose={() => setSendAllModal(false)}
+          title="Enviar agenda via WhatsApp"
+          footer={<>
+            <button className="btn btn-ghost" onClick={() => setSendAllModal(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={sendSelected} disabled={selectedLeaders.length === 0}>
+              <Send size={14}/> Enviar para {selectedLeaders.length} líder{selectedLeaders.length !== 1 ? 'es' : ''}
+            </button>
+          </>}
+        >
+          {/* Toggle selecionar todos */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12,
+            paddingBottom:12, borderBottom:'1px solid var(--border)' }}>
+            <span style={{ fontSize:13, fontWeight:600 }}>
+              {selectedLeaders.length === leaders.length ? 'Todos selecionados' : `${selectedLeaders.length} de ${leaders.length} selecionados`}
+            </span>
+            <button type="button" onClick={toggleAll}
+              style={{ fontSize:12, color:'var(--primary)', background:'none', border:'none',
+                cursor:'pointer', fontWeight:600 }}>
+              {selectedLeaders.length === leaders.length ? 'Desmarcar todos' : 'Selecionar todos'}
+            </button>
+          </div>
+
+          {/* Lista de líderes */}
+          <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:320, overflowY:'auto' }}>
+            {leaders.length === 0 && (
+              <p style={{ fontSize:13, color:'var(--text-muted)', textAlign:'center', padding:'20px 0' }}>
+                Nenhum líder cadastrado.
+              </p>
+            )}
+            {leaders.map(l => {
+              const selected = selectedLeaders.includes(l.id);
+              return (
+                <label key={l.id} style={{
+                  display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderRadius:8,
+                  cursor:'pointer', border:`1px solid ${selected ? 'var(--primary)' : 'var(--border)'}`,
+                  background: selected ? 'rgba(232,98,42,.06)' : 'var(--surface-2)',
+                  transition:'all .15s',
+                }}>
+                  <input type="checkbox" checked={selected} onChange={() => toggleLeader(l.id)}
+                    style={{ accentColor:'var(--primary)', width:16, height:16, flexShrink:0 }}/>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontWeight:600, fontSize:13 }}>{l.name}</div>
+                    <div style={{ fontSize:11, color:'var(--text-muted)' }}>{l.sector}</div>
+                  </div>
+                  <div style={{ fontSize:11, color:'var(--text-muted)' }}>{l.whatsapp}</div>
+                </label>
+              );
+            })}
+          </div>
+        </Modal>
+      )}
 
       {/* Modal envio individual por líder */}
       <Modal open={sendModal} onClose={() => setSendModal(false)}
