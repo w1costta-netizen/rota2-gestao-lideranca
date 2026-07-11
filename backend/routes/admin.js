@@ -21,7 +21,7 @@ router.get('/users', async (req, res) => {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, email, role, sector, access_level, active, first_access, created_at')
+    .select('id, full_name, email, role, sector, access_level, permissions, active, first_access, created_at')
     .eq('company', me.company)
     .neq('id', requester_id)
     .order('full_name');
@@ -69,18 +69,21 @@ router.post('/users', async (req, res) => {
 
 // PUT /api/admin/users/:id — atualiza perfil
 router.put('/users/:id', async (req, res) => {
-  const { requester_id, full_name, role, sector, access_level, active } = req.body;
+  const { requester_id } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
 
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
   if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
 
+  const { full_name, role, sector, access_level, active, permissions } = req.body;
+
   const updates = {};
-  if (full_name   !== undefined) updates.full_name    = full_name;
-  if (role        !== undefined) updates.role         = role;
-  if (sector      !== undefined) updates.sector       = sector;
-  if (access_level!== undefined) updates.access_level = access_level;
-  if (active      !== undefined) updates.active       = active;
+  if (full_name    !== undefined) updates.full_name    = full_name;
+  if (role         !== undefined) updates.role         = role;
+  if (sector       !== undefined) updates.sector       = sector;
+  if (access_level !== undefined) updates.access_level = access_level;
+  if (active       !== undefined) updates.active       = active;
+  if ('permissions' in req.body)  updates.permissions  = permissions; // aceita null explícito
 
   const { data, error } = await supabase.from('profiles').update(updates).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });

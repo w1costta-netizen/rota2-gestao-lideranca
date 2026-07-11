@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, Edit2, X, Save, Trash2, UserCheck, UserX, Settings } from 'lucide-react';
 import api from '../api';
+import { MODULES, DEFAULT_PERMISSIONS } from '../lib/permissions';
 
 const APP_URL = 'https://rota2-gestao-lideranca.netlify.app';
 
@@ -191,6 +192,67 @@ function ConfigModal({ userId, company, roles, sectors, onClose, onReload }) {
   );
 }
 
+function PermissionsSection({ values, onChange }) {
+  const effective = values.permissions ?? DEFAULT_PERMISSIONS[values.access_level] ?? DEFAULT_PERMISSIONS.lider;
+  const isCustom  = values.permissions !== null && values.permissions !== undefined;
+
+  const toggle = (key) => {
+    const next = effective.includes(key)
+      ? effective.filter(k => k !== key)
+      : [...effective, key];
+    onChange('permissions', next);
+  };
+
+  return (
+    <div className="form-group">
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10 }}>
+        <label className="form-label" style={{ marginBottom:0 }}>
+          Permissões de acesso
+          {isCustom && (
+            <span style={{ fontSize:10, fontWeight:700, color:'var(--primary)',
+              background:'rgba(232,98,42,.12)', borderRadius:99, padding:'1px 7px', marginLeft:8 }}>
+              Customizadas
+            </span>
+          )}
+        </label>
+        {isCustom && (
+          <button type="button" onClick={() => onChange('permissions', null)}
+            style={{ fontSize:11, color:'var(--text-muted)', background:'none', border:'none',
+              cursor:'pointer', textDecoration:'underline' }}>
+            Restaurar padrão do nível
+          </button>
+        )}
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+        {MODULES.map(m => {
+          const active = effective.includes(m.key);
+          return (
+            <label key={m.key} style={{
+              display:'flex', alignItems:'center', gap:10, padding:'10px 12px',
+              borderRadius:8, cursor:'pointer',
+              border:`1px solid ${active ? 'var(--primary)' : 'var(--border)'}`,
+              background: active ? 'rgba(232,98,42,.06)' : 'var(--surface-2)',
+              transition:'all .15s',
+            }}>
+              <input type="checkbox" checked={active} onChange={() => toggle(m.key)}
+                style={{ accentColor:'var(--primary)', width:15, height:15, flexShrink:0 }}/>
+              <div>
+                <div style={{ fontSize:12, fontWeight:600 }}>{m.icon} {m.label}</div>
+                <div style={{ fontSize:10, color:'var(--text-muted)', lineHeight:1.3 }}>{m.desc}</div>
+              </div>
+            </label>
+          );
+        })}
+      </div>
+      {!isCustom && (
+        <p style={{ fontSize:11, color:'var(--text-muted)', marginTop:8 }}>
+          Usando permissões padrão do nível <b>{values.access_level}</b>. Altere qualquer item para customizar.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function UsersAdmin({ userId, profile }) {
   const [users,    setUsers]    = useState([]);
   const [roles,    setRoles]    = useState([]);
@@ -271,6 +333,7 @@ export default function UsersAdmin({ userId, profile }) {
         role:         editing.role,
         sector:       editing.sector,
         access_level: editing.access_level,
+        permissions:  editing.permissions ?? null,
       });
       setEditing(null);
       load();
@@ -487,7 +550,7 @@ export default function UsersAdmin({ userId, profile }) {
 
       {/* Modal — Editar Usuário */}
       {editing && (
-        <Modal title="Editar Usuário" onClose={() => setEditing(null)} maxWidth={520}>
+        <Modal title="Editar Usuário" onClose={() => setEditing(null)} maxWidth={580}>
           {error && <div className="auth-error" style={{ marginBottom:14 }}>{error}</div>}
           <div className="form-group">
             <label className="form-label">Nome completo</label>
@@ -498,7 +561,12 @@ export default function UsersAdmin({ userId, profile }) {
             values={editing}
             onChange={(k, v) => setEditing(ed => ({ ...ed, [k]: v }))}
           />
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+          <div style={{ borderTop:'1px solid var(--border)', margin:'16px 0' }}/>
+          <PermissionsSection
+            values={editing}
+            onChange={(k, v) => setEditing(ed => ({ ...ed, [k]: v }))}
+          />
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
             <button className="btn btn-ghost" onClick={() => setEditing(null)}>Cancelar</button>
             <button className="btn btn-primary" onClick={saveEdit} disabled={saving}>
               <Save size={14}/> {saving ? 'Salvando...' : 'Salvar'}

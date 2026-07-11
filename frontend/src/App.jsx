@@ -1,5 +1,6 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { hasPermission } from './lib/permissions';
 import { ToastProvider } from './components/Toast';
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
@@ -13,6 +14,17 @@ import CashierAnalysis from './pages/CashierAnalysis';
 import TeamMembers from './pages/TeamMembers';
 import NativeSchedule from './pages/NativeSchedule';
 import UsersAdmin from './pages/UsersAdmin';
+
+function AccessDenied() {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+      minHeight:'60vh', gap:12, color:'var(--text-muted)' }}>
+      <span style={{ fontSize:40 }}>🔒</span>
+      <h2 style={{ fontSize:18, fontWeight:700, color:'var(--text)' }}>Acesso restrito</h2>
+      <p style={{ fontSize:13 }}>Você não tem permissão para acessar esta área.</p>
+    </div>
+  );
+}
 
 const SIDEBAR_MIN = 60;
 const SIDEBAR_MAX = 400;
@@ -99,16 +111,18 @@ function AppContent() {
   const userId = session?.user?.id;
   const userSector = profile?.sector || '';
 
+  const has = (key) => hasPermission(profile, key);
+
   const pages = {
-    dashboard:  () => <Dashboard setPage={setPage} />,
+    dashboard:  () => has('dashboard')  ? <Dashboard setPage={setPage} />                  : <AccessDenied />,
     leaders:    () => <Leaders setPage={setPage} />,
-    agenda:     () => <Agenda setPage={setPage} />,
+    agenda:     () => has('agenda')     ? <Agenda setPage={setPage} />                     : <AccessDenied />,
     scale:      () => <Scale setPage={setPage} />,
     team:       () => <TeamMembers userId={userId} userSector={userSector} />,
-    nscale:     () => <NativeSchedule userId={userId} profile={profile} />,
-    cashier:    () => <CashierAnalysis userId={userId} />,
+    nscale:     () => has('escala')     ? <NativeSchedule userId={userId} profile={profile} /> : <AccessDenied />,
+    cashier:    () => has('caixas')     ? <CashierAnalysis userId={userId} />               : <AccessDenied />,
     profile:    () => <Profile />,
-    usersadmin: () => <UsersAdmin userId={userId} profile={profile} />,
+    usersadmin: () => has('usuarios')   ? <UsersAdmin userId={userId} profile={profile} />  : <AccessDenied />,
   };
 
   const PageComponent = pages[page] || pages.dashboard;
