@@ -268,7 +268,7 @@ export default function UsersAdmin({ userId, profile }) {
   const [createdUser, setCreatedUser] = useState(null); // dados pós-criação p/ WhatsApp
 
   const [form, setForm] = useState({
-    full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider'
+    full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:''
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const company = profile?.company || '';
@@ -315,7 +315,7 @@ export default function UsersAdmin({ userId, profile }) {
     try {
       await api.post('/admin/users', { requester_id: userId, ...form });
       setCreatedUser({ full_name: form.full_name, email: form.email, password: form.password });
-      setForm({ full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider' });
+      setForm({ full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:'' });
       load();
     } catch (e) {
       setError(e.response?.data?.error || 'Erro ao criar usuário.');
@@ -336,6 +336,7 @@ export default function UsersAdmin({ userId, profile }) {
         sector:       editing.sector,
         access_level: editing.access_level,
         permissions:  editing.permissions ?? null,
+        phone:        editing.phone || null,
       });
       setEditing(null);
       load();
@@ -537,6 +538,11 @@ export default function UsersAdmin({ userId, profile }) {
                   <input className="input" type="password" value={form.password}
                     onChange={e => set('password', e.target.value)} placeholder="Mínimo 6 caracteres"/>
                 </div>
+                <div className="form-group" style={{ gridColumn:'1/-1' }}>
+                  <label className="form-label">WhatsApp</label>
+                  <input className="input" type="tel" value={form.phone}
+                    onChange={e => set('phone', e.target.value)} placeholder="5581999999999 (com DDI e DDD)"/>
+                </div>
               </div>
               <FormFields values={form} onChange={set}/>
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
@@ -554,10 +560,18 @@ export default function UsersAdmin({ userId, profile }) {
       {editing && (
         <Modal title="Editar Usuário" onClose={() => setEditing(null)} maxWidth={580}>
           {error && <div className="auth-error" style={{ marginBottom:14 }}>{error}</div>}
-          <div className="form-group">
-            <label className="form-label">Nome completo</label>
-            <input className="input" value={editing.full_name}
-              onChange={e => setEditing(ed => ({ ...ed, full_name: e.target.value }))}/>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <div className="form-group" style={{ gridColumn:'1/-1' }}>
+              <label className="form-label">Nome completo</label>
+              <input className="input" value={editing.full_name}
+                onChange={e => setEditing(ed => ({ ...ed, full_name: e.target.value }))}/>
+            </div>
+            <div className="form-group" style={{ gridColumn:'1/-1' }}>
+              <label className="form-label">WhatsApp</label>
+              <input className="input" type="tel" value={editing.phone || ''}
+                onChange={e => setEditing(ed => ({ ...ed, phone: e.target.value }))}
+                placeholder="5581999999999 (com DDI e DDD)"/>
+            </div>
           </div>
           <FormFields
             values={editing}

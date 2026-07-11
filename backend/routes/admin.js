@@ -21,7 +21,7 @@ router.get('/users', async (req, res) => {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, email, role, sector, access_level, permissions, active, first_access, created_at')
+    .select('id, full_name, email, role, sector, access_level, permissions, phone, active, first_access, created_at')
     .eq('company', me.company)
     .neq('id', requester_id)
     .order('full_name');
@@ -31,7 +31,7 @@ router.get('/users', async (req, res) => {
 
 // POST /api/admin/users — cria usuário e perfil
 router.post('/users', async (req, res) => {
-  const { requester_id, full_name, email, role, sector, access_level, password } = req.body;
+  const { requester_id, full_name, email, role, sector, access_level, password, phone } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
 
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
@@ -58,6 +58,7 @@ router.post('/users', async (req, res) => {
     role: role || '',
     sector: sector || '',
     access_level: access_level || 'lider',
+    phone: phone || null,
     active: true,
     first_access: true,
     created_by: requester_id,
@@ -75,7 +76,7 @@ router.put('/users/:id', async (req, res) => {
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
   if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
 
-  const { full_name, role, sector, access_level, active, permissions } = req.body;
+  const { full_name, role, sector, access_level, active, permissions, phone } = req.body;
 
   const updates = {};
   if (full_name    !== undefined) updates.full_name    = full_name;
@@ -83,7 +84,8 @@ router.put('/users/:id', async (req, res) => {
   if (sector       !== undefined) updates.sector       = sector;
   if (access_level !== undefined) updates.access_level = access_level;
   if (active       !== undefined) updates.active       = active;
-  if ('permissions' in req.body)  updates.permissions  = permissions; // aceita null explícito
+  if ('permissions' in req.body)  updates.permissions  = permissions;
+  if (phone        !== undefined) updates.phone        = phone; // aceita null explícito
 
   const { data, error } = await supabase.from('profiles').update(updates).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });

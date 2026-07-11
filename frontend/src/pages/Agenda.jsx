@@ -188,8 +188,8 @@ export default function Agenda({ userId, profile }) {
     setSendAllModal(false);
     for (const p of toSend) {
       const msg = buildMessageForProfile(p);
-      // Abre wa.me sem número — usuário escolhe o contato no WhatsApp
-      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank');
+      const phone = p.phone ? p.phone.replace(/\D/g, '') : '';
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
       await new Promise(r => setTimeout(r, 700));
     }
     toast(`WhatsApp aberto para ${toSend.length} pessoa${toSend.length > 1 ? 's' : ''}!`);
@@ -337,10 +337,10 @@ export default function Agenda({ userId, profile }) {
                     <div style={{ fontWeight:600, fontSize:13 }}>{p.full_name}</div>
                     <div style={{ fontSize:11, color:'var(--text-muted)' }}>{p.sector || p.role || '—'}</div>
                   </div>
-                  <span style={{ fontSize:10, padding:'2px 7px', borderRadius:99, fontWeight:600,
-                    background:'var(--surface)', border:'1px solid var(--border)', color:'var(--text-muted)' }}>
-                    {p.access_level}
-                  </span>
+                  {p.phone
+                    ? <span style={{ fontSize:11, color:'var(--text-muted)' }}>{p.phone}</span>
+                    : <span style={{ fontSize:10, color:'#f59e0b', fontWeight:600 }}>Sem número</span>
+                  }
                 </label>
               );
             })}
