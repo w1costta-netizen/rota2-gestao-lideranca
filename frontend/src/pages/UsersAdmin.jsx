@@ -131,6 +131,19 @@ export default function UsersAdmin({ userId, profile }) {
 
   const roleNames = roles.map(r => r.role_name);
 
+  const [addingRole, setAddingRole] = useState(false);
+  const [quickRole,  setQuickRole]  = useState('');
+
+  const saveQuickRole = async (onDone) => {
+    if (!quickRole.trim()) return;
+    await api.post('/admin/roles', { requester_id: userId, role_name: quickRole.trim() });
+    const saved = quickRole.trim();
+    setQuickRole('');
+    setAddingRole(false);
+    await load();
+    onDone(saved);
+  };
+
   const SectorSelect = ({ value, onChange }) => (
     <select value={value} onChange={e => onChange(e.target.value)}
       style={{ width:'100%', padding:'9px 12px', borderRadius:8, border:'1px solid var(--border)',
@@ -143,13 +156,48 @@ export default function UsersAdmin({ userId, profile }) {
   );
 
   const RoleSelect = ({ value, onChange }) => (
-    <select value={value} onChange={e => onChange(e.target.value)}
-      style={{ width:'100%', padding:'9px 12px', borderRadius:8, border:'1px solid var(--border)',
-        background:'var(--surface-2)', color:'var(--text)', fontSize:13 }}>
-      <option value="">Selecione o cargo</option>
-      {roleNames.map(r => <option key={r} value={r}>{r}</option>)}
-      {value && !roleNames.includes(value) && <option value={value}>{value}</option>}
-    </select>
+    <div>
+      <div style={{ display:'flex', gap:6 }}>
+        <select value={value} onChange={e => onChange(e.target.value)}
+          style={{ flex:1, padding:'9px 12px', borderRadius:8, border:'1px solid var(--border)',
+            background:'var(--surface-2)', color:'var(--text)', fontSize:13 }}>
+          <option value="">Selecione o cargo</option>
+          {roleNames.map(r => <option key={r} value={r}>{r}</option>)}
+          {value && !roleNames.includes(value) && <option value={value}>{value}</option>}
+        </select>
+        <button type="button" title="Adicionar novo cargo"
+          onClick={() => setAddingRole(a => !a)}
+          style={{ padding:'0 12px', borderRadius:8, border:'1px solid var(--border)',
+            background: addingRole ? 'var(--primary)' : 'var(--surface-2)',
+            color: addingRole ? '#fff' : 'var(--text-muted)',
+            fontSize:18, cursor:'pointer', flexShrink:0 }}>
+          +
+        </button>
+      </div>
+      {addingRole && (
+        <div style={{ display:'flex', gap:6, marginTop:8 }}>
+          <input
+            autoFocus
+            className="input"
+            value={quickRole}
+            onChange={e => setQuickRole(e.target.value)}
+            placeholder="Nome do novo cargo"
+            onKeyDown={e => e.key === 'Enter' && saveQuickRole(onChange)}
+            style={{ fontSize:13 }}
+          />
+          <button type="button" onClick={() => saveQuickRole(onChange)}
+            style={{ padding:'0 14px', borderRadius:8, border:'none',
+              background:'var(--primary)', color:'#fff', cursor:'pointer', fontWeight:700, flexShrink:0 }}>
+            Salvar
+          </button>
+          <button type="button" onClick={() => { setAddingRole(false); setQuickRole(''); }}
+            style={{ padding:'0 10px', borderRadius:8, border:'1px solid var(--border)',
+              background:'var(--surface-2)', color:'var(--text-muted)', cursor:'pointer', flexShrink:0 }}>
+            <X size={14}/>
+          </button>
+        </div>
+      )}
+    </div>
   );
 
   return (
