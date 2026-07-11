@@ -117,11 +117,13 @@ export default function Agenda({ userId, profile }) {
     if (li.length === 0) return `Olá ${leader.name}! Não há itens de agenda para você esta semana.`;
     const grouped = {};
     li.forEach(i => { if (!grouped[i.day_of_week]) grouped[i.day_of_week] = []; grouped[i.day_of_week].push(i); });
-    let msg = `📋 *Agenda da semana — ${formatDate(week)}*\nOlá, ${leader.name}! Segue sua agenda:\n\n`;
-    DAYS.forEach(day => {
+    let msg = `📋 *Agenda da semana*\nOlá, ${leader.name}! Segue sua agenda:\n\n`;
+    DAYS.forEach((day, idx) => {
       if (!grouped[day]) return;
-      msg += `*${DAY_LABELS[day]}*\n`;
-      grouped[day].forEach(i => { msg += `• ${i.time ? i.time + ' — ' : ''}${i.title}${i.description ? '\n  _' + i.description + '_' : ''}\n`; });
+      const dayDate = addDays(week, idx);
+      const [, m, d] = dayDate.split('-');
+      msg += `*${DAY_LABELS[day]}, ${d}/${m}*\n`;
+      grouped[day].forEach(i => { const desc = i.description?.trim(); msg += `• ${i.time ? i.time + ' — ' : ''}${i.title}${desc ? '\n  _' + desc + '_' : ''}\n`; });
       msg += '\n';
     });
     msg += '_Enviado via Rota 2.0_';
@@ -179,7 +181,8 @@ export default function Agenda({ userId, profile }) {
       const [y, m, d] = dayDate.split('-');
       msg += `*${DAY_LABELS[day]}, ${d}/${m}*\n`;
       grouped[day].forEach(i => {
-        msg += `• ${i.time ? i.time + ' — ' : ''}${i.title}${i.description ? '\n  _' + i.description + '_' : ''}\n`;
+        const desc = i.description?.trim();
+        msg += `• ${i.time ? i.time + ' — ' : ''}${i.title}${desc ? '\n  _' + desc + '_' : ''}\n`;
       });
       msg += '\n';
     });
