@@ -94,6 +94,12 @@ function AppContent() {
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [applyWidth, sidebarW]);
 
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }, []);
+
   if (session === undefined) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0D0D0D' }}>
       <div style={{ color:'var(--primary)', fontSize:18, fontWeight:700 }}>Carregando...</div>
@@ -116,7 +122,7 @@ function AppContent() {
   const pages = {
     dashboard:  () => has('dashboard')  ? <Dashboard setPage={setPage} />                  : <AccessDenied />,
     leaders:    () => <Leaders setPage={setPage} />,
-    agenda:     () => has('agenda')     ? <Agenda setPage={setPage} />                     : <AccessDenied />,
+    agenda:     () => has('agenda')     ? <Agenda setPage={setPage} userId={userId} profile={profile} /> : <AccessDenied />,
     scale:      () => <Scale setPage={setPage} />,
     team:       () => <TeamMembers userId={userId} userSector={userSector} />,
     nscale:     () => has('escala')     ? <NativeSchedule userId={userId} profile={profile} /> : <AccessDenied />,
