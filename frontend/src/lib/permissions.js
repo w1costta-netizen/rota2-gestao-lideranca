@@ -8,9 +8,10 @@ export const MODULES = [
 ];
 
 export const DEFAULT_PERMISSIONS = {
-  admin:      ['dashboard', 'agenda', 'escala', 'escala_setores', 'caixas', 'usuarios'],
-  supervisor: ['dashboard', 'agenda', 'escala', 'escala_setores', 'caixas'],
-  lider:      ['dashboard', 'agenda', 'escala', 'caixas'],
+  admin:        ['dashboard', 'agenda', 'escala', 'escala_setores', 'caixas', 'usuarios'],
+  supervisor:   ['dashboard', 'agenda', 'escala', 'escala_setores', 'caixas'],
+  lider:        ['dashboard', 'agenda', 'escala', 'caixas'],
+  colaborador:  ['dashboard'], // mínimo — admin customiza conforme o cargo
 };
 
 export function getEffectivePermissions(profile) {
