@@ -2,6 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, Edit2, X, Save, Trash2, UserCheck, UserX, Settings } from 'lucide-react';
 import api from '../api';
 
+const APP_URL = 'https://rota2-gestao-lideranca.netlify.app';
+
+function whatsappLink({ full_name, email, password }) {
+  const msg = `Olá ${full_name.split(' ')[0]}! 👋\n\nSeu acesso ao *Rota 2.0* foi criado.\n\n🔗 *Link:* ${APP_URL}\n📧 *E-mail:* ${email}\n🔑 *Senha:* ${password}\n\nAcesse e altere sua senha em *Meu Perfil*.`;
+  return `https://wa.me/?text=${encodeURIComponent(msg)}`;
+}
+
+function whatsappReinviteLink({ full_name, email }) {
+  const msg = `Olá ${full_name.split(' ')[0]}! 👋\n\nLembrete do seu acesso ao *Rota 2.0*.\n\n🔗 *Link:* ${APP_URL}\n📧 *E-mail:* ${email}\n\nQualquer dúvida sobre a senha, fale comigo.`;
+  return `https://wa.me/?text=${encodeURIComponent(msg)}`;
+}
+
 const ACCESS_LEVELS = [
   { value: 'admin',      label: 'Admin',      desc: 'Gerencia usuários e toda a empresa' },
   { value: 'supervisor', label: 'Supervisor',  desc: 'Vê escalas de todos os setores' },
@@ -184,11 +196,12 @@ export default function UsersAdmin({ userId, profile }) {
   const [roles,    setRoles]    = useState([]);
   const [sectors,  setSectors]  = useState([]);
   const [loading,  setLoading]  = useState(true);
-  const [showNew,  setShowNew]  = useState(false);
-  const [showCfg,  setShowCfg]  = useState(false);
-  const [editing,  setEditing]  = useState(null);
-  const [saving,   setSaving]   = useState(false);
-  const [error,    setError]    = useState('');
+  const [showNew,     setShowNew]     = useState(false);
+  const [showCfg,     setShowCfg]     = useState(false);
+  const [editing,     setEditing]     = useState(null);
+  const [saving,      setSaving]      = useState(false);
+  const [error,       setError]       = useState('');
+  const [createdUser, setCreatedUser] = useState(null); // dados pós-criação p/ WhatsApp
 
   const [form, setForm] = useState({
     full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider'
@@ -237,7 +250,7 @@ export default function UsersAdmin({ userId, profile }) {
     setSaving(true);
     try {
       await api.post('/admin/users', { requester_id: userId, ...form });
-      setShowNew(false);
+      setCreatedUser({ full_name: form.full_name, email: form.email, password: form.password });
       setForm({ full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider' });
       load();
     } catch (e) {
@@ -245,6 +258,8 @@ export default function UsersAdmin({ userId, profile }) {
     }
     setSaving(false);
   };
+
+  const closeNewModal = () => { setShowNew(false); setCreatedUser(null); setError(''); };
 
   const saveEdit = async () => {
     setError('');
@@ -330,7 +345,7 @@ export default function UsersAdmin({ userId, profile }) {
           <button onClick={() => setShowCfg(true)} className="btn btn-ghost btn-sm">
             <Settings size={14}/> Configurações
           </button>
-          <button onClick={() => { setShowNew(true); setError(''); }} className="btn btn-primary btn-sm">
+          <button onClick={() => { setShowNew(true); setCreatedUser(null); setError(''); }} className="btn btn-primary btn-sm">
             <Plus size={14}/> Novo Usuário
           </button>
         </div>
@@ -379,6 +394,15 @@ export default function UsersAdmin({ userId, profile }) {
                           onClick={() => { setEditing({...u}); setError(''); }}>
                           <Edit2 size={14}/>
                         </button>
+                        <a href={whatsappReinviteLink(u)} target="_blank" rel="noreferrer"
+                          title="Enviar acesso via WhatsApp"
+                          style={{ width:30, height:30, borderRadius:8, display:'flex', alignItems:'center',
+                            justifyContent:'center', background:'#25d36615', border:'1px solid #25d36630',
+                            color:'#25d366', textDecoration:'none', flexShrink:0 }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                          </svg>
+                        </a>
                         <button className="btn-icon" title={u.active ? 'Desativar' : 'Reativar'}
                           onClick={() => toggleActive(u)}
                           style={{ color: u.active ? 'var(--danger)' : 'var(--success)' }}>
@@ -396,32 +420,68 @@ export default function UsersAdmin({ userId, profile }) {
 
       {/* Modal — Novo Usuário */}
       {showNew && (
-        <Modal title="Novo Usuário" onClose={() => setShowNew(false)} maxWidth={520}>
-          {error && <div className="auth-error" style={{ marginBottom:14 }}>{error}</div>}
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-            <div className="form-group" style={{ gridColumn:'1/-1' }}>
-              <label className="form-label">Nome completo *</label>
-              <input className="input" value={form.full_name}
-                onChange={e => set('full_name', e.target.value)} placeholder="Nome do colaborador"/>
+        <Modal title={createdUser ? 'Usuário criado! 🎉' : 'Novo Usuário'} onClose={closeNewModal} maxWidth={520}>
+          {createdUser ? (
+            /* Tela de sucesso com botão WhatsApp */
+            <div style={{ textAlign:'center' }}>
+              <div style={{ width:64, height:64, borderRadius:'50%', background:'#25d36620',
+                border:'2px solid #25d366', display:'flex', alignItems:'center', justifyContent:'center',
+                margin:'0 auto 16px', fontSize:28 }}>✅</div>
+              <p style={{ fontWeight:700, fontSize:16, marginBottom:4 }}>{createdUser.full_name}</p>
+              <p style={{ fontSize:13, color:'var(--text-muted)', marginBottom:20 }}>{createdUser.email}</p>
+
+              <div style={{ background:'var(--surface-2)', border:'1px solid var(--border)',
+                borderRadius:10, padding:'14px 16px', marginBottom:20, textAlign:'left' }}>
+                <p style={{ fontSize:11, color:'var(--text-muted)', fontWeight:700, marginBottom:8, textTransform:'uppercase', letterSpacing:.5 }}>Credenciais de acesso</p>
+                <p style={{ fontSize:13, marginBottom:4 }}>🔗 <b>Link:</b> {APP_URL}</p>
+                <p style={{ fontSize:13, marginBottom:4 }}>📧 <b>E-mail:</b> {createdUser.email}</p>
+                <p style={{ fontSize:13 }}>🔑 <b>Senha:</b> {createdUser.password}</p>
+              </div>
+
+              <a href={whatsappLink(createdUser)} target="_blank" rel="noreferrer"
+                style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10,
+                  width:'100%', padding:'14px', borderRadius:10, border:'none', cursor:'pointer',
+                  background:'#25d366', color:'#fff', fontWeight:700, fontSize:15,
+                  textDecoration:'none', marginBottom:10 }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+                Enviar acesso via WhatsApp
+              </a>
+              <button className="btn btn-ghost" style={{ width:'100%', justifyContent:'center' }} onClick={closeNewModal}>
+                Fechar
+              </button>
             </div>
-            <div className="form-group">
-              <label className="form-label">E-mail *</label>
-              <input className="input" type="email" value={form.email}
-                onChange={e => set('email', e.target.value)} placeholder="email@empresa.com"/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Senha provisória *</label>
-              <input className="input" type="password" value={form.password}
-                onChange={e => set('password', e.target.value)} placeholder="Mínimo 6 caracteres"/>
-            </div>
-          </div>
-          <FormFields values={form} onChange={set}/>
-          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
-            <button className="btn btn-ghost" onClick={() => setShowNew(false)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={createUser} disabled={saving}>
-              <Save size={14}/> {saving ? 'Criando...' : 'Criar Usuário'}
-            </button>
-          </div>
+          ) : (
+            /* Formulário de criação */
+            <>
+              {error && <div className="auth-error" style={{ marginBottom:14 }}>{error}</div>}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div className="form-group" style={{ gridColumn:'1/-1' }}>
+                  <label className="form-label">Nome completo *</label>
+                  <input className="input" value={form.full_name}
+                    onChange={e => set('full_name', e.target.value)} placeholder="Nome do colaborador"/>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">E-mail *</label>
+                  <input className="input" type="email" value={form.email}
+                    onChange={e => set('email', e.target.value)} placeholder="email@empresa.com"/>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Senha provisória *</label>
+                  <input className="input" type="password" value={form.password}
+                    onChange={e => set('password', e.target.value)} placeholder="Mínimo 6 caracteres"/>
+                </div>
+              </div>
+              <FormFields values={form} onChange={set}/>
+              <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+                <button className="btn btn-ghost" onClick={closeNewModal}>Cancelar</button>
+                <button className="btn btn-primary" onClick={createUser} disabled={saving}>
+                  <Save size={14}/> {saving ? 'Criando...' : 'Criar Usuário'}
+                </button>
+              </div>
+            </>
+          )}
         </Modal>
       )}
 
