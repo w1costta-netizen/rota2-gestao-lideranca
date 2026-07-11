@@ -228,7 +228,7 @@ export default function Agenda({ userId, profile }) {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Status da sua agenda</div>
+          <div className="page-title">Agenda Semanal</div>
           <div className="page-subtitle">{items.length} itens esta semana</div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
