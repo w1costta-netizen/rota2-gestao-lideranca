@@ -44,16 +44,20 @@ export function getWeekStart(date = new Date()) {
 }
 
 export function addDays(dateStr, days) {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().split('T')[0];
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + days));
+  return date.toISOString().split('T')[0];
 }
 
 export function formatDate(dateStr) {
   if (!dateStr) return '';
-  const [y, m, day] = dateStr.split('-');
-  const end = new Date(dateStr);
-  end.setDate(end.getDate() + 6);
-  const [ey, em, ed] = end.toISOString().split('T')[0].split('-');
-  return `${day}/${m} – ${ed}/${em}/${ey}`;
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const start = new Date(Date.UTC(y, m - 1, d));
+  const end   = new Date(Date.UTC(y, m - 1, d + 6));
+  const sd = String(start.getUTCDate()).padStart(2, '0');
+  const sm = String(start.getUTCMonth() + 1).padStart(2, '0');
+  const ed = String(end.getUTCDate()).padStart(2, '0');
+  const em = String(end.getUTCMonth() + 1).padStart(2, '0');
+  const ey = end.getUTCFullYear();
+  return `${sd}/${sm} – ${ed}/${em}/${ey}`;
 }
