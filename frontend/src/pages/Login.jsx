@@ -97,8 +97,8 @@ export default function Login({ onGoRegister }) {
         </div>
       )}
 
-      <div className="auth-footer">
-        Não tem conta? <button className="auth-link" onClick={onGoRegister}>Criar conta grátis</button>
+      <div className="auth-footer" style={{ fontSize:12, color:'var(--text-muted)' }}>
+        Acesso apenas por convite do administrador.
       </div>
     </div>
   );

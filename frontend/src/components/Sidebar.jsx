@@ -1,8 +1,8 @@
 import React from 'react';
-import { Users, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, UsersRound } from 'lucide-react';
+import { Users, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const NAV = [
+const NAV_BASE = [
   { id: 'dashboard', label: 'Dashboard',  icon: LayoutGrid },
   { id: 'agenda',    label: 'Agenda',     icon: CalendarDays },
   { id: 'nscale',    label: 'Escala',     icon: CalendarRange },
@@ -12,6 +12,10 @@ const NAV = [
 
 export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, isMobile }) {
   const { profile, signOut } = useAuth();
+  const isAdmin = profile?.access_level === 'admin';
+  const NAV = isAdmin
+    ? [...NAV_BASE, { id: 'usersadmin', label: 'Usuários', icon: ShieldCheck }]
+    : NAV_BASE;
   const initials = profile?.full_name?.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase() || '?';
   const avatarUrl = profile?.avatar_url;
   const collapsed = !isMobile && width !== undefined && width < 100;

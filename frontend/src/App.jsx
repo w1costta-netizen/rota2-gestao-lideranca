@@ -12,6 +12,7 @@ import Register from './pages/Register';
 import CashierAnalysis from './pages/CashierAnalysis';
 import TeamMembers from './pages/TeamMembers';
 import NativeSchedule from './pages/NativeSchedule';
+import UsersAdmin from './pages/UsersAdmin';
 
 const SIDEBAR_MIN = 60;
 const SIDEBAR_MAX = 400;
@@ -99,14 +100,15 @@ function AppContent() {
   const userSector = profile?.sector || '';
 
   const pages = {
-    dashboard: () => <Dashboard setPage={setPage} />,
-    leaders:   () => <Leaders setPage={setPage} />,
-    agenda:    () => <Agenda setPage={setPage} />,
-    scale:     () => <Scale setPage={setPage} />,
-    team:      () => <TeamMembers userId={userId} userSector={userSector} />,
-    nscale:    () => <NativeSchedule userId={userId} profile={profile} />,
-    cashier:   () => <CashierAnalysis userId={userId} />,
-    profile:   () => <Profile />,
+    dashboard:  () => <Dashboard setPage={setPage} />,
+    leaders:    () => <Leaders setPage={setPage} />,
+    agenda:     () => <Agenda setPage={setPage} />,
+    scale:      () => <Scale setPage={setPage} />,
+    team:       () => <TeamMembers userId={userId} userSector={userSector} />,
+    nscale:     () => <NativeSchedule userId={userId} profile={profile} />,
+    cashier:    () => <CashierAnalysis userId={userId} />,
+    profile:    () => <Profile />,
+    usersadmin: () => <UsersAdmin userId={userId} profile={profile} />,
   };
 
   const PageComponent = pages[page] || pages.dashboard;
