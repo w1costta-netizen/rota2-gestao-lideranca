@@ -36,9 +36,12 @@ export function unformatPhone(value) {
 
 export function getWeekStart(date = new Date()) {
   const d = new Date(date);
-  const day = d.getDay();
-  // Week starts on Monday
-  const diff = day === 0 ? -6 : 1 - day;
+  const day = d.getDay(); // 0=dom, 6=sab
+  // No fds já mostra a próxima semana (planejamento)
+  let diff;
+  if (day === 6) diff = 2;      // sábado → próxima segunda
+  else if (day === 0) diff = 1; // domingo → próxima segunda
+  else diff = 1 - day;          // seg–sex → segunda desta semana
   d.setDate(d.getDate() + diff);
   return d.toISOString().split('T')[0];
 }
