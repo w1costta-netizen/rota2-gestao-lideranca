@@ -5,6 +5,14 @@ import { MODULES, DEFAULT_PERMISSIONS } from '../lib/permissions';
 
 const APP_URL = 'https://rota2-gestao-lideranca.netlify.app';
 
+function maskPhone(value) {
+  const digits = value.replace(/\D/g, '').slice(0, 11);
+  if (digits.length <= 2)  return `(${digits}`;
+  if (digits.length <= 6)  return `(${digits.slice(0,2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0,2)}) ${digits.slice(2,6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0,2)}) ${digits.slice(2,3)} ${digits.slice(3,7)}-${digits.slice(7)}`;
+}
+
 function whatsappLink({ full_name, email, password }) {
   const msg = `Olá ${full_name.split(' ')[0]}! 👋\n\nSeu acesso ao *Rota 2.0* foi criado.\n\n🔗 *Link:* ${APP_URL}\n📧 *E-mail:* ${email}\n🔑 *Senha:* ${password}\n\nAcesse e altere sua senha em *Meu Perfil*.`;
   return `https://wa.me/?text=${encodeURIComponent(msg)}`;
@@ -541,7 +549,7 @@ export default function UsersAdmin({ userId, profile }) {
                 <div className="form-group" style={{ gridColumn:'1/-1' }}>
                   <label className="form-label">WhatsApp</label>
                   <input className="input" type="tel" value={form.phone}
-                    onChange={e => set('phone', e.target.value)} placeholder="5581999999999 (com DDI e DDD)"/>
+                    onChange={e => set('phone', maskPhone(e.target.value))} placeholder="(98) 9 8220-9719"/>
                 </div>
               </div>
               <FormFields values={form} onChange={set}/>
@@ -569,8 +577,8 @@ export default function UsersAdmin({ userId, profile }) {
             <div className="form-group" style={{ gridColumn:'1/-1' }}>
               <label className="form-label">WhatsApp</label>
               <input className="input" type="tel" value={editing.phone || ''}
-                onChange={e => setEditing(ed => ({ ...ed, phone: e.target.value }))}
-                placeholder="5581999999999 (com DDI e DDD)"/>
+                onChange={e => setEditing(ed => ({ ...ed, phone: maskPhone(e.target.value) }))}
+                placeholder="(98) 9 8220-9719"/>
             </div>
           </div>
           <FormFields

@@ -188,7 +188,8 @@ export default function Agenda({ userId, profile }) {
     setSendAllModal(false);
     for (const p of toSend) {
       const msg = buildMessageForProfile(p);
-      const phone = p.phone ? p.phone.replace(/\D/g, '') : '';
+      const digits = p.phone ? p.phone.replace(/\D/g, '') : '';
+      const phone = digits ? (digits.startsWith('55') ? digits : `55${digits}`) : '';
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
       await new Promise(r => setTimeout(r, 700));
     }
