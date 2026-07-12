@@ -119,8 +119,9 @@ function AppContent() {
   const userId = session?.user?.id;
   const userSector = profile?.sector || '';
 
-  // Mostra boas-vindas na primeira vez
-  if (profile?.first_access) {
+  // Mostra boas-vindas na primeira vez (checa localStorage como fallback)
+  const welcomeDone = localStorage.getItem(`welcome_done_${userId}`);
+  if (profile?.first_access && !welcomeDone) {
     return (
       <Welcome userId={userId} onFinish={() => window.location.reload()} />
     );

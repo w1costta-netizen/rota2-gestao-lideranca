@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { supabase } from '../lib/supabase';
+import api from '../api';
 import { registerPush } from '../lib/push';
 
 const STEPS = [
@@ -72,7 +72,9 @@ export default function Welcome({ userId, onFinish }) {
   const isLast  = step === STEPS.length - 1;
 
   const finish = async () => {
-    await supabase.from('profiles').update({ first_access: false }).eq('id', userId).catch(() => {});
+    // Salva no localStorage imediatamente para não repetir mesmo se API falhar
+    localStorage.setItem(`welcome_done_${userId}`, '1');
+    await api.post('/profile/first-access-done', { user_id: userId }).catch(() => {});
     onFinish();
   };
 

@@ -30,4 +30,13 @@ router.post('/upsert', async (req, res) => {
   res.json(data);
 });
 
+// POST /api/profile/first-access-done — marca first_access como false
+router.post('/first-access-done', async (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
+  const { error } = await supabase.from('profiles').update({ first_access: false }).eq('id', user_id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 module.exports = router;
