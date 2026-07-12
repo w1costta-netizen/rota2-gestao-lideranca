@@ -2,7 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
-import { User, Lock, Save, Eye, EyeOff, Building2, Phone, Briefcase, Hash, Shield, Camera, X, AlertTriangle } from 'lucide-react';
+import { User, Lock, Save, Eye, EyeOff, Building2, Phone, Briefcase, Hash, Shield, Camera, X, AlertTriangle, Bell, BellOff } from 'lucide-react';
+import { registerPush } from '../lib/push';
 import PhoneInput from '../components/PhoneInput';
 import { formatPhone } from '../utils';
 
@@ -23,6 +24,7 @@ export default function Profile() {
     full_name:'', email:'', company:'', employee_id:'',
     sector:'', role:'', phone:'', whatsapp:''
   });
+  const [pushStatus, setPushStatus] = useState(Notification.permission); // 'default'|'granted'|'denied'
   const [passForm, setPassForm] = useState({ current:'', novo:'', confirmar:'' });
   const [showPass, setShowPass] = useState({ current:false, novo:false, confirmar:false });
   const [passLoading, setPassLoading] = useState(false);
@@ -225,6 +227,40 @@ export default function Profile() {
           <div style={{ marginTop:4 }}>{formatPhone(form.phone)}</div>
         </div>
       </div>
+
+      {/* Botão de notificações */}
+      {'Notification' in window && (
+        <div className="card" style={{ marginBottom:20, display:'flex', alignItems:'center', justifyContent:'space-between', gap:16 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            {pushStatus === 'granted'
+              ? <Bell size={20} style={{ color:'#10b981' }}/>
+              : <BellOff size={20} style={{ color:'var(--text-muted)' }}/>}
+            <div>
+              <div style={{ fontWeight:600, fontSize:14 }}>
+                {pushStatus === 'granted' ? 'Notificações ativadas' : pushStatus === 'denied' ? 'Notificações bloqueadas' : 'Receber notificações'}
+              </div>
+              <div style={{ fontSize:12, color:'var(--text-muted)' }}>
+                {pushStatus === 'granted' ? 'Você receberá alertas de comunicados e agenda'
+                  : pushStatus === 'denied' ? 'Desbloqueie nas configurações do navegador'
+                  : 'Toque para ativar alertas no seu dispositivo'}
+              </div>
+            </div>
+          </div>
+          {pushStatus !== 'denied' && pushStatus !== 'granted' && (
+            <button className="btn btn-primary" style={{ flexShrink:0 }}
+              onClick={async () => {
+                await registerPush(session?.user?.id);
+                setPushStatus(Notification.permission);
+                if (Notification.permission === 'granted') toast('Notificações ativadas!');
+              }}>
+              <Bell size={14}/> Ativar
+            </button>
+          )}
+          {pushStatus === 'granted' && (
+            <span style={{ fontSize:12, color:'#10b981', fontWeight:600, flexShrink:0 }}>✓ Ativo</span>
+          )}
+        </div>
+      )}
 
       {/* Preview da nova foto */}
       {(photoPreview || photoError) && (
