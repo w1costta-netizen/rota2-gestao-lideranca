@@ -18,6 +18,7 @@ import Comunicados from './pages/Comunicados';
 import Tarefas from './pages/Tarefas';
 import Mural from './pages/Mural';
 import Welcome from './pages/Welcome';
+import Campanhas from './pages/Campanhas';
 
 function AccessDenied() {
   return (
@@ -142,7 +143,8 @@ function AppContent() {
     profile:    () => <Profile />,
     comunicados:  () => <Comunicados userId={userId} profile={profile} />,
     tarefas:      () => has('tarefas') ? <Tarefas userId={userId} profile={profile} /> : <AccessDenied />,
-    mural:        () => has('mural')   ? <Mural   userId={userId} profile={profile} /> : <AccessDenied />,
+    mural:        () => has('mural')      ? <Mural      userId={userId} profile={profile} /> : <AccessDenied />,
+    campanhas:    () => has('campanhas') ? <Campanhas  userId={userId} profile={profile} /> : <AccessDenied />,
     usersadmin: () => has('usuarios')   ? <UsersAdmin userId={userId} profile={profile} />  : <AccessDenied />,
   };
 

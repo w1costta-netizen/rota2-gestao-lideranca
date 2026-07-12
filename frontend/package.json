@@ -11,6 +11,8 @@
     "@supabase/supabase-js": "^2.110.2",
     "axios": "^1.6.8",
     "html2pdf.js": "^0.14.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "lucide-react": "^0.378.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

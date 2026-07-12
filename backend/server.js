@@ -20,6 +20,7 @@ app.use('/api/push',         require('./routes/push'));
 app.use('/api/comunicados',  require('./routes/comunicados'));
 app.use('/api/tarefas',      require('./routes/tarefas'));
 app.use('/api/mural',        require('./routes/mural'));
+app.use('/api/campanhas',    require('./routes/campanhas'));
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

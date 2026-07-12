@@ -7,14 +7,15 @@ export const MODULES = [
   { key: 'escala',         label: 'Escala',             icon: '📋', desc: 'Ver e gerenciar a própria escala' },
   { key: 'escala_setores', label: 'Escala — Setores',   icon: '🗂️', desc: 'Visualizar escalas de outros setores' },
   { key: 'caixas',         label: 'Caixas',             icon: '💳', desc: 'Análise de desempenho de caixas' },
+  { key: 'campanhas',      label: 'Conferência Flyers', icon: '🏷️', desc: 'Sinalização e conferência de materiais promocionais' },
   { key: 'usuarios',       label: 'Usuários',           icon: '👥', desc: 'Criar e gerenciar usuários da empresa' },
 ];
 
 export const DEFAULT_PERMISSIONS = {
-  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'agenda', 'escala', 'escala_setores', 'caixas', 'usuarios'],
-  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'agenda', 'escala', 'escala_setores', 'caixas'],
-  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'agenda', 'escala', 'caixas'],
-  colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural'],
+  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'usuarios'],
+  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas'],
+  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'caixas'],
+  colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas'],
 };
 
 export function getEffectivePermissions(profile) {
