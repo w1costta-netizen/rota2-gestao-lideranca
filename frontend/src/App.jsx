@@ -15,6 +15,7 @@ import TeamMembers from './pages/TeamMembers';
 import NativeSchedule from './pages/NativeSchedule';
 import UsersAdmin from './pages/UsersAdmin';
 import Comunicados from './pages/Comunicados';
+import Welcome from './pages/Welcome';
 
 function AccessDenied() {
   return (
@@ -117,6 +118,13 @@ function AppContent() {
 
   const userId = session?.user?.id;
   const userSector = profile?.sector || '';
+
+  // Mostra boas-vindas na primeira vez
+  if (profile?.first_access) {
+    return (
+      <Welcome userId={userId} onFinish={() => window.location.reload()} />
+    );
+  }
 
   const has = (key) => hasPermission(profile, key);
 
