@@ -47,16 +47,17 @@ router.post('/', async (req, res) => {
 
 // PUT /api/campanhas/:id
 router.put('/:id', async (req, res) => {
-  const { requester_id, status, titulo, validade_ini, validade_fim } = req.body;
+  const { requester_id, status, titulo, validade_ini, validade_fim, flyer_pdf_url } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!isManager(me)) return res.status(403).json({ error: 'Acesso negado' });
 
   const updates = {};
-  if (titulo)       updates.titulo       = titulo;
-  if (status)       updates.status       = status;
-  if (validade_ini) updates.validade_ini = validade_ini;
-  if (validade_fim) updates.validade_fim = validade_fim;
+  if (titulo)                        updates.titulo        = titulo;
+  if (status)                        updates.status        = status;
+  if (validade_ini)                  updates.validade_ini  = validade_ini;
+  if (validade_fim)                  updates.validade_fim  = validade_fim;
+  if (flyer_pdf_url !== undefined)   updates.flyer_pdf_url = flyer_pdf_url;
 
   const { data, error } = await supabase.from('campanhas').update(updates).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
