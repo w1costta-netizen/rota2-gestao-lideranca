@@ -9,49 +9,80 @@ import 'jspdf-autotable';
 import * as pdfjsLib from 'pdfjs-dist';
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
-// Extrai itens de texto bruto do PDF
+// Extrai produtos e preços de flyers no formato Sam's Club / supermercados
 function parseFlyerText(rawText) {
-  const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+  // 1. Remove ruído típico de flyers de supermercado
+  const NOISE_RE = [
+    /leve\s*\d+\s*pague\s*\d+/gi, /pague\s*\d+\s*leve\s*\d+/gi,
+    /cada\s*sai\s*por[:.]?/gi, /economize/gi, /muito\s*vale/gi,
+    /nesta\s*embalagem[^\n]*/gi, /a\s*unidade\s*sai\s*por[:.]?/gi,
+    /o\s*litro\s*sai\s*por[:.]?/gi, /\d+%\s*de\s*desconto[^\n]*/gi,
+    /na\s*2ª?\s*unidade[^\n]*/gi, /nos\s*cartões[^\n]*/gi,
+    /à\s*vista[^\n]*/gi, /\d+x\s*de[^\n]*/gi,
+    /^de:\s*R?\$?[\d.,]+/gim, /^por:\s*R?\$?[\d.,]+/gim,
+    /ofertas?\s*válidas?[^\n]*/gi, /ou\s*enquanto[^\n]*/gi,
+    /foto\(s\)[^\n]*/gi, /imagens?\s*(meramente\s*)?ilustrativas?[^\n]*/gi,
+    /conforme\s*código[^\n]*/gi, /não\s*vendemos[^\n]*/gi,
+    /ministério\s*da\s*saúde[\s\S]*?(\d{2} anos[^\n]*|\n)/gi,
+    /aleitamento\s*materno[^\n]*/gi, /beba\s*com\s*moderação/gi,
+    /art\s*\d+[^\n]*/gi, /se\s*liga\s*no[^\n]*/gi,
+    /samsclub\.com\.br[^\n]*/gi, /você\s*pode\s*pagar[^\n]*/gi,
+    /promoção\s*não\s*cumulativa[\s\S]*?(\n\n|$)/gi,
+    /garantimos\s*o\s*estoque[\s\S]*?(\n\n|$)/gi,
+    /crédito\s*sujeito[^\n]*/gi, /consulte[^\n]*/gi,
+    /por\s*sócio[^\n]*/gi, /limitado\s*a[^\n]*/gi,
+    /ganhe\s*uma[^\n]*/gi, /assinada\s*por[^\n]*/gi,
+    /hora\s*da\s*divers[^\n]*/gi, /vale\s*muito\s*encher[^\n]*/gi,
+    /carrinho\s*de\s*economia[^\n]*/gi, /ofertas\s*imperdíveis[^\n]*/gi,
+    /aniversário[^\n]*/gi, /anos[^\n]*$/gim,
+    /\d{2}\/\d{2}\/\d{4}/g, /\*+/g, /\bpix\b/gi,
+    /^\s*(de|por|com|sem|cada|kg|ml|litro|litros|peças|anos|iqf|zip)[\s:]*$/gim,
+  ];
+  let text = rawText;
+  NOISE_RE.forEach(re => { text = text.replace(re, ' '); });
+
+  // 2. Preço no formato R$XX,XX ou R$X.XXX,XX (obrigatório o R$)
+  const PRICE_RE = /R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}/g;
+
+  // 3. Linhas que são specs/atributos curtos — não produto
+  const isSpec = l =>
+    /^(kg|ml|g\b|litro|litros|un\b|unid|folha|sachê|inteiro|fatiado|integral|extravirgem|adulto|grande|azul|vermelha|bancada|220v|congelado|resfriado|desfiado|com gás|sem semente|porcionado|\d+\s*(ml|g|kg|l|un|unidades|peças|litros)\b)/i.test(l.trim()) ||
+    l.trim().length < 3;
+
+  // 4. Varre linhas: ao encontrar preço, associa ao buffer de desc anterior
+  const rawLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   const items = [];
+  let descBuffer = [];
 
-  // Padrões de preço: R$ 9,99 | 9,99 | R$9.99 | 9.99
-  const priceRe = /R?\$?\s*(\d{1,4}[.,]\d{2})/gi;
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i];
+    const prices = line.match(PRICE_RE);
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const prices = [...line.matchAll(priceRe)];
+    if (prices) {
+      const preco = prices[0].replace(/R\$\s*/, 'R$ ');
+      const desc = descBuffer
+        .filter(l => !isSpec(l) && !/^\d/.test(l.trim()))
+        .join(' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
 
-    if (prices.length > 0) {
-      // Linha tem preço — a descrição pode estar na mesma linha ou na anterior
-      let descricao = line.replace(priceRe, '').replace(/[|•\-–—]+/g, ' ').trim();
-
-      // Se a descrição ficou vazia ou muito curta, pega linha anterior
-      if (descricao.length < 4 && i > 0) {
-        descricao = lines[i - 1].replace(priceRe, '').trim();
+      if (desc.length >= 4) {
+        items.push({ descricao: desc, preco, categoria: '', ordem: items.length });
       }
-
-      const preco = prices[0][0].trim().replace('R$', 'R$ ').replace(/R\$\s+/, 'R$ ');
-
-      if (descricao.length >= 3) {
-        items.push({ descricao, preco, categoria: '', ordem: items.length });
-      }
-    } else if (
-      // Linha sem preço mas com texto relevante (≥ 8 chars, não é só números/símbolos)
-      line.length >= 8 &&
-      !/^\d+$/.test(line) &&
-      !/^[^a-zA-ZÀ-ú]+$/.test(line) &&
-      // Próxima linha tem preço? Então esta é a descrição — já será capturada no loop
-      !lines[i + 1]?.match(priceRe)
-    ) {
-      // Item sem preço explícito (raro em flyers, mas acontece)
-      // Não adiciona automaticamente para não poluir com títulos/cabeçalhos
+      // Pula linhas seguintes que também são preços (preço promo, etc.)
+      while (i + 1 < rawLines.length && PRICE_RE.test(rawLines[i + 1])) { PRICE_RE.lastIndex = 0; i++; }
+      PRICE_RE.lastIndex = 0;
+      descBuffer = [];
+    } else {
+      descBuffer.push(line);
+      if (descBuffer.length > 6) descBuffer.shift(); // janela deslizante
     }
   }
 
-  // Remove duplicatas pelo par descrição+preço
+  // 5. Deduplica pelo início da descrição + preço
   const seen = new Set();
   return items.filter(it => {
-    const key = it.descricao.toLowerCase() + it.preco;
+    const key = it.descricao.toLowerCase().slice(0, 25) + it.preco;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
