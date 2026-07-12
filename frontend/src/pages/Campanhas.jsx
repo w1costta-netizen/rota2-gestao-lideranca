@@ -9,116 +9,139 @@ import 'jspdf-autotable';
 import * as pdfjsLib from 'pdfjs-dist';
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
-// Extrai produtos e preços de flyers no formato Sam's Club / supermercados
+// Extrai produtos + preço + dinâmica promocional de flyers de supermercado
 function parseFlyerText(rawText) {
   let text = rawText;
 
-  // ── 1. Normaliza preços com espaços tipográficos  ────────────────
-  // Ex: "R$ 3.499 ,00"  →  "R$3.499,00"
+  // ── 1. Normaliza preços com espaços tipográficos ─────────────────
+  // "R$ 3.499 ,00" → "R$3.499,00"
   text = text.replace(/R\$\s*([\d.]+)\s*,(\d{2})/g, 'R$$1,$2');
 
-  // ── 2. Remove blocos de parcelamento e referências de cartão ───────
-  text = text.replace(/à\s*vista\s*ou[\s\S]{0,80}?sem\s*juros[^\n]*/gi, ' ');
-  text = text.replace(/\d+x\s*de\s*R\$[\d\s.,]+[^\n]*/gi, ' ');
+  // ── 2. Remove blocos de parcelamento (antes do preço principal) ──
+  text = text.replace(/à\s*vista\s*ou[\s\S]{0,120}?sem\s*juros[^\n]*/gi, ' ');
+  text = text.replace(/\d+x\s*de\s*R\$[\d.,]+[^\n]*/gi, ' ');
   text = text.replace(/sem\s*juros[^\n]*/gi, ' ');
   text = text.replace(/nos\s*cart[õo]es[^\n]*/gi, ' ');
-  // Sam's Club com qualquer tipo de apóstrofe (', ', ', unicode)
-  text = text.replace(/sam[‘’''`]?s\s*club[^\n]*/gi, ' ');
+  text = text.replace(/sam['''''`]?s\s*club[^\n]*/gi, ' ');
   text = text.replace(/carrefour[^\n]*/gi, ' ');
   text = text.replace(/atacad[aã]o[^\n]*/gi, ' ');
   text = text.replace(/banco\s*csf[^\n]*/gi, ' ');
 
-  // ── 3. Remove ruído geral de flyers ─────────────────────────────
+  // ── 3. Normaliza dinâmicas promocionais → tokens padronizados ────
+  // "LEVE 2 PAGUE 1" ou "PAGUE1 LEVE2" → "__LP2P1__"
+  text = text.replace(/leve\s*(\d+)\s*pague\s*(\d+)/gi, (_, l, p) => ` __LP${l}P${p}__ `);
+  text = text.replace(/pague\s*(\d+)\s*leve\s*(\d+)/gi, (_, p, l) => ` __LP${l}P${p}__ `);
+  // "20% de desconto na 2ª unidade" → "__DESC20%__"
+  text = text.replace(/(\d+)\s*%\s*de\s*desconto\s*na\s*2[aª°]?\s*unidade/gi, (_, n) => ` __DESC${n}%__ `);
+  // "50% DE DESCONTO NA 2ª UNIDADE" idem
+  text = text.replace(/(\d+)\s*%\s*de\s*desconto/gi, (_, n) => ` __DESC${n}%__ `);
+
+  // ── 4. Remove ruído legal/institucional ──────────────────────────
   const NOISE = [
-    // Mecânicas promocionais
-    /leve\s*\d+\s*pague\s*\d+/gi, /pague\s*\d+\s*leve\s*\d+/gi,
-    /\bleve\b/gi, /\bpague\b/gi,
     /cada\s*sai\s*por[:.]?/gi, /sai\s*por[:.]?/gi, /\bsai\b/gi,
     /economize\b/gi,
-    /\bmuito\b/gi,                               // "MUITO VALE", "MUITO" sozinho
-    /\bvale\b(?!\s+\d)/gi,                       // "VALE" exceto "VALE R$X"
+    /\bmuito\b/gi, /\bvale\b(?!\s*R\$)/gi,
+    /\bleve\b(?!\s*\d)/gi, /\bpague\b(?!\s*\d)/gi,   // leve/pague soltos (sem número)
     /nesta\s*embalagem[^\n]*/gi,
-    /[ao]\s*unidade\s*sai\s*por[:.]?/gi,
-    /[ao]\s*litro\s*sai\s*por[:.]?/gi,
-    /\d+\s*%\s*de\s*desconto[^\n]*/gi,
+    /[ao]\s*unidade\s*sai\s*por[:.]?/gi, /[ao]\s*litro\s*sai\s*por[:.]?/gi,
     /na\s*2[aª°]?\s*unidade[^\n]*/gi,
-    /\bde:\s*R\$[\d\s.,]+/gi,
-    /\bpor:\s*R\$[\d\s.,]+/gi,
-    /\bpor:\s*$/gim,
-    /\bde:\s*$/gim,
-    /nesta\s*promoção[^\n]*/gi,
-    // Textos legais e datas
-    /as\s*ofertas?\s*(são\s*)?válidas?[^\n]*/gi,
-    /ofertas?\s*válidas?[^\n]*/gi,
-    /ou\s*enquanto[^\n]*/gi,
-    /prevalecendo[^\n]*/gi,
+    /nesta\s*promo[cç][aã]o[^\n]*/gi,
+    /\bde:\s*R\$[\d.,]+/gi, /\bpor:\s*R\$[\d.,]+/gi,
+    /\bpor:\s*$/gim, /\bde:\s*$/gim,
+    /as\s*ofertas?\s*(s[aã]o\s*)?v[aá]lidas?[^\n]*/gi,
+    /ofertas?\s*v[aá]lidas?[^\n]*/gi,
+    /ou\s*enquanto[^\n]*/gi, /prevalecendo[^\n]*/gi,
     /foto\(s\)[^\n]*/gi,
     /imagens?\s*(meramente\s*)?ilustrativas?[^\n]*/gi,
-    /conforme\s*c[oó]digo[^\n]*/gi,
-    /n[aã]o\s*vendemos[^\n]*/gi,
+    /conforme\s*c[oó]digo[^\n]*/gi, /n[aã]o\s*vendemos[^\n]*/gi,
     /minist[eé]rio\s*da\s*sa[uú]de[^\n]*/gi,
-    /aleitamento\s*materno[^\n]*/gi,
-    /beba\s*com\s*modera[cç][aã]o/gi,
-    /art\s*\d+[^\n]*/gi,
-    /se\s*liga\s*no[^\n]*/gi,
-    /samsclub[^\n]*/gi,
-    /voc[eê]\s*pode\s*pagar[^\n]*/gi,
-    /\bpix\b[^\n]*/gi,
-    /banco\s*central[^\n]*/gi,
+    /aleitamento\s*materno[^\n]*/gi, /beba\s*com\s*modera[cç][aã]o/gi,
+    /art\s*\d+[^\n]*/gi, /se\s*liga\s*no[^\n]*/gi,
+    /samsclub[^\n]*/gi, /voc[eê]\s*pode\s*pagar[^\n]*/gi,
+    /\bpix\b[^\n]*/gi, /banco\s*central[^\n]*/gi,
     /promo[cç][aã]o\s*n[aã]o\s*cumulativa[^\n]*/gi,
-    /garantimos[^\n]*/gi,
-    /cr[eé]dito\s*sujeito[^\n]*/gi,
-    /consulte[^\n]*/gi,
-    /limitad[ao]\s*a\s*\d+[^\n]*/gi,
-    /por\s*s[oó]cio[^\n]*/gi,
-    /ganhe\s*uma[^\n]*/gi,
-    /exclusiva[^\n]*/gi,
-    /assinada\s*por[^\n]*/gi,
-    /hora\s*da\s*divers[^\n]*/gi,
-    /carrinho\s*de\s*economia[^\n]*/gi,
-    /ofertas\s*imperd[ií]veis[^\n]*/gi,
-    /anivers[aá]rio[^\n]*/gi,
-    /a\s*cada\s*R\$[\d.,]+[^\n]*/gi,
-    /em\s*compras[^\n]*/gi,
-    /\d{2}\/\d{2}\/\d{4}/g,
-    /\*+/g,
-    // Linhas só com palavras-chave de promoção
+    /garantimos[^\n]*/gi, /cr[eé]dito\s*sujeito[^\n]*/gi,
+    /consulte[^\n]*/gi, /limitad[ao]\s*a\s*\d+[^\n]*/gi,
+    /por\s*s[oó]cio[^\n]*/gi, /ganhe\s*uma[^\n]*/gi,
+    /exclusiva[^\n]*/gi, /assinada\s*por[^\n]*/gi,
+    /hora\s*da\s*divers[^\n]*/gi, /carrinho\s*de\s*economia[^\n]*/gi,
+    /ofertas\s*imperd[ií]veis[^\n]*/gi, /anivers[aá]rio[^\n]*/gi,
+    /a\s*cada\s*R\$[\d.,]+[^\n]*/gi, /em\s*compras[^\n]*/gi,
+    /\d{2}\/\d{2}\/\d{4}/g, /\*+/g,
     /^\s*(de|por|cada|tamanho\s*fam[ií]lia|nova\s*f[oó]rmula|pacot[eo]\s*econ[oô]mico)\s*$/gim,
   ];
   NOISE.forEach(re => { text = text.replace(re, ' '); });
 
-  // ── 4. Preço com R$ obrigatório ──────────────────────────────────
+  // ── 5. Preço com R$ obrigatório ──────────────────────────────────
   const PRICE_RE = /R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}/g;
 
-  // ── 5. Linha irrelevante (specs, atributos, marcadores) ──────────
-  const IGNORE_LINE = /^(\d+\s*(ml|g|kg|l|un|unid|litros|peças|btus?|v\b)|kg\b|ml\b|litro|sem\s*cartucho|iqf|zip|neutro|folha\s*(dupla|tripla)|integral|extravirgem|congelado|resfriado|desfiado|fatiado|adulto|grande|azul|vermelha|bancada|220v|frio|externo|com\s*gás|com\s*luz\s*e\s*som|sem\s*semente|porcionado|pacote|sachê|inteiro|\d+\s*peças|\d+\s*unidades|ao\s*leite)/i;
+  // Detecta token de dinâmica em uma linha
+  const getDinamica = (line) => {
+    const lp = line.match(/__LP(\d+)P(\d+)__/);
+    if (lp) return `Leve ${lp[1]} Pague ${lp[2]}`;
+    const dc = line.match(/__DESC(\d+)%__/);
+    if (dc) return `${dc[1]}% desc 2ª un`;
+    return null;
+  };
 
-  // ── 6. Varre linhas e monta pares produto → preço ────────────────
+  // ── 6. Linha de spec (não é nome de produto) ─────────────────────
+  const IS_SPEC = /^(\d[\d.,]*\s*(ml|g|kg|l\b|un|unid|litros|peças|btus?|v\b)|kg\b|ml\b|litro[s]?|sem\s*cartucho|iqf|zip|neutro|folha\s*(dupla|tripla)|integral|extravirgem|congelado|resfriado|desfiado|fatiado|adulto|grande|azul|vermelha|bancada|220v|frio|externo|com\s*g[aá]s|sem\s*semente|porcionado|sach[eê]|inteiro|\d+\s*(peças|unidades)|ao\s*leite|c[oô]ngelado|iqf)/i;
+
+  // Linhas que são cabeçalhos/categorias, não produtos individuais
+  const IS_CATEGORY = /^(todos\s*os|todas\s*as|ofertas|aniversário|hora\s*da|vale\s*muito)/i;
+
+  // ── 7. Varre linhas: monta pares [descrição → preço + dinâmica] ──
   const rawLines = text.split('\n')
     .map(l => l.trim())
-    .filter(l => l.length > 1 && !/^[\d\s.,\-–—|•%*()]+$/.test(l));
+    .filter(l => l.length > 1 && !/^[\d\s.,\-–—|•%*()\/__]+$/.test(l));
 
   const items = [];
   let descBuffer = [];
+  let pendingDinamica = null; // dinâmica encontrada antes do preço
 
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i];
     PRICE_RE.lastIndex = 0;
     const prices = line.match(PRICE_RE);
 
-    if (prices) {
-      // Captura APENAS o maior preço da linha (preço de tabela, não parcela)
-      const allPrices = prices.map(p => {
-        const num = parseFloat(p.replace('R$','').replace('.','').replace(',','.'));
-        return { str: p, val: num };
-      });
-      const mainPrice = allPrices.reduce((a, b) => b.val > a.val ? b : a);
-      const preco = mainPrice.str.replace(/R\$\s*/, 'R$ ');
+    // Detecta dinâmica em qualquer linha (pode aparecer antes ou depois do preço)
+    const din = getDinamica(line);
+    if (din && !prices) {
+      pendingDinamica = din;
+      continue;
+    }
 
-      // Descrição: últimas linhas do buffer, sem specs e sem linhas numéricas
+    if (prices) {
+      // Maior preço da linha = preço de tabela
+      const mainPrice = prices
+        .map(p => ({ str: p, val: parseFloat(p.replace('R$','').replace(/\./g,'').replace(',','.')) }))
+        .reduce((a, b) => b.val > a.val ? b : a);
+
+      let preco = mainPrice.str.replace(/R\$\s*/, 'R$ ');
+
+      // Verifica dinâmica na mesma linha de preço
+      const dinNaLinha = getDinamica(line) || pendingDinamica;
+
+      // Olha adiante: próxima(s) linha(s) podem ter dinâmica
+      let lookahead = 1;
+      let dinAdiante = null;
+      while (lookahead <= 3 && i + lookahead < rawLines.length) {
+        const next = rawLines[i + lookahead];
+        PRICE_RE.lastIndex = 0;
+        if (PRICE_RE.test(next)) break; // parou em outro preço
+        dinAdiante = getDinamica(next);
+        if (dinAdiante) { i += lookahead; break; }
+        lookahead++;
+      }
+
+      const dinamicaFinal = dinNaLinha || dinAdiante;
+      if (dinamicaFinal) preco += ` · ${dinamicaFinal}`;
+      pendingDinamica = null;
+
+      // Monta descrição: últimas linhas úteis do buffer
       const desc = descBuffer
-        .filter(l => !IGNORE_LINE.test(l) && !/^\d/.test(l.trim()))
-        .slice(-4)                             // máximo 4 linhas para o nome
+        .filter(l => !IS_SPEC.test(l) && !IS_CATEGORY.test(l) && !/^\d/.test(l) && !/__/.test(l))
+        .slice(-3)
         .join(' ')
         .replace(/\s{2,}/g, ' ')
         .trim();
@@ -127,22 +150,23 @@ function parseFlyerText(rawText) {
         items.push({ descricao: desc, preco, categoria: '', ordem: items.length });
       }
 
-      // Pula preços seguintes (preço promo, De/Por)
+      // Pula preços seguintes (promo, De/Por)
       PRICE_RE.lastIndex = 0;
       while (i + 1 < rawLines.length && PRICE_RE.test(rawLines[i + 1])) {
         PRICE_RE.lastIndex = 0; i++;
       }
       descBuffer = [];
-    } else {
+    } else if (!/__/.test(line)) {
+      // Só adiciona ao buffer se não for token interno
       descBuffer.push(line);
       if (descBuffer.length > 8) descBuffer.shift();
     }
   }
 
-  // ── 7. Remove duplicatas ─────────────────────────────────────────
+  // ── 8. Deduplica ─────────────────────────────────────────────────
   const seen = new Set();
   return items.filter(it => {
-    const key = it.descricao.toLowerCase().slice(0, 28) + it.preco;
+    const key = it.descricao.toLowerCase().slice(0, 28) + it.preco.slice(0, 10);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
