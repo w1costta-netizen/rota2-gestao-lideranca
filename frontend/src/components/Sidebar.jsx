@@ -1,15 +1,16 @@
 import React from 'react';
-import { Users, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck } from 'lucide-react';
+import { Users, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 
 const NAV_ALL = [
-  { id: 'dashboard',  label: 'Dashboard',  icon: LayoutGrid,   perm: 'dashboard' },
-  { id: 'agenda',     label: 'Agenda',     icon: CalendarDays, perm: 'agenda' },
-  { id: 'nscale',     label: 'Escala',     icon: CalendarRange,perm: 'escala' },
-  { id: 'cashier',    label: 'Caixas',     icon: ShoppingCart, perm: 'caixas' },
-  { id: 'profile',    label: 'Meu Perfil', icon: UserCircle,   perm: null }, // sempre visível
-  { id: 'usersadmin', label: 'Usuários',   icon: ShieldCheck,  perm: 'usuarios' },
+  { id: 'dashboard',    label: 'Dashboard',    icon: LayoutGrid,   perm: 'dashboard' },
+  { id: 'comunicados',  label: 'Comunicados',  icon: Megaphone,    perm: 'dashboard' },
+  { id: 'agenda',       label: 'Agenda',       icon: CalendarDays, perm: 'agenda' },
+  { id: 'nscale',       label: 'Escala',       icon: CalendarRange,perm: 'escala' },
+  { id: 'cashier',      label: 'Caixas',       icon: ShoppingCart, perm: 'caixas' },
+  { id: 'profile',      label: 'Meu Perfil',   icon: UserCircle,   perm: null },
+  { id: 'usersadmin',   label: 'Usuários',     icon: ShieldCheck,  perm: 'usuarios' },
 ];
 
 export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, isMobile }) {

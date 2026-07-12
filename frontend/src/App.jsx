@@ -14,6 +14,7 @@ import CashierAnalysis from './pages/CashierAnalysis';
 import TeamMembers from './pages/TeamMembers';
 import NativeSchedule from './pages/NativeSchedule';
 import UsersAdmin from './pages/UsersAdmin';
+import Comunicados from './pages/Comunicados';
 
 function AccessDenied() {
   return (
@@ -128,6 +129,7 @@ function AppContent() {
     nscale:     () => has('escala')     ? <NativeSchedule userId={userId} profile={profile} /> : <AccessDenied />,
     cashier:    () => has('caixas')     ? <CashierAnalysis userId={userId} />               : <AccessDenied />,
     profile:    () => <Profile />,
+    comunicados:  () => <Comunicados userId={userId} profile={profile} />,
     usersadmin: () => has('usuarios')   ? <UsersAdmin userId={userId} profile={profile} />  : <AccessDenied />,
   };
 
