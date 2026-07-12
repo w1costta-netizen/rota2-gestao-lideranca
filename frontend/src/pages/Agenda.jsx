@@ -433,7 +433,7 @@ export default function Agenda({ userId, profile }) {
             <label className="form-label">Líder</label>
             <select className="select" value={form.target_value} onChange={e => setForm(f => ({ ...f, target_value: e.target.value }))}>
               <option value="">Selecionar líder...</option>
-              {leaders.map(l => <option key={l.id} value={l.id}>{l.name} ({l.sector})</option>)}
+              {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}{p.sector ? ` (${p.sector})` : ''}</option>)}
             </select>
           </div>
         )}
