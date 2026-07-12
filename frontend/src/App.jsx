@@ -15,6 +15,8 @@ import TeamMembers from './pages/TeamMembers';
 import NativeSchedule from './pages/NativeSchedule';
 import UsersAdmin from './pages/UsersAdmin';
 import Comunicados from './pages/Comunicados';
+import Tarefas from './pages/Tarefas';
+import Mural from './pages/Mural';
 import Welcome from './pages/Welcome';
 
 function AccessDenied() {
@@ -139,6 +141,8 @@ function AppContent() {
     cashier:    () => has('caixas')     ? <CashierAnalysis userId={userId} />               : <AccessDenied />,
     profile:    () => <Profile />,
     comunicados:  () => <Comunicados userId={userId} profile={profile} />,
+    tarefas:      () => has('tarefas') ? <Tarefas userId={userId} profile={profile} /> : <AccessDenied />,
+    mural:        () => has('mural')   ? <Mural   userId={userId} profile={profile} /> : <AccessDenied />,
     usersadmin: () => has('usuarios')   ? <UsersAdmin userId={userId} profile={profile} />  : <AccessDenied />,
   };
 
