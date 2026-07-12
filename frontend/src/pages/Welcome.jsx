@@ -6,7 +6,7 @@ const STEPS = [
   {
     icon: '🧭',
     title: 'Bem-vindo ao Rota 2.0',
-    subtitle: 'Gestão de Liderança — Sam\'s Club',
+    subtitle: 'Gestão de Liderança',
     body: 'Sua ferramenta exclusiva de comunicação e gestão. Tudo que você precisa para o dia a dia, direto no celular.',
     highlights: [
       { icon: '📅', text: 'Agenda semanal atualizada em tempo real' },
