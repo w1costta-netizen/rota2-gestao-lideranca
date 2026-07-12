@@ -1,11 +1,62 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Pencil, Trash2, Camera, CheckCircle, Circle, FileText, ChevronRight, X, ArrowLeft } from 'lucide-react';
+import { Plus, Pencil, Trash2, Camera, CheckCircle, Circle, FileText, ChevronRight, X, ArrowLeft, Upload, Loader } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import * as pdfjsLib from 'pdfjs-dist';
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+
+// Extrai itens de texto bruto do PDF
+function parseFlyerText(rawText) {
+  const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+  const items = [];
+
+  // Padrões de preço: R$ 9,99 | 9,99 | R$9.99 | 9.99
+  const priceRe = /R?\$?\s*(\d{1,4}[.,]\d{2})/gi;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const prices = [...line.matchAll(priceRe)];
+
+    if (prices.length > 0) {
+      // Linha tem preço — a descrição pode estar na mesma linha ou na anterior
+      let descricao = line.replace(priceRe, '').replace(/[|•\-–—]+/g, ' ').trim();
+
+      // Se a descrição ficou vazia ou muito curta, pega linha anterior
+      if (descricao.length < 4 && i > 0) {
+        descricao = lines[i - 1].replace(priceRe, '').trim();
+      }
+
+      const preco = prices[0][0].trim().replace('R$', 'R$ ').replace(/R\$\s+/, 'R$ ');
+
+      if (descricao.length >= 3) {
+        items.push({ descricao, preco, categoria: '', ordem: items.length });
+      }
+    } else if (
+      // Linha sem preço mas com texto relevante (≥ 8 chars, não é só números/símbolos)
+      line.length >= 8 &&
+      !/^\d+$/.test(line) &&
+      !/^[^a-zA-ZÀ-ú]+$/.test(line) &&
+      // Próxima linha tem preço? Então esta é a descrição — já será capturada no loop
+      !lines[i + 1]?.match(priceRe)
+    ) {
+      // Item sem preço explícito (raro em flyers, mas acontece)
+      // Não adiciona automaticamente para não poluir com títulos/cabeçalhos
+    }
+  }
+
+  // Remove duplicatas pelo par descrição+preço
+  const seen = new Set();
+  return items.filter(it => {
+    const key = it.descricao.toLowerCase() + it.preco;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 const TIPO_LABEL = { feira: '🛒 Feira', fds: '🏷️ Final de Semana' };
 const TIPO_COLOR = { feira: '#6366f1', fds: '#E8681A' };
@@ -27,9 +78,14 @@ function CampanhaDetalhe({ campanha, userId, profile, onBack }) {
   const [itemModal, setItemModal] = useState(false);
   const [editItem, setEditItem]   = useState(null);
   const [itemForm, setItemForm]   = useState({ descricao:'', preco:'', categoria:'' });
-  const [bulkText, setBulkText]   = useState('');
-  const [bulkModal, setBulkModal] = useState(false);
-  const [fotoModal, setFotoModal] = useState(null); // item selecionado para foto
+  const [bulkText, setBulkText]         = useState('');
+  const [bulkModal, setBulkModal]       = useState(false);
+  const [pdfModal, setPdfModal]         = useState(false);
+  const [pdfItems, setPdfItems]         = useState([]);   // itens extraídos do PDF
+  const [pdfLoading, setPdfLoading]     = useState(false);
+  const [pdfSaving, setPdfSaving]       = useState(false);
+  const pdfInputRef                     = useRef();
+  const [fotoModal, setFotoModal]       = useState(null); // item selecionado para foto
   const [obs, setObs]             = useState('');
   const [uploading, setUploading] = useState(false);
   const [gerandoPDF, setGerandoPDF] = useState(false);
@@ -79,6 +135,60 @@ function CampanhaDetalhe({ campanha, userId, profile, onBack }) {
     await api.delete(`/campanhas/itens/${id}?requester_id=${userId}`).catch(() => {});
     setItens(l => l.filter(i => i.id !== id));
     toast('Item removido');
+  };
+
+  // ── Upload e extração automática do PDF do flyer
+  const handlePdfUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPdfLoading(true);
+    setPdfItems([]);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        // Agrupa itens de texto por linha usando y-coordinate
+        const byY = {};
+        content.items.forEach(item => {
+          const y = Math.round(item.transform[5]);
+          if (!byY[y]) byY[y] = [];
+          byY[y].push(item.str);
+        });
+        const sortedYs = Object.keys(byY).map(Number).sort((a, b) => b - a);
+        sortedYs.forEach(y => { fullText += byY[y].join(' ') + '\n'; });
+      }
+      const extracted = parseFlyerText(fullText);
+      if (extracted.length === 0) {
+        toast('Nenhum produto encontrado no PDF. Tente adicionar em lote.');
+      } else {
+        setPdfItems(extracted.map(it => ({ ...it, selected: true })));
+        setPdfModal(true);
+      }
+    } catch (err) {
+      toast('Erro ao ler o PDF: ' + err.message);
+    } finally {
+      setPdfLoading(false);
+      e.target.value = '';
+    }
+  };
+
+  const savePdfItems = async () => {
+    const toSave = pdfItems
+      .filter(it => it.selected)
+      .map((it, i) => ({ descricao: it.descricao, preco: it.preco, categoria: it.categoria, ordem: itens.length + i }));
+    if (!toSave.length) return toast('Selecione ao menos um item');
+    setPdfSaving(true);
+    try {
+      await api.post(`/campanhas/${campanha.id}/itens`, { requester_id: userId, itens: toSave });
+      toast(`✅ ${toSave.length} itens importados do flyer!`);
+      setPdfModal(false);
+      setPdfItems([]);
+      load();
+    } catch { toast('Erro ao salvar itens'); }
+    finally { setPdfSaving(false); }
   };
 
   // ── Adicionar itens em lote (texto livre)
@@ -251,6 +361,15 @@ function CampanhaDetalhe({ campanha, userId, profile, onBack }) {
         <div style={{ display:'flex', gap:8 }}>
           {isAdmin && (
             <>
+              {/* Upload do PDF do flyer */}
+              <input ref={pdfInputRef} type="file" accept="application/pdf"
+                style={{ display:'none' }} onChange={handlePdfUpload}/>
+              <button className="btn btn-primary" style={{ background:'#6366f1' }}
+                onClick={() => pdfInputRef.current?.click()} disabled={pdfLoading}>
+                {pdfLoading
+                  ? <><Loader size={14} style={{ animation:'spin 1s linear infinite' }}/> Lendo PDF...</>
+                  : <><Upload size={14}/> Upload Flyer PDF</>}
+              </button>
               <button className="btn btn-ghost" onClick={() => setBulkModal(true)}>+ Lote</button>
               <button className="btn btn-ghost" onClick={() => { setEditItem(null); setItemForm({ descricao:'', preco:'', categoria:'' }); setItemModal(true); }}>
                 <Plus size={14}/> Item
@@ -359,6 +478,52 @@ function CampanhaDetalhe({ campanha, userId, profile, onBack }) {
           </div>
         </Modal>
       )}
+
+      {/* Modal PDF — confirmar itens extraídos */}
+      <Modal open={pdfModal} onClose={() => setPdfModal(false)} title={`📄 Itens extraídos do flyer (${pdfItems.filter(i=>i.selected).length}/${pdfItems.length} selecionados)`}>
+        <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:10 }}>
+          Revise os itens extraídos automaticamente. Desmarque os que não são produtos (títulos, rodapés etc) antes de importar.
+        </div>
+        <div style={{ maxHeight:360, overflowY:'auto', display:'flex', flexDirection:'column', gap:6, marginBottom:14 }}>
+          {pdfItems.map((it, idx) => (
+            <div key={idx} style={{
+              display:'flex', alignItems:'center', gap:10, padding:'8px 10px',
+              borderRadius:8, background: it.selected ? 'var(--primary)10' : 'var(--bg)',
+              border:`1px solid ${it.selected ? 'var(--primary)40' : 'var(--border)'}`,
+              cursor:'pointer',
+            }} onClick={() => setPdfItems(l => l.map((x,i) => i===idx ? {...x, selected:!x.selected} : x))}>
+              <input type="checkbox" checked={it.selected} readOnly
+                style={{ accentColor:'var(--primary)', width:16, height:16, flexShrink:0 }}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <input className="input" style={{ padding:'4px 8px', fontSize:13, marginBottom:4 }}
+                  value={it.descricao}
+                  onClick={e => e.stopPropagation()}
+                  onChange={e => setPdfItems(l => l.map((x,i) => i===idx ? {...x, descricao:e.target.value} : x))}/>
+              </div>
+              <input className="input" style={{ width:90, padding:'4px 8px', fontSize:13, flexShrink:0 }}
+                value={it.preco}
+                onClick={e => e.stopPropagation()}
+                onChange={e => setPdfItems(l => l.map((x,i) => i===idx ? {...x, preco:e.target.value} : x))}/>
+              <button className="btn-icon" style={{ color:'#ef4444', flexShrink:0 }}
+                onClick={e => { e.stopPropagation(); setPdfItems(l => l.filter((_,i)=>i!==idx)); }}>
+                <X size={14}/>
+              </button>
+            </div>
+          ))}
+        </div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+          <button style={{ fontSize:12, color:'var(--text-muted)', background:'none', border:'none', cursor:'pointer' }}
+            onClick={() => setPdfItems(l => l.map(x=>({...x,selected:true})))}>Selecionar todos</button>
+          <button style={{ fontSize:12, color:'var(--text-muted)', background:'none', border:'none', cursor:'pointer' }}
+            onClick={() => setPdfItems(l => l.map(x=>({...x,selected:false})))}>Desmarcar todos</button>
+        </div>
+        <div style={{ display:'flex', gap:10 }}>
+          <button className="btn btn-ghost" style={{ flex:1, justifyContent:'center' }} onClick={() => setPdfModal(false)}>Cancelar</button>
+          <button className="btn btn-primary" style={{ flex:1, justifyContent:'center' }} onClick={savePdfItems} disabled={pdfSaving}>
+            {pdfSaving ? 'Importando...' : `Importar ${pdfItems.filter(i=>i.selected).length} itens`}
+          </button>
+        </div>
+      </Modal>
 
       {/* Modal item único */}
       <Modal open={itemModal} onClose={() => setItemModal(false)} title={editItem ? 'Editar item' : 'Novo item'}>

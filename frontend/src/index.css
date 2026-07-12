@@ -792,3 +792,5 @@ tbody td { padding: 12px 14px; font-size: 13.5px; color: var(--text); }
   /* Formulários de perfil */
   .form-group { margin-bottom: 14px; }
 }
+
+@keyframes spin { to { transform: rotate(360deg); } }
