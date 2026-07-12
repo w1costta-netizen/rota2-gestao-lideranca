@@ -11,57 +11,105 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mi
 
 // Extrai produtos e preços de flyers no formato Sam's Club / supermercados
 function parseFlyerText(rawText) {
-  // 1. Remove ruído típico de flyers de supermercado
-  const NOISE_RE = [
-    /leve\s*\d+\s*pague\s*\d+/gi, /pague\s*\d+\s*leve\s*\d+/gi,
-    /cada\s*sai\s*por[:.]?/gi, /economize/gi, /muito\s*vale/gi,
-    /nesta\s*embalagem[^\n]*/gi, /a\s*unidade\s*sai\s*por[:.]?/gi,
-    /o\s*litro\s*sai\s*por[:.]?/gi, /\d+%\s*de\s*desconto[^\n]*/gi,
-    /na\s*2ª?\s*unidade[^\n]*/gi, /nos\s*cartões[^\n]*/gi,
-    /à\s*vista[^\n]*/gi, /\d+x\s*de[^\n]*/gi,
-    /^de:\s*R?\$?[\d.,]+/gim, /^por:\s*R?\$?[\d.,]+/gim,
-    /ofertas?\s*válidas?[^\n]*/gi, /ou\s*enquanto[^\n]*/gi,
-    /foto\(s\)[^\n]*/gi, /imagens?\s*(meramente\s*)?ilustrativas?[^\n]*/gi,
-    /conforme\s*código[^\n]*/gi, /não\s*vendemos[^\n]*/gi,
-    /ministério\s*da\s*saúde[\s\S]*?(\d{2} anos[^\n]*|\n)/gi,
-    /aleitamento\s*materno[^\n]*/gi, /beba\s*com\s*moderação/gi,
-    /art\s*\d+[^\n]*/gi, /se\s*liga\s*no[^\n]*/gi,
-    /samsclub\.com\.br[^\n]*/gi, /você\s*pode\s*pagar[^\n]*/gi,
-    /promoção\s*não\s*cumulativa[\s\S]*?(\n\n|$)/gi,
-    /garantimos\s*o\s*estoque[\s\S]*?(\n\n|$)/gi,
-    /crédito\s*sujeito[^\n]*/gi, /consulte[^\n]*/gi,
-    /por\s*sócio[^\n]*/gi, /limitado\s*a[^\n]*/gi,
-    /ganhe\s*uma[^\n]*/gi, /assinada\s*por[^\n]*/gi,
-    /hora\s*da\s*divers[^\n]*/gi, /vale\s*muito\s*encher[^\n]*/gi,
-    /carrinho\s*de\s*economia[^\n]*/gi, /ofertas\s*imperdíveis[^\n]*/gi,
-    /aniversário[^\n]*/gi, /anos[^\n]*$/gim,
-    /\d{2}\/\d{2}\/\d{4}/g, /\*+/g, /\bpix\b/gi,
-    /^\s*(de|por|com|sem|cada|kg|ml|litro|litros|peças|anos|iqf|zip)[\s:]*$/gim,
-  ];
   let text = rawText;
-  NOISE_RE.forEach(re => { text = text.replace(re, ' '); });
 
-  // 2. Preço no formato R$XX,XX ou R$X.XXX,XX (obrigatório o R$)
+  // ── 1. Normaliza preços com espaços tipográficos  ────────────────
+  // Ex: "R$ 3.499 ,00"  →  "R$3.499,00"
+  text = text.replace(/R\$\s*([\d.]+)\s*,(\d{2})/g, 'R$$1,$2');
+
+  // ── 2. Remove blocos de parcelamento ANTES do preço principal ────
+  // "à vista ou 15x de\nR$253,27 sem juros\nnos Cartões..."
+  text = text.replace(/à\s*vista\s*ou[\s\S]*?R\$[\d.,]+[^\n]*/gi, ' ');
+  text = text.replace(/\d+x\s*de[\s\S]*?R\$[\d.,]+[^\n]*/gi, ' ');
+  text = text.replace(/sem\s*juros[^\n]*/gi, ' ');
+  text = text.replace(/nos\s*cartões[^\n]*/gi, ' ');
+  text = text.replace(/sam['']?s\s*club[^\n]*/gi, ' ');
+  text = text.replace(/carrefour[^\n]*/gi, ' ');
+  text = text.replace(/atacadão[^\n]*/gi, ' ');
+
+  // ── 3. Remove ruído geral de flyers ─────────────────────────────
+  const NOISE = [
+    /leve\s*\d+\s*pague\s*\d+/gi, /pague\s*\d+\s*leve\s*\d+/gi,
+    /cada\s*sai\s*por[:.]?/gi, /economize\b/gi, /muito\s*vale\b/gi,
+    /nesta\s*embalagem[^\n]*/gi,
+    /[ao]\s*unidade\s*sai\s*por[:.]?/gi,
+    /[ao]\s*litro\s*sai\s*por[:.]?/gi,
+    /\d+\s*%\s*de\s*desconto[^\n]*/gi,
+    /na\s*2[aª°]?\s*unidade[^\n]*/gi,
+    /\bde:\s*R\$[\d.,]+/gi, /\bpor:\s*R\$[\d.,]+/gi,
+    /nesta\s*promoção[^\n]*/gi,
+    /as\s*ofertas?\s*(são\s*)?válidas?[^\n]*/gi,
+    /ofertas?\s*válidas?[^\n]*/gi,
+    /ou\s*enquanto[^\n]*/gi,
+    /prevalecendo[^\n]*/gi,
+    /foto\(s\)[^\n]*/gi,
+    /imagens?\s*(meramente\s*)?ilustrativas?[^\n]*/gi,
+    /conforme\s*código[^\n]*/gi,
+    /não\s*vendemos[^\n]*/gi,
+    /ministério\s*da\s*saúde[^\n]*/gi,
+    /aleitamento\s*materno[^\n]*/gi,
+    /beba\s*com\s*moderação/gi,
+    /art\s*\d+[^\n]*/gi,
+    /se\s*liga\s*no\s*app[^\n]*/gi,
+    /samsclub\.com\.br[^\n]*/gi,
+    /você\s*pode\s*pagar[^\n]*/gi,
+    /\bpix\b[^\n]*/gi,
+    /banco\s*central[^\n]*/gi,
+    /promoção\s*não\s*cumulativa[^\n]*/gi,
+    /garantimos\s*o\s*estoque[^\n]*/gi,
+    /crédito\s*sujeito[^\n]*/gi,
+    /consulte[^\n]*/gi,
+    /limitad[ao]\s*a\s*\d+[^\n]*/gi,
+    /por\s*sócio[^\n]*/gi,
+    /ganhe\s*uma\s*bolsa[^\n]*/gi,
+    /exclusiva\s*e\s*de[^\n]*/gi,
+    /assinada\s*por[^\n]*/gi,
+    /hora\s*da\s*divers[^\n]*/gi,
+    /vale\s*muito\s*encher[^\n]*/gi,
+    /carrinho\s*de\s*economia[^\n]*/gi,
+    /ofertas\s*imperdíveis[^\n]*/gi,
+    /aniversário\b[^\n]*/gi,
+    /^\s*\d+\s*anos\b[^\n]*/gim,
+    /a\s*cada\s*R\$[\d.,]+[^\n]*/gi,
+    /em\s*compras[^\n]*/gi,
+    /\d{2}\/\d{2}\/\d{4}/g,
+    /\*+/g,
+    /^\s*(de|por|cada|leve|pague|tamanho\s*família|nova\s*fórmula|vale\s*muito)\s*$/gim,
+  ];
+  NOISE.forEach(re => { text = text.replace(re, ' '); });
+
+  // ── 4. Preço com R$ obrigatório ──────────────────────────────────
   const PRICE_RE = /R\$\s*\d{1,3}(?:\.\d{3})*,\d{2}/g;
 
-  // 3. Linhas que são specs/atributos curtos — não produto
-  const isSpec = l =>
-    /^(kg|ml|g\b|litro|litros|un\b|unid|folha|sachê|inteiro|fatiado|integral|extravirgem|adulto|grande|azul|vermelha|bancada|220v|congelado|resfriado|desfiado|com gás|sem semente|porcionado|\d+\s*(ml|g|kg|l|un|unidades|peças|litros)\b)/i.test(l.trim()) ||
-    l.trim().length < 3;
+  // ── 5. Linha irrelevante (specs, atributos, marcadores) ──────────
+  const IGNORE_LINE = /^(\d+\s*(ml|g|kg|l|un|unid|litros|peças|btus?|v\b)|kg\b|ml\b|litro|sem\s*cartucho|iqf|zip|neutro|folha\s*(dupla|tripla)|integral|extravirgem|congelado|resfriado|desfiado|fatiado|adulto|grande|azul|vermelha|bancada|220v|frio|externo|com\s*gás|com\s*luz\s*e\s*som|sem\s*semente|porcionado|pacote|sachê|inteiro|\d+\s*peças|\d+\s*unidades|ao\s*leite)/i;
 
-  // 4. Varre linhas: ao encontrar preço, associa ao buffer de desc anterior
-  const rawLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  // ── 6. Varre linhas e monta pares produto → preço ────────────────
+  const rawLines = text.split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 1 && !/^[\d\s.,\-–—|•%*()]+$/.test(l));
+
   const items = [];
   let descBuffer = [];
 
   for (let i = 0; i < rawLines.length; i++) {
     const line = rawLines[i];
+    PRICE_RE.lastIndex = 0;
     const prices = line.match(PRICE_RE);
 
     if (prices) {
-      const preco = prices[0].replace(/R\$\s*/, 'R$ ');
+      // Captura APENAS o maior preço da linha (preço de tabela, não parcela)
+      const allPrices = prices.map(p => {
+        const num = parseFloat(p.replace('R$','').replace('.','').replace(',','.'));
+        return { str: p, val: num };
+      });
+      const mainPrice = allPrices.reduce((a, b) => b.val > a.val ? b : a);
+      const preco = mainPrice.str.replace(/R\$\s*/, 'R$ ');
+
+      // Descrição: últimas linhas do buffer, sem specs e sem linhas numéricas
       const desc = descBuffer
-        .filter(l => !isSpec(l) && !/^\d/.test(l.trim()))
+        .filter(l => !IGNORE_LINE.test(l) && !/^\d/.test(l.trim()))
+        .slice(-4)                             // máximo 4 linhas para o nome
         .join(' ')
         .replace(/\s{2,}/g, ' ')
         .trim();
@@ -69,20 +117,23 @@ function parseFlyerText(rawText) {
       if (desc.length >= 4) {
         items.push({ descricao: desc, preco, categoria: '', ordem: items.length });
       }
-      // Pula linhas seguintes que também são preços (preço promo, etc.)
-      while (i + 1 < rawLines.length && PRICE_RE.test(rawLines[i + 1])) { PRICE_RE.lastIndex = 0; i++; }
+
+      // Pula preços seguintes (preço promo, De/Por)
       PRICE_RE.lastIndex = 0;
+      while (i + 1 < rawLines.length && PRICE_RE.test(rawLines[i + 1])) {
+        PRICE_RE.lastIndex = 0; i++;
+      }
       descBuffer = [];
     } else {
       descBuffer.push(line);
-      if (descBuffer.length > 6) descBuffer.shift(); // janela deslizante
+      if (descBuffer.length > 8) descBuffer.shift();
     }
   }
 
-  // 5. Deduplica pelo início da descrição + preço
+  // ── 7. Remove duplicatas ─────────────────────────────────────────
   const seen = new Set();
   return items.filter(it => {
-    const key = it.descricao.toLowerCase().slice(0, 25) + it.preco;
+    const key = it.descricao.toLowerCase().slice(0, 28) + it.preco;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
