@@ -17,64 +17,73 @@ function parseFlyerText(rawText) {
   // Ex: "R$ 3.499 ,00"  →  "R$3.499,00"
   text = text.replace(/R\$\s*([\d.]+)\s*,(\d{2})/g, 'R$$1,$2');
 
-  // ── 2. Remove blocos de parcelamento ANTES do preço principal ────
-  // "à vista ou 15x de\nR$253,27 sem juros\nnos Cartões..."
-  text = text.replace(/à\s*vista\s*ou[\s\S]*?R\$[\d.,]+[^\n]*/gi, ' ');
-  text = text.replace(/\d+x\s*de[\s\S]*?R\$[\d.,]+[^\n]*/gi, ' ');
+  // ── 2. Remove blocos de parcelamento e referências de cartão ───────
+  text = text.replace(/à\s*vista\s*ou[\s\S]{0,80}?sem\s*juros[^\n]*/gi, ' ');
+  text = text.replace(/\d+x\s*de\s*R\$[\d\s.,]+[^\n]*/gi, ' ');
   text = text.replace(/sem\s*juros[^\n]*/gi, ' ');
-  text = text.replace(/nos\s*cartões[^\n]*/gi, ' ');
-  text = text.replace(/sam['']?s\s*club[^\n]*/gi, ' ');
+  text = text.replace(/nos\s*cart[õo]es[^\n]*/gi, ' ');
+  // Sam's Club com qualquer tipo de apóstrofe (', ', ', unicode)
+  text = text.replace(/sam[‘’''`]?s\s*club[^\n]*/gi, ' ');
   text = text.replace(/carrefour[^\n]*/gi, ' ');
-  text = text.replace(/atacadão[^\n]*/gi, ' ');
+  text = text.replace(/atacad[aã]o[^\n]*/gi, ' ');
+  text = text.replace(/banco\s*csf[^\n]*/gi, ' ');
 
   // ── 3. Remove ruído geral de flyers ─────────────────────────────
   const NOISE = [
+    // Mecânicas promocionais
     /leve\s*\d+\s*pague\s*\d+/gi, /pague\s*\d+\s*leve\s*\d+/gi,
-    /cada\s*sai\s*por[:.]?/gi, /economize\b/gi, /muito\s*vale\b/gi,
+    /\bleve\b/gi, /\bpague\b/gi,
+    /cada\s*sai\s*por[:.]?/gi, /sai\s*por[:.]?/gi, /\bsai\b/gi,
+    /economize\b/gi,
+    /\bmuito\b/gi,                               // "MUITO VALE", "MUITO" sozinho
+    /\bvale\b(?!\s+\d)/gi,                       // "VALE" exceto "VALE R$X"
     /nesta\s*embalagem[^\n]*/gi,
     /[ao]\s*unidade\s*sai\s*por[:.]?/gi,
     /[ao]\s*litro\s*sai\s*por[:.]?/gi,
     /\d+\s*%\s*de\s*desconto[^\n]*/gi,
     /na\s*2[aª°]?\s*unidade[^\n]*/gi,
-    /\bde:\s*R\$[\d.,]+/gi, /\bpor:\s*R\$[\d.,]+/gi,
+    /\bde:\s*R\$[\d\s.,]+/gi,
+    /\bpor:\s*R\$[\d\s.,]+/gi,
+    /\bpor:\s*$/gim,
+    /\bde:\s*$/gim,
     /nesta\s*promoção[^\n]*/gi,
+    // Textos legais e datas
     /as\s*ofertas?\s*(são\s*)?válidas?[^\n]*/gi,
     /ofertas?\s*válidas?[^\n]*/gi,
     /ou\s*enquanto[^\n]*/gi,
     /prevalecendo[^\n]*/gi,
     /foto\(s\)[^\n]*/gi,
     /imagens?\s*(meramente\s*)?ilustrativas?[^\n]*/gi,
-    /conforme\s*código[^\n]*/gi,
-    /não\s*vendemos[^\n]*/gi,
-    /ministério\s*da\s*saúde[^\n]*/gi,
+    /conforme\s*c[oó]digo[^\n]*/gi,
+    /n[aã]o\s*vendemos[^\n]*/gi,
+    /minist[eé]rio\s*da\s*sa[uú]de[^\n]*/gi,
     /aleitamento\s*materno[^\n]*/gi,
-    /beba\s*com\s*moderação/gi,
+    /beba\s*com\s*modera[cç][aã]o/gi,
     /art\s*\d+[^\n]*/gi,
-    /se\s*liga\s*no\s*app[^\n]*/gi,
-    /samsclub\.com\.br[^\n]*/gi,
-    /você\s*pode\s*pagar[^\n]*/gi,
+    /se\s*liga\s*no[^\n]*/gi,
+    /samsclub[^\n]*/gi,
+    /voc[eê]\s*pode\s*pagar[^\n]*/gi,
     /\bpix\b[^\n]*/gi,
     /banco\s*central[^\n]*/gi,
-    /promoção\s*não\s*cumulativa[^\n]*/gi,
-    /garantimos\s*o\s*estoque[^\n]*/gi,
-    /crédito\s*sujeito[^\n]*/gi,
+    /promo[cç][aã]o\s*n[aã]o\s*cumulativa[^\n]*/gi,
+    /garantimos[^\n]*/gi,
+    /cr[eé]dito\s*sujeito[^\n]*/gi,
     /consulte[^\n]*/gi,
     /limitad[ao]\s*a\s*\d+[^\n]*/gi,
-    /por\s*sócio[^\n]*/gi,
-    /ganhe\s*uma\s*bolsa[^\n]*/gi,
-    /exclusiva\s*e\s*de[^\n]*/gi,
+    /por\s*s[oó]cio[^\n]*/gi,
+    /ganhe\s*uma[^\n]*/gi,
+    /exclusiva[^\n]*/gi,
     /assinada\s*por[^\n]*/gi,
     /hora\s*da\s*divers[^\n]*/gi,
-    /vale\s*muito\s*encher[^\n]*/gi,
     /carrinho\s*de\s*economia[^\n]*/gi,
-    /ofertas\s*imperdíveis[^\n]*/gi,
-    /aniversário\b[^\n]*/gi,
-    /^\s*\d+\s*anos\b[^\n]*/gim,
+    /ofertas\s*imperd[ií]veis[^\n]*/gi,
+    /anivers[aá]rio[^\n]*/gi,
     /a\s*cada\s*R\$[\d.,]+[^\n]*/gi,
     /em\s*compras[^\n]*/gi,
     /\d{2}\/\d{2}\/\d{4}/g,
     /\*+/g,
-    /^\s*(de|por|cada|leve|pague|tamanho\s*família|nova\s*fórmula|vale\s*muito)\s*$/gim,
+    // Linhas só com palavras-chave de promoção
+    /^\s*(de|por|cada|tamanho\s*fam[ií]lia|nova\s*f[oó]rmula|pacot[eo]\s*econ[oô]mico)\s*$/gim,
   ];
   NOISE.forEach(re => { text = text.replace(re, ' '); });
 
@@ -229,19 +238,54 @@ function CampanhaDetalhe({ campanha, userId, profile, onBack }) {
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let fullText = '';
+
       for (let p = 1; p <= pdf.numPages; p++) {
         const page = await pdf.getPage(p);
+        const viewport = page.getViewport({ scale: 1 });
+        const pageWidth = viewport.width;
         const content = await page.getTextContent();
-        // Agrupa itens de texto por linha usando y-coordinate
-        const byY = {};
-        content.items.forEach(item => {
-          const y = Math.round(item.transform[5]);
-          if (!byY[y]) byY[y] = [];
-          byY[y].push(item.str);
-        });
-        const sortedYs = Object.keys(byY).map(Number).sort((a, b) => b - a);
-        sortedYs.forEach(y => { fullText += byY[y].join(' ') + '\n'; });
+
+        // Ordena todos os itens por Y decrescente (topo→base), depois por X crescente (esq→dir)
+        const sorted = [...content.items]
+          .filter(it => it.str.trim())
+          .sort((a, b) => {
+            const dy = b.transform[5] - a.transform[5];
+            if (Math.abs(dy) > 4) return dy;      // linhas diferentes
+            return a.transform[4] - b.transform[4]; // mesma linha: da esquerda para direita
+          });
+
+        // Percorre item a item detectando quebras de linha e de coluna
+        let prevY = null;
+        let prevX = null;
+        for (const item of sorted) {
+          const x = item.transform[4];
+          const y = item.transform[5];
+          const txt = item.str.trim();
+          if (!txt) continue;
+
+          if (prevY === null) {
+            fullText += txt;
+          } else {
+            const dy = Math.abs(y - prevY);
+            const dx = x - prevX;
+
+            if (dy > 4) {
+              // Nova linha vertical
+              fullText += '\n' + txt;
+            } else if (dx > pageWidth * 0.22) {
+              // Mesmo nível Y mas salto horizontal grande → coluna diferente → nova linha
+              fullText += '\n' + txt;
+            } else {
+              // Mesmo bloco de texto
+              fullText += ' ' + txt;
+            }
+          }
+          prevY = y;
+          prevX = x + (item.width || 0);
+        }
+        fullText += '\n';
       }
+
       const extracted = parseFlyerText(fullText);
       if (extracted.length === 0) {
         toast('Nenhum produto encontrado no PDF. Tente adicionar em lote.');
