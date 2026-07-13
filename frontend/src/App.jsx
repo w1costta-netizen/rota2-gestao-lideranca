@@ -100,9 +100,14 @@ function AppContent() {
   }, [applyWidth, sidebarW]);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    // Navega para a página correta quando o usuário clica em uma notificação
+    const handler = (e) => {
+      if (e.data?.type === 'NAVIGATE') setPage(e.data.page || 'dashboard');
+    };
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
   }, []);
 
   if (session === undefined) return (
