@@ -7,19 +7,36 @@ function urlBase64ToUint8Array(base64) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+// Chamado manualmente (com gesto do usuário): pede permissão se necessário
 export async function registerPush(userId) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
   try {
     const reg = await navigator.serviceWorker.ready;
     const perm = await Notification.requestPermission();
     if (perm !== 'granted') return;
-    const { data } = await api.get('/push/vapid-public-key');
-    const sub = await reg.pushManager.subscribe({
-      userVisibleOnly: true,
-      applicationServerKey: urlBase64ToUint8Array(data.publicKey),
-    });
-    await api.post('/push/subscribe', { user_id: userId, subscription: sub });
+    await _subscribe(reg, userId);
   } catch (e) {
     console.warn('Push:', e.message);
   }
+}
+
+// Chamado automaticamente no login: só registra se a permissão JÁ foi concedida
+export async function autoRegisterPush(userId) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    await _subscribe(reg, userId);
+  } catch (e) {
+    // silencioso
+  }
+}
+
+async function _subscribe(reg, userId) {
+  const { data } = await api.get('/push/vapid-public-key');
+  const sub = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(data.publicKey),
+  });
+  await api.post('/push/subscribe', { user_id: userId, subscription: sub });
 }

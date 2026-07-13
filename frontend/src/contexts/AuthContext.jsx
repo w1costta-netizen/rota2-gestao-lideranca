@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { registerPush } from '../lib/push';
+import { autoRegisterPush } from '../lib/push';
 
 const AuthCtx = createContext(null);
 
@@ -27,7 +27,7 @@ export function AuthProvider({ children }) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
     setProfile(data);
     // Auto-subscribe to push on every login (silently, no-op if already subscribed)
-    registerPush(userId).catch(() => {});
+    autoRegisterPush(userId).catch(() => {});
   }
 
   async function signOut() {
