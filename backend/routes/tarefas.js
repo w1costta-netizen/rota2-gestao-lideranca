@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { sendPushToUsers } = require('../lib/push');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -57,6 +58,16 @@ router.post('/', async (req, res) => {
   }).select('*, assigned:assigned_to(id,full_name,sector), creator:created_by(full_name)').single();
 
   if (error) return res.status(500).json({ error: error.message });
+
+  // Notifica o destinatário se for diferente de quem criou
+  if (data.assigned_to && data.assigned_to !== requester_id) {
+    sendPushToUsers([data.assigned_to], {
+      title: '📋 Nova tarefa atribuída',
+      body: title.trim().slice(0, 80),
+      page: 'tarefas',
+    }).catch(() => {});
+  }
+
   res.json(data);
 });
 

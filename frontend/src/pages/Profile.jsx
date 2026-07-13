@@ -257,7 +257,17 @@ export default function Profile() {
             </button>
           )}
           {pushStatus === 'granted' && (
-            <span style={{ fontSize:12, color:'#10b981', fontWeight:600, flexShrink:0 }}>✓ Ativo</span>
+            <button className="btn btn-ghost" style={{ flexShrink:0, fontSize:12 }}
+              onClick={async () => {
+                try {
+                  const { data } = await import('../api').then(m => m.default.post('/push/test', { user_id: session?.user?.id }));
+                  toast('Notificação de teste enviada! Verifique seu dispositivo.');
+                } catch (e) {
+                  toast(e?.response?.data?.error || 'Erro ao testar notificação', 'error');
+                }
+              }}>
+              <Bell size={13}/> Testar
+            </button>
           )}
         </div>
       )}
