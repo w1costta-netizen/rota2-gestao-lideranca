@@ -49,12 +49,15 @@ export default function Tarefas({ userId, profile }) {
     }
   }, [userId, isAdmin]);
 
-  const openNew  = () => { setEditing(null); setForm(EMPTY); setModal(true); };
+  const openNew  = () => { setEditing(null); setForm({ ...EMPTY, assigned_to: userId }); setModal(true); };
   const openEdit = (t) => {
     setEditing(t.id);
     setForm({ title: t.title, description: t.description, assigned_to: t.assigned_to, due_date: t.due_date || '', priority: t.priority });
     setModal(true);
   };
+
+  // Retorna true se o usuário atual pode editar/excluir a tarefa
+  const canEdit = (t) => isAdmin || (t.created_by === userId && t.assigned_to === userId);
 
   const save = async () => {
     if (!form.title.trim()) return toast('Preencha o título');
@@ -99,11 +102,9 @@ export default function Tarefas({ userId, profile }) {
           <div className="page-title">Tarefas</div>
           <div className="page-subtitle">{list.length} tarefa{list.length !== 1 ? 's' : ''}</div>
         </div>
-        {isAdmin && (
-          <button className="btn btn-primary" onClick={openNew}>
-            <Plus size={15}/> Nova tarefa
-          </button>
-        )}
+        <button className="btn btn-primary" onClick={openNew}>
+          <Plus size={15}/> Nova tarefa
+        </button>
       </div>
 
       {/* Filtros */}
@@ -182,7 +183,7 @@ export default function Tarefas({ userId, profile }) {
                 </div>
               </div>
 
-              {isAdmin && (
+              {canEdit(t) && (
                 <div style={{ display:'flex', gap:6, flexShrink:0 }}>
                   <button className="btn-icon" onClick={() => openEdit(t)}><Pencil size={14}/></button>
                   <button className="btn-icon" onClick={() => remove(t.id)} style={{ color:'#ef4444' }}><Trash2 size={14}/></button>
@@ -202,13 +203,18 @@ export default function Tarefas({ userId, profile }) {
           <label className="form-label">Descrição</label>
           <textarea className="input" rows={3} value={form.description} onChange={e => setForm(f=>({...f,description:e.target.value}))} placeholder="Detalhes opcionais..." style={{ resize:'vertical' }}/>
         </div>
-        {isAdmin && (
+        {isAdmin ? (
           <div className="form-group">
             <label className="form-label">Responsável *</label>
             <select className="select" value={form.assigned_to} onChange={e => setForm(f=>({...f,assigned_to:e.target.value}))}>
               <option value="">Selecionar...</option>
               {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}{p.sector ? ` (${p.sector})` : ''}</option>)}
             </select>
+          </div>
+        ) : (
+          <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:12, padding:'8px 12px',
+            background:'var(--bg)', borderRadius:8, border:'1px solid var(--border)' }}>
+            📌 Esta tarefa será criada para você mesmo como lembrete pessoal.
           </div>
         )}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
