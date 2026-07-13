@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
 import { User, Lock, Save, Eye, EyeOff, Building2, Phone, Briefcase, Hash, Shield, Camera, X, AlertTriangle, Bell, BellOff } from 'lucide-react';
 import { registerPush } from '../lib/push';
+import api from '../api';
 import PhoneInput from '../components/PhoneInput';
 import { formatPhone } from '../utils';
 
@@ -260,10 +261,11 @@ export default function Profile() {
             <button className="btn btn-ghost" style={{ flexShrink:0, fontSize:12 }}
               onClick={async () => {
                 try {
-                  const { data } = await import('../api').then(m => m.default.post('/push/test', { user_id: session?.user?.id }));
+                  await api.post('/push/test', { user_id: session?.user?.id });
                   toast('Notificação de teste enviada! Verifique seu dispositivo.');
                 } catch (e) {
-                  toast(e?.response?.data?.error || 'Erro ao testar notificação', 'error');
+                  const msg = e?.response?.data?.error || e?.message || 'Erro desconhecido';
+                  toast(msg, 'error');
                 }
               }}>
               <Bell size={13}/> Testar
