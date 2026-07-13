@@ -21,8 +21,15 @@ router.get('/', async (req, res) => {
     .eq('company', me.company)
     .order('created_at', { ascending: false });
 
-  // Líderes veem só as suas
-  if (!isManager(me)) query = query.eq('assigned_to', requester_id);
+  if (me.access_level === 'admin') {
+    // Admin vê tudo
+  } else if (me.access_level === 'supervisor') {
+    // Supervisor vê tarefas atribuídas a ele + tarefas que ele criou/delegou
+    query = query.or(`assigned_to.eq.${requester_id},created_by.eq.${requester_id}`);
+  } else {
+    // Lider/colaborador vê apenas as tarefas atribuídas a ele
+    query = query.eq('assigned_to', requester_id);
+  }
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
