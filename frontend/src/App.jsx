@@ -19,6 +19,7 @@ import Tarefas from './pages/Tarefas';
 import Mural from './pages/Mural';
 import Welcome from './pages/Welcome';
 import Campanhas from './pages/Campanhas';
+const RelatoriosFotograficos = React.lazy(() => import('./pages/RelatoriosFotograficos'));
 
 function AccessDenied() {
   return (
@@ -149,8 +150,13 @@ function AppContent() {
     comunicados:  () => <Comunicados userId={userId} profile={profile} />,
     tarefas:      () => has('tarefas') ? <Tarefas userId={userId} profile={profile} /> : <AccessDenied />,
     mural:        () => has('mural')      ? <Mural      userId={userId} profile={profile} /> : <AccessDenied />,
-    campanhas:    () => has('campanhas') ? <Campanhas  userId={userId} profile={profile} /> : <AccessDenied />,
-    usersadmin: () => has('usuarios')   ? <UsersAdmin userId={userId} profile={profile} />  : <AccessDenied />,
+    campanhas:    () => has('campanhas')   ? <Campanhas              userId={userId} profile={profile} /> : <AccessDenied />,
+    relatorios:   () => has('relatorios') ? (
+      <React.Suspense fallback={<div style={{padding:40,textAlign:'center',color:'var(--text-muted)'}}>Carregando...</div>}>
+        <RelatoriosFotograficos userId={userId} profile={profile} />
+      </React.Suspense>
+    ) : <AccessDenied />,
+    usersadmin:   () => has('usuarios')   ? <UsersAdmin             userId={userId} profile={profile} /> : <AccessDenied />,
   };
 
   const PageComponent = pages[page] || pages.dashboard;
