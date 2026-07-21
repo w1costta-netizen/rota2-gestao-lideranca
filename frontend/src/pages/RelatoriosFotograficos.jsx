@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Plus, Camera, ChevronRight, Trash2, FileText, Check, X, Upload, Image, Edit3, ArrowLeft } from 'lucide-react';
+import { Plus, Camera, ChevronRight, Trash2, FileText, Check, X, Upload,
+         Image, Edit3, ArrowLeft, Download, Share2, Mail, MessageCircle, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import api from '../api';
 import Modal from '../components/Modal';
@@ -29,12 +30,269 @@ function resizeImage(file, maxWidth = 1600, quality = 0.8) {
   });
 }
 
+// Converte URL de imagem → base64 (via fetch, sem problemas de CORS com Supabase)
+async function imageUrlToBase64(url) {
+  const resp = await fetch(url);
+  const blob = await resp.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+// Gera o PDF do relatório usando jsPDF
+async function gerarPDF(rel, fotos, creatorName) {
+  const { jsPDF } = await import('jspdf');
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+
+  const W = 210, H = 297, M = 15, CW = W - M * 2;
+  const ORANGE = [232, 104, 26];
+  const DARK   = [13, 13, 13];
+
+  // ── Capa ──────────────────────────────────────────────────────────────────
+  pdf.setFillColor(...DARK);
+  pdf.rect(0, 0, W, 70, 'F');
+
+  pdf.setFillColor(...ORANGE);
+  pdf.rect(0, 0, 4, 70, 'F');
+
+  pdf.setTextColor(...ORANGE);
+  pdf.setFontSize(20);
+  pdf.setFont('helvetica', 'bold');
+  const titleLines = pdf.splitTextToSize(rel.title, CW - 6);
+  pdf.text(titleLines, M + 6, 28);
+
+  pdf.setTextColor(200, 200, 200);
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'normal');
+  const yInfo = 28 + titleLines.length * 8;
+  pdf.text(`Elaborado por: ${creatorName}`, M + 6, Math.min(yInfo, 52));
+  pdf.text(`Data: ${formatDate(rel.created_at)}`, M + 6, Math.min(yInfo + 7, 60));
+  pdf.text(`${fotos.length} foto${fotos.length !== 1 ? 's' : ''}`, M + 6, Math.min(yInfo + 14, 67));
+
+  if (rel.description) {
+    pdf.setTextColor(80, 80, 80);
+    pdf.setFontSize(11);
+    const descLines = pdf.splitTextToSize(rel.description, CW);
+    pdf.text(descLines, M, 85);
+  }
+
+  // Linha divisória
+  pdf.setDrawColor(232, 104, 26);
+  pdf.setLineWidth(0.5);
+  pdf.line(M, rel.description ? 85 + pdf.splitTextToSize(rel.description, CW).length * 6 + 4 : 80, W - M, rel.description ? 85 + pdf.splitTextToSize(rel.description, CW).length * 6 + 4 : 80);
+
+  // Rodapé da capa
+  pdf.setTextColor(120, 120, 120);
+  pdf.setFontSize(8);
+  pdf.text('Gerado pelo Rota 2.0 — Gestão de Liderança', W / 2, H - 10, { align: 'center' });
+
+  // ── Páginas de fotos ──────────────────────────────────────────────────────
+  for (let i = 0; i < fotos.length; i++) {
+    const foto = fotos[i];
+    pdf.addPage();
+
+    // Header da página
+    pdf.setFillColor(245, 245, 245);
+    pdf.rect(0, 0, W, 13, 'F');
+    pdf.setFillColor(...ORANGE);
+    pdf.rect(0, 0, 3, 13, 'F');
+    pdf.setTextColor(80, 80, 80);
+    pdf.setFontSize(8);
+    pdf.setFont('helvetica', 'normal');
+    const shortTitle = rel.title.length > 60 ? rel.title.slice(0, 57) + '...' : rel.title;
+    pdf.text(shortTitle, M, 8.5);
+    pdf.text(`Foto ${i + 1} de ${fotos.length}`, W - M, 8.5, { align: 'right' });
+
+    // Imagem
+    let imgData;
+    try {
+      imgData = await imageUrlToBase64(foto.photo_url);
+    } catch {
+      pdf.setTextColor(200, 60, 60);
+      pdf.setFontSize(10);
+      pdf.text('[Erro ao carregar imagem]', M, 80);
+      continue;
+    }
+
+    const tmpImg = new window.Image();
+    tmpImg.src = imgData;
+    await new Promise(r => { tmpImg.onload = r; tmpImg.onerror = r; });
+
+    const ratio = tmpImg.height / tmpImg.width;
+    const maxImgH = foto.caption ? H - 60 : H - 40;
+    let imgW = CW, imgH = CW * ratio;
+    if (imgH > maxImgH) { imgH = maxImgH; imgW = maxImgH / ratio; }
+    const imgX = M + (CW - imgW) / 2;
+
+    pdf.addImage(imgData, 'JPEG', imgX, 18, imgW, imgH);
+
+    // Borda sutil
+    pdf.setDrawColor(220, 220, 220);
+    pdf.setLineWidth(0.3);
+    pdf.rect(imgX, 18, imgW, imgH);
+
+    // Caption / descrição
+    if (foto.caption) {
+      const captY = 18 + imgH + 6;
+      pdf.setFillColor(248, 248, 248);
+      const captLines = pdf.splitTextToSize(foto.caption, CW - 6);
+      pdf.rect(M, captY - 4, CW, captLines.length * 5.5 + 5, 'F');
+      pdf.setTextColor(60, 60, 60);
+      pdf.setFontSize(9.5);
+      pdf.setFont('helvetica', 'italic');
+      pdf.text(captLines, M + 3, captY + 1);
+    }
+
+    // Número da foto
+    pdf.setFillColor(...ORANGE);
+    pdf.circle(W - M - 5, 18 + 5, 4, 'F');
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(7);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(String(i + 1), W - M - 5, 18 + 5 + 2.5, { align: 'center' });
+
+    // Rodapé
+    pdf.setTextColor(150, 150, 150);
+    pdf.setFontSize(7);
+    pdf.setFont('helvetica', 'normal');
+    pdf.text('Rota 2.0 — Gestão de Liderança', W / 2, H - 5, { align: 'center' });
+  }
+
+  return pdf;
+}
+
+// ─── Painel de compartilhamento ───────────────────────────────────────────────
+function PainelCompartilhar({ rel, fotos, creatorName, userId }) {
+  const toast   = useToast();
+  const [gerando, setGerando]   = useState(false);
+  const [pdfUrl, setPdfUrl]     = useState(rel.pdf_url || null);
+  const [pdfBlob, setPdfBlob]   = useState(null);
+
+  const gerarEFazerUpload = async () => {
+    if (fotos.length === 0) { toast('Adicione ao menos uma foto', 'error'); return; }
+    setGerando(true);
+    try {
+      const pdf  = await gerarPDF(rel, fotos, creatorName);
+      const blob = pdf.output('blob');
+      setPdfBlob(blob);
+
+      // Upload para Supabase Storage
+      const path = `relatorios/pdfs/${rel.id}.pdf`;
+      const { error: upErr } = await supabase.storage.from('evidencias')
+        .upload(path, blob, { contentType: 'application/pdf', upsert: true });
+      if (upErr) throw upErr;
+
+      const { data: { publicUrl } } = supabase.storage.from('evidencias').getPublicUrl(path);
+      await api.put(`/relatorios/${rel.id}`, { requester_id: userId, pdf_url: publicUrl, status: 'finalizado' });
+      setPdfUrl(publicUrl);
+      toast('PDF gerado com sucesso!');
+    } catch (e) {
+      toast('Erro ao gerar PDF: ' + e.message, 'error');
+    } finally {
+      setGerando(false);
+    }
+  };
+
+  const baixarPDF = async () => {
+    if (pdfBlob) {
+      // Já temos o blob em memória
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${rel.title.replace(/\s+/g,'_')}.pdf`; a.click();
+      URL.revokeObjectURL(url);
+    } else if (pdfUrl) {
+      window.open(pdfUrl, '_blank');
+    }
+  };
+
+  const compartilharWhatsApp = async () => {
+    if (!pdfUrl) { toast('Gere o PDF primeiro', 'error'); return; }
+    const texto = `📋 *${rel.title}*\nCriado por: ${creatorName}\nData: ${formatDate(rel.created_at)}\n\n📄 Acesse o PDF:\n${pdfUrl}`;
+
+    // Tenta Web Share API com arquivo (iOS 15+ / Android)
+    if (pdfBlob && navigator.share && navigator.canShare) {
+      const file = new File([pdfBlob], `${rel.title}.pdf`, { type: 'application/pdf' });
+      if (navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ title: rel.title, files: [file] }); return; } catch {}
+      }
+    }
+    // Fallback: abre WhatsApp com link
+    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
+  };
+
+  const compartilharEmail = () => {
+    if (!pdfUrl) { toast('Gere o PDF primeiro', 'error'); return; }
+    const subject = encodeURIComponent(`Relatório Fotográfico: ${rel.title}`);
+    const body = encodeURIComponent(
+      `Olá,\n\nSegue o relatório fotográfico "${rel.title}".\n` +
+      `Criado por: ${creatorName}\nData: ${formatDate(rel.created_at)}\n\n` +
+      `📄 Download do PDF:\n${pdfUrl}\n\nGerado via Rota 2.0 — Gestão de Liderança`
+    );
+    window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
+  };
+
+  return (
+    <div style={{ background:'var(--surface)', borderRadius:12, padding:20,
+      border:'1px solid var(--border)', marginTop:16 }}>
+      <div style={{ fontWeight:700, fontSize:13, marginBottom:14, color:'var(--text)', display:'flex', alignItems:'center', gap:8 }}>
+        <FileText size={16} style={{ color:'var(--primary)' }}/> Exportar e Compartilhar
+      </div>
+
+      {!pdfUrl ? (
+        <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center' }}
+          onClick={gerarEFazerUpload} disabled={gerando}>
+          {gerando
+            ? <><Loader size={15} style={{ animation:'spin 1s linear infinite' }}/> Gerando PDF...</>
+            : <><FileText size={15}/> Gerar PDF</>}
+        </button>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+          {/* Status + regenerar */}
+          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+            <span style={{ fontSize:12, color:'#10b981', fontWeight:600 }}>✓ PDF disponível</span>
+            <button onClick={gerarEFazerUpload} disabled={gerando}
+              style={{ background:'none', border:'none', cursor:'pointer', fontSize:11,
+                color:'var(--text-muted)', textDecoration:'underline', padding:0 }}>
+              {gerando ? 'Atualizando...' : 'Atualizar PDF'}
+            </button>
+          </div>
+
+          {/* Botões de ação */}
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
+            <button className="btn btn-ghost" onClick={baixarPDF}
+              style={{ flexDirection:'column', gap:4, padding:'10px 8px', fontSize:11 }}>
+              <Download size={18}/>
+              Baixar PDF
+            </button>
+            <button onClick={compartilharWhatsApp}
+              style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'10px 8px',
+                borderRadius:10, fontSize:11, fontWeight:600, cursor:'pointer',
+                background:'#25D36620', border:'1px solid #25D366', color:'#25D366' }}>
+              <MessageCircle size={18}/>
+              WhatsApp
+            </button>
+            <button onClick={compartilharEmail}
+              style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, padding:'10px 8px',
+                borderRadius:10, fontSize:11, fontWeight:600, cursor:'pointer',
+                background:'#6366f120', border:'1px solid #6366f1', color:'#6366f1' }}>
+              <Mail size={18}/>
+              E-mail
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Tela de lista ────────────────────────────────────────────────────────────
 function RelatorioLista({ userId, profile, onOpen, onCreate }) {
-  const [list, setList]     = useState([]);
+  const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
   const toast = useToast();
-  const isAdmin = ['admin', 'supervisor'].includes(profile?.access_level);
 
   const load = () => {
     setLoading(true);
@@ -97,12 +355,18 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
                 <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:4 }}>
                   {r.creator?.full_name} · {formatDate(r.created_at)}
                 </div>
-                <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                   <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20,
                     background: r.status === 'finalizado' ? '#10b98120' : '#f59e0b20',
                     color: r.status === 'finalizado' ? '#10b981' : '#f59e0b' }}>
                     {r.status === 'finalizado' ? '✓ Finalizado' : '● Rascunho'}
                   </span>
+                  {r.pdf_url && (
+                    <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20,
+                      background:'#6366f120', color:'#6366f1' }}>
+                      📄 PDF
+                    </span>
+                  )}
                   <span style={{ fontSize:11, color:'var(--text-muted)' }}>
                     {r.fotos?.length || 0} foto{(r.fotos?.length || 0) !== 1 ? 's' : ''}
                   </span>
@@ -124,20 +388,24 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
 }
 
 // ─── Tela de detalhe/edição ───────────────────────────────────────────────────
-function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack, onFinalizar }) {
+function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
   const toast = useToast();
   const fileRef = useRef();
-  const [rel, setRel]           = useState(initialRel);
-  const [fotos, setFotos]       = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [rel, setRel]             = useState(initialRel);
+  const [fotos, setFotos]         = useState([]);
+  const [loading, setLoading]     = useState(true);
   const [uploading, setUploading] = useState(false);
-  const [editandoFoto, setEditandoFoto] = useState(null); // { foto, photoUrl }
+  const [editandoFoto, setEditandoFoto]       = useState(null);
   const [editandoCaption, setEditandoCaption] = useState(null);
   const [captionText, setCaptionText]         = useState('');
 
   const loadFotos = () => {
     api.get(`/relatorios/${rel.id}?requester_id=${userId}`)
-      .then(r => { setFotos(r.data.fotos?.sort((a,b) => a.order_index - b.order_index) || []); })
+      .then(r => {
+        const sorted = (r.data.fotos || []).sort((a,b) => a.order_index - b.order_index);
+        setFotos(sorted);
+        setRel(prev => ({ ...prev, ...r.data, fotos: sorted }));
+      })
       .catch(() => toast('Erro ao carregar fotos', 'error'))
       .finally(() => setLoading(false));
   };
@@ -147,53 +415,56 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack, onFi
   const handleFilesSelected = async (files) => {
     if (!files?.length) return;
     setUploading(true);
+    const novos = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       try {
-        const blob    = await resizeImage(file);
-        const path    = `relatorios/${rel.id}/${Date.now()}_${i}.jpg`;
+        const blob = await resizeImage(file);
+        const path = `relatorios/${rel.id}/${Date.now()}_${i}.jpg`;
         const { error: upErr } = await supabase.storage.from('evidencias').upload(path, blob, { contentType:'image/jpeg' });
         if (upErr) throw upErr;
         const { data: { publicUrl } } = supabase.storage.from('evidencias').getPublicUrl(path);
-        const { data: nova } = await api.post(`/relatorios/${rel.id}/fotos`, {
+        const res = await api.post(`/relatorios/${rel.id}/fotos`, {
           requester_id: userId, photo_url: publicUrl, order_index: fotos.length + i,
         });
-        setFotos(f => [...f, nova.data]);
+        novos.push(res.data);
       } catch (e) {
-        toast(`Erro ao enviar foto ${i+1}: ${e.message}`, 'error');
+        toast(`Erro na foto ${i+1}: ${e.message}`, 'error');
       }
     }
-    loadFotos();
+    setFotos(f => [...f, ...novos]);
     setUploading(false);
-    toast('Fotos adicionadas!');
+    if (novos.length) toast(`${novos.length} foto${novos.length > 1 ? 's' : ''} adicionada${novos.length > 1 ? 's' : ''}!`);
   };
 
   const removeFoto = async (fotoId) => {
     if (!window.confirm('Remover esta foto?')) return;
     await api.delete(`/relatorios/fotos/${fotoId}`).catch(() => toast('Erro ao remover', 'error'));
     setFotos(f => f.filter(x => x.id !== fotoId));
-    toast('Foto removida');
   };
 
   const saveAnnotations = async ({ dataUrl, shapes }) => {
     const foto = editandoFoto;
-    // Salva imagem anotada no Storage
-    const blob = await (await fetch(dataUrl)).blob();
-    const path = `relatorios/${rel.id}/annotated_${foto.id}.jpg`;
-    const { error: upErr } = await supabase.storage.from('evidencias').upload(path, blob, { contentType:'image/jpeg', upsert:true });
-    if (upErr) { toast('Erro ao salvar anotações', 'error'); return; }
-    const { data: { publicUrl } } = supabase.storage.from('evidencias').getPublicUrl(path);
-    await api.put(`/relatorios/fotos/${foto.id}`, { photo_url: publicUrl, annotations: { shapes } });
-    setFotos(f => f.map(x => x.id === foto.id ? { ...x, photo_url: publicUrl, annotations: { shapes } } : x));
-    setEditandoFoto(null);
-    toast('Anotações salvas!');
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const path = `relatorios/${rel.id}/annotated_${foto.id}.jpg`;
+      const { error: upErr } = await supabase.storage.from('evidencias')
+        .upload(path, blob, { contentType:'image/jpeg', upsert:true });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('evidencias').getPublicUrl(path);
+      await api.put(`/relatorios/fotos/${foto.id}`, { photo_url: publicUrl, annotations: { shapes } });
+      setFotos(f => f.map(x => x.id === foto.id ? { ...x, photo_url: publicUrl, annotations: { shapes } } : x));
+      setEditandoFoto(null);
+      toast('Anotações salvas!');
+    } catch (e) {
+      toast('Erro ao salvar anotações: ' + e.message, 'error');
+    }
   };
 
   const saveCaption = async () => {
     await api.put(`/relatorios/fotos/${editandoCaption}`, { caption: captionText });
     setFotos(f => f.map(x => x.id === editandoCaption ? { ...x, caption: captionText } : x));
     setEditandoCaption(null);
-    toast('Descrição salva!');
   };
 
   const finalizarRelatorio = async () => {
@@ -201,7 +472,6 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack, onFi
     await api.put(`/relatorios/${rel.id}`, { requester_id: userId, status: 'finalizado' });
     setRel(r => ({ ...r, status: 'finalizado' }));
     toast('Relatório finalizado!');
-    onFinalizar?.({ ...rel, status: 'finalizado', fotos });
   };
 
   // Editor de anotações aberto
@@ -216,7 +486,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack, onFi
           <span style={{ fontWeight:700, fontSize:15 }}>Editar anotações</span>
         </div>
         <FotoEditor
-          photoUrl={editandoFoto.originalUrl || editandoFoto.photo_url}
+          photoUrl={editandoFoto.photo_url}
           initialAnnotations={editandoFoto.annotations}
           onSave={saveAnnotations}
           onCancel={() => setEditandoFoto(null)}
@@ -239,7 +509,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack, onFi
             {rel.creator?.full_name} · {formatDate(rel.created_at)}
           </div>
         </div>
-        <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20,
+        <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, flexShrink:0,
           background: rel.status === 'finalizado' ? '#10b98120' : '#f59e0b20',
           color: rel.status === 'finalizado' ? '#10b981' : '#f59e0b' }}>
           {rel.status === 'finalizado' ? '✓ Finalizado' : '● Rascunho'}
@@ -254,7 +524,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack, onFi
       {loading
         ? <div style={{ textAlign:'center', padding:32, color:'var(--text-muted)' }}>Carregando fotos...</div>
         : (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:12, marginBottom:20 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:12, marginBottom:16 }}>
           {fotos.map(foto => (
             <div key={foto.id} style={{ background:'var(--surface)', borderRadius:10, overflow:'hidden',
               border:'1px solid var(--border)', display:'flex', flexDirection:'column' }}>
@@ -278,34 +548,32 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack, onFi
                 )}
               </div>
               <div style={{ padding:'8px 10px' }}>
-                {editandoCaption === foto.id
-                  ? (
-                    <div style={{ display:'flex', gap:6 }}>
-                      <input autoFocus className="input" style={{ fontSize:12, padding:'4px 8px', flex:1 }}
-                        value={captionText} onChange={e => setCaptionText(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') saveCaption(); if (e.key === 'Escape') setEditandoCaption(null); }}/>
-                      <button onClick={saveCaption} style={{ background:'none', border:'none', cursor:'pointer', color:'#10b981' }}><Check size={14}/></button>
-                      <button onClick={() => setEditandoCaption(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)' }}><X size={14}/></button>
-                    </div>
-                  ) : (
-                    <div onClick={() => { setEditandoCaption(foto.id); setCaptionText(foto.caption || ''); }}
-                      style={{ fontSize:12, color: foto.caption ? 'var(--text)' : 'var(--text-muted)',
-                        cursor:'pointer', minHeight:20, fontStyle: foto.caption ? 'normal' : 'italic' }}>
-                      {foto.caption || 'Adicionar descrição...'}
-                    </div>
-                  )
-                }
+                {editandoCaption === foto.id ? (
+                  <div style={{ display:'flex', gap:6 }}>
+                    <input autoFocus className="input" style={{ fontSize:12, padding:'4px 8px', flex:1 }}
+                      value={captionText} onChange={e => setCaptionText(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveCaption(); if (e.key === 'Escape') setEditandoCaption(null); }}/>
+                    <button onClick={saveCaption} style={{ background:'none', border:'none', cursor:'pointer', color:'#10b981' }}><Check size={14}/></button>
+                    <button onClick={() => setEditandoCaption(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)' }}><X size={14}/></button>
+                  </div>
+                ) : (
+                  <div onClick={() => { setEditandoCaption(foto.id); setCaptionText(foto.caption || ''); }}
+                    style={{ fontSize:12, color: foto.caption ? 'var(--text)' : 'var(--text-muted)',
+                      cursor:'pointer', minHeight:20, fontStyle: foto.caption ? 'normal' : 'italic' }}>
+                    {foto.caption || 'Adicionar descrição...'}
+                  </div>
+                )}
               </div>
             </div>
           ))}
 
           {/* Botão adicionar foto */}
-          <div onClick={() => fileRef.current?.click()}
+          <div onClick={() => !uploading && fileRef.current?.click()}
             style={{ minHeight:140, background:'var(--bg)', borderRadius:10,
               border:'2px dashed var(--border)', cursor: uploading ? 'wait' : 'pointer',
               display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8,
               color:'var(--text-muted)', opacity: uploading ? 0.5 : 1 }}>
-            {uploading ? <Upload size={24}/> : <Camera size={24}/>}
+            {uploading ? <Loader size={24} style={{ animation:'spin 1s linear infinite' }}/> : <Camera size={24}/>}
             <span style={{ fontSize:12 }}>{uploading ? 'Enviando...' : 'Adicionar foto'}</span>
           </div>
         </div>
@@ -314,16 +582,21 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack, onFi
       <input ref={fileRef} type="file" accept="image/*" multiple capture="environment"
         style={{ display:'none' }} onChange={e => handleFilesSelected(Array.from(e.target.files))}/>
 
-      {/* Ações finais */}
-      {rel.status !== 'finalizado' && (
-        <div style={{ display:'flex', gap:10, marginTop:8 }}>
-          <button className="btn btn-ghost" style={{ flex:1, justifyContent:'center' }} onClick={onBack}>
-            Salvar rascunho
-          </button>
-          <button className="btn btn-primary" style={{ flex:1, justifyContent:'center' }} onClick={finalizarRelatorio}>
-            <Check size={15}/> Finalizar relatório
-          </button>
-        </div>
+      {/* Botão finalizar (só se rascunho) */}
+      {rel.status !== 'finalizado' && fotos.length > 0 && (
+        <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center', marginBottom:8 }}
+          onClick={finalizarRelatorio}>
+          <Check size={15}/> Finalizar relatório
+        </button>
+      )}
+
+      {/* Painel de exportação/compartilhamento (sempre visível se tiver fotos) */}
+      {fotos.length > 0 && (
+        <PainelCompartilhar
+          rel={rel} fotos={fotos}
+          creatorName={rel.creator?.full_name || 'Usuário'}
+          userId={userId}
+        />
       )}
     </div>
   );
@@ -332,9 +605,9 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack, onFi
 // ─── Modal de criação ─────────────────────────────────────────────────────────
 function ModalCriar({ open, onClose, onCreated, userId }) {
   const toast = useToast();
-  const [title, setTitle]       = useState('');
-  const [desc, setDesc]         = useState('');
-  const [saving, setSaving]     = useState(false);
+  const [title, setTitle]   = useState('');
+  const [desc, setDesc]     = useState('');
+  const [saving, setSaving] = useState(false);
 
   const handleCreate = async () => {
     if (!title.trim()) return toast('Digite um título para o relatório', 'error');
@@ -372,33 +645,28 @@ function ModalCriar({ open, onClose, onCreated, userId }) {
 
 // ─── Componente raiz ──────────────────────────────────────────────────────────
 export default function RelatoriosFotograficos({ userId, profile }) {
-  const [tela, setTela]             = useState('lista'); // 'lista' | 'detalhe'
+  const [tela, setTela]             = useState('lista');
   const [relAtual, setRelAtual]     = useState(null);
   const [modalCriar, setModalCriar] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const abrirRelatorio = (rel) => { setRelAtual(rel); setTela('detalhe'); };
 
-  const aoFinalizar = (rel) => {
-    setRelAtual(rel);
-    // mantém na tela de detalhe para PDF/share na Etapa 2
-  };
-
   return (
     <div>
-      <RelatorioLista
-        userId={userId} profile={profile}
-        onOpen={abrirRelatorio}
-        onCreate={() => setModalCriar(true)}
-        key={refreshKey}
-        style={{ display: tela === 'lista' ? 'block' : 'none' }}
-      />
+      {tela === 'lista' && (
+        <RelatorioLista
+          key={refreshKey}
+          userId={userId} profile={profile}
+          onOpen={abrirRelatorio}
+          onCreate={() => setModalCriar(true)}
+        />
+      )}
 
       {tela === 'detalhe' && relAtual && (
         <RelatorioDetalhe
           relatorio={relAtual} userId={userId} profile={profile}
           onBack={() => { setTela('lista'); setRefreshKey(k => k + 1); }}
-          onFinalizar={aoFinalizar}
         />
       )}
 
