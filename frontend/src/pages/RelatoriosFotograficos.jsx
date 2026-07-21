@@ -12,12 +12,20 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric' });
 }
 
-// Serializa/desserializa campos extras dentro do campo description
+// Serializa/desserializa campos extras dentro do campo description do tour
 function encodeDesc({ texto, clube, destinatario, departamento, prazo }) {
   return JSON.stringify({ texto, clube, destinatario, departamento, prazo });
 }
 function decodeDesc(raw) {
   try { return JSON.parse(raw || '{}'); } catch { return { texto: raw || '' }; }
+}
+
+// Serializa/desserializa descrição + prazo dentro do caption de cada foto
+function encodeCaption({ texto, prazo }) {
+  return JSON.stringify({ texto: texto || '', prazo: prazo || '' });
+}
+function decodeCaption(raw) {
+  try { return JSON.parse(raw || '{}'); } catch { return { texto: raw || '', prazo: '' }; }
 }
 
 function resizeImage(file, maxWidth = 1600, quality = 0.8) {
@@ -207,13 +215,23 @@ async function gerarPDF(rel, fotos, creatorName) {
     pdf.setFont('helvetica', 'bold');
     pdf.text(String(i + 1), M + 5, tableY + 6.3, { align: 'center' });
 
-    // Descrição
-    const captText = foto.caption || '';
-    pdf.setTextColor(50, 50, 50);
-    pdf.setFontSize(9);
-    pdf.setFont('helvetica', 'normal');
-    const captLines = pdf.splitTextToSize(captText, COL_DESC - 6);
-    pdf.text(captLines, DESC_X + 3, tableY + 6);
+    // Descrição + Prazo por ponto
+    const cap = decodeCaption(foto.caption);
+    let descY = tableY + 6;
+    if (cap.texto) {
+      pdf.setTextColor(50, 50, 50);
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      const linhas = pdf.splitTextToSize(cap.texto, COL_DESC - 6);
+      pdf.text(linhas, DESC_X + 3, descY);
+      descY += linhas.length * 5 + 3;
+    }
+    if (cap.prazo) {
+      pdf.setTextColor(...ORANGE);
+      pdf.setFontSize(8.5);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text(`⏱ Prazo: ${cap.prazo}`, DESC_X + 3, descY);
+    }
 
     tableY += ROW_H;
   }
@@ -460,7 +478,8 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
   const [uploading, setUploading] = useState(false);
   const [editandoFoto, setEditandoFoto]       = useState(null);
   const [editandoCaption, setEditandoCaption] = useState(null);
-  const [captionText, setCaptionText]         = useState('');
+  const [captionTexto, setCaptionTexto]       = useState('');
+  const [captionPrazo, setCaptionPrazo]       = useState('');
 
   const loadFotos = () => {
     api.get(`/relatorios/${rel.id}?requester_id=${userId}`)
@@ -524,9 +543,17 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
     }
   };
 
+  const abrirCaption = (foto) => {
+    const c = decodeCaption(foto.caption);
+    setCaptionTexto(c.texto || '');
+    setCaptionPrazo(c.prazo || '');
+    setEditandoCaption(foto.id);
+  };
+
   const saveCaption = async () => {
-    await api.put(`/relatorios/fotos/${editandoCaption}`, { caption: captionText });
-    setFotos(f => f.map(x => x.id === editandoCaption ? { ...x, caption: captionText } : x));
+    const caption = encodeCaption({ texto: captionTexto, prazo: captionPrazo });
+    await api.put(`/relatorios/fotos/${editandoCaption}`, { caption });
+    setFotos(f => f.map(x => x.id === editandoCaption ? { ...x, caption } : x));
     setEditandoCaption(null);
   };
 
@@ -630,22 +657,45 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
                   </div>
                 )}
               </div>
-              <div style={{ padding:'8px 10px' }}>
+              <div style={{ padding:'8px 10px', display:'flex', flexDirection:'column', gap:6 }}>
                 {editandoCaption === foto.id ? (
-                  <div style={{ display:'flex', gap:6 }}>
-                    <input autoFocus className="input" style={{ fontSize:12, padding:'4px 8px', flex:1 }}
-                      value={captionText} onChange={e => setCaptionText(e.target.value)}
+                  <>
+                    <input autoFocus className="input" style={{ fontSize:12, padding:'4px 8px' }}
+                      placeholder="Descrição do ponto..."
+                      value={captionTexto} onChange={e => setCaptionTexto(e.target.value)}/>
+                    <input className="input" style={{ fontSize:12, padding:'4px 8px' }}
+                      placeholder="Prazo (ex: até sexta-feira)"
+                      value={captionPrazo} onChange={e => setCaptionPrazo(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') saveCaption(); if (e.key === 'Escape') setEditandoCaption(null); }}/>
-                    <button onClick={saveCaption} style={{ background:'none', border:'none', cursor:'pointer', color:'#10b981' }}><Check size={14}/></button>
-                    <button onClick={() => setEditandoCaption(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)' }}><X size={14}/></button>
-                  </div>
-                ) : (
-                  <div onClick={() => { setEditandoCaption(foto.id); setCaptionText(foto.caption || ''); }}
-                    style={{ fontSize:12, color: foto.caption ? 'var(--text)' : 'var(--text-muted)',
-                      cursor:'pointer', minHeight:20, fontStyle: foto.caption ? 'normal' : 'italic' }}>
-                    {foto.caption || 'Adicionar descrição...'}
-                  </div>
-                )}
+                    <div style={{ display:'flex', gap:6 }}>
+                      <button onClick={saveCaption}
+                        style={{ flex:1, background:'#10b98120', border:'1px solid #10b981',
+                          borderRadius:6, padding:'4px 0', cursor:'pointer', color:'#10b981', fontSize:11, fontWeight:600 }}>
+                        <Check size={12} style={{ verticalAlign:'middle', marginRight:3 }}/>Salvar
+                      </button>
+                      <button onClick={() => setEditandoCaption(null)}
+                        style={{ background:'none', border:'1px solid var(--border)', borderRadius:6,
+                          padding:'4px 8px', cursor:'pointer', color:'var(--text-muted)' }}>
+                        <X size={12}/>
+                      </button>
+                    </div>
+                  </>
+                ) : (() => {
+                  const c = decodeCaption(foto.caption);
+                  return (
+                    <div onClick={() => abrirCaption(foto)} style={{ cursor:'pointer' }}>
+                      <div style={{ fontSize:12, color: c.texto ? 'var(--text)' : 'var(--text-muted)',
+                        fontStyle: c.texto ? 'normal' : 'italic', minHeight:18 }}>
+                        {c.texto || 'Adicionar descrição e prazo...'}
+                      </div>
+                      {c.prazo && (
+                        <div style={{ fontSize:11, color:'var(--primary)', fontWeight:600, marginTop:3 }}>
+                          ⏱ {c.prazo}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           ))}
