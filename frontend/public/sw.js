@@ -1,10 +1,10 @@
-const CACHE = 'rota2-v4';
-const ASSETS = ['/','index.html','/manifest.json','/icon-192.png','/icon-512.png'];
+const CACHE = 'rota2-v5';
+const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
-// Instala e pré-cacheia assets estáticos
+// Instala e pré-cacheia apenas assets imutáveis (sem index.html)
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting())
+    caches.open(CACHE).then(c => c.addAll(STATIC_ASSETS)).then(() => self.skipWaiting())
   );
 });
 
@@ -17,24 +17,45 @@ self.addEventListener('activate', e => {
   );
 });
 
-// Cache-first para assets estáticos; network-first para /api
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
   // API: sempre vai à rede, sem cache
   if (url.pathname.startsWith('/api')) return;
 
-  // Assets estáticos: cache-first
-  e.respondWith(
-    caches.match(e.request).then(cached => {
-      if (cached) return cached;
-      return fetch(e.request).then(res => {
-        if (res.ok && e.request.method === 'GET') {
-          caches.open(CACHE).then(c => c.put(e.request, res.clone()));
-        }
+  // index.html e navegação SPA: network-first (evita servir HTML desatualizado com hashes antigos)
+  if (e.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
         return res;
-      });
-    })
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Assets com hash no nome (JS/CSS): cache-first — são imutáveis por conteúdo
+  if (url.pathname.startsWith('/assets/')) {
+    e.respondWith(
+      caches.match(e.request).then(cached => {
+        if (cached) return cached;
+        return fetch(e.request).then(res => {
+          if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+          return res;
+        });
+      })
+    );
+    return;
+  }
+
+  // Demais recursos: network-first com fallback para cache
+  e.respondWith(
+    fetch(e.request).then(res => {
+      if (res.ok && e.request.method === 'GET') {
+        caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+      }
+      return res;
+    }).catch(() => caches.match(e.request))
   );
 });
 
