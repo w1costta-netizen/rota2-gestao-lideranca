@@ -25,7 +25,9 @@ export default function Profile() {
     full_name:'', email:'', company:'', employee_id:'',
     sector:'', role:'', phone:'', whatsapp:''
   });
-  const [pushStatus, setPushStatus] = useState(Notification.permission); // 'default'|'granted'|'denied'
+  const [pushStatus, setPushStatus] = useState(
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
+  );
   const [passForm, setPassForm] = useState({ current:'', novo:'', confirmar:'' });
   const [showPass, setShowPass] = useState({ current:false, novo:false, confirmar:false });
   const [passLoading, setPassLoading] = useState(false);
@@ -251,8 +253,9 @@ export default function Profile() {
             <button className="btn btn-primary" style={{ flexShrink:0 }}
               onClick={async () => {
                 await registerPush(session?.user?.id);
-                setPushStatus(Notification.permission);
-                if (Notification.permission === 'granted') toast('Notificações ativadas!');
+                const perm = typeof Notification !== 'undefined' ? Notification.permission : 'denied';
+                setPushStatus(perm);
+                if (perm === 'granted') toast('Notificações ativadas!');
               }}>
               <Bell size={14}/> Ativar
             </button>

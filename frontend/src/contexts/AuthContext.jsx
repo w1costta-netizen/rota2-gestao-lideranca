@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { autoRegisterPush } from '../lib/push';
 
 const AuthCtx = createContext(null);
 
@@ -25,6 +26,7 @@ export function AuthProvider({ children }) {
   async function loadProfile(userId) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
     setProfile(data);
+    autoRegisterPush(userId).catch(() => {});
   }
 
   async function signOut() {

@@ -34,6 +34,13 @@ export async function autoRegisterPush(userId) {
 
 async function _subscribe(reg, userId) {
   const { data } = await api.get('/push/vapid-public-key');
+  if (!data?.publicKey) throw new Error('VAPID public key não disponível');
+  const existing = await reg.pushManager.getSubscription();
+  if (existing) {
+    // Já subscrito: só garante que está salvo no banco
+    await api.post('/push/subscribe', { user_id: userId, subscription: existing });
+    return;
+  }
   const sub = await reg.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(data.publicKey),
