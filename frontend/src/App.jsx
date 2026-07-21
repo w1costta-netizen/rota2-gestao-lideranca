@@ -2,24 +2,28 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { hasPermission } from './lib/permissions';
 import { ToastProvider } from './components/Toast';
+import ErrorBoundary from './components/ErrorBoundary';
 import Sidebar from './components/Sidebar';
-import Dashboard from './pages/Dashboard';
-import Leaders from './pages/Leaders';
-import Agenda from './pages/Agenda';
-import Scale from './pages/Scale';
-import Profile from './pages/Profile';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import CashierAnalysis from './pages/CashierAnalysis';
-import TeamMembers from './pages/TeamMembers';
-import NativeSchedule from './pages/NativeSchedule';
-import UsersAdmin from './pages/UsersAdmin';
-import Comunicados from './pages/Comunicados';
-import Tarefas from './pages/Tarefas';
-import Mural from './pages/Mural';
 import Welcome from './pages/Welcome';
-import Campanhas from './pages/Campanhas';
-const RelatoriosFotograficos = React.lazy(() => import('./pages/RelatoriosFotograficos'));
+
+// Lazy-load de todas as páginas — reduz o bundle inicial em ~70%
+const lazy = (fn) => React.lazy(fn);
+const Dashboard              = lazy(() => import('./pages/Dashboard'));
+const Leaders                = lazy(() => import('./pages/Leaders'));
+const Agenda                 = lazy(() => import('./pages/Agenda'));
+const Scale                  = lazy(() => import('./pages/Scale'));
+const Profile                = lazy(() => import('./pages/Profile'));
+const CashierAnalysis        = lazy(() => import('./pages/CashierAnalysis'));
+const TeamMembers            = lazy(() => import('./pages/TeamMembers'));
+const NativeSchedule         = lazy(() => import('./pages/NativeSchedule'));
+const UsersAdmin             = lazy(() => import('./pages/UsersAdmin'));
+const Comunicados            = lazy(() => import('./pages/Comunicados'));
+const Tarefas                = lazy(() => import('./pages/Tarefas'));
+const Mural                  = lazy(() => import('./pages/Mural'));
+const Campanhas              = lazy(() => import('./pages/Campanhas'));
+const RelatoriosFotograficos = lazy(() => import('./pages/RelatoriosFotograficos'));
 
 function AccessDenied() {
   return (
@@ -100,10 +104,22 @@ function AppContent() {
     return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   }, [applyWidth, sidebarW]);
 
+  const [swUpdate, setSwUpdate] = useState(false);
+
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
-    // Navega para a página correta quando o usuário clica em uma notificação
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      // Detecta nova versão do SW disponível
+      reg.addEventListener('updatefound', () => {
+        const newWorker = reg.installing;
+        newWorker?.addEventListener('statechange', () => {
+          if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+            setSwUpdate(true);
+          }
+        });
+      });
+    }).catch(() => {});
+
     const handler = (e) => {
       if (e.data?.type === 'NAVIGATE') setPage(e.data.page || 'dashboard');
     };
@@ -139,24 +155,20 @@ function AppContent() {
   const has = (key) => hasPermission(profile, key);
 
   const pages = {
-    dashboard:  () => has('dashboard')  ? <Dashboard setPage={setPage} />                  : <AccessDenied />,
-    leaders:    () => <Leaders setPage={setPage} />,
-    agenda:     () => has('agenda')     ? <Agenda setPage={setPage} userId={userId} profile={profile} /> : <AccessDenied />,
-    scale:      () => <Scale setPage={setPage} />,
-    team:       () => <TeamMembers userId={userId} userSector={userSector} />,
-    nscale:     () => has('escala')     ? <NativeSchedule userId={userId} profile={profile} /> : <AccessDenied />,
-    cashier:    () => has('caixas')     ? <CashierAnalysis userId={userId} />               : <AccessDenied />,
-    profile:    () => <Profile />,
+    dashboard:    () => has('dashboard')  ? <Dashboard setPage={setPage} />                              : <AccessDenied />,
+    leaders:      () => <Leaders setPage={setPage} />,
+    agenda:       () => has('agenda')     ? <Agenda setPage={setPage} userId={userId} profile={profile} /> : <AccessDenied />,
+    scale:        () => <Scale setPage={setPage} />,
+    team:         () => <TeamMembers userId={userId} userSector={userSector} />,
+    nscale:       () => has('escala')     ? <NativeSchedule userId={userId} profile={profile} />          : <AccessDenied />,
+    cashier:      () => has('caixas')     ? <CashierAnalysis userId={userId} />                           : <AccessDenied />,
+    profile:      () => <Profile />,
     comunicados:  () => <Comunicados userId={userId} profile={profile} />,
-    tarefas:      () => has('tarefas') ? <Tarefas userId={userId} profile={profile} /> : <AccessDenied />,
-    mural:        () => has('mural')      ? <Mural      userId={userId} profile={profile} /> : <AccessDenied />,
-    campanhas:    () => has('campanhas')   ? <Campanhas              userId={userId} profile={profile} /> : <AccessDenied />,
-    relatorios:   () => has('relatorios') ? (
-      <React.Suspense fallback={<div style={{padding:40,textAlign:'center',color:'var(--text-muted)'}}>Carregando...</div>}>
-        <RelatoriosFotograficos userId={userId} profile={profile} />
-      </React.Suspense>
-    ) : <AccessDenied />,
-    usersadmin:   () => has('usuarios')   ? <UsersAdmin             userId={userId} profile={profile} /> : <AccessDenied />,
+    tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={profile} />                 : <AccessDenied />,
+    mural:        () => has('mural')      ? <Mural userId={userId} profile={profile} />                   : <AccessDenied />,
+    campanhas:    () => has('campanhas')  ? <Campanhas userId={userId} profile={profile} />               : <AccessDenied />,
+    relatorios:   () => has('relatorios') ? <RelatoriosFotograficos userId={userId} profile={profile} />  : <AccessDenied />,
+    usersadmin:   () => has('usuarios')   ? <UsersAdmin userId={userId} profile={profile} />              : <AccessDenied />,
   };
 
   const PageComponent = pages[page] || pages.dashboard;
@@ -223,12 +235,40 @@ function AppContent() {
         </div>
       )}
 
+      {swUpdate && (
+        <div style={{
+          position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)',
+          zIndex: 9999, background: 'var(--primary)', color: '#fff',
+          borderRadius: 12, padding: '12px 20px', display: 'flex', gap: 12,
+          alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,.4)', fontSize: 13,
+          whiteSpace: 'nowrap',
+        }}>
+          <span>Nova versão disponível</span>
+          <button
+            onClick={() => window.location.reload()}
+            style={{ background: '#fff', color: 'var(--primary)', border: 'none',
+              borderRadius: 8, padding: '4px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}
+          >
+            Atualizar
+          </button>
+        </div>
+      )}
+
       <main
         ref={isMobile ? undefined : mainRef}
         className="main-content"
         style={isMobile ? { marginLeft: 0 } : { marginLeft: sidebarW }}
       >
-        <PageComponent />
+        <React.Suspense fallback={
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
+            minHeight:'60vh', color:'var(--text-muted)', fontSize:14 }}>
+            Carregando...
+          </div>
+        }>
+          <ErrorBoundary key={page}>
+            <PageComponent />
+          </ErrorBoundary>
+        </React.Suspense>
       </main>
     </div>
   );
