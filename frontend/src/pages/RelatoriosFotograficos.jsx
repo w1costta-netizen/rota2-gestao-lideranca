@@ -12,6 +12,14 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric' });
 }
 
+// Serializa/desserializa campos extras dentro do campo description
+function encodeDesc({ texto, clube, destinatario, departamento, prazo }) {
+  return JSON.stringify({ texto, clube, destinatario, departamento, prazo });
+}
+function decodeDesc(raw) {
+  try { return JSON.parse(raw || '{}'); } catch { return { texto: raw || '' }; }
+}
+
 function resizeImage(file, maxWidth = 1600, quality = 0.8) {
   return new Promise((resolve) => {
     const img = new window.Image();
@@ -52,39 +60,74 @@ async function gerarPDF(rel, fotos, creatorName) {
   const GRAY1  = [230, 230, 230]; // borda da tabela
   const GRAY2  = [245, 245, 245]; // cabeçalho da tabela
 
+  const meta = decodeDesc(rel.description);
+
   // ── Cabeçalho do relatório ─────────────────────────────────────────────────
+  // Faixa laranja com título
   pdf.setFillColor(...ORANGE);
-  pdf.rect(0, 0, W, 22, 'F');
-
+  pdf.rect(0, 0, W, 18, 'F');
   pdf.setTextColor(255, 255, 255);
-  pdf.setFontSize(13);
+  pdf.setFontSize(14);
   pdf.setFont('helvetica', 'bold');
-  pdf.text(rel.title, M, 10);
-
-  pdf.setFontSize(8);
+  pdf.text('Tour 4x4', M, 8);
+  pdf.setFontSize(10);
   pdf.setFont('helvetica', 'normal');
-  pdf.text(`${creatorName}  ·  ${formatDate(rel.created_at)}  ·  ${fotos.length} foto${fotos.length !== 1 ? 's' : ''}`, M, 17);
+  pdf.text(rel.title, M, 15);
 
-  if (rel.description) {
-    pdf.setTextColor(60, 60, 60);
-    pdf.setFontSize(9);
-    const descLines = pdf.splitTextToSize(rel.description, W - M * 2);
-    pdf.text(descLines, M, 30);
+  // Bloco de dados do Tour
+  let infoY = 24;
+  const LABEL_W = 38;
+  const infoRows = [
+    ['Clube',            meta.clube        || '—'],
+    ['Elaborado por',    creatorName],
+    ['Destinado a',      meta.destinatario || '—'],
+    ['Departamento',     meta.departamento || '—'],
+    ['Prazo',            meta.prazo        || '—'],
+    ['Data',             formatDate(rel.created_at)],
+  ];
+
+  pdf.setDrawColor(...GRAY1);
+  pdf.setLineWidth(0.3);
+
+  for (const [label, valor] of infoRows) {
+    // fundo da label
+    pdf.setFillColor(245, 245, 245);
+    pdf.rect(M, infoY, LABEL_W, 7, 'F');
+    pdf.rect(M, infoY, W - M * 2, 7); // borda linha
+
+    pdf.setTextColor(100, 100, 100);
+    pdf.setFontSize(7.5);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text(label, M + 2, infoY + 4.8);
+
+    pdf.setTextColor(30, 30, 30);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(8.5);
+    pdf.text(String(valor), M + LABEL_W + 3, infoY + 4.8);
+
+    infoY += 7;
   }
 
+  if (meta.texto) {
+    infoY += 3;
+    pdf.setTextColor(80, 80, 80);
+    pdf.setFontSize(8.5);
+    pdf.setFont('helvetica', 'italic');
+    const obs = pdf.splitTextToSize(`Observações: ${meta.texto}`, W - M * 2);
+    pdf.text(obs, M, infoY);
+    infoY += obs.length * 5 + 3;
+  }
+
+  infoY += 4;
+
   // ── Tabela de fotos ────────────────────────────────────────────────────────
-  // Dimensões das colunas
-  const COL_FOTO = 80;   // largura coluna foto
-  const COL_DESC = W - M * 2 - COL_FOTO - 2; // largura coluna descrição
-  const ROW_H    = 58;   // altura de cada linha
-  const IMG_PAD  = 3;    // padding interno da célula foto
+  const COL_FOTO = 80;
+  const COL_DESC = W - M * 2 - COL_FOTO - 2;
+  const ROW_H    = 58;
+  const IMG_PAD  = 3;
   const DESC_X   = M + COL_FOTO + 2;
 
-  // posição Y inicial (abaixo do cabeçalho + descrição)
-  const descLineCount = rel.description
-    ? pdf.splitTextToSize(rel.description, W - M * 2).length
-    : 0;
-  let tableY = rel.description ? 30 + descLineCount * 5 + 6 : 28;
+  let tableY = infoY;
 
   // Cabeçalho da tabela
   pdf.setFillColor(...GRAY2);
@@ -336,11 +379,11 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
     <div>
       <div className="page-header">
         <div>
-          <div className="page-title">Relatórios Fotográficos</div>
-          <div className="page-subtitle">{list.length} relatório{list.length !== 1 ? 's' : ''}</div>
+          <div className="page-title">Tour 4x4</div>
+          <div className="page-subtitle">{list.length} tour{list.length !== 1 ? 's' : ''}</div>
         </div>
         <button className="btn btn-primary" onClick={onCreate}>
-          <Plus size={15}/> Novo relatório
+          <Plus size={15}/> Novo Tour
         </button>
       </div>
 
@@ -349,9 +392,9 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
       {!loading && list.length === 0 && (
         <div style={{ textAlign:'center', padding:60, color:'var(--text-muted)' }}>
           <Camera size={40} style={{ opacity:.3, marginBottom:12 }}/>
-          <p>Nenhum relatório criado ainda.</p>
+          <p>Nenhum Tour 4x4 criado ainda.</p>
           <button className="btn btn-primary" style={{ marginTop:16 }} onClick={onCreate}>
-            <Plus size={14}/> Criar primeiro relatório
+            <Plus size={14}/> Criar primeiro Tour
           </button>
         </div>
       )}
@@ -515,19 +558,19 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
     );
   }
 
+  const meta = decodeDesc(rel.description);
+
   return (
     <div>
       {/* Cabeçalho */}
-      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:20 }}>
+      <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
         <button onClick={onBack}
           style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:0 }}>
           <ArrowLeft size={20}/>
         </button>
         <div style={{ flex:1 }}>
+          <div style={{ fontSize:11, fontWeight:600, color:'var(--primary)', textTransform:'uppercase', letterSpacing:.5 }}>Tour 4x4</div>
           <div style={{ fontWeight:700, fontSize:16 }}>{rel.title}</div>
-          <div style={{ fontSize:12, color:'var(--text-muted)' }}>
-            {rel.creator?.full_name} · {formatDate(rel.created_at)}
-          </div>
         </div>
         <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, flexShrink:0,
           background: rel.status === 'finalizado' ? '#10b98120' : '#f59e0b20',
@@ -536,9 +579,29 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
         </span>
       </div>
 
-      {rel.description && (
-        <p style={{ fontSize:13, color:'var(--text-muted)', marginBottom:16, lineHeight:1.5 }}>{rel.description}</p>
-      )}
+      {/* Ficha do Tour */}
+      <div style={{ background:'var(--surface)', borderRadius:10, padding:'12px 14px',
+        border:'1px solid var(--border)', marginBottom:16, display:'grid',
+        gridTemplateColumns:'1fr 1fr', gap:'6px 16px', fontSize:12 }}>
+        {[
+          ['Clube',        meta.clube],
+          ['Elaborado por',rel.creator?.full_name],
+          ['Destinado a',  meta.destinatario],
+          ['Departamento', meta.departamento],
+          ['Prazo',        meta.prazo],
+          ['Data',         formatDate(rel.created_at)],
+        ].map(([label, valor]) => valor ? (
+          <div key={label}>
+            <span style={{ color:'var(--text-muted)', fontSize:11 }}>{label}: </span>
+            <span style={{ fontWeight:600, color:'var(--text)' }}>{valor}</span>
+          </div>
+        ) : null)}
+        {meta.texto && (
+          <div style={{ gridColumn:'1/-1', color:'var(--text-muted)', fontStyle:'italic', marginTop:4 }}>
+            {meta.texto}
+          </div>
+        )}
+      </div>
 
       {/* Fotos */}
       {loading
@@ -606,7 +669,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
       {rel.status !== 'finalizado' && fotos.length > 0 && (
         <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center', marginBottom:8 }}
           onClick={finalizarRelatorio}>
-          <Check size={15}/> Finalizar relatório
+          <Check size={15}/> Finalizar Tour
         </button>
       )}
 
@@ -625,33 +688,53 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
 // ─── Modal de criação ─────────────────────────────────────────────────────────
 function ModalCriar({ open, onClose, onCreated, userId }) {
   const toast = useToast();
-  const [title, setTitle]   = useState('');
-  const [desc, setDesc]     = useState('');
-  const [saving, setSaving] = useState(false);
+  const [title,        setTitle]        = useState('');
+  const [clube,        setClube]        = useState('');
+  const [destinatario, setDestinatario] = useState('');
+  const [departamento, setDepartamento] = useState('');
+  const [prazo,        setPrazo]        = useState('');
+  const [texto,        setTexto]        = useState('');
+  const [saving,       setSaving]       = useState(false);
+
+  const reset = () => { setTitle(''); setClube(''); setDestinatario(''); setDepartamento(''); setPrazo(''); setTexto(''); };
 
   const handleCreate = async () => {
-    if (!title.trim()) return toast('Digite um título para o relatório', 'error');
+    if (!title.trim()) return toast('Digite um título para o Tour', 'error');
     setSaving(true);
     try {
-      const { data } = await api.post('/relatorios', { requester_id: userId, title, description: desc });
-      toast('Relatório criado!');
-      setTitle(''); setDesc('');
+      const description = encodeDesc({ texto, clube, destinatario, departamento, prazo });
+      const { data } = await api.post('/relatorios', { requester_id: userId, title, description });
+      toast('Tour 4x4 criado!');
+      reset();
       onCreated(data);
-    } catch { toast('Erro ao criar relatório', 'error'); }
+    } catch { toast('Erro ao criar Tour 4x4', 'error'); }
     finally { setSaving(false); }
   };
 
+  const Field = ({ label, value, onChange, placeholder, type = 'text', required }) => (
+    <div className="form-group">
+      <label className="form-label">{label}{required && ' *'}</label>
+      <input className="input" type={type} placeholder={placeholder}
+        value={value} onChange={e => onChange(e.target.value)}/>
+    </div>
+  );
+
   return (
-    <Modal open={open} onClose={onClose} title="Novo Relatório Fotográfico">
+    <Modal open={open} onClose={onClose} title="Novo Tour 4x4">
+      <Field label="Título do Tour" value={title} onChange={setTitle}
+        placeholder="Ex.: Tour Setor de Padaria" required/>
+      <Field label="Nome do Clube" value={clube} onChange={setClube}
+        placeholder="Ex.: Clube Rota Norte"/>
+      <Field label="A quem se destina" value={destinatario} onChange={setDestinatario}
+        placeholder="Ex.: Gerente de Loja / Equipe de Gondola"/>
+      <Field label="Departamento" value={departamento} onChange={setDepartamento}
+        placeholder="Ex.: Mercearia, Perecíveis..."/>
+      <Field label="Prazo para realização" value={prazo} onChange={setPrazo}
+        placeholder="Ex.: 15/08/2025 ou Até sexta-feira" type="text"/>
       <div className="form-group">
-        <label className="form-label">Título *</label>
-        <input className="input" placeholder="Ex.: Inspeção corredor de laticínios" value={title}
-          onChange={e => setTitle(e.target.value)} autoFocus/>
-      </div>
-      <div className="form-group">
-        <label className="form-label">Descrição (opcional)</label>
-        <textarea className="input" rows={3} placeholder="Contexto ou observações gerais..."
-          value={desc} onChange={e => setDesc(e.target.value)} style={{ resize:'vertical' }}/>
+        <label className="form-label">Observações gerais (opcional)</label>
+        <textarea className="input" rows={2} placeholder="Contexto ou instruções adicionais..."
+          value={texto} onChange={e => setTexto(e.target.value)} style={{ resize:'vertical' }}/>
       </div>
       <div style={{ display:'flex', gap:10, marginTop:8 }}>
         <button className="btn btn-ghost" style={{ flex:1, justifyContent:'center' }} onClick={onClose}>Cancelar</button>

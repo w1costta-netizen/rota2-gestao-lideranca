@@ -9,7 +9,7 @@ const NAV_ALL = [
   { id: 'tarefas',      label: 'Tarefas',      icon: CheckSquare,  perm: 'tarefas' },
   { id: 'mural',        label: 'Mural',        icon: LayoutList,   perm: 'mural' },
   { id: 'campanhas',    label: 'Flyers',       icon: Tag,          perm: 'campanhas' },
-  { id: 'relatorios',   label: 'Relatórios',   icon: Camera,       perm: 'relatorios' },
+  { id: 'relatorios',   label: 'Tour 4x4',     icon: Camera,       perm: 'relatorios' },
   { id: 'agenda',       label: 'Agenda',       icon: CalendarDays, perm: 'agenda' },
   { id: 'nscale',       label: 'Escala',       icon: CalendarRange,perm: 'escala' },
   { id: 'cashier',      label: 'Caixas',       icon: ShoppingCart, perm: 'caixas' },

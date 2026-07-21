@@ -8,7 +8,7 @@ export const MODULES = [
   { key: 'escala_setores', label: 'Escala — Setores',       icon: '🗂️', desc: 'Visualizar escalas de outros setores' },
   { key: 'caixas',         label: 'Caixas',                 icon: '💳', desc: 'Análise de desempenho de caixas' },
   { key: 'campanhas',      label: 'Conferência Flyers',     icon: '🏷️', desc: 'Sinalização e conferência de materiais promocionais' },
-  { key: 'relatorios',     label: 'Relatórios Fotográficos',icon: '📷', desc: 'Criar e compartilhar relatórios com fotos anotadas' },
+  { key: 'relatorios',     label: 'Tour 4x4',               icon: '📷', desc: 'Criar e compartilhar tours com fotos anotadas' },
   { key: 'usuarios',       label: 'Usuários',               icon: '👥', desc: 'Criar e gerenciar usuários da empresa' },
 ];
 
