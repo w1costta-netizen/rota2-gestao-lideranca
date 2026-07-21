@@ -42,124 +42,144 @@ async function imageUrlToBase64(url) {
   });
 }
 
-// Gera o PDF do relatório usando jsPDF
+// Gera o PDF no formato de tabela: foto pequena à esquerda + descrição à direita
 async function gerarPDF(rel, fotos, creatorName) {
   const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
-  const W = 210, H = 297, M = 15, CW = W - M * 2;
+  const W = 210, H = 297, M = 12;
   const ORANGE = [232, 104, 26];
-  const DARK   = [13, 13, 13];
+  const GRAY1  = [230, 230, 230]; // borda da tabela
+  const GRAY2  = [245, 245, 245]; // cabeçalho da tabela
 
-  // ── Capa ──────────────────────────────────────────────────────────────────
-  pdf.setFillColor(...DARK);
-  pdf.rect(0, 0, W, 70, 'F');
-
+  // ── Cabeçalho do relatório ─────────────────────────────────────────────────
   pdf.setFillColor(...ORANGE);
-  pdf.rect(0, 0, 4, 70, 'F');
+  pdf.rect(0, 0, W, 22, 'F');
 
-  pdf.setTextColor(...ORANGE);
-  pdf.setFontSize(20);
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(13);
   pdf.setFont('helvetica', 'bold');
-  const titleLines = pdf.splitTextToSize(rel.title, CW - 6);
-  pdf.text(titleLines, M + 6, 28);
+  pdf.text(rel.title, M, 10);
 
-  pdf.setTextColor(200, 200, 200);
-  pdf.setFontSize(10);
+  pdf.setFontSize(8);
   pdf.setFont('helvetica', 'normal');
-  const yInfo = 28 + titleLines.length * 8;
-  pdf.text(`Elaborado por: ${creatorName}`, M + 6, Math.min(yInfo, 52));
-  pdf.text(`Data: ${formatDate(rel.created_at)}`, M + 6, Math.min(yInfo + 7, 60));
-  pdf.text(`${fotos.length} foto${fotos.length !== 1 ? 's' : ''}`, M + 6, Math.min(yInfo + 14, 67));
+  pdf.text(`${creatorName}  ·  ${formatDate(rel.created_at)}  ·  ${fotos.length} foto${fotos.length !== 1 ? 's' : ''}`, M, 17);
 
   if (rel.description) {
-    pdf.setTextColor(80, 80, 80);
-    pdf.setFontSize(11);
-    const descLines = pdf.splitTextToSize(rel.description, CW);
-    pdf.text(descLines, M, 85);
+    pdf.setTextColor(60, 60, 60);
+    pdf.setFontSize(9);
+    const descLines = pdf.splitTextToSize(rel.description, W - M * 2);
+    pdf.text(descLines, M, 30);
   }
 
-  // Linha divisória
-  pdf.setDrawColor(232, 104, 26);
-  pdf.setLineWidth(0.5);
-  pdf.line(M, rel.description ? 85 + pdf.splitTextToSize(rel.description, CW).length * 6 + 4 : 80, W - M, rel.description ? 85 + pdf.splitTextToSize(rel.description, CW).length * 6 + 4 : 80);
+  // ── Tabela de fotos ────────────────────────────────────────────────────────
+  // Dimensões das colunas
+  const COL_FOTO = 80;   // largura coluna foto
+  const COL_DESC = W - M * 2 - COL_FOTO - 2; // largura coluna descrição
+  const ROW_H    = 58;   // altura de cada linha
+  const IMG_PAD  = 3;    // padding interno da célula foto
+  const DESC_X   = M + COL_FOTO + 2;
 
-  // Rodapé da capa
-  pdf.setTextColor(120, 120, 120);
+  // posição Y inicial (abaixo do cabeçalho + descrição)
+  const descLineCount = rel.description
+    ? pdf.splitTextToSize(rel.description, W - M * 2).length
+    : 0;
+  let tableY = rel.description ? 30 + descLineCount * 5 + 6 : 28;
+
+  // Cabeçalho da tabela
+  pdf.setFillColor(...GRAY2);
+  pdf.rect(M, tableY, COL_FOTO, 8, 'F');
+  pdf.rect(DESC_X, tableY, COL_DESC, 8, 'F');
+
+  pdf.setDrawColor(...GRAY1);
+  pdf.setLineWidth(0.3);
+  pdf.rect(M, tableY, COL_FOTO + 2 + COL_DESC, 8); // borda externa header
+
+  pdf.setTextColor(80, 80, 80);
   pdf.setFontSize(8);
-  pdf.text('Gerado pelo Rota 2.0 — Gestão de Liderança', W / 2, H - 10, { align: 'center' });
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('Foto', M + COL_FOTO / 2, tableY + 5.2, { align: 'center' });
+  pdf.text('Descrição', DESC_X + COL_DESC / 2, tableY + 5.2, { align: 'center' });
 
-  // ── Páginas de fotos ──────────────────────────────────────────────────────
+  tableY += 8;
+
   for (let i = 0; i < fotos.length; i++) {
     const foto = fotos[i];
-    pdf.addPage();
 
-    // Header da página
-    pdf.setFillColor(245, 245, 245);
-    pdf.rect(0, 0, W, 13, 'F');
-    pdf.setFillColor(...ORANGE);
-    pdf.rect(0, 0, 3, 13, 'F');
-    pdf.setTextColor(80, 80, 80);
-    pdf.setFontSize(8);
-    pdf.setFont('helvetica', 'normal');
-    const shortTitle = rel.title.length > 60 ? rel.title.slice(0, 57) + '...' : rel.title;
-    pdf.text(shortTitle, M, 8.5);
-    pdf.text(`Foto ${i + 1} de ${fotos.length}`, W - M, 8.5, { align: 'right' });
+    // Quebra de página se necessário
+    if (tableY + ROW_H > H - 12) {
+      pdf.addPage();
+      tableY = 14;
+      // Repete mini-header
+      pdf.setFillColor(...GRAY2);
+      pdf.rect(M, tableY, COL_FOTO, 8, 'F');
+      pdf.rect(DESC_X, tableY, COL_DESC, 8, 'F');
+      pdf.setDrawColor(...GRAY1);
+      pdf.rect(M, tableY, COL_FOTO + 2 + COL_DESC, 8);
+      pdf.setTextColor(80, 80, 80);
+      pdf.setFontSize(8);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Foto', M + COL_FOTO / 2, tableY + 5.2, { align: 'center' });
+      pdf.text('Descrição', DESC_X + COL_DESC / 2, tableY + 5.2, { align: 'center' });
+      tableY += 8;
+    }
+
+    // Borda da linha
+    pdf.setDrawColor(...GRAY1);
+    pdf.setLineWidth(0.3);
+    pdf.rect(M, tableY, COL_FOTO, ROW_H);
+    pdf.rect(DESC_X, tableY, COL_DESC, ROW_H);
+    // linha divisória vertical
+    pdf.line(M + COL_FOTO, tableY, M + COL_FOTO, tableY + ROW_H);
 
     // Imagem
     let imgData;
     try {
       imgData = await imageUrlToBase64(foto.photo_url);
-    } catch {
-      pdf.setTextColor(200, 60, 60);
-      pdf.setFontSize(10);
-      pdf.text('[Erro ao carregar imagem]', M, 80);
-      continue;
+    } catch { /* sem imagem */ }
+
+    if (imgData) {
+      const tmpImg = new window.Image();
+      tmpImg.src = imgData;
+      await new Promise(r => { tmpImg.onload = r; tmpImg.onerror = r; });
+      const ratio = tmpImg.height / tmpImg.width;
+      const maxW = COL_FOTO - IMG_PAD * 2;
+      const maxH = ROW_H - IMG_PAD * 2;
+      let iw = maxW, ih = maxW * ratio;
+      if (ih > maxH) { ih = maxH; iw = maxH / ratio; }
+      const ix = M + IMG_PAD + (maxW - iw) / 2;
+      const iy = tableY + IMG_PAD + (maxH - ih) / 2;
+      pdf.addImage(imgData, 'JPEG', ix, iy, iw, ih);
+    } else {
+      pdf.setTextColor(180, 180, 180);
+      pdf.setFontSize(7);
+      pdf.text('[sem imagem]', M + COL_FOTO / 2, tableY + ROW_H / 2, { align: 'center' });
     }
 
-    const tmpImg = new window.Image();
-    tmpImg.src = imgData;
-    await new Promise(r => { tmpImg.onload = r; tmpImg.onerror = r; });
-
-    const ratio = tmpImg.height / tmpImg.width;
-    const maxImgH = foto.caption ? H - 60 : H - 40;
-    let imgW = CW, imgH = CW * ratio;
-    if (imgH > maxImgH) { imgH = maxImgH; imgW = maxImgH / ratio; }
-    const imgX = M + (CW - imgW) / 2;
-
-    pdf.addImage(imgData, 'JPEG', imgX, 18, imgW, imgH);
-
-    // Borda sutil
-    pdf.setDrawColor(220, 220, 220);
-    pdf.setLineWidth(0.3);
-    pdf.rect(imgX, 18, imgW, imgH);
-
-    // Caption / descrição
-    if (foto.caption) {
-      const captY = 18 + imgH + 6;
-      pdf.setFillColor(248, 248, 248);
-      const captLines = pdf.splitTextToSize(foto.caption, CW - 6);
-      pdf.rect(M, captY - 4, CW, captLines.length * 5.5 + 5, 'F');
-      pdf.setTextColor(60, 60, 60);
-      pdf.setFontSize(9.5);
-      pdf.setFont('helvetica', 'italic');
-      pdf.text(captLines, M + 3, captY + 1);
-    }
-
-    // Número da foto
+    // Número da foto (badge laranja)
     pdf.setFillColor(...ORANGE);
-    pdf.circle(W - M - 5, 18 + 5, 4, 'F');
+    pdf.circle(M + 5, tableY + 5, 3.5, 'F');
     pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(7);
+    pdf.setFontSize(6.5);
     pdf.setFont('helvetica', 'bold');
-    pdf.text(String(i + 1), W - M - 5, 18 + 5 + 2.5, { align: 'center' });
+    pdf.text(String(i + 1), M + 5, tableY + 6.3, { align: 'center' });
 
-    // Rodapé
-    pdf.setTextColor(150, 150, 150);
-    pdf.setFontSize(7);
+    // Descrição
+    const captText = foto.caption || '';
+    pdf.setTextColor(50, 50, 50);
+    pdf.setFontSize(9);
     pdf.setFont('helvetica', 'normal');
-    pdf.text('Rota 2.0 — Gestão de Liderança', W / 2, H - 5, { align: 'center' });
+    const captLines = pdf.splitTextToSize(captText, COL_DESC - 6);
+    pdf.text(captLines, DESC_X + 3, tableY + 6);
+
+    tableY += ROW_H;
   }
+
+  // Rodapé
+  pdf.setTextColor(160, 160, 160);
+  pdf.setFontSize(7);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text('Gerado pelo Rota 2.0 — Gestão de Liderança', W / 2, H - 5, { align: 'center' });
 
   return pdf;
 }
