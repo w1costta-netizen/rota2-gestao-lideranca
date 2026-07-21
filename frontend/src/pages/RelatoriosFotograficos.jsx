@@ -685,6 +685,17 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
   );
 }
 
+// Campo reutilizável — definido FORA do ModalCriar para não ser remontado a cada render
+function CampoTexto({ label, value, onChange, placeholder, type = 'text', required }) {
+  return (
+    <div className="form-group">
+      <label className="form-label">{label}{required && ' *'}</label>
+      <input className="input" type={type} placeholder={placeholder}
+        value={value} onChange={e => onChange(e.target.value)}/>
+    </div>
+  );
+}
+
 // ─── Modal de criação ─────────────────────────────────────────────────────────
 function ModalCriar({ open, onClose, onCreated, userId }) {
   const toast = useToast();
@@ -711,26 +722,18 @@ function ModalCriar({ open, onClose, onCreated, userId }) {
     finally { setSaving(false); }
   };
 
-  const Field = ({ label, value, onChange, placeholder, type = 'text', required }) => (
-    <div className="form-group">
-      <label className="form-label">{label}{required && ' *'}</label>
-      <input className="input" type={type} placeholder={placeholder}
-        value={value} onChange={e => onChange(e.target.value)}/>
-    </div>
-  );
-
   return (
     <Modal open={open} onClose={onClose} title="Novo Tour 4x4">
-      <Field label="Título do Tour" value={title} onChange={setTitle}
+      <CampoTexto label="Título do Tour" value={title} onChange={setTitle}
         placeholder="Ex.: Tour Setor de Padaria" required/>
-      <Field label="Nome do Clube" value={clube} onChange={setClube}
+      <CampoTexto label="Nome do Clube" value={clube} onChange={setClube}
         placeholder="Ex.: Clube Rota Norte"/>
-      <Field label="A quem se destina" value={destinatario} onChange={setDestinatario}
+      <CampoTexto label="A quem se destina" value={destinatario} onChange={setDestinatario}
         placeholder="Ex.: Gerente de Loja / Equipe de Gondola"/>
-      <Field label="Departamento" value={departamento} onChange={setDepartamento}
+      <CampoTexto label="Departamento" value={departamento} onChange={setDepartamento}
         placeholder="Ex.: Mercearia, Perecíveis..."/>
-      <Field label="Prazo para realização" value={prazo} onChange={setPrazo}
-        placeholder="Ex.: 15/08/2025 ou Até sexta-feira" type="text"/>
+      <CampoTexto label="Prazo para realização" value={prazo} onChange={setPrazo}
+        placeholder="Ex.: 15/08/2025 ou Até sexta-feira"/>
       <div className="form-group">
         <label className="form-label">Observações gerais (opcional)</label>
         <textarea className="input" rows={2} placeholder="Contexto ou instruções adicionais..."
