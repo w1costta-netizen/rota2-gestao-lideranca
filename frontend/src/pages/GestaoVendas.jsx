@@ -38,8 +38,12 @@ export default function GestaoVendas({ userId, profile }) {
 
     setUploading(true);
     try {
-      const { linhas } = await parseVendasXlsx(file);
-      if (!linhas.length) { showToast('Nenhum dado encontrado no arquivo.', 'error'); return; }
+      const { linhas, _debug } = await parseVendasXlsx(file);
+      console.log('[Vendas] Parse resultado:', linhas.length, 'linhas', _debug);
+      if (!linhas.length) {
+        showToast('Nenhum dado encontrado. Verifique se o arquivo tem colunas META e REALIZADO.', 'error');
+        return;
+      }
 
       // Apaga os dados atuais da empresa
       await supabase.from('vendas_atual').delete().eq('company', company);
