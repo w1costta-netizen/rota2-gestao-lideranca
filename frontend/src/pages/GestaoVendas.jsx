@@ -38,10 +38,9 @@ export default function GestaoVendas({ userId, profile }) {
 
     setUploading(true);
     try {
-      const { linhas, _debug } = await parseVendasXlsx(file);
-      console.log('[Vendas] Parse resultado:', linhas.length, 'linhas', _debug);
+      const { linhas } = await parseVendasXlsx(file);
       if (!linhas.length) {
-        showToast('Nenhum dado encontrado. Verifique se o arquivo tem colunas META e REALIZADO.', 'error');
+        showToast('Nenhum dado encontrado. Verifique se o arquivo tem colunas CANAL/DEPARTAMENTO/CATEGORIA.', 'error');
         return;
       }
 
@@ -51,14 +50,15 @@ export default function GestaoVendas({ userId, profile }) {
       // Insere novo lote
       const rows = linhas.map(l => ({
         company,
-        canal: l.tipo === 'CANAL' ? l.nome : null,
-        departamento: l.tipo === 'DEPARTAMENTO' ? l.nome : null,
-        categoria: l.tipo === 'CATEGORIA' ? l.nome : null,
-        item: l.tipo === 'ITEM' ? l.nome : null,
-        meta: l.meta,
-        realizado: l.realizado,
-        percentual: l.percentual,
-        uploaded_by: userId,
+        canal:         l.tipo === 'CANAL'        ? l.nome : null,
+        departamento:  l.tipo === 'DEPARTAMENTO' ? l.nome : null,
+        categoria:     l.tipo === 'CATEGORIA'    ? l.nome : null,
+        item:          l.tipo === 'ITEM'         ? l.nome : null,
+        meta:          l.meta,
+        realizado:     l.realizado,
+        percentual:    l.percentual,
+        extras:        l.extras || null,
+        uploaded_by:   userId,
       }));
 
       const { error } = await supabase.from('vendas_atual').insert(rows);
