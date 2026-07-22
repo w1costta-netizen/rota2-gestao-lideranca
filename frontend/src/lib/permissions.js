@@ -9,13 +9,15 @@ export const MODULES = [
   { key: 'caixas',         label: 'Caixas',                 icon: '💳', desc: 'Análise de desempenho de caixas' },
   { key: 'campanhas',      label: 'Conferência Flyers',     icon: '🏷️', desc: 'Sinalização e conferência de materiais promocionais' },
   { key: 'relatorios',     label: 'Tour 4x4',               icon: '📷', desc: 'Criar e compartilhar tours com fotos anotadas' },
+  { key: 'vendas_gestao', label: 'Gestão de Vendas',       icon: '📂', desc: 'Importar planilhas e fechar mês de vendas' },
+  { key: 'vendas_painel', label: 'Painel de Vendas',       icon: '📈', desc: 'Acompanhar metas e resultados de vendas' },
   { key: 'usuarios',       label: 'Usuários',               icon: '👥', desc: 'Criar e gerenciar usuários da empresa' },
 ];
 
 export const DEFAULT_PERMISSIONS = {
-  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'usuarios'],
-  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios'],
-  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'caixas', 'relatorios'],
+  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios'],
+  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel'],
+  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'caixas', 'relatorios', 'vendas_painel'],
   colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas'],
 };
 

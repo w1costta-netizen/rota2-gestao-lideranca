@@ -24,6 +24,8 @@ const Tarefas                = lazy(() => import('./pages/Tarefas'));
 const Mural                  = lazy(() => import('./pages/Mural'));
 const Campanhas              = lazy(() => import('./pages/Campanhas'));
 const RelatoriosFotograficos = lazy(() => import('./pages/RelatoriosFotograficos'));
+const GestaoVendas           = lazy(() => import('./pages/GestaoVendas'));
+const PainelVendas           = lazy(() => import('./pages/PainelVendas'));
 
 function AccessDenied() {
   return (
@@ -167,8 +169,10 @@ function AppContent() {
     tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={profile} />                 : <AccessDenied />,
     mural:        () => has('mural')      ? <Mural userId={userId} profile={profile} />                   : <AccessDenied />,
     campanhas:    () => has('campanhas')  ? <Campanhas userId={userId} profile={profile} />               : <AccessDenied />,
-    relatorios:   () => has('relatorios') ? <RelatoriosFotograficos userId={userId} profile={profile} />  : <AccessDenied />,
-    usersadmin:   () => has('usuarios')   ? <UsersAdmin userId={userId} profile={profile} />              : <AccessDenied />,
+    relatorios:   () => has('relatorios')     ? <RelatoriosFotograficos userId={userId} profile={profile} /> : <AccessDenied />,
+    vendas_gestao:() => has('vendas_gestao') ? <GestaoVendas userId={userId} profile={profile} />           : <AccessDenied />,
+    vendas_painel:() => has('vendas_painel') ? <PainelVendas userId={userId} profile={profile} />           : <AccessDenied />,
+    usersadmin:   () => has('usuarios')      ? <UsersAdmin userId={userId} profile={profile} />             : <AccessDenied />,
   };
 
   const PageComponent = pages[page] || pages.dashboard;

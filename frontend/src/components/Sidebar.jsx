@@ -1,5 +1,5 @@
 import React from 'react';
-import { Users, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera } from 'lucide-react';
+import { Users, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 
@@ -10,6 +10,8 @@ const NAV_ALL = [
   { id: 'mural',        label: 'Mural',        icon: LayoutList,   perm: 'mural' },
   { id: 'campanhas',    label: 'Flyers',       icon: Tag,          perm: 'campanhas' },
   { id: 'relatorios',   label: 'Tour 4x4',     icon: Camera,       perm: 'relatorios' },
+  { id: 'vendas_gestao', label: 'Gest. Vendas', icon: FolderOpen,   perm: 'vendas_gestao' },
+  { id: 'vendas_painel', label: 'Painel Vendas', icon: BarChart2,   perm: 'vendas_painel' },
   { id: 'agenda',       label: 'Agenda',       icon: CalendarDays, perm: 'agenda' },
   { id: 'nscale',       label: 'Escala',       icon: CalendarRange,perm: 'escala' },
   { id: 'cashier',      label: 'Caixas',       icon: ShoppingCart, perm: 'caixas' },
