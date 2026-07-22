@@ -49,15 +49,82 @@ function BadgeYoY({ yoy }) {
   );
 }
 
+function CardItem({ l, isTotal }) {
+  const e = l.extras || {};
+  const saldo = e.saldo_receita ?? (l.realizado - l.meta);
+  const corSaldo = saldo >= 0 ? '#22c55e' : '#ef4444';
+  const yoy = e.yoy_receita ?? l.percentual;
+  return (
+    <div style={{
+      background: isTotal ? 'rgba(var(--primary-rgb,255,112,0),.08)' : 'var(--surface)',
+      border: `1px solid ${isTotal ? 'var(--primary)' : 'var(--border)'}`,
+      borderRadius: 10, padding: '12px 14px',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+        <span style={{ fontSize: 13, fontWeight: isTotal ? 800 : 600, color: 'var(--text)' }}>
+          {l.nome}
+          {isTotal && <span style={{ fontSize: 10, color: 'var(--primary)', marginLeft: 6, fontWeight: 700 }}>TOTAL</span>}
+        </span>
+        <BadgeYoY yoy={yoy} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px 4px' }}>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 2 }}>RECEITA</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{fmtR(l.realizado)}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 2 }}>SALDO</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: corSaldo }}>{fmtR(saldo)}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 2 }}>MARGEM</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{fmtR(e.margem)}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 2 }}>% MARGEM</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{e.pct_margem !== undefined ? `${e.pct_margem}%` : '—'}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 2 }}>SÓCIOS</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{fmtN(e.socios)}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 2 }}>VOLUME</div>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{fmtN(e.volume)}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TabelaVendas({ linhas, marcarTotal }) {
+  const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 640);
+  React.useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+
   if (!linhas.length) return <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Sem dados.</p>;
   const { totalRow } = marcarTotal ? detectarTotal(linhas) : { totalRow: null };
+
+  if (isMobile) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {linhas.map((l, i) => {
+          const isTotal = totalRow && l.nome === totalRow.nome;
+          return <CardItem key={i} l={l} isTotal={isTotal} />;
+        })}
+      </div>
+    );
+  }
+
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border)' }}>
-            {['Nome','Receita','YoY Receita','Saldo','Margem','% Margem','Sócios','Volume'].map(h => (
+            {['Nome','Receita','YoY','Saldo','Margem','% Marg.','Sócios','Volume'].map(h => (
               <th key={h} style={{ textAlign: h === 'Nome' ? 'left' : 'right', padding: '8px 6px',
                 color: 'var(--text-muted)', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
             ))}
@@ -70,12 +137,10 @@ function TabelaVendas({ linhas, marcarTotal }) {
             const corSaldo = saldo >= 0 ? '#22c55e' : '#ef4444';
             const isTotal = totalRow && l.nome === totalRow.nome;
             return (
-              <tr key={i} style={{
-                borderBottom: '1px solid var(--border)',
-                background: isTotal ? 'var(--primary)10' : undefined,
-              }}>
+              <tr key={i} style={{ borderBottom: '1px solid var(--border)',
+                background: isTotal ? 'rgba(255,112,0,.06)' : undefined }}>
                 <td style={{ padding: '10px 6px', color: 'var(--text)', fontWeight: isTotal ? 800 : 500, whiteSpace: 'nowrap' }}>
-                  {l.nome}{isTotal && <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 6 }}>TOTAL</span>}
+                  {l.nome}{isTotal && <span style={{ fontSize: 10, color: 'var(--primary)', marginLeft: 6 }}>TOTAL</span>}
                 </td>
                 <td style={{ padding: '10px 6px', textAlign: 'right', color: 'var(--text)', fontWeight: isTotal ? 800 : 600 }}>{fmtR(l.realizado)}</td>
                 <td style={{ padding: '10px 6px', textAlign: 'right' }}><BadgeYoY yoy={e.yoy_receita ?? l.percentual} /></td>
