@@ -49,8 +49,9 @@ function BadgeYoY({ yoy }) {
   );
 }
 
-function TabelaVendas({ linhas }) {
+function TabelaVendas({ linhas, marcarTotal }) {
   if (!linhas.length) return <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Sem dados.</p>;
+  const { totalRow } = marcarTotal ? detectarTotal(linhas) : { totalRow: null };
   return (
     <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -67,10 +68,16 @@ function TabelaVendas({ linhas }) {
             const e = l.extras || {};
             const saldo = e.saldo_receita ?? (l.realizado - l.meta);
             const corSaldo = saldo >= 0 ? '#22c55e' : '#ef4444';
+            const isTotal = totalRow && l.nome === totalRow.nome;
             return (
-              <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
-                <td style={{ padding: '10px 6px', color: 'var(--text)', fontWeight: 500, whiteSpace: 'nowrap' }}>{l.nome}</td>
-                <td style={{ padding: '10px 6px', textAlign: 'right', color: 'var(--text)', fontWeight: 600 }}>{fmtR(l.realizado)}</td>
+              <tr key={i} style={{
+                borderBottom: '1px solid var(--border)',
+                background: isTotal ? 'var(--primary)10' : undefined,
+              }}>
+                <td style={{ padding: '10px 6px', color: 'var(--text)', fontWeight: isTotal ? 800 : 500, whiteSpace: 'nowrap' }}>
+                  {l.nome}{isTotal && <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 6 }}>TOTAL</span>}
+                </td>
+                <td style={{ padding: '10px 6px', textAlign: 'right', color: 'var(--text)', fontWeight: isTotal ? 800 : 600 }}>{fmtR(l.realizado)}</td>
                 <td style={{ padding: '10px 6px', textAlign: 'right' }}><BadgeYoY yoy={e.yoy_receita ?? l.percentual} /></td>
                 <td style={{ padding: '10px 6px', textAlign: 'right', color: corSaldo, fontWeight: 600 }}>{fmtR(saldo)}</td>
                 <td style={{ padding: '10px 6px', textAlign: 'right', color: 'var(--text-muted)' }}>{fmtR(e.margem)}</td>
@@ -84,6 +91,20 @@ function TabelaVendas({ linhas }) {
       </table>
     </div>
   );
+}
+
+/**
+ * Detecta linha de total: o valor da última linha ≈ soma das anteriores.
+ * Retorna { totalRow, subRows } — se não detectar total, totalRow = null.
+ */
+function detectarTotal(linhas) {
+  if (linhas.length < 2) return { totalRow: null, subRows: linhas };
+  const sub = linhas.slice(0, -1);
+  const last = linhas[linhas.length - 1];
+  const somaAnts = sub.reduce((s, l) => s + (l.realizado || 0), 0);
+  const ratio = somaAnts > 0 ? Math.abs(last.realizado - somaAnts) / somaAnts : 1;
+  if (ratio < 0.02) return { totalRow: last, subRows: sub };
+  return { totalRow: null, subRows: linhas };
 }
 
 // ─── Tela principal ──────────────────────────────────────
@@ -120,12 +141,14 @@ export default function PainelVendas({ profile }) {
   const cats    = dados.filter(d => d.categoria).map(d => ({ ...d, nome: d.categoria }));
   const itens   = dados.filter(d => d.item).map(d => ({ ...d, nome: d.item }));
 
-  // KPIs globais (base = canais)
-  const base = canais.length ? canais : dados;
-  const totalReceita = base.reduce((s, d) => s + (d.realizado || 0), 0);
-  const totalSaldo   = base.reduce((s, d) => s + (d.extras?.saldo_receita ?? (d.realizado - d.meta) ?? 0), 0);
-  const totalMargem  = base.reduce((s, d) => s + (d.extras?.margem || 0), 0);
-  const totalSocios  = base.reduce((s, d) => s + (d.extras?.socios || 0), 0);
+  // KPIs globais — usa linha de total do bloco CANAL se detectada, senão soma tudo
+  const baseCanais = canais.length ? canais : dados;
+  const { totalRow: canalTotal, subRows: canalSubs } = detectarTotal(baseCanais);
+  const kpiBase = canalTotal ? [canalTotal] : baseCanais;
+  const totalReceita = kpiBase.reduce((s, d) => s + (d.realizado || 0), 0);
+  const totalSaldo   = kpiBase.reduce((s, d) => s + (d.extras?.saldo_receita ?? (d.realizado - d.meta) ?? 0), 0);
+  const totalMargem  = kpiBase.reduce((s, d) => s + (d.extras?.margem || 0), 0);
+  const totalSocios  = kpiBase.reduce((s, d) => s + (d.extras?.socios || 0), 0);
   const crescimento  = (totalReceita - totalSaldo) > 0
     ? Math.round((totalSaldo / (totalReceita - totalSaldo)) * 100 * 10) / 10
     : 0;
@@ -215,7 +238,7 @@ export default function PainelVendas({ profile }) {
           {tab === 0 && (
             <>
               <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Por Canal de Venda</h3>
-              <TabelaVendas linhas={canais.map(d => ({ ...d, nome: d.canal }))} />
+              <TabelaVendas linhas={canais.map(d => ({ ...d, nome: d.canal }))} marcarTotal />
             </>
           )}
           {tab === 1 && (
