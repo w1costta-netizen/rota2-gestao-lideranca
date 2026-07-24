@@ -2,7 +2,18 @@ import { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, Pencil, Trash2, X, Save, UserCheck, UserX } from 'lucide-react';
 import api from '../api';
 
-const ROLES = ['Operador Loja','Operador SAC Devolução','Fiscal de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
+const DEFAULT_ROLES = ['Operador Loja','Operador SAC Devolução','Fiscal de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
+const CUSTOM_ROLES_KEY = 'rota2_custom_roles';
+function getCustomRoles() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_ROLES_KEY) || '[]'); } catch { return []; }
+}
+function saveCustomRole(role) {
+  const existing = getCustomRoles();
+  if (!existing.includes(role)) localStorage.setItem(CUSTOM_ROLES_KEY, JSON.stringify([...existing, role]));
+}
+function getAllRoles() {
+  return [...DEFAULT_ROLES, ...getCustomRoles().filter(r => !DEFAULT_ROLES.includes(r))];
+}
 
 function Modal({ title, onClose, children }) {
   return (
@@ -21,13 +32,26 @@ function Modal({ title, onClose, children }) {
 const EMPTY = { matricula: '', name: '', role: '', sector: '', active: true };
 
 export default function TeamMembers({ userId, userSector }) {
-  const [members, setMembers]   = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [modal, setModal]       = useState(null); // null | 'add' | 'edit'
-  const [form, setForm]         = useState(EMPTY);
-  const [saving, setSaving]     = useState(false);
-  const [toast, setToast]       = useState(null);
-  const [filter, setFilter]     = useState('');
+  const [members,    setMembers]    = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [modal,      setModal]      = useState(null);
+  const [form,       setForm]       = useState(EMPTY);
+  const [saving,     setSaving]     = useState(false);
+  const [toast,      setToast]      = useState(null);
+  const [filter,     setFilter]     = useState('');
+  const [roles,      setRoles]      = useState(getAllRoles);
+  const [addingRole, setAddingRole] = useState(false);
+  const [newRole,    setNewRole]    = useState('');
+
+  const confirmNewRole = () => {
+    const trimmed = newRole.trim();
+    if (!trimmed) return;
+    saveCustomRole(trimmed);
+    setRoles(getAllRoles());
+    set('role', trimmed);
+    setNewRole('');
+    setAddingRole(false);
+  };
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -242,10 +266,32 @@ export default function TeamMembers({ userId, userSector }) {
           </div>
           <div className="form-group">
             <label className="form-label">Função</label>
-            <select className="select" value={form.role} onChange={e => set('role', e.target.value)}>
-              <option value="">Selecione...</option>
-              {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
+            <div style={{ display:'flex', gap:6 }}>
+              {addingRole ? (
+                <>
+                  <input
+                    className="input" autoFocus placeholder="Nome do cargo..."
+                    value={newRole} onChange={e => setNewRole(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') confirmNewRole(); if (e.key === 'Escape') setAddingRole(false); }}
+                    style={{ flex:1 }}/>
+                  <button onClick={confirmNewRole} style={{ background:'var(--primary)', border:'none', borderRadius:8, color:'#fff', fontWeight:700, fontSize:13, padding:'0 12px', cursor:'pointer' }}>✓</button>
+                  <button onClick={() => { setAddingRole(false); setNewRole(''); }} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:8, color:'var(--text-muted)', fontSize:13, padding:'0 10px', cursor:'pointer' }}>✕</button>
+                </>
+              ) : (
+                <>
+                  <select className="select" value={form.role} onChange={e => set('role', e.target.value)} style={{ flex:1 }}>
+                    <option value="">Selecione...</option>
+                    {roles.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                  <button
+                    onClick={() => setAddingRole(true)}
+                    title="Adicionar novo cargo"
+                    style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:8, color:'var(--primary)', fontWeight:800, fontSize:18, padding:'0 12px', cursor:'pointer', flexShrink:0 }}>
+                    +
+                  </button>
+                </>
+              )}
+            </div>
           </div>
           <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:8 }}>
             <button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button>

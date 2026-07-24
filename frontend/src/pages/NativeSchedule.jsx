@@ -5,7 +5,19 @@ import api from '../api';
 const DAY_NAME  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const DAY_FULL  = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const ROLES     = ['Operador Loja','Operador SAC Devolução','Fiscal de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
+const DEFAULT_ROLES = ['Operador Loja','Operador SAC Devolução','Fiscal de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
+const CUSTOM_ROLES_KEY = 'rota2_custom_roles';
+function getCustomRoles() {
+  try { return JSON.parse(localStorage.getItem(CUSTOM_ROLES_KEY) || '[]'); } catch { return []; }
+}
+function saveCustomRole(role) {
+  const existing = getCustomRoles();
+  if (!existing.includes(role)) localStorage.setItem(CUSTOM_ROLES_KEY, JSON.stringify([...existing, role]));
+}
+function getAllRoles() {
+  return [...DEFAULT_ROLES, ...getCustomRoles().filter(r => !DEFAULT_ROLES.includes(r))];
+}
+const ROLES = getAllRoles();
 
 const STATUS = {
   trabalha: { label:'Trabalha', bg:'#e0f2fe', color:'#0369a1' },
@@ -158,10 +170,23 @@ function CellEditor({ entry, memberName, dateStr, dayName, allDatesOfMonth, onSa
 
 /* ── Modal Time ── */
 function TeamModal({ userId, userSector, onClose }) {
-  const [members, setMembers] = useState([]);
-  const [form, setForm]       = useState({ matricula:'', name:'', role:'', sector:'' });
-  const [adding, setAdding]   = useState(false);
-  const [saving, setSaving]   = useState(false);
+  const [members,     setMembers]     = useState([]);
+  const [form,        setForm]        = useState({ matricula:'', name:'', role:'', sector:'' });
+  const [adding,      setAdding]      = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [roles,       setRoles]       = useState(getAllRoles);
+  const [addingRole,  setAddingRole]  = useState(false);
+  const [newRole,     setNewRole]     = useState('');
+
+  const confirmNewRole = () => {
+    const trimmed = newRole.trim();
+    if (!trimmed) return;
+    saveCustomRole(trimmed);
+    setRoles(getAllRoles());
+    setForm(f => ({ ...f, role: trimmed }));
+    setNewRole('');
+    setAddingRole(false);
+  };
 
   const load = useCallback(async () => {
     const res = await api.get(`/team?user_id=${userId}`);
@@ -205,10 +230,32 @@ function TeamModal({ userId, userSector, onClose }) {
                 onChange={e => setForm(f => ({...f, name:e.target.value.toUpperCase()}))} style={{ fontSize:12 }}/>
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:10 }}>
-              <select className="select" value={form.role} onChange={e => setForm(f => ({...f, role:e.target.value}))} style={{ fontSize:12 }}>
-                <option value="">Função...</option>
-                {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-              </select>
+              <div style={{ display:'flex', gap:4 }}>
+                {addingRole ? (
+                  <div style={{ display:'flex', gap:4, flex:1 }}>
+                    <input
+                      className="input" autoFocus placeholder="Nome do cargo..."
+                      value={newRole} onChange={e => setNewRole(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') confirmNewRole(); if (e.key === 'Escape') setAddingRole(false); }}
+                      style={{ fontSize:12, flex:1 }}/>
+                    <button onClick={confirmNewRole} style={{ background:'var(--primary)', border:'none', borderRadius:6, color:'#fff', fontWeight:700, fontSize:12, padding:'0 10px', cursor:'pointer' }}>✓</button>
+                    <button onClick={() => setAddingRole(false)} style={{ background:'#333', border:'none', borderRadius:6, color:'#aaa', fontSize:12, padding:'0 8px', cursor:'pointer' }}>✕</button>
+                  </div>
+                ) : (
+                  <>
+                    <select className="select" value={form.role} onChange={e => setForm(f => ({...f, role:e.target.value}))} style={{ fontSize:12, flex:1 }}>
+                      <option value="">Função...</option>
+                      {roles.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                    <button
+                      onClick={() => setAddingRole(true)}
+                      title="Adicionar novo cargo"
+                      style={{ background:'#2a2a2a', border:'1px solid #444', borderRadius:6, color:'var(--primary)', fontWeight:800, fontSize:16, padding:'0 10px', cursor:'pointer', lineHeight:1, flexShrink:0 }}>
+                      +
+                    </button>
+                  </>
+                )}
+              </div>
               <input className="input" placeholder="Setor" value={form.sector}
                 onChange={e => setForm(f => ({...f, sector:e.target.value}))} style={{ fontSize:12 }}/>
             </div>
