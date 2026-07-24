@@ -275,6 +275,7 @@ export default function NativeSchedule({ userId, profile }) {
   const isElevated = ELEVATED_ROLES.includes((profile?.role || '').toLowerCase());
   const [allProfiles,     setAllProfiles]     = useState([]);
   const [selectedSector,  setSelectedSector]  = useState('');
+  const [lastEditor,      setLastEditor]       = useState(null);
 
   // Para perfis elevados: carrega lista de todos os líderes com setor
   useEffect(() => {
@@ -282,13 +283,17 @@ export default function NativeSchedule({ userId, profile }) {
     api.get('/profile/all').then(r => setAllProfiles(r.data)).catch(() => {});
   }, [isElevated]);
 
-  // Acha o perfil do líder responsável pelo setor selecionado
+  // Acha o perfil do líder responsável pelo setor selecionado (apenas supervisor)
   const sectorProfile = selectedSector
     ? allProfiles.find(p => p.sector?.toLowerCase() === selectedSector.toLowerCase())
     : null;
 
-  // O userId efetivo: usa o do líder do setor selecionado, senão o próprio
+  // userId efetivo para supervisores vendo outro setor
   const effectiveUserId = sectorProfile ? sectorProfile.id : userId;
+
+  // Setor e empresa ativos — usados para queries de colaboração
+  const activeSector  = selectedSector || profile?.sector || '';
+  const activeCompany = profile?.company || '';
 
   // Perfil sendo visualizado (para cabeçalho e PDF)
   const viewedProfile = sectorProfile || profile;
@@ -303,15 +308,20 @@ export default function NativeSchedule({ userId, profile }) {
 
   const load = useCallback(async () => {
     if (!effectiveUserId) return;
-    const [mRes, eRes, sRes] = await Promise.all([
+    const sectorParams = activeSector && activeCompany
+      ? `&sector=${encodeURIComponent(activeSector)}&company=${encodeURIComponent(activeCompany)}`
+      : '';
+    const [mRes, eRes, sRes, leRes] = await Promise.all([
       api.get(`/team?user_id=${effectiveUserId}&active=true`),
-      api.get(`/schedule/month?user_id=${effectiveUserId}&year=${year}&month=${month}`),
-      api.get(`/schedule/submission?user_id=${effectiveUserId}&year=${year}&month=${month}`).catch(() => ({ data: null })),
+      api.get(`/schedule/month?user_id=${effectiveUserId}&year=${year}&month=${month}${sectorParams}`),
+      api.get(`/schedule/submission?user_id=${effectiveUserId}&year=${year}&month=${month}${sectorParams}`).catch(() => ({ data: null })),
+      api.get(`/schedule/last-editor?user_id=${effectiveUserId}&year=${year}&month=${month}${sectorParams}`).catch(() => ({ data: null })),
     ]);
     setMembers(mRes.data);
     setEntries(eRes.data);
     setSubmission(sRes.data);
-  }, [effectiveUserId, year, month]);
+    setLastEditor(leRes.data);
+  }, [effectiveUserId, activeSector, activeCompany, year, month]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -324,8 +334,9 @@ export default function NativeSchedule({ userId, profile }) {
   const saveCell = async ({ copyToDays = [], ...payload }) => {
     if (!openCell) return;
     const dates   = [openCell.date, ...copyToDays];
+    // Sempre envia o userId do usuário logado — o backend resolve o canonical do setor
     const results = await Promise.all(
-      dates.map(date => api.post('/schedule/save', { user_id:effectiveUserId, team_member_id:openCell.memberId, work_date:date, ...payload }))
+      dates.map(date => api.post('/schedule/save', { user_id: userId, team_member_id: openCell.memberId, work_date: date, ...payload }))
     );
     setEntries(prev => {
       let next = [...prev];
@@ -335,21 +346,26 @@ export default function NativeSchedule({ userId, profile }) {
       });
       return next;
     });
+    // Atualiza o last editor imediatamente (sem reload completo)
+    setLastEditor({ editor: { full_name: profile?.full_name }, last_edited_at: new Date().toISOString() });
     setOpenCell(null);
   };
 
   const submitSchedule = async () => {
     setSubmitting(true);
     try {
-      const res = await api.post('/schedule/submit', { user_id:effectiveUserId, year, month });
+      const res = await api.post('/schedule/submit', { user_id: userId, year, month });
       setSubmission(res.data);
     } catch {}
     setSubmitting(false);
   };
 
   const reopenSchedule = async () => {
+    const sectorParams = activeSector && activeCompany
+      ? `&sector=${encodeURIComponent(activeSector)}&company=${encodeURIComponent(activeCompany)}`
+      : '';
     try {
-      await api.delete(`/schedule/submission?user_id=${effectiveUserId}&year=${year}&month=${month}`);
+      await api.delete(`/schedule/submission?user_id=${userId}&year=${year}&month=${month}${sectorParams}`);
       setSubmission(null);
     } catch {}
   };
@@ -521,6 +537,17 @@ export default function NativeSchedule({ userId, profile }) {
               🔓 Reabrir
             </button>
           </>)}
+
+          {/* Última edição por */}
+          {lastEditor?.editor?.full_name && (
+            <>
+              <span style={{ color:'#e2e8f0' }}>|</span>
+              <span style={{ fontSize:9, color:'#64748b', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:3 }}>
+                ✏️ <b>{lastEditor.editor.full_name.split(' ')[0]}</b>
+                {lastEditor.last_edited_at && ` · ${new Date(lastEditor.last_edited_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}`}
+              </span>
+            </>
+          )}
 
           {/* Espaço flexível */}
           <div style={{ flex:1 }}/>
