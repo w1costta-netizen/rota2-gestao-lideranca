@@ -247,13 +247,13 @@ function AppContent() {
           alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,.4)', fontSize: 13,
           whiteSpace: 'nowrap',
         }}>
-          <span>Nova versão disponível</span>
+          <span>Nova versão disponível — v2024.07.24</span>
           <button
-            onClick={() => window.location.reload()}
+            onClick={() => { if ('caches' in window) { caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))).then(() => window.location.reload()); } else { window.location.reload(); } }}
             style={{ background: '#fff', color: 'var(--primary)', border: 'none',
               borderRadius: 8, padding: '4px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}
           >
-            Atualizar
+            Atualizar agora
           </button>
         </div>
       )}
