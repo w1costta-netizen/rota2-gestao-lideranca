@@ -167,10 +167,18 @@ router.get('/operators', async (req, res) => {
     .eq('status', 'trabalha');
   if (error) return res.status(500).json({ error: error.message });
 
+  // Funções que operam caixa (inclui nome antigo para compatibilidade com registros existentes)
+  const CASHIER_ROLES = ['operador loja', 'operador(a) de caixa'];
+
+  const cashierEntries = (data || []).filter(e => {
+    const role = (e.team_members?.role || '').toLowerCase();
+    return CASHIER_ROLES.includes(role);
+  });
+
   const hours = Array.from({ length: 13 }, (_, i) => i + 8);
   const result = hours.map(h => {
     const hMin = h * 60;
-    const active = (data || []).filter(e => {
+    const active = cashierEntries.filter(e => {
       const [sh, sm] = (e.entrada || '').split(':').map(Number);
       const [eh, em] = (e.saida   || '').split(':').map(Number);
       if (isNaN(sh) || isNaN(eh)) return false;

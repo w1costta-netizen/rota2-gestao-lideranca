@@ -5,7 +5,7 @@ import api from '../api';
 const DAY_NAME  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const DAY_FULL  = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-const ROLES     = ['Operador(a) de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
+const ROLES     = ['Operador Loja','Operador SAC Devolução','Fiscal de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
 
 const STATUS = {
   trabalha: { label:'Trabalha', bg:'#e0f2fe', color:'#0369a1' },

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, Pencil, Trash2, X, Save, UserCheck, UserX } from 'lucide-react';
 import api from '../api';
 
-const ROLES = ['Operador(a) de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
+const ROLES = ['Operador Loja','Operador SAC Devolução','Fiscal de Caixa','Atendente','Repositor(a)','Supervisor(a)','Coordenador(a)','Auxiliar','Outro'];
 
 function Modal({ title, onClose, children }) {
   return (
