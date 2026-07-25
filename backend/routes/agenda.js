@@ -3,12 +3,13 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { sendPushToTargets } = require('../lib/push');
 
-// GET /api/agenda?week_start=&user_id=&sector=
+// GET /api/agenda?week_start=&user_id=&sector=&company=
 // Se user_id + sector fornecidos → filtra itens para aquele usuário
 router.get('/', async (req, res) => {
-  const { week_start, user_id, sector } = req.query;
+  const { week_start, user_id, sector, company } = req.query;
   let query = supabase.from('agenda_items').select('*').order('day_of_week').order('time');
   if (week_start) query = query.eq('week_start', week_start);
+  if (company)    query = query.eq('company', company);
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
@@ -49,17 +50,17 @@ router.post('/', async (req, res) => {
   if (!title || !week_start || !target_type || !day_of_week)
     return res.status(400).json({ error: 'Campos obrigatórios: title, week_start, target_type, day_of_week' });
 
+  // Determina company: usa a passada no body, ou busca do criador
+  let company = req.body.company || null;
+  if (!company && created_by) {
+    const { data: me } = await supabase.from('profiles').select('company').eq('id', created_by).single();
+    company = me?.company || null;
+  }
+
   const { data, error } = await supabase.from('agenda_items')
-    .insert({ title, description: description || '', week_start, target_type, target_value: target_value || '', day_of_week, time: time || '' })
+    .insert({ title, description: description || '', week_start, target_type, target_value: target_value || '', day_of_week, time: time || '', company })
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
-
-  // Busca company do criador para filtrar push
-  let company = null;
-  if (created_by) {
-    const { data: me } = await supabase.from('profiles').select('company').eq('id', created_by).single();
-    company = me?.company;
-  }
 
   // Dispara push em background (não bloqueia a resposta)
   const dayLabel = { segunda:'Segunda',terca:'Terça',quarta:'Quarta',quinta:'Quinta',sexta:'Sexta',sabado:'Sábado',domingo:'Domingo' };
