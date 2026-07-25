@@ -10,19 +10,20 @@ const isManager = p => p && ['admin','supervisor'].includes(p.access_level);
 
 // ── CAMPANHAS ─────────────────────────────────────────────────────
 
-// GET /api/campanhas?requester_id=
+// GET /api/campanhas?requester_id=&company=
 router.get('/', async (req, res) => {
-  const { requester_id } = req.query;
+  const { requester_id, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const targetCompany = me.access_level === 'master' ? queryCompany : me.company;
 
   const { data, error } = await supabase
     .from('campanhas')
     .select(`*, creator:created_by(full_name),
       campanha_itens(id),
       campanha_evidencias(id, item_id)`)
-    .eq('company', me.company)
+    .eq('company', targetCompany)
     .neq('status', 'arquivada')
     .order('created_at', { ascending: false });
 
