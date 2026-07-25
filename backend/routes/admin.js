@@ -7,7 +7,7 @@ async function requireAdmin(req, res, next) {
   const { requester_id } = req.body || req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
-  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
   req.adminCompany = me.company;
   next();
 }
@@ -80,7 +80,7 @@ router.put('/users/:id', async (req, res) => {
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
 
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
-  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
   const { full_name, role, sector, access_level, active, permissions, phone, email } = req.body;
 
@@ -155,7 +155,7 @@ router.post('/roles', async (req, res) => {
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
 
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
-  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
   if (!role_name) return res.status(400).json({ error: 'role_name obrigatório' });
 
   const { data, error } = await supabase.from('company_roles')
@@ -170,7 +170,7 @@ router.delete('/roles/:id', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const { data: me } = await supabase.from('profiles').select('access_level').eq('id', requester_id).single();
-  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
   const { error } = await supabase.from('company_roles').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
@@ -193,7 +193,7 @@ router.post('/sectors', async (req, res) => {
   const { requester_id, sector_name } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
-  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
   if (!sector_name) return res.status(400).json({ error: 'sector_name obrigatório' });
 
   const { data, error } = await supabase.from('company_sectors')
@@ -208,7 +208,7 @@ router.delete('/sectors/:id', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const { data: me } = await supabase.from('profiles').select('access_level').eq('id', requester_id).single();
-  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
   const { error } = await supabase.from('company_sectors').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });

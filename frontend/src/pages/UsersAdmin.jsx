@@ -70,11 +70,16 @@ function InlineSelect({ value, onChange, items, placeholder, onAdd, onRemove, ad
   const handleAdd = async () => {
     if (!newVal.trim() || saving) return;
     setSaving(true);
-    const saved = await onAdd(newVal.trim());
-    setNewVal('');
-    setAdding(false);
-    setSaving(false);
-    if (saved) onChange(saved);
+    try {
+      const saved = await onAdd(newVal.trim());
+      setNewVal('');
+      setAdding(false);
+      if (saved) onChange(saved);
+    } catch {
+      // mantém o campo aberto para o usuário tentar novamente
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -276,12 +281,18 @@ export default function UsersAdmin({ userId, profile }) {
   const [createdUser, setCreatedUser] = useState(null); // dados pós-criação p/ WhatsApp
 
   const isMaster = profile?.access_level === 'master';
-  const [form, setForm] = useState({
+  const FORM_KEY = 'rota2_new_user_form';
+  const savedForm = (() => { try { return JSON.parse(sessionStorage.getItem(FORM_KEY) || 'null'); } catch { return null; } })();
+  const [form, setForm] = useState(savedForm || {
     full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:'', company:''
   });
   const [selectedCompany, setSelectedCompany] = useState('');
   const [allStores, setAllStores] = useState([]);
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k, v) => setForm(f => {
+    const next = { ...f, [k]: v };
+    sessionStorage.setItem(FORM_KEY, JSON.stringify(next));
+    return next;
+  });
   const company = isMaster ? selectedCompany : (profile?.company || '');
 
   // Master carrega lista de lojas para o seletor
@@ -342,7 +353,8 @@ export default function UsersAdmin({ userId, profile }) {
         company: isMaster ? (form.company || null) : undefined,
       });
       setCreatedUser({ full_name: form.full_name, email: form.email, password: form.password });
-      setForm({ full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:'' });
+      sessionStorage.removeItem(FORM_KEY);
+      setForm({ full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:'', company:'' });
       load();
     } catch (e) {
       setError(e.response?.data?.error || 'Erro ao criar usuário.');
