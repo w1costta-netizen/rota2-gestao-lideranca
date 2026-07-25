@@ -8,17 +8,18 @@ async function getProfile(id) {
   return data;
 }
 
-// GET /api/comunicados?requester_id=
+// GET /api/comunicados?requester_id=&company=
 router.get('/', async (req, res) => {
-  const { requester_id } = req.query;
+  const { requester_id, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const targetCompany = me.access_level === 'master' ? queryCompany : me.company;
 
   const { data, error } = await supabase
     .from('comunicados')
     .select('*, profiles:created_by(full_name)')
-    .eq('company', me.company)
+    .eq('company', targetCompany)
     .eq('active', true)
     .order('created_at', { ascending: false });
 
@@ -42,15 +43,16 @@ router.get('/', async (req, res) => {
 
 // POST /api/comunicados — cria comunicado (admin/supervisor)
 router.post('/', async (req, res) => {
-  const { requester_id, title, body, priority } = req.body;
+  const { requester_id, title, body, priority, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!me || !['admin', 'supervisor'].includes(me.access_level))
+  if (!me || !['admin', 'supervisor', 'master'].includes(me.access_level))
     return res.status(403).json({ error: 'Acesso negado' });
   if (!title || !body) return res.status(400).json({ error: 'title e body obrigatórios' });
+  const targetCompany = me.access_level === 'master' ? bodyCompany : me.company;
 
   const { data, error } = await supabase.from('comunicados').insert({
-    company: me.company,
+    company: targetCompany,
     title: title.trim(),
     body: body.trim(),
     priority: priority || 'normal',
@@ -63,7 +65,7 @@ router.post('/', async (req, res) => {
   try {
     await sendPushToTargets({
       targetType: 'geral',
-      company: me.company,
+      company: targetCompany,
       payload: {
         title: priority === 'urgente' ? `🚨 ${title}` : `📢 ${title}`,
         body: body.slice(0, 100),

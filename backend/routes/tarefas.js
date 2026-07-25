@@ -9,17 +9,19 @@ async function getProfile(id) {
 }
 const isManager = p => p && ['admin','supervisor'].includes(p.access_level);
 
-// GET /api/tarefas?requester_id=
+// GET /api/tarefas?requester_id=&company=
 router.get('/', async (req, res) => {
-  const { requester_id } = req.query;
+  const { requester_id, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
+  const targetCompany = me.access_level === 'master' ? queryCompany : me.company;
+
   let query = supabase
     .from('tarefas')
     .select('*, assigned:assigned_to(id,full_name,sector), creator:created_by(full_name)')
-    .eq('company', me.company)
+    .eq('company', targetCompany)
     .order('created_at', { ascending: false });
 
   if (me.access_level === 'admin') {
@@ -39,18 +41,19 @@ router.get('/', async (req, res) => {
 
 // POST /api/tarefas
 router.post('/', async (req, res) => {
-  const { requester_id, title, description, assigned_to, due_date, priority } = req.body;
+  const { requester_id, title, description, assigned_to, due_date, priority, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
   // Não-admin só pode criar tarefa para si mesmo
-  if (!isManager(me) && assigned_to && assigned_to !== requester_id)
+  if (!isManager(me) && me.access_level !== 'master' && assigned_to && assigned_to !== requester_id)
     return res.status(403).json({ error: 'Você só pode criar tarefas para você mesmo' });
   if (!title) return res.status(400).json({ error: 'title obrigatório' });
   const finalAssignee = assigned_to || requester_id;
+  const targetCompany = me.access_level === 'master' ? bodyCompany : me.company;
 
   const { data, error } = await supabase.from('tarefas').insert({
-    company: me.company, title: title.trim(),
+    company: targetCompany, title: title.trim(),
     description: description?.trim() || '',
     assigned_to: finalAssignee, created_by: requester_id,
     due_date: due_date || null,

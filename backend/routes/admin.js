@@ -82,14 +82,16 @@ router.put('/users/:id', async (req, res) => {
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
   if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
-  const { full_name, role, sector, access_level, active, permissions, phone, email } = req.body;
+  const { full_name, role, sector, access_level, active, permissions, phone, email, password } = req.body;
 
-  // Atualiza e-mail no Supabase Auth se fornecido
-  if (email) {
-    const { error: authErr } = await supabase.auth.admin.updateUserById(req.params.id, { email });
-    if (authErr) return res.status(500).json({ error: 'Erro ao atualizar e-mail: ' + authErr.message });
-    // Atualiza também na tabela profiles
-    await supabase.from('profiles').update({ email }).eq('id', req.params.id);
+  // Atualiza e-mail e/ou senha no Supabase Auth se fornecido
+  const authUpdates = {};
+  if (email)    authUpdates.email    = email;
+  if (password) authUpdates.password = password;
+  if (Object.keys(authUpdates).length > 0) {
+    const { error: authErr } = await supabase.auth.admin.updateUserById(req.params.id, authUpdates);
+    if (authErr) return res.status(500).json({ error: 'Erro ao atualizar auth: ' + authErr.message });
+    if (email) await supabase.from('profiles').update({ email }).eq('id', req.params.id);
   }
 
   const updates = {};
