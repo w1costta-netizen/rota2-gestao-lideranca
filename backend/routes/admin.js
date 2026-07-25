@@ -76,7 +76,15 @@ router.put('/users/:id', async (req, res) => {
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
   if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
 
-  const { full_name, role, sector, access_level, active, permissions, phone } = req.body;
+  const { full_name, role, sector, access_level, active, permissions, phone, email } = req.body;
+
+  // Atualiza e-mail no Supabase Auth se fornecido
+  if (email) {
+    const { error: authErr } = await supabase.auth.admin.updateUserById(req.params.id, { email });
+    if (authErr) return res.status(500).json({ error: 'Erro ao atualizar e-mail: ' + authErr.message });
+    // Atualiza também na tabela profiles
+    await supabase.from('profiles').update({ email }).eq('id', req.params.id);
+  }
 
   const updates = {};
   if (full_name    !== undefined) updates.full_name    = full_name;
@@ -85,7 +93,7 @@ router.put('/users/:id', async (req, res) => {
   if (access_level !== undefined) updates.access_level = access_level;
   if (active       !== undefined) updates.active       = active;
   if ('permissions' in req.body)  updates.permissions  = permissions;
-  if (phone        !== undefined) updates.phone        = phone; // aceita null explícito
+  if (phone        !== undefined) updates.phone        = phone;
 
   const { data, error } = await supabase.from('profiles').update(updates).eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });

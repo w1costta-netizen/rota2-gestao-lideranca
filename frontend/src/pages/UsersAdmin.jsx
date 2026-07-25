@@ -340,6 +340,7 @@ export default function UsersAdmin({ userId, profile }) {
       await api.put(`/admin/users/${editing.id}`, {
         requester_id: userId,
         full_name:    editing.full_name,
+        email:        editing.email || undefined,
         role:         editing.role,
         sector:       editing.sector,
         access_level: editing.access_level,
@@ -574,7 +575,13 @@ export default function UsersAdmin({ userId, profile }) {
               <input className="input" value={editing.full_name}
                 onChange={e => setEditing(ed => ({ ...ed, full_name: e.target.value }))}/>
             </div>
-            <div className="form-group" style={{ gridColumn:'1/-1' }}>
+            <div className="form-group">
+              <label className="form-label">E-mail</label>
+              <input className="input" type="email" value={editing.email || ''}
+                onChange={e => setEditing(ed => ({ ...ed, email: e.target.value }))}
+                placeholder="email@empresa.com"/>
+            </div>
+            <div className="form-group">
               <label className="form-label">WhatsApp</label>
               <input className="input" type="tel" value={editing.phone || ''}
                 onChange={e => setEditing(ed => ({ ...ed, phone: maskPhone(e.target.value) }))}
