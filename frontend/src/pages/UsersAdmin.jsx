@@ -609,11 +609,12 @@ export default function UsersAdmin({ userId, profile }) {
                 {isMaster && (
                   <div className="form-group" style={{ gridColumn:'1/-1' }}>
                     <label className="form-label">Loja / Empresa</label>
-                    <input className="input" value={form.company}
-                      onChange={e => set('company', e.target.value)}
-                      placeholder="Deixe vazio para o gerente cadastrar a loja dele"/>
+                    <select className="select" value={form.company} onChange={e => set('company', e.target.value)}>
+                      <option value="">— Sem loja (gerente cadastra ao logar) —</option>
+                      {allStores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    </select>
                     <span style={{ fontSize:11, color:'var(--text-muted)', marginTop:4, display:'block' }}>
-                      Se vazio, o gerente verá a tela de cadastro da loja ao logar.
+                      Se não selecionar, o gerente verá a tela de cadastro da loja ao logar.
                     </span>
                   </div>
                 )}
