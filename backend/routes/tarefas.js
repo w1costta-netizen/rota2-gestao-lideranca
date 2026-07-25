@@ -24,8 +24,8 @@ router.get('/', async (req, res) => {
     .eq('company', targetCompany)
     .order('created_at', { ascending: false });
 
-  if (me.access_level === 'admin') {
-    // Admin vê tudo
+  if (me.access_level === 'admin' || me.access_level === 'master') {
+    // Admin e master veem tudo da empresa
   } else if (me.access_level === 'supervisor') {
     // Supervisor vê tarefas atribuídas a ele + tarefas que ele criou/delegou
     query = query.or(`assigned_to.eq.${requester_id},created_by.eq.${requester_id}`);
