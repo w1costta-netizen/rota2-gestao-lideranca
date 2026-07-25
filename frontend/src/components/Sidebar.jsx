@@ -1,9 +1,10 @@
 import React from 'react';
-import { Users, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 
 const NAV_ALL = [
+  { id: 'lojas',         label: 'Lojas',        icon: Store,        perm: 'lojas' },
   { id: 'dashboard',    label: 'Dashboard',    icon: LayoutGrid,   perm: 'dashboard' },
   { id: 'comunicados',  label: 'Comunicados',  icon: Megaphone,    perm: 'comunicados' },
   { id: 'tarefas',      label: 'Tarefas',      icon: CheckSquare,  perm: 'tarefas' },

@@ -26,6 +26,8 @@ const Campanhas              = lazy(() => import('./pages/Campanhas'));
 const RelatoriosFotograficos = lazy(() => import('./pages/RelatoriosFotograficos'));
 const GestaoVendas           = lazy(() => import('./pages/GestaoVendas'));
 const PainelVendas           = lazy(() => import('./pages/PainelVendas'));
+const MasterDashboard        = lazy(() => import('./pages/MasterDashboard'));
+const StoreSetup             = lazy(() => import('./pages/StoreSetup'));
 
 function AccessDenied() {
   return (
@@ -154,6 +156,15 @@ function AppContent() {
     );
   }
 
+  // Gerente Geral sem loja cadastrada → tela de cadastro
+  if (profile?.access_level === 'admin' && !profile?.company) {
+    return (
+      <React.Suspense fallback={null}>
+        <StoreSetup userId={userId} />
+      </React.Suspense>
+    );
+  }
+
   const has = (key) => hasPermission(profile, key);
 
   const pages = {
@@ -173,6 +184,7 @@ function AppContent() {
     vendas_gestao:() => has('vendas_gestao') ? <GestaoVendas userId={userId} profile={profile} />           : <AccessDenied />,
     vendas_painel:() => has('vendas_painel') ? <PainelVendas userId={userId} profile={profile} />           : <AccessDenied />,
     usersadmin:   () => has('usuarios')      ? <UsersAdmin userId={userId} profile={profile} />             : <AccessDenied />,
+    lojas:        () => has('lojas')         ? <MasterDashboard userId={userId} />                          : <AccessDenied />,
   };
 
   const PageComponent = pages[page] || pages.dashboard;

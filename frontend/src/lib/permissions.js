@@ -15,6 +15,7 @@ export const MODULES = [
 ];
 
 export const DEFAULT_PERMISSIONS = {
+  master:       ['lojas'],
   admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios'],
   supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel'],
   lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'caixas', 'relatorios', 'vendas_painel'],
@@ -22,6 +23,7 @@ export const DEFAULT_PERMISSIONS = {
 };
 
 export function getEffectivePermissions(profile) {
+  if (profile?.access_level === 'master') return DEFAULT_PERMISSIONS.master;
   if (profile?.permissions?.length) return profile.permissions;
   return DEFAULT_PERMISSIONS[profile?.access_level] || DEFAULT_PERMISSIONS.lider;
 }
