@@ -301,8 +301,7 @@ function TeamModal({ userId, userSector, onClose }) {
 }
 
 /* ── Página principal ── */
-const ELEVATED_ROLES = ['supervisor', 'supervisor(a)', 'gerente geral', 'gerente geral & digital', 'gerente geral & digital(a)', 'gerente_geral', 'gerente'];
-const CARREFOUR_SECTORS = ['Frente Loja', 'Recebimento', 'Mercearia', 'Não Alimentar', 'Perecíveis', 'Liderança', 'Plantonistas'];
+const ELEVATED_LEVELS = ['admin', 'supervisor'];
 
 export default function NativeSchedule({ userId, profile }) {
   const now = new Date();
@@ -319,16 +318,20 @@ export default function NativeSchedule({ userId, profile }) {
   const todayMonth = parseInt(today.split('-')[1]);
   const todayYear  = parseInt(today.split('-')[0]);
 
-  const isElevated = ELEVATED_ROLES.includes((profile?.role || '').toLowerCase());
+  const isElevated = ELEVATED_LEVELS.includes(profile?.access_level);
   const [allProfiles,     setAllProfiles]     = useState([]);
+  const [allSectors,      setAllSectors]      = useState([]);
   const [selectedSector,  setSelectedSector]  = useState('');
   const [lastEditor,      setLastEditor]       = useState(null);
 
-  // Para perfis elevados: carrega lista de todos os líderes com setor
+  // Para perfis elevados: carrega lista de todos os perfis e setores cadastrados
   useEffect(() => {
     if (!isElevated) return;
     api.get('/profile/all').then(r => setAllProfiles(r.data)).catch(() => {});
-  }, [isElevated]);
+    api.get(`/admin/sectors?company=${encodeURIComponent(profile?.company || '')}`)
+      .then(r => setAllSectors(r.data.map(s => s.sector_name)))
+      .catch(() => {});
+  }, [isElevated, profile?.company]);
 
   // Acha o perfil do líder responsável pelo setor selecionado (apenas supervisor)
   const sectorProfile = selectedSector
@@ -545,7 +548,7 @@ export default function NativeSchedule({ userId, profile }) {
               style={{ fontSize:10, padding:'2px 5px', borderRadius:4, border:'1px solid #0e7490', background:'#f0fdff', color:'#0e7490', fontWeight:700, maxWidth:200, cursor:'pointer' }}
             >
               <option value="">Meu setor ({profile?.sector||'—'})</option>
-              {CARREFOUR_SECTORS.filter(s => s !== profile?.sector).map(s => (
+              {allSectors.filter(s => s !== profile?.sector).map(s => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
