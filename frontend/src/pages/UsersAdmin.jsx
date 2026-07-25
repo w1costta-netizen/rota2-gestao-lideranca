@@ -275,8 +275,9 @@ export default function UsersAdmin({ userId, profile }) {
   const [error,       setError]       = useState('');
   const [createdUser, setCreatedUser] = useState(null); // dados pós-criação p/ WhatsApp
 
+  const isMaster = profile?.access_level === 'master';
   const [form, setForm] = useState({
-    full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:''
+    full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:'', company:''
   });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const company = profile?.company || '';
@@ -321,7 +322,11 @@ export default function UsersAdmin({ userId, profile }) {
       return setError('Senha precisa ter pelo menos 6 caracteres.');
     setSaving(true);
     try {
-      await api.post('/admin/users', { requester_id: userId, ...form });
+      await api.post('/admin/users', {
+        requester_id: userId,
+        ...form,
+        company: isMaster ? (form.company || null) : undefined,
+      });
       setCreatedUser({ full_name: form.full_name, email: form.email, password: form.password });
       setForm({ full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:'' });
       load();
@@ -552,6 +557,17 @@ export default function UsersAdmin({ userId, profile }) {
                   <input className="input" type="tel" value={form.phone}
                     onChange={e => set('phone', maskPhone(e.target.value))} placeholder="(98) 9 8220-9719"/>
                 </div>
+                {isMaster && (
+                  <div className="form-group" style={{ gridColumn:'1/-1' }}>
+                    <label className="form-label">Loja / Empresa</label>
+                    <input className="input" value={form.company}
+                      onChange={e => set('company', e.target.value)}
+                      placeholder="Deixe vazio para o gerente cadastrar a loja dele"/>
+                    <span style={{ fontSize:11, color:'var(--text-muted)', marginTop:4, display:'block' }}>
+                      Se vazio, o gerente verá a tela de cadastro da loja ao logar.
+                    </span>
+                  </div>
+                )}
               </div>
               <FormFields values={form} onChange={set}/>
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>

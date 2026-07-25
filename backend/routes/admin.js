@@ -31,11 +31,11 @@ router.get('/users', async (req, res) => {
 
 // POST /api/admin/users — cria usuário e perfil
 router.post('/users', async (req, res) => {
-  const { requester_id, full_name, email, role, sector, access_level, password, phone } = req.body;
+  const { requester_id, full_name, email, role, sector, access_level, password, phone, company: reqCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
 
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
-  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
   if (!full_name || !email || !password) return res.status(400).json({ error: 'full_name, email e password são obrigatórios' });
 
@@ -54,7 +54,7 @@ router.post('/users', async (req, res) => {
     id: newUserId,
     full_name: full_name.trim(),
     email,
-    company: me.company,
+    company: reqCompany !== undefined ? (reqCompany || null) : me.company,
     role: role || '',
     sector: sector || '',
     access_level: access_level || 'lider',
