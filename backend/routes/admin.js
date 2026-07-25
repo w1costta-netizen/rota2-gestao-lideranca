@@ -12,19 +12,25 @@ async function requireAdmin(req, res, next) {
   next();
 }
 
-// GET /api/admin/users?requester_id=
+// GET /api/admin/users?requester_id=&company=
 router.get('/users', async (req, res) => {
-  const { requester_id } = req.query;
+  const { requester_id, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
-  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
-  const { data, error } = await supabase
+  // master pode ver qualquer empresa passada via query, admin vê apenas a sua
+  const targetCompany = me.access_level === 'master' ? (queryCompany || me.company) : me.company;
+
+  let query = supabase
     .from('profiles')
     .select('id, full_name, email, role, sector, access_level, permissions, phone, active, first_access, created_at')
-    .eq('company', me.company)
     .neq('id', requester_id)
     .order('full_name');
+
+  if (targetCompany) query = query.eq('company', targetCompany);
+
+  const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });

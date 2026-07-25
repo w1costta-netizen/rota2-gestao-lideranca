@@ -279,23 +279,37 @@ export default function UsersAdmin({ userId, profile }) {
   const [form, setForm] = useState({
     full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:'', company:''
   });
+  const [selectedCompany, setSelectedCompany] = useState('');
+  const [allStores, setAllStores] = useState([]);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const company = profile?.company || '';
+  const company = isMaster ? selectedCompany : (profile?.company || '');
+
+  // Master carrega lista de lojas para o seletor
+  useEffect(() => {
+    if (!isMaster) return;
+    api.get(`/stores?requester_id=${userId}`)
+      .then(r => {
+        setAllStores(r.data.filter(s => s.active));
+        if (r.data.length > 0 && !selectedCompany) setSelectedCompany(r.data[0].name);
+      }).catch(() => {});
+  }, [isMaster, userId]);
 
   const load = useCallback(async () => {
+    if (isMaster && !selectedCompany) return;
     setLoading(true);
     try {
+      const companyParam = encodeURIComponent(company);
       const [uRes, rRes, sRes] = await Promise.all([
-        api.get(`/admin/users?requester_id=${userId}`),
-        api.get(`/admin/roles?company=${encodeURIComponent(company)}`),
-        api.get(`/admin/sectors?company=${encodeURIComponent(company)}`),
+        api.get(`/admin/users?requester_id=${userId}${company ? `&company=${companyParam}` : ''}`),
+        api.get(`/admin/roles?company=${companyParam}`),
+        api.get(`/admin/sectors?company=${companyParam}`),
       ]);
       setUsers(uRes.data);
       setRoles(rRes.data);
       setSectors(sRes.data);
     } catch {}
     setLoading(false);
-  }, [userId, company]);
+  }, [userId, company, isMaster, selectedCompany]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -419,8 +433,17 @@ export default function UsersAdmin({ userId, profile }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">Gestão de Usuários</h1>
-          <p className="page-subtitle">{company} · {users.filter(u=>u.active).length} ativos</p>
+          <p className="page-subtitle">{company || '—'} · {users.filter(u=>u.active).length} ativos</p>
         </div>
+        {isMaster && allStores.length > 1 && (
+          <select
+            value={selectedCompany}
+            onChange={e => { setSelectedCompany(e.target.value); setUsers([]); }}
+            style={{ padding:'8px 12px', borderRadius:8, border:'1px solid var(--border)',
+              background:'var(--surface-2)', color:'var(--text)', fontSize:13, cursor:'pointer' }}>
+            {allStores.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+          </select>
+        )}
         <div style={{ display:'flex', gap:8 }}>
           <button onClick={() => setShowCfg(true)} className="btn btn-ghost btn-sm">
             <Settings size={14}/> Configurações
