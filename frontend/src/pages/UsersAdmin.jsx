@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Plus, Edit2, X, Save, Trash2, UserCheck, UserX, Settings } from 'lucide-react';
+import { Users, Plus, Edit2, X, Save, Trash2, UserCheck, UserX, Settings, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import { MODULES, DEFAULT_PERMISSIONS } from '../lib/permissions';
 
@@ -380,6 +380,16 @@ export default function UsersAdmin({ userId, profile }) {
     load();
   };
 
+  const deleteUser = async (u) => {
+    if (!confirm(`Excluir permanentemente "${u.full_name}"?\n\nEsta ação não pode ser desfeita — o usuário perderá o acesso ao app.`)) return;
+    try {
+      await api.delete(`/admin/users/${u.id}/permanent?requester_id=${userId}`);
+      load();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Erro ao excluir usuário.');
+    }
+  };
+
   const FormFields = ({ values, onChange }) => (
     <>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
@@ -510,6 +520,10 @@ export default function UsersAdmin({ userId, profile }) {
                           onClick={() => toggleActive(u)}
                           style={{ color: u.active ? 'var(--danger)' : 'var(--success)' }}>
                           {u.active ? <UserX size={14}/> : <UserCheck size={14}/>}
+                        </button>
+                        <button className="btn-icon danger" title="Excluir permanentemente"
+                          onClick={() => deleteUser(u)}>
+                          <Trash2 size={14}/>
                         </button>
                       </div>
                     </td>

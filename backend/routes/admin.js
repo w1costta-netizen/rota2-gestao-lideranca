@@ -112,9 +112,30 @@ router.delete('/users/:id', async (req, res) => {
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
 
   const { data: me } = await supabase.from('profiles').select('access_level').eq('id', requester_id).single();
-  if (!me || me.access_level !== 'admin') return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
   const { error } = await supabase.from('profiles').update({ active: false }).eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// DELETE /api/admin/users/:id/permanent — exclui usuário permanentemente
+router.delete('/users/:id/permanent', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+
+  const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
+  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
+
+  // Garante que admin só exclui usuários da própria empresa
+  if (me.access_level === 'admin') {
+    const { data: target } = await supabase.from('profiles').select('company').eq('id', req.params.id).single();
+    if (!target || target.company !== me.company) return res.status(403).json({ error: 'Acesso negado' });
+  }
+
+  // Remove o perfil e o usuário do Auth
+  await supabase.from('profiles').delete().eq('id', req.params.id);
+  const { error } = await supabase.auth.admin.deleteUser(req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
