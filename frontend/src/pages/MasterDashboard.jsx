@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Store, Users, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Store, Users, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, X, Plus, Save } from 'lucide-react';
 import api from '../api';
 
 function Modal({ title, onClose, children }) {
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal" style={{ maxWidth: 560 }}>
+      <div className="modal" style={{ maxWidth: 480 }}>
         <div className="modal-header">
           <span className="modal-title">{title}</span>
           <button className="btn-icon" onClick={onClose}><X size={16}/></button>
@@ -23,6 +23,9 @@ export default function MasterDashboard({ userId }) {
   const [storeUsers,   setStoreUsers]   = useState({});
   const [loadingUsers, setLoadingUsers] = useState(null);
   const [toast,        setToast]        = useState(null);
+  const [showNew,      setShowNew]      = useState(false);
+  const [newForm,      setNewForm]      = useState({ name: '', city: '' });
+  const [savingNew,    setSavingNew]    = useState(false);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -39,6 +42,21 @@ export default function MasterDashboard({ userId }) {
   };
 
   useEffect(() => { load(); }, []);
+
+  const createStore = async () => {
+    if (!newForm.name.trim()) return;
+    setSavingNew(true);
+    try {
+      // Cria já ativa (master cria direto sem aprovação)
+      await api.post('/stores/master', { requester_id: userId, name: newForm.name.trim(), city: newForm.city.trim() });
+      setShowNew(false);
+      setNewForm({ name: '', city: '' });
+      load();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Erro ao criar loja.');
+    }
+    setSavingNew(false);
+  };
 
   const approve = async (store) => {
     try {
@@ -83,6 +101,9 @@ export default function MasterDashboard({ userId }) {
           <h1 className="page-title">Gestão de Lojas</h1>
           <p className="page-subtitle">{active.length} ativas · {pending.length} aguardando aprovação</p>
         </div>
+        <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>
+          <Plus size={14}/> Nova Loja
+        </button>
       </div>
 
       {/* KPIs */}
@@ -251,6 +272,31 @@ export default function MasterDashboard({ userId }) {
             </div>
           ))}
         </div>
+      )}
+
+      {showNew && (
+        <Modal title="Nova Loja" onClose={() => setShowNew(false)}>
+          <div className="form-group">
+            <label className="form-label">Nome da loja *</label>
+            <input className="input" autoFocus value={newForm.name}
+              onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="Ex: Sam's Club Brasília Sul"
+              onKeyDown={e => e.key === 'Enter' && createStore()}/>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Cidade</label>
+            <input className="input" value={newForm.city}
+              onChange={e => setNewForm(f => ({ ...f, city: e.target.value }))}
+              placeholder="Ex: Brasília - DF"
+              onKeyDown={e => e.key === 'Enter' && createStore()}/>
+          </div>
+          <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+            <button className="btn btn-ghost" onClick={() => setShowNew(false)}>Cancelar</button>
+            <button className="btn btn-primary" onClick={createStore} disabled={savingNew}>
+              <Save size={14}/> {savingNew ? 'Criando...' : 'Criar Loja'}
+            </button>
+          </div>
+        </Modal>
       )}
 
       {toast && (

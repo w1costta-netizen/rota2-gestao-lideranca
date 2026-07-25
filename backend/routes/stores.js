@@ -42,6 +42,20 @@ router.get('/', async (req, res) => {
   res.json(result);
 });
 
+// POST /api/stores/master — master cria loja já ativa
+router.post('/master', async (req, res) => {
+  const me = await requireMaster(req, res);
+  if (!me) return;
+  const { name, city } = req.body;
+  if (!name) return res.status(400).json({ error: 'name obrigatório' });
+
+  const { data, error } = await supabase.from('stores').insert({
+    name, city: city || null, active: true, approved_by: req.body.requester_id,
+  }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 // POST /api/stores — gerente cria pedido de loja
 router.post('/', async (req, res) => {
   const { requester_id, name, city } = req.body;
