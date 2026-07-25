@@ -151,15 +151,18 @@ router.get('/roles', async (req, res) => {
 
 // POST /api/admin/roles — adiciona cargo customizado
 router.post('/roles', async (req, res) => {
-  const { requester_id, role_name } = req.body;
+  const { requester_id, role_name, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
 
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
   if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
   if (!role_name) return res.status(400).json({ error: 'role_name obrigatório' });
 
+  const targetCompany = me.access_level === 'master' ? bodyCompany : me.company;
+  if (!targetCompany) return res.status(400).json({ error: 'company obrigatório para master' });
+
   const { data, error } = await supabase.from('company_roles')
-    .upsert({ company: me.company, role_name: role_name.trim() }, { onConflict: 'company,role_name' })
+    .upsert({ company: targetCompany, role_name: role_name.trim() }, { onConflict: 'company,role_name' })
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -190,14 +193,17 @@ router.get('/sectors', async (req, res) => {
 
 // POST /api/admin/sectors
 router.post('/sectors', async (req, res) => {
-  const { requester_id, sector_name } = req.body;
+  const { requester_id, sector_name, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
   if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
   if (!sector_name) return res.status(400).json({ error: 'sector_name obrigatório' });
 
+  const targetCompany = me.access_level === 'master' ? bodyCompany : me.company;
+  if (!targetCompany) return res.status(400).json({ error: 'company obrigatório para master' });
+
   const { data, error } = await supabase.from('company_sectors')
-    .upsert({ company: me.company, sector_name: sector_name.trim() }, { onConflict: 'company,sector_name' })
+    .upsert({ company: targetCompany, sector_name: sector_name.trim() }, { onConflict: 'company,sector_name' })
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);

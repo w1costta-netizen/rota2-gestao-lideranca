@@ -328,13 +328,13 @@ export default function UsersAdmin({ userId, profile }) {
   const sectorItems = sectors.map(s => ({ id: s.id, name: s.sector_name }));
 
   const addRoleInline = async (name) => {
-    await api.post('/admin/roles', { requester_id: userId, role_name: name });
+    await api.post('/admin/roles', { requester_id: userId, role_name: name, company });
     await load();
     return name;
   };
 
   const addSectorInline = async (name) => {
-    await api.post('/admin/sectors', { requester_id: userId, sector_name: name });
+    await api.post('/admin/sectors', { requester_id: userId, sector_name: name, company });
     await load();
     return name;
   };
