@@ -95,6 +95,8 @@ input, select, textarea {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .nav-item {
