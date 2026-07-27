@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, access_level, sector, reports_to_list')
+    .select('id, full_name, access_level, sector, reports_to_list, avatar_url')
     .eq('company', targetCompany)
     .order('full_name');
 
@@ -39,7 +39,7 @@ router.put('/:id', async (req, res) => {
     .from('profiles')
     .update({ reports_to_list: reports_to_list || [] })
     .eq('id', req.params.id)
-    .select('id, full_name, access_level, sector, reports_to_list')
+    .select('id, full_name, access_level, sector, reports_to_list, avatar_url')
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
