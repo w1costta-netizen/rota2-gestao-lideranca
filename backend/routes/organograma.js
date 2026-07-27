@@ -19,7 +19,7 @@ router.get('/', async (req, res) => {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, access_level, sector, reports_to')
+    .select('id, full_name, access_level, sector, reports_to_list')
     .eq('company', targetCompany)
     .order('full_name');
 
@@ -27,9 +27,9 @@ router.get('/', async (req, res) => {
   res.json(data || []);
 });
 
-// PUT /api/organograma/:id  — define a quem um colaborador reporta
+// PUT /api/organograma/:id  — define lista de líderes de um colaborador
 router.put('/:id', async (req, res) => {
-  const { requester_id, reports_to } = req.body;
+  const { requester_id, reports_to_list } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me || !['admin','master'].includes(me.access_level))
@@ -37,9 +37,9 @@ router.put('/:id', async (req, res) => {
 
   const { data, error } = await supabase
     .from('profiles')
-    .update({ reports_to: reports_to || null })
+    .update({ reports_to_list: reports_to_list || [] })
     .eq('id', req.params.id)
-    .select('id, full_name, access_level, sector, reports_to')
+    .select('id, full_name, access_level, sector, reports_to_list')
     .single();
 
   if (error) return res.status(500).json({ error: error.message });

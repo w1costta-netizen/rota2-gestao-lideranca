@@ -34,10 +34,11 @@ router.get('/', async (req, res) => {
   if (!['admin','master'].includes(me.access_level)) {
     const { data: teamMembers } = await supabase
       .from('profiles')
-      .select('id')
-      .eq('reports_to', requester_id)
+      .select('id, reports_to_list')
       .eq('company', targetCompany);
-    teamIds = (teamMembers || []).map(m => m.id);
+    teamIds = (teamMembers || [])
+      .filter(m => Array.isArray(m.reports_to_list) && m.reports_to_list.includes(requester_id))
+      .map(m => m.id);
   }
 
   let query = supabase
