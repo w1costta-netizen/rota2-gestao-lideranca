@@ -18,6 +18,9 @@ router.get('/', async (req, res) => {
 
   const targetCompany = me.access_level === 'master' ? queryCompany : me.company;
 
+  // Master sem loja selecionada → retorna lista vazia
+  if (me.access_level === 'master' && !targetCompany) return res.json([]);
+
   let query = supabase
     .from('tarefas')
     .select('*, assigned:assigned_to(id,full_name,sector), creator:created_by(full_name)')

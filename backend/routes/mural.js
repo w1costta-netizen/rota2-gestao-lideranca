@@ -15,6 +15,7 @@ router.get('/', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
   const targetCompany = me.access_level === 'master' ? queryCompany : me.company;
+  if (me.access_level === 'master' && !targetCompany) return res.json([]);
 
   const { data, error } = await supabase
     .from('mural')
