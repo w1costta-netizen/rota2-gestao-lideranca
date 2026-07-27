@@ -99,9 +99,59 @@ router.put('/:id', async (req, res) => {
   if (isManager(me) && assigned_to) updates.assigned_to = assigned_to;
   if (status) updates.status = status;
 
+  // Notifica criador quando tarefa é concluída por outra pessoa
+  if (status === 'concluida') {
+    const { data: taskFull } = await supabase.from('tarefas').select('created_by, title').eq('id', req.params.id).single();
+    if (taskFull && taskFull.created_by && taskFull.created_by !== requester_id) {
+      sendPushToUsers([taskFull.created_by], {
+        title: '✅ Tarefa concluída',
+        body: (taskFull.title || '').slice(0, 80),
+        page: 'tarefas',
+      }).catch(() => {});
+    }
+  }
+
   const { data, error } = await supabase.from('tarefas').update(updates).eq('id', req.params.id)
     .select('*, assigned:assigned_to(id,full_name,sector), creator:created_by(full_name)').single();
   if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// GET /api/tarefas/:id/comentarios
+router.get('/:id/comentarios', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const { data, error } = await supabase
+    .from('tarefa_comentarios')
+    .select('*, author:user_id(full_name)')
+    .eq('tarefa_id', req.params.id)
+    .order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+// POST /api/tarefas/:id/comentarios
+router.post('/:id/comentarios', async (req, res) => {
+  const { requester_id, text } = req.body;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  if (!text?.trim()) return res.status(400).json({ error: 'text obrigatório' });
+  const { data, error } = await supabase
+    .from('tarefa_comentarios')
+    .insert({ tarefa_id: req.params.id, user_id: requester_id, text: text.trim() })
+    .select('*, author:user_id(full_name)')
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Notifica responsável da tarefa
+  const { data: task } = await supabase.from('tarefas').select('assigned_to, title, created_by').eq('id', req.params.id).single();
+  const notify = [...new Set([task?.assigned_to, task?.created_by].filter(id => id && id !== requester_id))];
+  if (notify.length) {
+    sendPushToUsers(notify, {
+      title: '💬 Novo comentário na tarefa',
+      body: text.trim().slice(0, 80),
+      page: 'tarefas',
+    }).catch(() => {});
+  }
   res.json(data);
 });
 
