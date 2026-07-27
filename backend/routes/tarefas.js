@@ -9,7 +9,17 @@ async function getProfile(id) {
 }
 const isManager = p => p && ['admin','supervisor','master'].includes(p.access_level);
 
-// GET /api/tarefas?requester_id=&company=
+function nextDueDate(due_date, recorrencia) {
+  if (!due_date || !recorrencia || recorrencia === 'nenhuma') return null;
+  const d = new Date(due_date + 'T12:00:00');
+  if (recorrencia === 'diaria')     d.setDate(d.getDate() + 1);
+  if (recorrencia === 'semanal')    d.setDate(d.getDate() + 7);
+  if (recorrencia === 'quinzenal')  d.setDate(d.getDate() + 15);
+  if (recorrencia === 'mensal')     d.setMonth(d.getMonth() + 1);
+  return d.toISOString().split('T')[0];
+}
+
+// GET /api/tarefas
 router.get('/', async (req, res) => {
   const { requester_id, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
@@ -17,9 +27,18 @@ router.get('/', async (req, res) => {
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
   const targetCompany = me.access_level === 'master' ? queryCompany : me.company;
-
-  // Master sem loja selecionada → retorna lista vazia
   if (me.access_level === 'master' && !targetCompany) return res.json([]);
+
+  // Busca membros do time que reportam ao usuário (para líderes)
+  let teamIds = [];
+  if (!['admin','master'].includes(me.access_level)) {
+    const { data: teamMembers } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('reports_to', requester_id)
+      .eq('company', targetCompany);
+    teamIds = (teamMembers || []).map(m => m.id);
+  }
 
   let query = supabase
     .from('tarefas')
@@ -28,12 +47,15 @@ router.get('/', async (req, res) => {
     .order('created_at', { ascending: false });
 
   if (me.access_level === 'admin' || me.access_level === 'master') {
-    // Admin e master veem tudo da empresa
+    // vê tudo da empresa
   } else if (me.access_level === 'supervisor') {
-    // Supervisor vê tarefas atribuídas a ele + tarefas que ele criou/delegou
-    query = query.or(`assigned_to.eq.${requester_id},created_by.eq.${requester_id}`);
+    const ids = [requester_id, ...teamIds];
+    query = query.in('assigned_to', ids);
+  } else if (teamIds.length > 0) {
+    // lider com time: vê próprias + do time
+    const ids = [requester_id, ...teamIds];
+    query = query.in('assigned_to', ids);
   } else {
-    // Lider/colaborador vê apenas as tarefas atribuídas a ele
     query = query.eq('assigned_to', requester_id);
   }
 
@@ -44,28 +66,32 @@ router.get('/', async (req, res) => {
 
 // POST /api/tarefas
 router.post('/', async (req, res) => {
-  const { requester_id, title, description, assigned_to, due_date, priority, company: bodyCompany } = req.body;
+  const { requester_id, title, description, assigned_to, due_date, due_time, priority, company: bodyCompany, recorrencia, tags } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
-  // Não-admin só pode criar tarefa para si mesmo
-  if (!isManager(me) && me.access_level !== 'master' && assigned_to && assigned_to !== requester_id)
+  if (!isManager(me) && assigned_to && assigned_to !== requester_id)
     return res.status(403).json({ error: 'Você só pode criar tarefas para você mesmo' });
   if (!title) return res.status(400).json({ error: 'title obrigatório' });
+
   const finalAssignee = assigned_to || requester_id;
   const targetCompany = me.access_level === 'master' ? bodyCompany : me.company;
 
   const { data, error } = await supabase.from('tarefas').insert({
-    company: targetCompany, title: title.trim(),
+    company:     targetCompany,
+    title:       title.trim(),
     description: description?.trim() || '',
-    assigned_to: finalAssignee, created_by: requester_id,
-    due_date: due_date || null,
-    priority: priority || 'normal',
+    assigned_to: finalAssignee,
+    created_by:  requester_id,
+    due_date:    due_date || null,
+    due_time:    due_time || null,
+    priority:    priority || 'normal',
+    recorrencia: recorrencia || 'nenhuma',
+    tags:        tags || [],
   }).select('*, assigned:assigned_to(id,full_name,sector), creator:created_by(full_name)').single();
 
   if (error) return res.status(500).json({ error: error.message });
 
-  // Notifica o destinatário se for diferente de quem criou
   if (data.assigned_to && data.assigned_to !== requester_id) {
     sendPushToUsers([data.assigned_to], {
       title: '📋 Nova tarefa atribuída',
@@ -79,35 +105,57 @@ router.post('/', async (req, res) => {
 
 // PUT /api/tarefas/:id
 router.put('/:id', async (req, res) => {
-  const { requester_id, title, description, assigned_to, due_date, priority, status } = req.body;
+  const { requester_id, title, description, assigned_to, due_date, due_time, priority, status, recorrencia, tags } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Acesso negado' });
 
-  // Verifica se é dono da tarefa (criou para si mesmo)
-  const { data: task } = await supabase.from('tarefas').select('created_by, assigned_to').eq('id', req.params.id).single();
+  const { data: task } = await supabase
+    .from('tarefas')
+    .select('created_by, assigned_to, title, due_date, due_time, recorrencia, tags, company, description, priority')
+    .eq('id', req.params.id).single();
+
   const isOwner = task?.created_by === requester_id && task?.assigned_to === requester_id;
 
   const updates = { updated_at: new Date().toISOString() };
-  // Admin edita tudo; dono da tarefa edita tudo exceto atribuição; outros só mudam status
   if (isManager(me) || isOwner) {
-    if (title)       updates.title       = title.trim();
+    if (title !== undefined)       updates.title       = title.trim();
     if (description !== undefined) updates.description = description?.trim() || '';
-    if (due_date !== undefined) updates.due_date = due_date || null;
-    if (priority)    updates.priority    = priority;
+    if (due_date !== undefined)    updates.due_date    = due_date || null;
+    if (due_time !== undefined)    updates.due_time    = due_time || null;
+    if (priority)                  updates.priority    = priority;
+    if (recorrencia !== undefined) updates.recorrencia = recorrencia;
+    if (tags !== undefined)        updates.tags        = tags;
   }
   if (isManager(me) && assigned_to) updates.assigned_to = assigned_to;
   if (status) updates.status = status;
 
-  // Notifica criador quando tarefa é concluída por outra pessoa
-  if (status === 'concluida') {
-    const { data: taskFull } = await supabase.from('tarefas').select('created_by, title').eq('id', req.params.id).single();
-    if (taskFull && taskFull.created_by && taskFull.created_by !== requester_id) {
-      sendPushToUsers([taskFull.created_by], {
-        title: '✅ Tarefa concluída',
-        body: (taskFull.title || '').slice(0, 80),
-        page: 'tarefas',
-      }).catch(() => {});
+  // Notifica criador quando concluída
+  if (status === 'concluida' && task?.created_by && task.created_by !== requester_id) {
+    sendPushToUsers([task.created_by], {
+      title: '✅ Tarefa concluída',
+      body: (task.title || '').slice(0, 80),
+      page: 'tarefas',
+    }).catch(() => {});
+  }
+
+  // Recorrência: ao concluir, cria próxima instância automaticamente
+  if (status === 'concluida' && task?.recorrencia && task.recorrencia !== 'nenhuma') {
+    const proxData = nextDueDate(task.due_date, task.recorrencia);
+    if (proxData) {
+      supabase.from('tarefas').insert({
+        company:     task.company,
+        title:       task.title,
+        description: task.description,
+        assigned_to: task.assigned_to,
+        created_by:  task.created_by,
+        due_date:    proxData,
+        due_time:    task.due_time,
+        priority:    task.priority,
+        recorrencia: task.recorrencia,
+        tags:        task.tags || [],
+        status:      'pendente',
+      }).then(() => {}).catch(() => {});
     }
   }
 
@@ -138,11 +186,9 @@ router.post('/:id/comentarios', async (req, res) => {
   const { data, error } = await supabase
     .from('tarefa_comentarios')
     .insert({ tarefa_id: req.params.id, user_id: requester_id, text: text.trim() })
-    .select('*, author:user_id(full_name)')
-    .single();
+    .select('*, author:user_id(full_name)').single();
   if (error) return res.status(500).json({ error: error.message });
 
-  // Notifica responsável da tarefa
   const { data: task } = await supabase.from('tarefas').select('assigned_to, title, created_by').eq('id', req.params.id).single();
   const notify = [...new Set([task?.assigned_to, task?.created_by].filter(id => id && id !== requester_id))];
   if (notify.length) {
@@ -161,7 +207,6 @@ router.delete('/:id', async (req, res) => {
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Acesso negado' });
-  // Verifica se é o dono (criou para si mesmo)
   const { data: task } = await supabase.from('tarefas').select('created_by, assigned_to').eq('id', req.params.id).single();
   const isOwner = task?.created_by === requester_id && task?.assigned_to === requester_id;
   if (!isManager(me) && !isOwner) return res.status(403).json({ error: 'Acesso negado' });
