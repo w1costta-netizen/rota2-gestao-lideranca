@@ -4,8 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 const API = import.meta.env.VITE_API_URL || '/api';
 
 export default function Estoque() {
-  const { effectiveProfile } = useAuth();
-  const company = effectiveProfile?.company || '';
+  const { profile } = useAuth();
+  const company = profile?.company || '';
   const src = `/estoque-final-v4.html?company=${encodeURIComponent(company)}&api=${encodeURIComponent(API)}`;
   return (
     <iframe
