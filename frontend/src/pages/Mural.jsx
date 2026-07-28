@@ -81,8 +81,13 @@ export default function Mural({ userId, profile }) {
       const { data } = await api.post('/reacoes/toggle', { tipo: 'mural', item_id: itemId, user_id: userId, emoji });
       setReacoes(prev => {
         const item = { ...(prev[itemId] || {}) };
+        // Remove reação anterior (se trocou de emoji)
+        if (data.old_emoji && data.old_emoji !== emoji) {
+          const old = item[data.old_emoji] || { count: 0, mine: false };
+          item[data.old_emoji] = { count: Math.max(0, old.count - 1), mine: false };
+        }
         if (!item[emoji]) item[emoji] = { count: 0, mine: false };
-        if (data.action === 'added') {
+        if (data.action === 'added' || data.action === 'changed') {
           item[emoji] = { count: item[emoji].count + 1, mine: true };
         } else {
           item[emoji] = { count: Math.max(0, item[emoji].count - 1), mine: false };

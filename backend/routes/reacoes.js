@@ -3,31 +3,64 @@ const router  = express.Router();
 const supabase = require('../supabase');
 
 // POST /api/reacoes/toggle
+// Regra: 1 reação por usuário por item. Trocar emoji remove o anterior.
 // body: { tipo, item_id, user_id, emoji }
 router.post('/toggle', async (req, res) => {
   const { tipo, item_id, user_id, emoji } = req.body;
   if (!tipo || !item_id || !user_id || !emoji)
     return res.status(400).json({ error: 'tipo, item_id, user_id e emoji são obrigatórios' });
 
-  // Verifica se já existe
+  // Busca qualquer reação existente desse usuário nesse item
   const { data: existing } = await supabase
     .from('reacoes')
-    .select('id')
+    .select('id, emoji')
     .eq('tipo', tipo)
     .eq('item_id', item_id)
     .eq('user_id', user_id)
-    .eq('emoji', emoji)
-    .single();
+    .maybeSingle();
 
   if (existing) {
-    // Remover
+    // Remove a reação atual
     await supabase.from('reacoes').delete().eq('id', existing.id);
-    return res.json({ action: 'removed' });
+
+    if (existing.emoji === emoji) {
+      // Mesmo emoji → apenas remove (toggle off)
+      return res.json({ action: 'removed', old_emoji: emoji });
+    } else {
+      // Emoji diferente → remove o antigo e adiciona o novo
+      await supabase.from('reacoes').insert({ tipo, item_id, user_id, emoji });
+      return res.json({ action: 'changed', old_emoji: existing.emoji });
+    }
   } else {
-    // Adicionar
+    // Nenhuma reação ainda → adiciona
     await supabase.from('reacoes').insert({ tipo, item_id, user_id, emoji });
     return res.json({ action: 'added' });
   }
+});
+
+// GET /api/reacoes/quem?tipo=mural&item_id=xxx&emoji=👍
+// Retorna lista de nomes que reagiram com esse emoji
+router.get('/quem', async (req, res) => {
+  const { tipo, item_id, emoji } = req.query;
+  if (!tipo || !item_id || !emoji) return res.json([]);
+
+  const { data: rows } = await supabase
+    .from('reacoes')
+    .select('user_id')
+    .eq('tipo', tipo)
+    .eq('item_id', item_id)
+    .eq('emoji', emoji);
+
+  if (!rows || rows.length === 0) return res.json([]);
+
+  const userIds = rows.map(r => r.user_id);
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('full_name')
+    .in('id', userIds);
+
+  const nomes = (profiles || []).map(p => p.full_name).filter(Boolean);
+  res.json(nomes);
 });
 
 // GET /api/reacoes?tipo=mural&item_ids=id1,id2&user_id=xxx
@@ -47,7 +80,6 @@ router.get('/', async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  // Agrupa por item_id → emoji → { count, mine }
   const result = {};
   for (const row of data || []) {
     if (!result[row.item_id]) result[row.item_id] = {};
@@ -57,24 +89,6 @@ router.get('/', async (req, res) => {
   }
 
   res.json(result);
-});
-
-// GET /api/reacoes/quem?tipo=mural&item_id=xxx&emoji=👍
-// Retorna lista de nomes que reagiram com esse emoji
-router.get('/quem', async (req, res) => {
-  const { tipo, item_id, emoji } = req.query;
-  if (!tipo || !item_id || !emoji) return res.json([]);
-
-  const { data, error } = await supabase
-    .from('reacoes')
-    .select('user_id, profiles:user_id(full_name)')
-    .eq('tipo', tipo)
-    .eq('item_id', item_id)
-    .eq('emoji', emoji);
-
-  if (error) return res.status(500).json({ error: error.message });
-  const nomes = (data || []).map(r => r.profiles?.full_name || 'Usuário').filter(Boolean);
-  res.json(nomes);
 });
 
 module.exports = router;
