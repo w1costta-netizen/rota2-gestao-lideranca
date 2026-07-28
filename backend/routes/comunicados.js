@@ -82,7 +82,7 @@ router.put('/:id', async (req, res) => {
   const { requester_id, title, body, priority } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!me || !['admin', 'supervisor'].includes(me.access_level))
+  if (!me || !['admin', 'supervisor', 'master'].includes(me.access_level))
     return res.status(403).json({ error: 'Acesso negado' });
 
   const updates = {};
@@ -100,7 +100,7 @@ router.delete('/:id', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!me || !['admin', 'supervisor'].includes(me.access_level))
+  if (!me || !['admin', 'supervisor', 'master'].includes(me.access_level))
     return res.status(403).json({ error: 'Acesso negado' });
 
   const { error } = await supabase.from('comunicados').update({ active: false }).eq('id', req.params.id);
