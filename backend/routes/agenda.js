@@ -67,9 +67,9 @@ router.post('/', async (req, res) => {
   const pushPayload = {
     title: '📅 Agenda atualizada',
     body: `${title}${time ? ' às ' + time : ''} — ${dayLabel[day_of_week] || day_of_week}`,
-    url: '/',
+    page: 'agenda',
   };
-  if (company) sendPushToTargets({ targetType: target_type, targetValue: target_value, company, payload: pushPayload });
+  if (company) sendPushToTargets({ targetType: target_type, targetValue: target_value, company, payload: pushPayload }).catch(() => {});
 
   res.status(201).json(data);
 });
@@ -92,9 +92,9 @@ router.put('/:id', async (req, res) => {
   const pushPayload = {
     title: '📅 Agenda alterada',
     body: `${title}${time ? ' às ' + time : ''} — ${dayLabel[day_of_week] || day_of_week}`,
-    url: '/',
+    page: 'agenda',
   };
-  if (company) sendPushToTargets({ targetType: target_type, targetValue: target_value, company, payload: pushPayload });
+  if (company) sendPushToTargets({ targetType: target_type, targetValue: target_value, company, payload: pushPayload }).catch(() => {});
 
   res.json(data);
 });
