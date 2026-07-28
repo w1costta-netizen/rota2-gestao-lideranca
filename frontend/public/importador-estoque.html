@@ -356,7 +356,10 @@ async function processFile(file){
   const sem4s         = ativos.filter(r=>r.total_4s===0);
   const giro_lento    = ativos.filter(r=>r.sum_VENDA_MEDIA&&r.dias_cobertura>=45).sort((a,b)=>b.sum_VALOR_ESTOQUE_LOJA_A_CUSTO-a.sum_VALOR_ESTOQUE_LOJA_A_CUSTO);
   const estq_neg      = items.filter(r=>r.sum_ESTOQUE_ON_HAND_LOJA_QTD<0);
-  const suspensos_est = com_estoque.filter(r=>r.STATUS_REAL==='Suspenso');
+  const suspensos_est  = com_estoque.filter(r=>r.STATUS_REAL==='Suspenso');
+  const deletados_est  = com_estoque.filter(r=>r.STATUS_REAL==='Deletado');
+  const ativos_zer_lst = items.filter(r=>r.STATUS_REAL==='Ativo'&&r.sum_ESTOQUE_ON_HAND_LOJA_QTD===0);
+  const sem_mov        = ativos_zer_lst.filter(r=>!(r.sum_QTD_VENDAS_MES_ATUAL>0));
 
   const sum = (arr,k) => arr.reduce((a,r)=>a+(r[k]||0),0);
 
@@ -399,9 +402,15 @@ async function processFile(file){
       sem4s_custo:       Math.round(sum(sem4s,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO')*100)/100,
       giro_lento_count:  giro_lento.length,
       giro_lento_custo:  Math.round(sum(giro_lento,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO')*100)/100,
-      estq_neg_count:    estq_neg.length,
-      suspensos_count:   suspensos_est.length,
-      suspensos_custo:   Math.round(sum(suspensos_est,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO')*100)/100,
+      estq_neg_count:        estq_neg.length,
+      suspensos_count:       suspensos_est.length,
+      suspensos_custo:       Math.round(sum(suspensos_est,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO')*100)/100,
+      suspensos_com_estoque: suspensos_est.length,
+      deletados_com_estoque: deletados_est.length,
+      deletados_custo:       Math.round(sum(deletados_est,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO')*100)/100,
+      ativos_zerados:        ativos_zer_lst.length,
+      ativos_com_estoque:    ativos.length,
+      com_estoque:           com_estoque.length,
     },
     secao_ruptura:    bySecaoQtd(ruptura),
     secao_urgente:    bySecao(urgente,'sum_ESTOQUE_ON_HAND_LOJA_QTD'),
@@ -415,21 +424,31 @@ async function processFile(file){
     sem4s_top:    topN(sem4s,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
     giro_lento_top: topN(giro_lento,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
     estq_neg_top: topN([...estq_neg].sort((a,b)=>a.sum_ESTOQUE_ON_HAND_LOJA_QTD-b.sum_ESTOQUE_ON_HAND_LOJA_QTD),'sum_ESTOQUE_ON_HAND_LOJA_QTD',true),
-    suspensos_top:topN(suspensos_est,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
+    suspensos_top:  topN(suspensos_est,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
+    deletados_top:  topN(deletados_est,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
+    sem_mov_top:    topN(sem_mov,'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
+    dep_suspensos:  bySecao(suspensos_est),
+    dep_aging:      bySecao(aging),
+    dep_sem4s:      bySecao(sem4s),
+    status_com_estoque: (()=>{
+      const m={};
+      for(const r of com_estoque){
+        const s=r.STATUS_REAL||'Desconhecido';
+        if(!m[s]) m[s]={STATUS_REAL:s,itens:0,custo_total:0};
+        m[s].itens++; m[s].custo_total+=(r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO||0);
+      }
+      return Object.values(m).sort((a,b)=>b.custo_total-a.custo_total);
+    })(),
   };
 
   setStatus('st-calc','ok','Indicadores calculados');
 
   // ─── Salvar no localStorage (substitui anterior) ───
   setStatus('st-salvo','spin','Salvando dados…');
+  const lastImport = { arquivo: file.name, data: dataStr, linhas: items.length };
   try{
     localStorage.setItem('rota2_payload', JSON.stringify(payload));
-    localStorage.setItem('rota2_last_import', JSON.stringify({
-      arquivo: file.name,
-      data: dataStr,
-      linhas: items.length
-    }));
-    setStatus('st-salvo','ok','Dados salvos com sucesso — planilha anterior substituída');
+    localStorage.setItem('rota2_last_import', JSON.stringify(lastImport));
   }catch(e){
     if(e.name==='QuotaExceededError'){
       setStatus('st-salvo','err','Arquivo muito grande para o armazenamento local. Tente reduzir o tamanho da extração.');
@@ -437,6 +456,25 @@ async function processFile(file){
     }
     setStatus('st-salvo','err','Erro ao salvar: '+e.message);
     return;
+  }
+
+  // ─── Sincronizar com Supabase via backend (multi-dispositivo) ───
+  const _params = new URLSearchParams(location.search);
+  const _company = _params.get('company');
+  const _api     = _params.get('api') || '/api';
+  if(_company){
+    try{
+      await fetch(_api+'/estoque/payload',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ company:_company, payload }),
+      });
+      setStatus('st-salvo','ok','Dados salvos e sincronizados com todos os dispositivos ✓');
+    }catch(e2){
+      setStatus('st-salvo','ok','Dados salvos localmente (sincronização indisponível)');
+    }
+  } else {
+    setStatus('st-salvo','ok','Dados salvos com sucesso — planilha anterior substituída');
   }
 
   // ─── Resumo visual ───

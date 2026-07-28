@@ -1,0 +1,34 @@
+const express = require('express');
+const router  = express.Router();
+const supabase = require('../supabase');
+
+// POST /api/estoque/payload — salva payload do importador (sync entre dispositivos)
+router.post('/payload', async (req, res) => {
+  const { company, payload } = req.body;
+  if (!company || !payload) return res.status(400).json({ error: 'company e payload obrigatórios' });
+
+  const { error } = await supabase
+    .from('estoque_payloads')
+    .upsert({ company, payload, updated_at: new Date().toISOString() }, { onConflict: 'company' });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// GET /api/estoque/payload?company=xxx — retorna último payload salvo
+router.get('/payload', async (req, res) => {
+  const { company } = req.query;
+  if (!company) return res.status(400).json({ error: 'company obrigatório' });
+
+  const { data, error } = await supabase
+    .from('estoque_payloads')
+    .select('payload, updated_at')
+    .eq('company', company)
+    .single();
+
+  if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
+  if (!data) return res.json({ payload: null });
+  res.json({ payload: data.payload, updated_at: data.updated_at });
+});
+
+module.exports = router;
