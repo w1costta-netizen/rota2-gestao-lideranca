@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Plus, Pencil, Trash2, LayoutList } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
@@ -12,8 +12,40 @@ const CATEGORIES = [
 ];
 
 const EMPTY = { title: '', content: '', category: 'geral' };
+const EMOJIS = ['👍', '✅', '❤️', '😮', '🎯'];
 
 function getCat(key) { return CATEGORIES.find(c => c.key === key) || CATEGORIES[3]; }
+
+function ReacaoBar({ itemId, userId, reacoes, onToggle }) {
+  return (
+    <div style={{ display:'flex', gap:6, flexWrap:'wrap', paddingTop:10, borderTop:'1px solid var(--border)', marginTop:4 }}>
+      {EMOJIS.map(emoji => {
+        const info = reacoes?.[emoji];
+        const count = info?.count || 0;
+        const mine  = info?.mine  || false;
+        return (
+          <button
+            key={emoji}
+            onClick={() => onToggle(itemId, emoji)}
+            title={mine ? 'Remover reação' : 'Reagir'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '4px 10px', borderRadius: 20, fontSize: 13,
+              cursor: 'pointer', transition: 'all .15s',
+              border: mine ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
+              background: mine ? 'var(--primary-subtle, rgba(99,102,241,.12))' : 'transparent',
+              color: mine ? 'var(--primary)' : 'var(--text-muted)',
+              fontWeight: mine ? 700 : 400,
+            }}
+          >
+            <span>{emoji}</span>
+            {count > 0 && <span style={{ fontSize: 11 }}>{count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function Mural({ userId, profile }) {
   const toast = useToast();
@@ -25,19 +57,28 @@ export default function Mural({ userId, profile }) {
   const [form, setForm]       = useState(EMPTY);
   const [saving, setSaving]   = useState(false);
   const [filter, setFilter]   = useState('todas');
+  const [reacoes, setReacoes] = useState({});
 
   const company = profile?.company || '';
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     const q = company ? `&company=${encodeURIComponent(company)}` : '';
     api.get(`/mural?requester_id=${userId}${q}`)
-      .then(r => setList(r.data))
+      .then(r => {
+        setList(r.data);
+        if (r.data.length > 0) {
+          const ids = r.data.map(m => m.id).join(',');
+          api.get(`/reacoes?tipo=mural&item_ids=${ids}&user_id=${userId}`)
+            .then(rr => setReacoes(rr.data))
+            .catch(() => {});
+        }
+      })
       .catch(() => toast('Erro ao carregar mural'))
       .finally(() => setLoading(false));
-  };
+  }, [userId, company]);
 
-  useEffect(() => { load(); }, [userId, company]);
+  useEffect(() => { load(); }, [load]);
 
   const openNew  = () => { setEditing(null); setForm(EMPTY); setModal(true); };
   const openEdit = (m) => { setEditing(m.id); setForm({ title:m.title, content:m.content, category:m.category }); setModal(true); };
@@ -64,6 +105,22 @@ export default function Mural({ userId, profile }) {
     await api.delete(`/mural/${id}?requester_id=${userId}`).catch(() => toast('Erro'));
     setList(l => l.filter(m => m.id !== id));
     toast('Card removido');
+  };
+
+  const toggleReacao = async (itemId, emoji) => {
+    try {
+      const { data } = await api.post('/reacoes/toggle', { tipo: 'mural', item_id: itemId, user_id: userId, emoji });
+      setReacoes(prev => {
+        const item = { ...(prev[itemId] || {}) };
+        if (!item[emoji]) item[emoji] = { count: 0, mine: false };
+        if (data.action === 'added') {
+          item[emoji] = { count: item[emoji].count + 1, mine: true };
+        } else {
+          item[emoji] = { count: Math.max(0, item[emoji].count - 1), mine: false };
+        }
+        return { ...prev, [itemId]: item };
+      });
+    } catch { toast('Erro ao reagir'); }
   };
 
   const filtered = filter === 'todas' ? list : list.filter(m => m.category === filter);
@@ -140,10 +197,15 @@ export default function Mural({ userId, profile }) {
               <div style={{ fontSize:13, color:'var(--text-muted)', lineHeight:1.7, whiteSpace:'pre-wrap' }}>
                 {m.content}
               </div>
-              <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:'auto', paddingTop:8,
-                borderTop:'1px solid var(--border)' }}>
+              <div style={{ fontSize:11, color:'var(--text-muted)', paddingBottom:4 }}>
                 {m.creator?.full_name || 'Gestor'}
               </div>
+              <ReacaoBar
+                itemId={m.id}
+                userId={userId}
+                reacoes={reacoes[m.id]}
+                onToggle={toggleReacao}
+              />
             </div>
           );
         })}

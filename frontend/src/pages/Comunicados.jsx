@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Megaphone } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 
 const EMPTY = { title: '', body: '', priority: 'normal' };
+const EMOJIS = ['👍', '✅', '❤️', '😮', '🎯'];
 
 function timeAgo(dateStr) {
   const diff = Math.floor((Date.now() - new Date(dateStr)) / 1000);
@@ -12,6 +13,40 @@ function timeAgo(dateStr) {
   if (diff < 3600) return `${Math.floor(diff/60)}min atrás`;
   if (diff < 86400) return `${Math.floor(diff/3600)}h atrás`;
   return `${Math.floor(diff/86400)}d atrás`;
+}
+
+function ReacaoBar({ itemId, userId, reacoes, onToggle }) {
+  return (
+    <div
+      style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:10 }}
+      onClick={e => e.stopPropagation()}
+    >
+      {EMOJIS.map(emoji => {
+        const info = reacoes?.[emoji];
+        const count = info?.count || 0;
+        const mine  = info?.mine  || false;
+        return (
+          <button
+            key={emoji}
+            onClick={() => onToggle(itemId, emoji)}
+            title={mine ? 'Remover reação' : 'Reagir'}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 4,
+              padding: '4px 10px', borderRadius: 20, fontSize: 13,
+              cursor: 'pointer', transition: 'all .15s',
+              border: mine ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
+              background: mine ? 'var(--primary-subtle, rgba(99,102,241,.12))' : 'transparent',
+              color: mine ? 'var(--primary)' : 'var(--text-muted)',
+              fontWeight: mine ? 700 : 400,
+            }}
+          >
+            <span>{emoji}</span>
+            {count > 0 && <span style={{ fontSize: 11 }}>{count}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 export default function Comunicados({ userId, profile }) {
@@ -24,19 +59,28 @@ export default function Comunicados({ userId, profile }) {
   const [form, setForm]       = useState(EMPTY);
   const [saving, setSaving]   = useState(false);
   const [deleting, setDeleting] = useState(null);
+  const [reacoes, setReacoes] = useState({});
 
   const company = profile?.company || '';
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true);
     const q = company ? `&company=${encodeURIComponent(company)}` : '';
     api.get(`/comunicados?requester_id=${userId}${q}`)
-      .then(r => setList(r.data))
+      .then(r => {
+        setList(r.data);
+        if (r.data.length > 0) {
+          const ids = r.data.map(c => c.id).join(',');
+          api.get(`/reacoes?tipo=comunicado&item_ids=${ids}&user_id=${userId}`)
+            .then(rr => setReacoes(rr.data))
+            .catch(() => {});
+        }
+      })
       .catch(() => toast('Erro ao carregar comunicados'))
       .finally(() => setLoading(false));
-  };
+  }, [userId, company]);
 
-  useEffect(() => { load(); }, [userId, company]);
+  useEffect(() => { load(); }, [load]);
 
   const openNew  = () => { setEditing(null); setForm(EMPTY); setModal(true); };
   const openEdit = (c) => { setEditing(c.id); setForm({ title: c.title, body: c.body, priority: c.priority }); setModal(true); };
@@ -71,6 +115,22 @@ export default function Comunicados({ userId, profile }) {
   const marcarLido = async (id) => {
     await api.post(`/comunicados/${id}/lido`, { user_id: userId }).catch(() => {});
     setList(l => l.map(c => c.id === id ? { ...c, lido: true } : c));
+  };
+
+  const toggleReacao = async (itemId, emoji) => {
+    try {
+      const { data } = await api.post('/reacoes/toggle', { tipo: 'comunicado', item_id: itemId, user_id: userId, emoji });
+      setReacoes(prev => {
+        const item = { ...(prev[itemId] || {}) };
+        if (!item[emoji]) item[emoji] = { count: 0, mine: false };
+        if (data.action === 'added') {
+          item[emoji] = { count: item[emoji].count + 1, mine: true };
+        } else {
+          item[emoji] = { count: Math.max(0, item[emoji].count - 1), mine: false };
+        }
+        return { ...prev, [itemId]: item };
+      });
+    } catch { toast('Erro ao reagir'); }
   };
 
   const naoLidos = list.filter(c => !c.lido).length;
@@ -136,6 +196,12 @@ export default function Comunicados({ userId, profile }) {
                 <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:8 }}>
                   Publicado por {c.profiles?.full_name || 'Gestor'}
                 </div>
+                <ReacaoBar
+                  itemId={c.id}
+                  userId={userId}
+                  reacoes={reacoes[c.id]}
+                  onToggle={toggleReacao}
+                />
               </div>
               {isAdmin && (
                 <div style={{ display:'flex', gap:6, flexShrink:0 }} onClick={e => e.stopPropagation()}>
