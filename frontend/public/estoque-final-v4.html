@@ -323,46 +323,40 @@ const _qp=new URLSearchParams(location.search);
 const _co=_qp.get('company');
 const _ap=_qp.get('api')||'/api';
 
-// ─── Indicador de sync (canto inferior esquerdo, não bloqueia nada) ───
-const _syncBadge=document.createElement('div');
-_syncBadge.style.cssText='position:fixed;bottom:10px;left:14px;font-size:11px;padding:4px 10px;border-radius:6px;z-index:9999;pointer-events:none;transition:opacity .5s;';
-document.body.appendChild(_syncBadge);
-function _badge(msg,color){_syncBadge.style.background=color;_syncBadge.style.color='#fff';_syncBadge.style.opacity='1';_syncBadge.textContent=msg;}
-function _badgeFade(){setTimeout(()=>{_syncBadge.style.opacity='0';},3000);}
-
-// ─── Renderiza com dados locais imediatamente (sem espera) ───
-function _safeRender(data){
-  try{renderAll(data);}catch(e){console.error('Estoque render error:',e);}
-}
+// ─── Renderiza UMA vez com dados locais (sem espera, sem re-render) ───
 const _localData=(()=>{const _s=localStorage.getItem('rota2_payload');return _s?JSON.parse(_s):JSON.parse(document.getElementById('dp').textContent);})();
-_safeRender(_localData);
+try{renderAll(_localData);}catch(e){console.error('Estoque render error:',e);}
 
-// ─── Busca backend em background (sem bloquear UI, sem timeout curto) ───
-// Render free tier pode demorar 50s+ no cold start — não bloqueamos a tela
+// ─── Sync em background: detecta dado novo → salva localStorage → reload ───
+// reload() no iframe é rápido (lê do localStorage) e evita event listeners duplicados
 let _lastKey=null;
 async function _syncBackend(){
   if(!_co) return;
-  _badge('↻ Sincronizando…','#333');
   try{
     const _r=await fetch(`${_ap}/estoque/payload?company=${encodeURIComponent(_co)}`);
     const _j=await _r.json();
-    if(!_j||!_j.payload){_syncBadge.style.opacity='0';return;}
-    const newKey=_j.updated_at||_j.payload.gerado_em;
-    localStorage.setItem('rota2_payload',JSON.stringify(_j.payload));
-    if(newKey!==_lastKey){
+    if(!_j||!_j.payload) return;
+    const newKey=_j.updated_at||_j.payload.gerado_em||'';
+    if(_lastKey===null){
+      // Primeira sync: apenas registra a chave atual
       _lastKey=newKey;
-      _safeRender(_j.payload);
-      _badge('✓ Dados atualizados','#2a7a2a');
-    } else {
-      _badge('✓ Sincronizado','#2a7a2a');
+      // Se backend tem dado mais novo que localStorage, recarrega
+      const localKey=_localData.gerado_em||'';
+      if(newKey!==localKey){
+        localStorage.setItem('rota2_payload',JSON.stringify(_j.payload));
+        location.reload();
+      }
+    } else if(newKey!==_lastKey){
+      // Dado novo detectado enquanto página estava aberta → recarrega
+      localStorage.setItem('rota2_payload',JSON.stringify(_j.payload));
+      location.reload();
     }
-    _badgeFade();
-  }catch(_e){_syncBadge.style.opacity='0';}
+  }catch(_e){}
 }
 
-// Sincroniza ao abrir e a cada 60s (atualiza outros dispositivos automaticamente)
+// Verifica ao abrir e a cada 15s (detecta importações de outros dispositivos)
 _syncBackend();
-setInterval(_syncBackend,60000);
+setInterval(_syncBackend,15000);
 
 function renderAll(D){
 const t=D.totais;
