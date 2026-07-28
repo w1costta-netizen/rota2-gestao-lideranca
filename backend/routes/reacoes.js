@@ -59,4 +59,22 @@ router.get('/', async (req, res) => {
   res.json(result);
 });
 
+// GET /api/reacoes/quem?tipo=mural&item_id=xxx&emoji=👍
+// Retorna lista de nomes que reagiram com esse emoji
+router.get('/quem', async (req, res) => {
+  const { tipo, item_id, emoji } = req.query;
+  if (!tipo || !item_id || !emoji) return res.json([]);
+
+  const { data, error } = await supabase
+    .from('reacoes')
+    .select('user_id, profiles:user_id(full_name)')
+    .eq('tipo', tipo)
+    .eq('item_id', item_id)
+    .eq('emoji', emoji);
+
+  if (error) return res.status(500).json({ error: error.message });
+  const nomes = (data || []).map(r => r.profiles?.full_name || 'Usuário').filter(Boolean);
+  res.json(nomes);
+});
+
 module.exports = router;

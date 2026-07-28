@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, LayoutList } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
+import ReacaoBar from '../components/ReacaoBar';
 
 const CATEGORIES = [
   { key: 'meta',     label: '🎯 Metas',      color: '#6366f1' },
@@ -12,40 +13,8 @@ const CATEGORIES = [
 ];
 
 const EMPTY = { title: '', content: '', category: 'geral' };
-const EMOJIS = ['👍', '✅', '❤️', '😮', '🎯'];
 
 function getCat(key) { return CATEGORIES.find(c => c.key === key) || CATEGORIES[3]; }
-
-function ReacaoBar({ itemId, userId, reacoes, onToggle }) {
-  return (
-    <div style={{ display:'flex', gap:6, flexWrap:'wrap', paddingTop:10, borderTop:'1px solid var(--border)', marginTop:4 }}>
-      {EMOJIS.map(emoji => {
-        const info = reacoes?.[emoji];
-        const count = info?.count || 0;
-        const mine  = info?.mine  || false;
-        return (
-          <button
-            key={emoji}
-            onClick={() => onToggle(itemId, emoji)}
-            title={mine ? 'Remover reação' : 'Reagir'}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 4,
-              padding: '4px 10px', borderRadius: 20, fontSize: 13,
-              cursor: 'pointer', transition: 'all .15s',
-              border: mine ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
-              background: mine ? 'var(--primary-subtle, rgba(99,102,241,.12))' : 'transparent',
-              color: mine ? 'var(--primary)' : 'var(--text-muted)',
-              fontWeight: mine ? 700 : 400,
-            }}
-          >
-            <span>{emoji}</span>
-            {count > 0 && <span style={{ fontSize: 11 }}>{count}</span>}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 export default function Mural({ userId, profile }) {
   const toast = useToast();
@@ -203,6 +172,7 @@ export default function Mural({ userId, profile }) {
               <ReacaoBar
                 itemId={m.id}
                 userId={userId}
+                tipo="mural"
                 reacoes={reacoes[m.id]}
                 onToggle={toggleReacao}
               />
