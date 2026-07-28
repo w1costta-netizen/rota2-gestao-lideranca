@@ -40,12 +40,22 @@ const NAV_GROUPS = [
       { id: 'agenda',  label: 'Agenda',  icon: CalendarDays, perm: 'agenda' },
     ],
   },
+  {
+    id:    'equipe',
+    label: 'Equipe',
+    icon:  UserCircle,
+    items: [
+      { id: 'usersadmin',  label: 'Usuários',    icon: ShieldCheck, perm: 'usuarios' },
+      { id: 'profile',     label: 'Meu Perfil',  icon: UserCircle,  perm: null },
+      { id: 'organograma', label: 'Organograma', icon: GitBranch,   perm: 'organograma' },
+    ],
+  },
 ];
 
 // Ordem final na sidebar: solos intercalados com grupos na posição certa
 // dashboard → grupos → resto
 const SOLO_BEFORE = ['lojas', 'dashboard'];
-const SOLO_AFTER  = ['campanhas','relatorios','vendas_gestao','vendas_painel','estoque','importador_estoque','nscale','cashier','organograma','usersadmin','profile'];
+const SOLO_AFTER  = ['campanhas','relatorios','vendas_gestao','vendas_painel','estoque','importador_estoque','nscale','cashier'];
 
 export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, isMobile }) {
   const { profile, signOut } = useAuth();
