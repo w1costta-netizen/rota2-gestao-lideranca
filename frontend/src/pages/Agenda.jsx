@@ -9,7 +9,7 @@ import { registerPush } from '../lib/push';
 
 const DAYS = ['segunda','terca','quarta','quinta','sexta','sabado','domingo'];
 const DAY_LABELS = { segunda:'Segunda', terca:'Terça', quarta:'Quarta', quinta:'Quinta', sexta:'Sexta', sabado:'Sábado', domingo:'Domingo' };
-const EMPTY_ITEM = { title: '', description: '', target_type: 'geral', target_value: '', day_of_week: 'segunda', time: '' };
+const EMPTY_ITEM = { title: '', description: '', target_type: 'geral', target_value: '', day_of_week: 'segunda', time: '', lembrete_minutos: null };
 
 const WA_ICON = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -414,6 +414,19 @@ export default function Agenda({ userId, profile }) {
             <label className="form-label">Horário</label>
             <input className="input" type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
           </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">🔔 Lembrete</label>
+          <select className="select" value={form.lembrete_minutos ?? ''}
+            onChange={e => setForm(f => ({ ...f, lembrete_minutos: e.target.value === '' ? null : Number(e.target.value) }))}>
+            <option value="">Sem lembrete</option>
+            <option value="0">Na hora</option>
+            <option value="5">5 minutos antes</option>
+            <option value="10">10 minutos antes</option>
+            <option value="15">15 minutos antes</option>
+            <option value="30">30 minutos antes</option>
+            <option value="60">1 hora antes</option>
+          </select>
         </div>
         <div className="form-group">
           <label className="form-label">Destino *</label>

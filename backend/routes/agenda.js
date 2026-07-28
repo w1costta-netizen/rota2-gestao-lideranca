@@ -46,7 +46,7 @@ router.get('/leader/:id', async (req, res) => {
 
 // POST /api/agenda — cria item e dispara push
 router.post('/', async (req, res) => {
-  const { title, description, week_start, target_type, target_value, day_of_week, time, created_by } = req.body;
+  const { title, description, week_start, target_type, target_value, day_of_week, time, created_by, lembrete_minutos } = req.body;
   if (!title || !week_start || !target_type || !day_of_week)
     return res.status(400).json({ error: 'Campos obrigatórios: title, week_start, target_type, day_of_week' });
 
@@ -58,7 +58,7 @@ router.post('/', async (req, res) => {
   }
 
   const { data, error } = await supabase.from('agenda_items')
-    .insert({ title, description: description || '', week_start, target_type, target_value: target_value || '', day_of_week, time: time || '', company })
+    .insert({ title, description: description || '', week_start, target_type, target_value: target_value || '', day_of_week, time: time || '', company, lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false })
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
 
@@ -76,9 +76,9 @@ router.post('/', async (req, res) => {
 
 // PUT /api/agenda/:id — atualiza item e dispara push
 router.put('/:id', async (req, res) => {
-  const { title, description, week_start, target_type, target_value, day_of_week, time, updated_by } = req.body;
+  const { title, description, week_start, target_type, target_value, day_of_week, time, updated_by, lembrete_minutos } = req.body;
   const { data, error } = await supabase.from('agenda_items')
-    .update({ title, description: description || '', week_start, target_type, target_value: target_value || '', day_of_week, time: time || '' })
+    .update({ title, description: description || '', week_start, target_type, target_value: target_value || '', day_of_week, time: time || '', lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false })
     .eq('id', req.params.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
 

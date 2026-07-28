@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { hasPermission } from './lib/permissions';
-import { ToastProvider } from './components/Toast';
+import { ToastProvider, useToast } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
+import { startAlarmEngine, stopAlarmEngine } from './lib/alarm';
 import Sidebar from './components/Sidebar';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -59,6 +60,7 @@ function useIsMobile() {
 
 function AppContent() {
   const { session, profile } = useAuth();
+  const toast = useToast();
   const [page, setPage] = useState('dashboard');
   const [authPage, setAuthPage] = useState('login');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -137,6 +139,17 @@ function AppContent() {
     return () => navigator.serviceWorker.removeEventListener('message', handler);
   }, []);
 
+  // Engine de alarme — inicia quando o usuário faz login
+  const userId = session?.user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    startAlarmEngine(userId, (item) => {
+      const label = item.type === 'tarefa' ? '📋 Tarefa' : '📅 Agenda';
+      toast(`⏰ ${label}: ${item.title}${item.time ? ' às ' + item.time : ''}`, 'info', 10000);
+    });
+    return () => stopAlarmEngine();
+  }, [userId]);
+
   if (session === undefined) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0D0D0D' }}>
       <div style={{ color:'var(--primary)', fontSize:18, fontWeight:700 }}>Carregando...</div>
@@ -151,7 +164,6 @@ function AppContent() {
     </div>
   );
 
-  const userId = session?.user?.id;
   const isMaster = profile?.access_level === 'master';
 
   const setViewingStoreAndSave = (name) => {

@@ -67,7 +67,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/tarefas
 router.post('/', async (req, res) => {
-  const { requester_id, title, description, assigned_to, due_date, due_time, priority, company: bodyCompany, recorrencia, tags } = req.body;
+  const { requester_id, title, description, assigned_to, due_date, due_time, priority, company: bodyCompany, recorrencia, tags, lembrete_minutos } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -79,16 +79,18 @@ router.post('/', async (req, res) => {
   const targetCompany = me.access_level === 'master' ? bodyCompany : me.company;
 
   const { data, error } = await supabase.from('tarefas').insert({
-    company:     targetCompany,
-    title:       title.trim(),
-    description: description?.trim() || '',
-    assigned_to: finalAssignee,
-    created_by:  requester_id,
-    due_date:    due_date || null,
-    due_time:    due_time || null,
-    priority:    priority || 'normal',
-    recorrencia: recorrencia || 'nenhuma',
-    tags:        tags || [],
+    company:          targetCompany,
+    title:            title.trim(),
+    description:      description?.trim() || '',
+    assigned_to:      finalAssignee,
+    created_by:       requester_id,
+    due_date:         due_date || null,
+    due_time:         due_time || null,
+    priority:         priority || 'normal',
+    recorrencia:      recorrencia || 'nenhuma',
+    tags:             tags || [],
+    lembrete_minutos: lembrete_minutos ?? null,
+    lembrete_enviado: false,
   }).select('*, assigned:assigned_to(id,full_name,sector), creator:created_by(full_name)').single();
 
   if (error) return res.status(500).json({ error: error.message });
@@ -106,7 +108,7 @@ router.post('/', async (req, res) => {
 
 // PUT /api/tarefas/:id
 router.put('/:id', async (req, res) => {
-  const { requester_id, title, description, assigned_to, due_date, due_time, priority, status, recorrencia, tags } = req.body;
+  const { requester_id, title, description, assigned_to, due_date, due_time, priority, status, recorrencia, tags, lembrete_minutos } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Acesso negado' });
@@ -125,8 +127,9 @@ router.put('/:id', async (req, res) => {
     if (due_date !== undefined)    updates.due_date    = due_date || null;
     if (due_time !== undefined)    updates.due_time    = due_time || null;
     if (priority)                  updates.priority    = priority;
-    if (recorrencia !== undefined) updates.recorrencia = recorrencia;
-    if (tags !== undefined)        updates.tags        = tags;
+    if (recorrencia !== undefined)        updates.recorrencia      = recorrencia;
+    if (tags !== undefined)               updates.tags             = tags;
+    if (lembrete_minutos !== undefined) { updates.lembrete_minutos = lembrete_minutos ?? null; updates.lembrete_enviado = false; }
   }
   if (isManager(me) && assigned_to) updates.assigned_to = assigned_to;
   if (status) updates.status = status;

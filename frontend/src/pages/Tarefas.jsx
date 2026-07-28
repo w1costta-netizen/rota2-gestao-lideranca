@@ -4,7 +4,7 @@ import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 
-const EMPTY = { title: '', description: '', assigned_to: '', due_date: '', due_time: '', priority: 'normal', recorrencia: 'nenhuma', tags: [] };
+const EMPTY = { title: '', description: '', assigned_to: '', due_date: '', due_time: '', priority: 'normal', recorrencia: 'nenhuma', tags: [], lembrete_minutos: null };
 
 const STATUS_LABEL = { pendente: 'Pendente', em_andamento: 'Em andamento', concluida: 'Concluída' };
 const STATUS_COLOR = { pendente: '#f59e0b', em_andamento: '#6366f1', concluida: '#10b981' };
@@ -170,7 +170,7 @@ export default function Tarefas({ userId, profile }) {
       title: t.title, description: t.description, assigned_to: t.assigned_to,
       due_date: t.due_date || '', due_time: t.due_time || '',
       priority: t.priority, recorrencia: t.recorrencia || 'nenhuma',
-      tags: t.tags || [],
+      tags: t.tags || [], lembrete_minutos: t.lembrete_minutos ?? null,
     });
     setModal(true);
   };
@@ -425,6 +425,28 @@ export default function Tarefas({ userId, profile }) {
             <label className="form-label">Horário</label>
             <input className="input" type="time" value={form.due_time} onChange={e => setForm(f=>({...f,due_time:e.target.value}))}/>
           </div>
+        </div>
+
+        {/* Lembrete — só disponível se tiver prazo + horário */}
+        <div className="form-group" style={{ marginTop:12 }}>
+          <label className="form-label">🔔 Lembrete</label>
+          <select className="select" value={form.lembrete_minutos ?? ''}
+            onChange={e => setForm(f => ({ ...f, lembrete_minutos: e.target.value === '' ? null : Number(e.target.value) }))}
+            disabled={!form.due_date || !form.due_time}>
+            <option value="">Sem lembrete</option>
+            <option value="0">Na hora</option>
+            <option value="5">5 minutos antes</option>
+            <option value="10">10 minutos antes</option>
+            <option value="15">15 minutos antes</option>
+            <option value="30">30 minutos antes</option>
+            <option value="60">1 hora antes</option>
+            <option value="1440">1 dia antes</option>
+          </select>
+          {(!form.due_date || !form.due_time) && (
+            <span style={{ fontSize:11, color:'var(--text-muted)', marginTop:4, display:'block' }}>
+              Defina prazo e horário para ativar o lembrete
+            </span>
+          )}
         </div>
 
         {/* Prioridade + Recorrência */}
