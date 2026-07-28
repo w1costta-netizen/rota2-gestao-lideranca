@@ -367,7 +367,7 @@ async function processFile(file){
     const m={};
     for(const r of arr){
       const s=r.DESCRICAO_SECAO;
-      if(!m[s]) m[s]={DESCRICAO_SECAO:s,itens:0,custo_total:0,depto:r.DESCRICAO_DEPARTAMENTO};
+      if(!m[s]) m[s]={DESCRICAO_SECAO:s,itens:0,custo_total:0,DESCRICAO_DEPARTAMENTO:r.DESCRICAO_DEPARTAMENTO};
       m[s].itens++; m[s].custo_total+=r[valKey]||0;
     }
     return Object.values(m).sort((a,b)=>b.custo_total-a.custo_total);
@@ -376,7 +376,7 @@ async function processFile(file){
     const m={};
     for(const r of arr){
       const s=r.DESCRICAO_SECAO;
-      if(!m[s]) m[s]={DESCRICAO_SECAO:s,itens:0,venda_mes:0,depto:r.DESCRICAO_DEPARTAMENTO};
+      if(!m[s]) m[s]={DESCRICAO_SECAO:s,itens:0,venda_mes:0,DESCRICAO_DEPARTAMENTO:r.DESCRICAO_DEPARTAMENTO};
       m[s].itens++; m[s].venda_mes+=(r[valKey]||0);
     }
     return Object.values(m).sort((a,b)=>b.venda_mes-a.venda_mes);
