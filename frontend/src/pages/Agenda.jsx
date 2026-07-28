@@ -19,7 +19,11 @@ const WA_ICON = (
 
 export default function Agenda({ userId, profile }) {
   const toast = useToast();
-  const isAdmin = profile?.access_level === 'admin' || profile?.access_level === 'supervisor';
+  // canManage: pode criar/editar/deletar itens de agenda
+  // seeAll: vê todos os itens da empresa (só admin/master — master já vira admin via effectiveProfile)
+  const canManage = ['admin', 'supervisor'].includes(profile?.access_level);
+  const seeAll    = profile?.access_level === 'admin';
+  const isAdmin   = canManage; // mantido para compatibilidade com UI
   const [week, setWeek]       = useState(getWeekStart());
   const [items, setItems]     = useState([]);
   const [leaders, setLeaders] = useState([]);   // tabela antiga (pdf/whatsapp individual)
@@ -48,7 +52,7 @@ export default function Agenda({ userId, profile }) {
 
   const load = () => {
     // Admin vê tudo; líderes/colaboradores veem apenas os seus
-    if (isAdmin) {
+    if (seeAll) {
       agendaAPI.list(week, company).then(r => setItems(r.data));
     } else {
       api.get('/agenda', { params: { week_start: week, user_id: userId, sector: profile?.sector || '' } })
@@ -263,7 +267,7 @@ export default function Agenda({ userId, profile }) {
       )}
 
       {/* Aviso para não-admins */}
-      {!isAdmin && (
+      {!seeAll && (
         <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderRadius:8,
           background:'rgba(232,98,42,.08)', border:'1px solid rgba(232,98,42,.2)', marginBottom:20, fontSize:13 }}>
           📅 Você está vendo apenas os itens destinados a você ou ao seu setor.
