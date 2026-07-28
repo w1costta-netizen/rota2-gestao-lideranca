@@ -290,18 +290,43 @@ function PainelCompartilhar({ rel, fotos, creatorName, userId }) {
   };
 
   const compartilharWhatsApp = async () => {
-    if (!pdfUrl) { toast('Gere o PDF primeiro', 'error'); return; }
-    const texto = `📋 *${rel.title}*\nCriado por: ${creatorName}\nData: ${formatDate(rel.created_at)}\n\n📄 Acesse o PDF:\n${pdfUrl}`;
+    if (!pdfUrl && !pdfBlob) { toast('Gere o PDF primeiro', 'error'); return; }
 
-    // Tenta Web Share API com arquivo (iOS 15+ / Android)
-    if (pdfBlob && navigator.share && navigator.canShare) {
-      const file = new File([pdfBlob], `${rel.title}.pdf`, { type: 'application/pdf' });
-      if (navigator.canShare({ files: [file] })) {
-        try { await navigator.share({ title: rel.title, files: [file] }); return; } catch {}
+    const meta = decodeDesc(rel.description);
+    const destinatario = (meta.destinatario || '').trim();
+    const safeName = `${rel.title}${destinatario ? '_' + destinatario : ''}`
+      .replace(/[^a-zA-Z0-9À-ÿ\s_-]/g, '')
+      .replace(/\s+/g, '_')
+      .trim();
+    const fileName = `${safeName}.pdf`;
+
+    try {
+      // Obtém o blob — do estado ou fazendo fetch da URL salva
+      let blob = pdfBlob;
+      if (!blob && pdfUrl) {
+        setGerando(true);
+        const resp = await fetch(pdfUrl);
+        if (!resp.ok) throw new Error('Não foi possível baixar o PDF');
+        blob = await resp.blob();
       }
+
+      const file = new File([blob], fileName, { type: 'application/pdf' });
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: rel.title, files: [file] });
+      } else {
+        // Fallback: baixa o arquivo diretamente
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = fileName; a.click();
+        URL.revokeObjectURL(url);
+        toast('PDF baixado! Envie o arquivo pelo WhatsApp manualmente.');
+      }
+    } catch (e) {
+      if (e?.name !== 'AbortError') toast('Erro ao compartilhar: ' + e.message, 'error');
+    } finally {
+      setGerando(false);
     }
-    // Fallback: abre WhatsApp com link
-    window.open(`https://wa.me/?text=${encodeURIComponent(texto)}`, '_blank');
   };
 
   const compartilharEmail = () => {

@@ -16,7 +16,7 @@ function Modal({ title, onClose, children }) {
   );
 }
 
-export default function MasterDashboard({ userId }) {
+export default function MasterDashboard({ userId, viewingStore, onSelectStore }) {
   const [stores,       setStores]       = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [expanded,     setExpanded]     = useState(null);
@@ -214,7 +214,16 @@ export default function MasterDashboard({ userId }) {
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {onSelectStore && (
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={e => { e.stopPropagation(); onSelectStore(s.name); }}
+                      style={{ fontSize: 11 }}
+                    >
+                      Entrar
+                    </button>
+                  )}
                   <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); disable(s); }}
                     style={{ color: 'var(--danger)', fontSize: 11 }}>
                     Desativar

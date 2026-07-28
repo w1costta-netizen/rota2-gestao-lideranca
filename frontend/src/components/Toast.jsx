@@ -9,7 +9,8 @@ export function ToastProvider({ children }) {
   const show = useCallback((msg, type = 'success') => {
     const id = Date.now();
     setToasts(p => [...p, { id, msg, type }]);
-    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), 3500);
+    const duration = type === 'error' ? 10000 : 3500;
+    setTimeout(() => setToasts(p => p.filter(t => t.id !== id)), duration);
   }, []);
 
   return (

@@ -5,12 +5,13 @@ import { parseVendasXlsx } from '../lib/parseVendasXlsx';
 import { useToast } from '../components/Toast';
 
 export default function GestaoVendas({ userId, profile }) {
-  const { showToast } = useToast();
+  const showToast = useToast();
   const [historico, setHistorico] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [fechando, setFechando] = useState(false);
   const [totalAtual, setTotalAtual] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [erroUpload, setErroUpload] = useState('');
 
   const company = profile?.company;
 
@@ -37,10 +38,13 @@ export default function GestaoVendas({ userId, profile }) {
     e.target.value = '';
 
     setUploading(true);
+    setErroUpload('');
     try {
       const { linhas } = await parseVendasXlsx(file);
       if (!linhas.length) {
-        showToast('Nenhum dado encontrado. Verifique se o arquivo tem colunas CANAL/DEPARTAMENTO/CATEGORIA.', 'error');
+        const msg = 'Nenhum dado encontrado. Verifique se o arquivo tem colunas CANAL/DEPARTAMENTO/CATEGORIA.';
+        showToast(msg, 'error');
+        setErroUpload(msg);
         return;
       }
 
@@ -67,7 +71,9 @@ export default function GestaoVendas({ userId, profile }) {
       showToast(`${linhas.length} linhas importadas com sucesso!`, 'success');
       carregarDados();
     } catch (err) {
-      showToast('Erro ao processar arquivo: ' + err.message, 'error');
+      const msg = 'Erro ao processar arquivo: ' + (err.message || JSON.stringify(err));
+      showToast(msg, 'error');
+      setErroUpload(msg);
     } finally {
       setUploading(false);
     }
@@ -123,6 +129,18 @@ export default function GestaoVendas({ userId, profile }) {
       <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 28 }}>
         Importe o relatório de vendas e gerencie o histórico mensal.
       </p>
+
+      {erroUpload && (
+        <div style={{ background:'#ef444420', border:'1px solid #ef4444', borderRadius:10, padding:'12px 16px',
+          marginBottom:16, fontSize:13, color:'#ef4444', display:'flex', gap:10, alignItems:'flex-start' }}>
+          <AlertTriangle size={16} style={{ flexShrink:0, marginTop:1 }}/>
+          <div>
+            <strong>Erro ao importar:</strong> {erroUpload}
+            <button onClick={() => setErroUpload('')} style={{ marginLeft:12, background:'none', border:'none',
+              color:'#ef4444', cursor:'pointer', fontWeight:700, fontSize:13 }}>✕</button>
+          </div>
+        </div>
+      )}
 
       {/* Card: dados atuais */}
       <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, marginBottom: 16 }}>

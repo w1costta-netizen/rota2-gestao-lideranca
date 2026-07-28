@@ -25,15 +25,18 @@ export default function Comunicados({ userId, profile }) {
   const [saving, setSaving]   = useState(false);
   const [deleting, setDeleting] = useState(null);
 
+  const company = profile?.company || '';
+
   const load = () => {
     setLoading(true);
-    api.get(`/comunicados?requester_id=${userId}`)
+    const q = company ? `&company=${encodeURIComponent(company)}` : '';
+    api.get(`/comunicados?requester_id=${userId}${q}`)
       .then(r => setList(r.data))
       .catch(() => toast('Erro ao carregar comunicados'))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [userId]);
+  useEffect(() => { load(); }, [userId, company]);
 
   const openNew  = () => { setEditing(null); setForm(EMPTY); setModal(true); };
   const openEdit = (c) => { setEditing(c.id); setForm({ title: c.title, body: c.body, priority: c.priority }); setModal(true); };
@@ -46,7 +49,7 @@ export default function Comunicados({ userId, profile }) {
         await api.put(`/comunicados/${editing}`, { requester_id: userId, ...form });
         toast('Comunicado atualizado!');
       } else {
-        await api.post('/comunicados', { requester_id: userId, ...form });
+        await api.post('/comunicados', { requester_id: userId, ...form, company: company || undefined });
         toast('Comunicado publicado! Notificação enviada.');
       }
       setModal(false);

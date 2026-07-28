@@ -28,6 +28,9 @@ const GestaoVendas           = lazy(() => import('./pages/GestaoVendas'));
 const PainelVendas           = lazy(() => import('./pages/PainelVendas'));
 const MasterDashboard        = lazy(() => import('./pages/MasterDashboard'));
 const StoreSetup             = lazy(() => import('./pages/StoreSetup'));
+const Estoque                = lazy(() => import('./pages/Estoque'));
+const ImportadorEstoque      = lazy(() => import('./pages/ImportadorEstoque'));
+const Organograma            = lazy(() => import('./pages/Organograma'));
 
 function AccessDenied() {
   return (
@@ -59,6 +62,9 @@ function AppContent() {
   const [page, setPage] = useState('dashboard');
   const [authPage, setAuthPage] = useState('login');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [viewingStore, setViewingStore] = useState(() =>
+    localStorage.getItem('master_viewing_store') || ''
+  );
   const isMobile = useIsMobile();
   const [sidebarW, setSidebarW] = useState(
     () => parseInt(localStorage.getItem('sidebarWidth') || SIDEBAR_DEFAULT)
@@ -146,7 +152,18 @@ function AppContent() {
   );
 
   const userId = session?.user?.id;
-  const userSector = profile?.sector || '';
+  const isMaster = profile?.access_level === 'master';
+
+  const setViewingStoreAndSave = (name) => {
+    setViewingStore(name);
+    localStorage.setItem('master_viewing_store', name);
+  };
+
+  // Perfil efetivo: master visualiza dados como se fosse admin da loja selecionada
+  const effectiveProfile = isMaster && viewingStore
+    ? { ...profile, company: viewingStore, access_level: 'admin' }
+    : profile;
+  const userSector = effectiveProfile?.sector || '';
 
   // Mostra boas-vindas na primeira vez (checa localStorage como fallback)
   const welcomeDone = localStorage.getItem(`welcome_done_${userId}`);
@@ -168,23 +185,26 @@ function AppContent() {
   const has = (key) => hasPermission(profile, key);
 
   const pages = {
-    dashboard:    () => has('dashboard')  ? <Dashboard setPage={setPage} />                              : <AccessDenied />,
+    dashboard:    () => has('dashboard')  ? <Dashboard setPage={setPage} profile={effectiveProfile} />            : <AccessDenied />,
     leaders:      () => <Leaders setPage={setPage} />,
-    agenda:       () => has('agenda')     ? <Agenda setPage={setPage} userId={userId} profile={profile} /> : <AccessDenied />,
+    agenda:       () => has('agenda')     ? <Agenda setPage={setPage} userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     scale:        () => <Scale setPage={setPage} />,
     team:         () => <TeamMembers userId={userId} userSector={userSector} />,
-    nscale:       () => has('escala')     ? <NativeSchedule userId={userId} profile={profile} />          : <AccessDenied />,
-    cashier:      () => has('caixas')     ? <CashierAnalysis userId={userId} />                           : <AccessDenied />,
+    nscale:       () => has('escala')     ? <NativeSchedule userId={userId} profile={effectiveProfile} />           : <AccessDenied />,
+    cashier:      () => has('caixas')     ? <CashierAnalysis userId={userId} />                                    : <AccessDenied />,
     profile:      () => <Profile />,
-    comunicados:  () => <Comunicados userId={userId} profile={profile} />,
-    tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={profile} />                 : <AccessDenied />,
-    mural:        () => has('mural')      ? <Mural userId={userId} profile={profile} />                   : <AccessDenied />,
-    campanhas:    () => has('campanhas')  ? <Campanhas userId={userId} profile={profile} />               : <AccessDenied />,
-    relatorios:   () => has('relatorios')     ? <RelatoriosFotograficos userId={userId} profile={profile} /> : <AccessDenied />,
-    vendas_gestao:() => has('vendas_gestao') ? <GestaoVendas userId={userId} profile={profile} />           : <AccessDenied />,
-    vendas_painel:() => has('vendas_painel') ? <PainelVendas userId={userId} profile={profile} />           : <AccessDenied />,
-    usersadmin:   () => has('usuarios')      ? <UsersAdmin userId={userId} profile={profile} />             : <AccessDenied />,
-    lojas:        () => has('lojas')         ? <MasterDashboard userId={userId} />                          : <AccessDenied />,
+    comunicados:  () => <Comunicados userId={userId} profile={effectiveProfile} />,
+    tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={effectiveProfile} />                  : <AccessDenied />,
+    mural:        () => has('mural')      ? <Mural userId={userId} profile={effectiveProfile} />                    : <AccessDenied />,
+    campanhas:    () => has('campanhas')  ? <Campanhas userId={userId} profile={effectiveProfile} />                : <AccessDenied />,
+    relatorios:   () => has('relatorios')     ? <RelatoriosFotograficos userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
+    vendas_gestao:() => has('vendas_gestao') ? <GestaoVendas userId={userId} profile={effectiveProfile} />           : <AccessDenied />,
+    vendas_painel:() => has('vendas_painel') ? <PainelVendas userId={userId} profile={effectiveProfile} />           : <AccessDenied />,
+    usersadmin:   () => has('usuarios')      ? <UsersAdmin userId={userId} profile={effectiveProfile} />             : <AccessDenied />,
+    lojas:        () => has('lojas')         ? <MasterDashboard userId={userId} viewingStore={viewingStore} onSelectStore={(name) => { setViewingStoreAndSave(name); setPage('dashboard'); }} /> : <AccessDenied />,
+    estoque:          () => has('estoque')          ? <Estoque />           : <AccessDenied />,
+    importador_estoque: () => has('importador_estoque') ? <ImportadorEstoque /> : <AccessDenied />,
+    organograma:        () => has('organograma')        ? <Organograma userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
   };
 
   const PageComponent = pages[page] || pages.dashboard;
@@ -259,7 +279,7 @@ function AppContent() {
           alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,.4)', fontSize: 13,
           whiteSpace: 'nowrap',
         }}>
-          <span>Nova versão disponível — v2026.07.25</span>
+          <span>Nova versão disponível — v2026.07.25b</span>
           <button
             onClick={() => { if ('caches' in window) { caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))).then(() => window.location.reload()); } else { window.location.reload(); } }}
             style={{ background: '#fff', color: 'var(--primary)', border: 'none',
@@ -275,6 +295,28 @@ function AppContent() {
         className="main-content"
         style={isMobile ? { marginLeft: 0 } : { marginLeft: sidebarW }}
       >
+        {/* Banner de visualização de loja — só para master */}
+        {isMaster && viewingStore && (
+          <div style={{
+            background: 'var(--primary)', color: '#fff',
+            padding: '10px 20px', display: 'flex', alignItems: 'center',
+            justifyContent: 'space-between', fontSize: 13, fontWeight: 600,
+            gap: 12, flexShrink: 0,
+          }}>
+            <span>👁 Visualizando: <strong>{viewingStore}</strong></span>
+            <button
+              onClick={() => { setViewingStoreAndSave(''); setPage('lojas'); }}
+              style={{
+                background: 'rgba(255,255,255,.2)', border: '1px solid rgba(255,255,255,.4)',
+                color: '#fff', borderRadius: 8, padding: '3px 12px',
+                cursor: 'pointer', fontSize: 12, fontWeight: 700,
+              }}
+            >
+              ✕ Sair da loja
+            </button>
+          </div>
+        )}
+
         <React.Suspense fallback={
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
             minHeight:'60vh', color:'var(--text-muted)', fontSize:14 }}>

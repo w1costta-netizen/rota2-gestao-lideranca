@@ -11,14 +11,17 @@ export const MODULES = [
   { key: 'relatorios',     label: 'Tour 4x4',               icon: '📷', desc: 'Criar e compartilhar tours com fotos anotadas' },
   { key: 'vendas_gestao', label: 'Gestão de Vendas',       icon: '📂', desc: 'Importar planilhas e fechar mês de vendas' },
   { key: 'vendas_painel', label: 'Painel de Vendas',       icon: '📈', desc: 'Acompanhar metas e resultados de vendas' },
-  { key: 'usuarios',       label: 'Usuários',               icon: '👥', desc: 'Criar e gerenciar usuários da empresa' },
+  { key: 'usuarios',             label: 'Usuários',               icon: '👥', desc: 'Criar e gerenciar usuários da empresa' },
+  { key: 'estoque',             label: 'Estoque',                icon: '📦', desc: 'Visualizar e gerenciar estoque' },
+  { key: 'importador_estoque',  label: 'Importador de Estoque',  icon: '📥', desc: 'Importar planilhas de estoque' },
+  { key: 'organograma',         label: 'Organograma',            icon: '🌿', desc: 'Hierarquia de equipes e líderes' },
 ];
 
 export const DEFAULT_PERMISSIONS = {
-  master:       ['lojas', 'dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios'],
-  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios'],
-  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel'],
-  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'caixas', 'relatorios', 'vendas_painel'],
+  master:       ['lojas', 'dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma'],
+  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma'],
+  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma'],
+  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma'],
   colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas'],
 };
 

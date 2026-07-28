@@ -18,7 +18,7 @@ export const leadersAPI = {
 };
 
 export const agendaAPI = {
-  list: (week_start) => api.get('/agenda', { params: { week_start } }),
+  list: (week_start, company) => api.get('/agenda', { params: { week_start, ...(company ? { company } : {}) } }),
   forLeader: (id, week_start) => api.get(`/agenda/leader/${id}`, { params: { week_start } }),
   create: (data) => api.post('/agenda', data),
   update: (id, data) => api.put(`/agenda/${id}`, data),

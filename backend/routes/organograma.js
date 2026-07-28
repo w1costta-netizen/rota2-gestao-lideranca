@@ -21,6 +21,7 @@ router.get('/', async (req, res) => {
     .from('profiles')
     .select('id, full_name, access_level, sector, reports_to_list, avatar_url')
     .eq('company', targetCompany)
+    .neq('access_level', 'master')
     .order('full_name');
 
   if (error) return res.status(500).json({ error: error.message });

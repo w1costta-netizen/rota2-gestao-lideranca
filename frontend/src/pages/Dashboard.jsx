@@ -5,7 +5,16 @@ import {
 } from 'lucide-react';
 import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
-import { getWeekStart, formatDate } from '../utils';
+import { formatDate } from '../utils';
+
+// Para o Dashboard, sempre usa a semana real do dia atual (não avança no fds)
+function getCurrentWeekStart() {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day; // sempre vai para a segunda desta semana
+  d.setDate(d.getDate() + diff);
+  return d.toISOString().split('T')[0];
+}
 
 function StatCard({ icon: Icon, color, bg, value, label, onClick }) {
   return (
@@ -21,11 +30,13 @@ function StatCard({ icon: Icon, color, bg, value, label, onClick }) {
   );
 }
 
-export default function Dashboard({ setPage }) {
-  const { session, profile } = useAuth();
+export default function Dashboard({ setPage, profile: propProfile }) {
+  const { session, profile: authProfile } = useAuth();
+  const profile  = propProfile || authProfile;
   const userId   = session?.user?.id;
-  const isAdmin  = ['admin','supervisor'].includes(profile?.access_level);
-  const week     = getWeekStart();
+  const isAdmin  = ['admin','supervisor','master'].includes(profile?.access_level);
+  const company  = profile?.company || '';
+  const week     = getCurrentWeekStart();
 
   const [stats, setStats]         = useState({});
   const [tarefas, setTarefas]     = useState([]);
@@ -36,12 +47,13 @@ export default function Dashboard({ setPage }) {
 
   useEffect(() => {
     if (!userId) return;
+    const cq = company ? `&company=${encodeURIComponent(company)}` : '';
     Promise.all([
-      api.get(`/tarefas?requester_id=${userId}`).catch(() => ({ data: [] })),
-      api.get(`/comunicados?requester_id=${userId}`).catch(() => ({ data: [] })),
-      api.get(`/campanhas?requester_id=${userId}`).catch(() => ({ data: [] })),
-      api.get(`/agenda/${week}?requester_id=${userId}`).catch(() => ({ data: [] })),
-      isAdmin ? api.get(`/admin/users?requester_id=${userId}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+      api.get(`/tarefas?requester_id=${userId}${cq}`).catch(() => ({ data: [] })),
+      api.get(`/comunicados?requester_id=${userId}${cq}`).catch(() => ({ data: [] })),
+      api.get(`/campanhas?requester_id=${userId}${cq}`).catch(() => ({ data: [] })),
+      api.get(`/agenda?week_start=${week}${company ? `&company=${encodeURIComponent(company)}` : ''}`).catch(() => ({ data: [] })),
+      isAdmin && company ? api.get(`/admin/users?requester_id=${userId}${cq}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
     ]).then(([t, c, camp, ag, users]) => {
       setTarefas(t.data || []);
       setComunicados(c.data || []);
@@ -49,7 +61,7 @@ export default function Dashboard({ setPage }) {
       setAgenda(ag.data || []);
       setStats({ totalUsers: (users.data || []).length });
     }).finally(() => setLoading(false));
-  }, [userId]);
+  }, [userId, company]);
 
   const todayIdx = new Date().getDay(); // 0=dom
   const dayNames = ['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
@@ -213,20 +225,24 @@ export default function Dashboard({ setPage }) {
                           : <CheckSquare size={14} style={{ color:'var(--text-muted)', flexShrink:0 }}/>}
                         <div style={{ flex:1, minWidth:0 }}>
                           <div style={{ fontSize:13, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-                            {t.titulo}
+                            {t.title || t.titulo}
                           </div>
-                          {t.due_date && (
-                            <div style={{ fontSize:11, color: atrasada ? '#ef4444' : 'var(--text-muted)', marginTop:1 }}>
-                              {atrasada ? '⚠ ' : ''}Prazo: {new Date(t.due_date + 'T12:00:00').toLocaleDateString('pt-BR')}
-                            </div>
-                          )}
+                          <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:1, display:'flex', gap:8, flexWrap:'wrap' }}>
+                            {t.assigned?.full_name && <span>👤 {t.assigned.full_name}</span>}
+                            {t.due_date && (
+                              <span style={{ color: atrasada ? '#ef4444' : 'var(--text-muted)', fontWeight: atrasada ? 700 : 400 }}>
+                                {atrasada ? '⚠ vencida: ' : '📅 '}
+                                {new Date(t.due_date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <span style={{
                           fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:6,
-                          background: t.prioridade === 'alta' ? '#ef444420' : t.prioridade === 'media' ? '#f59e0b20' : '#6366f120',
-                          color: t.prioridade === 'alta' ? '#ef4444' : t.prioridade === 'media' ? '#f59e0b' : '#6366f1',
+                          background: (t.priority||t.prioridade) === 'alta' ? '#ef444420' : (t.priority||t.prioridade) === 'normal' ? '#6366f120' : '#6b728020',
+                          color: (t.priority||t.prioridade) === 'alta' ? '#ef4444' : (t.priority||t.prioridade) === 'normal' ? '#6366f1' : '#6b7280',
                         }}>
-                          {t.prioridade === 'alta' ? 'Alta' : t.prioridade === 'media' ? 'Média' : 'Baixa'}
+                          {(t.priority||t.prioridade) === 'alta' ? 'Alta' : (t.priority||t.prioridade) === 'normal' ? 'Normal' : 'Baixa'}
                         </span>
                       </div>
                     );

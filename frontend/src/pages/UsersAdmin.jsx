@@ -368,10 +368,13 @@ export default function UsersAdmin({ userId, profile }) {
     setError('');
     setSaving(true);
     try {
+      if (editing._newPassword && editing._newPassword.length < 6)
+        return setError('Nova senha precisa ter pelo menos 6 caracteres.');
       await api.put(`/admin/users/${editing.id}`, {
         requester_id: userId,
         full_name:    editing.full_name,
         email:        editing.email || undefined,
+        password:     editing._newPassword || undefined,
         role:         editing.role,
         sector:       editing.sector,
         access_level: editing.access_level,
@@ -652,6 +655,24 @@ export default function UsersAdmin({ userId, profile }) {
               <input className="input" type="tel" value={editing.phone || ''}
                 onChange={e => setEditing(ed => ({ ...ed, phone: maskPhone(e.target.value) }))}
                 placeholder="(98) 9 8220-9719"/>
+            </div>
+            <div className="form-group" style={{ gridColumn:'1/-1' }}>
+              <label className="form-label">Nova senha <span style={{ fontWeight:400, color:'var(--text-muted)' }}>(deixe em branco para não alterar)</span></label>
+              <div style={{ position:'relative' }}>
+                <input className="input" type={editing._showPwd ? 'text' : 'password'} value={editing._newPassword || ''}
+                  onChange={e => setEditing(ed => ({ ...ed, _newPassword: e.target.value }))}
+                  placeholder="Mínimo 6 caracteres" style={{ paddingRight: 40 }}/>
+                <button type="button"
+                  onClick={() => setEditing(ed => ({ ...ed, _showPwd: !ed._showPwd }))}
+                  style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)',
+                    background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)',
+                    display:'flex', alignItems:'center', padding:0 }}>
+                  {editing._showPwd
+                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  }
+                </button>
+              </div>
             </div>
           </div>
           <FormFields

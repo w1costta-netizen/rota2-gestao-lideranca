@@ -44,17 +44,19 @@ export default function Agenda({ userId, profile }) {
     }
   }, [userId]);
 
+  const company = profile?.company || '';
+
   const load = () => {
     // Admin vê tudo; líderes/colaboradores veem apenas os seus
     if (isAdmin) {
-      agendaAPI.list(week).then(r => setItems(r.data));
+      agendaAPI.list(week, company).then(r => setItems(r.data));
     } else {
       api.get('/agenda', { params: { week_start: week, user_id: userId, sector: profile?.sector || '' } })
         .then(r => setItems(r.data));
     }
   };
 
-  useEffect(() => { load(); }, [week]);
+  useEffect(() => { load(); }, [week, company]);
   useEffect(() => {
     leadersAPI.list().then(r => {
       setLeaders(r.data);
@@ -62,11 +64,13 @@ export default function Agenda({ userId, profile }) {
     });
     // Carrega usuários do novo sistema para o modal de envio
     if (userId) {
-      api.get(`/admin/users?requester_id=${userId}`)
+      const company = profile?.company || '';
+      const cq = company ? `&company=${encodeURIComponent(company)}` : '';
+      api.get(`/admin/users?requester_id=${userId}${cq}`)
         .then(r => setProfiles(r.data || []))
         .catch(() => {});
     }
-  }, [userId]);
+  }, [userId, profile?.company]);
 
   const prevWeek = () => setWeek(addDays(week, -7));
   const nextWeek = () => setWeek(addDays(week, 7));
@@ -91,7 +95,7 @@ export default function Agenda({ userId, profile }) {
         const r = await agendaAPI.update(editing, { ...form, week_start: week, updated_by: userId });
         saved = r.data;
       } else {
-        const r = await agendaAPI.create({ ...form, week_start: week, created_by: userId });
+        const r = await agendaAPI.create({ ...form, week_start: week, created_by: userId, company: company || undefined });
         saved = r.data;
       }
       setModal(false);

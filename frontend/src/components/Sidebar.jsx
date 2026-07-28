@@ -1,5 +1,5 @@
 import React from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, FileSpreadsheet, GitBranch } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 
@@ -13,10 +13,13 @@ const NAV_ALL = [
   { id: 'relatorios',   label: 'Tour 4x4',     icon: Camera,       perm: 'relatorios' },
   { id: 'vendas_gestao', label: 'Gest. Vendas', icon: FolderOpen,   perm: 'vendas_gestao' },
   { id: 'vendas_painel', label: 'Painel Vendas', icon: BarChart2,   perm: 'vendas_painel' },
+  { id: 'estoque',           label: 'Estoque',          icon: Package,         perm: 'estoque' },
+  { id: 'importador_estoque', label: 'Import. Estoque', icon: PackagePlus,     perm: 'importador_estoque' },
   { id: 'agenda',       label: 'Agenda',       icon: CalendarDays, perm: 'agenda' },
   { id: 'nscale',       label: 'Escala',       icon: CalendarRange,perm: 'escala' },
   { id: 'cashier',      label: 'Caixas',       icon: ShoppingCart, perm: 'caixas' },
   { id: 'profile',      label: 'Meu Perfil',   icon: UserCircle,   perm: null },
+  { id: 'organograma',  label: 'Organograma',  icon: GitBranch,    perm: 'organograma' },
   { id: 'usersadmin',   label: 'Usuários',     icon: ShieldCheck,  perm: 'usuarios' },
 ];
 

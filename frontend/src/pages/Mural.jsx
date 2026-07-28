@@ -26,15 +26,18 @@ export default function Mural({ userId, profile }) {
   const [saving, setSaving]   = useState(false);
   const [filter, setFilter]   = useState('todas');
 
+  const company = profile?.company || '';
+
   const load = () => {
     setLoading(true);
-    api.get(`/mural?requester_id=${userId}`)
+    const q = company ? `&company=${encodeURIComponent(company)}` : '';
+    api.get(`/mural?requester_id=${userId}${q}`)
       .then(r => setList(r.data))
       .catch(() => toast('Erro ao carregar mural'))
       .finally(() => setLoading(false));
   };
 
-  useEffect(() => { load(); }, [userId]);
+  useEffect(() => { load(); }, [userId, company]);
 
   const openNew  = () => { setEditing(null); setForm(EMPTY); setModal(true); };
   const openEdit = (m) => { setEditing(m.id); setForm({ title:m.title, content:m.content, category:m.category }); setModal(true); };
@@ -48,7 +51,7 @@ export default function Mural({ userId, profile }) {
         setList(l => l.map(m => m.id === editing ? r.data : m));
         toast('Card atualizado!');
       } else {
-        const r = await api.post('/mural', { requester_id: userId, ...form });
+        const r = await api.post('/mural', { requester_id: userId, ...form, company: company || undefined });
         setList(l => [r.data, ...l]);
         toast('Card adicionado ao mural!');
       }
