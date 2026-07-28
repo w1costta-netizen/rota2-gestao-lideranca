@@ -49,12 +49,37 @@ function Popover({ emoji, tipo, itemId, onClose }) {
 }
 
 export default function ReacaoBar({ itemId, userId, tipo, reacoes, onToggle, stopPropagation }) {
-  const [popover, setPopover] = useState(null); // emoji string or null
+  const [popover, setPopover]       = useState(null);
+  // emoji aguardando confirmação de remoção (primeiro clique no emoji já selecionado)
+  const [confirming, setConfirming] = useState(null);
+  const confirmTimer = useRef(null);
+
+  const stop = e => { if (stopPropagation) e.stopPropagation(); };
 
   const handleReacao = (e, emoji) => {
-    if (stopPropagation) e.stopPropagation();
-    onToggle(itemId, emoji);
+    stop(e);
     setPopover(null);
+
+    const mine = reacoes?.[emoji]?.mine;
+
+    if (mine) {
+      if (confirming === emoji) {
+        // Segundo clique no mesmo emoji → remove
+        clearTimeout(confirmTimer.current);
+        setConfirming(null);
+        onToggle(itemId, emoji);
+      } else {
+        // Primeiro clique no emoji já selecionado → pede confirmação
+        clearTimeout(confirmTimer.current);
+        setConfirming(emoji);
+        confirmTimer.current = setTimeout(() => setConfirming(null), 2500);
+      }
+    } else {
+      // Clique em emoji diferente → troca
+      clearTimeout(confirmTimer.current);
+      setConfirming(null);
+      onToggle(itemId, emoji);
+    }
   };
 
   const handleCount = (e, emoji) => {
@@ -62,44 +87,62 @@ export default function ReacaoBar({ itemId, userId, tipo, reacoes, onToggle, sto
     setPopover(prev => prev === emoji ? null : emoji);
   };
 
+  // Limpa timer ao desmontar
+  useEffect(() => () => clearTimeout(confirmTimer.current), []);
+
   return (
     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', paddingTop: 10 }}
-      onClick={e => stopPropagation && e.stopPropagation()}>
+      onClick={stop}>
       {EMOJIS.map(emoji => {
         const info  = reacoes?.[emoji];
         const count = info?.count || 0;
         const mine  = info?.mine  || false;
+        const isConfirming = confirming === emoji;
 
         return (
           <div key={emoji} style={{ position: 'relative' }}>
             {popover === emoji && (
-              <Popover
-                emoji={emoji}
-                tipo={tipo}
-                itemId={itemId}
-                onClose={() => setPopover(null)}
-              />
+              <Popover emoji={emoji} tipo={tipo} itemId={itemId} onClose={() => setPopover(null)} />
             )}
-            <div style={{ display: 'flex', alignItems: 'center',
-              border: mine ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
+
+            {/* Tooltip "clique para remover" */}
+            {isConfirming && (
+              <div style={{
+                position: 'absolute', bottom: 'calc(100% + 6px)', left: '50%',
+                transform: 'translateX(-50%)', whiteSpace: 'nowrap',
+                background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 600,
+                padding: '3px 8px', borderRadius: 6, zIndex: 998,
+                pointerEvents: 'none',
+              }}>
+                Clique de novo para remover
+              </div>
+            )}
+
+            <div style={{
+              display: 'flex', alignItems: 'center',
+              border: isConfirming
+                ? '1.5px solid #ef4444'
+                : mine ? '1.5px solid var(--primary)' : '1.5px solid var(--border)',
               borderRadius: 20, overflow: 'hidden',
-              background: mine ? 'var(--primary-subtle, rgba(99,102,241,.12))' : 'transparent',
+              background: isConfirming
+                ? 'rgba(239,68,68,.12)'
+                : mine ? 'var(--primary-subtle, rgba(99,102,241,.12))' : 'transparent',
+              transition: 'all .2s',
             }}>
-              {/* Botão emoji — toggle */}
               <button
                 onClick={e => handleReacao(e, emoji)}
-                title={mine ? 'Remover reação' : 'Reagir'}
+                title={mine ? (isConfirming ? 'Clique para remover' : 'Clique novamente para remover') : 'Reagir'}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 4,
                   padding: count > 0 ? '4px 6px 4px 10px' : '4px 10px',
                   fontSize: 13, cursor: 'pointer', background: 'transparent',
-                  border: 'none', color: mine ? 'var(--primary)' : 'var(--text-muted)',
+                  border: 'none',
+                  color: isConfirming ? '#ef4444' : mine ? 'var(--primary)' : 'var(--text-muted)',
                   fontWeight: mine ? 700 : 400,
                 }}>
                 <span>{emoji}</span>
               </button>
 
-              {/* Contagem clicável — abre popover com nomes */}
               {count > 0 && (
                 <button
                   onClick={e => handleCount(e, emoji)}
@@ -107,7 +150,7 @@ export default function ReacaoBar({ itemId, userId, tipo, reacoes, onToggle, sto
                   style={{
                     padding: '4px 10px 4px 2px', fontSize: 11,
                     cursor: 'pointer', background: 'transparent', border: 'none',
-                    color: mine ? 'var(--primary)' : 'var(--text-muted)',
+                    color: isConfirming ? '#ef4444' : mine ? 'var(--primary)' : 'var(--text-muted)',
                     fontWeight: mine ? 700 : 500,
                     borderLeft: '1px solid var(--border)',
                   }}>
