@@ -833,6 +833,8 @@ export default function NativeSchedule({ userId, profile }) {
         .pdf-generating { overflow:visible !important; border-radius:0 !important; box-shadow:none !important; }
         /* Permite nomes completos no PDF */
         .pdf-generating td.nome-col { white-space:normal !important; overflow:visible !important; text-overflow:unset !important; word-break:break-word !important; }
+        /* Evita corte de linhas no meio entre páginas */
+        .pdf-generating tr { page-break-inside: avoid !important; break-inside: avoid !important; }
         @media print {
           .print-only { display: table-cell !important; }
           .pdf-page-break { page-break-before: always; }
