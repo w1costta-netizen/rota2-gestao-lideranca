@@ -13,76 +13,37 @@ function dayOfWeekPT(dateStr) {
   return ['domingo','segunda','terca','quarta','quinta','sexta','sabado'][d.getUTCDay()];
 }
 
-/**
- * Retorna o user_id "canônico" do setor — o primeiro líder cadastrado com
- * aquele setor+empresa. Isso garante que todos que editam o mesmo setor
- * escrevem no mesmo conjunto de linhas (sem duplicatas).
- */
-async function getCanonicalUserId(company, sector, fallbackId) {
-  if (!company || !sector) return fallbackId;
-  const { data } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('company', company)
-    .ilike('sector', sector.trim())
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return data?.id || fallbackId;
-}
-
-async function getProfileInfo(userId) {
-  const { data } = await supabase
-    .from('profiles')
-    .select('company, sector, full_name')
-    .eq('id', userId)
-    .maybeSingle();
-  return data;
-}
-
-// GET /api/schedule?user_id=&week_start=
-router.get('/', async (req, res) => {
-  const { user_id, week_start } = req.query;
-  const { data, error } = await supabase
-    .from('schedule_entries')
-    .select('*, team_members(id,name,matricula,role,sector)')
-    .eq('user_id', user_id)
-    .eq('week_start', week_start)
-    .order('work_date');
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
-// GET /api/schedule/month?user_id=&year=&month=&sector=&company=
+// GET /api/schedule/month?user_id=&year=&month=
 router.get('/month', async (req, res) => {
-  const { user_id, year, month, sector, company } = req.query;
+  const { user_id, year, month } = req.query;
+  if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
+
   const from = `${year}-${String(month).padStart(2,'0')}-01`;
   const to   = `${year}-${String(month).padStart(2,'0')}-31`;
-
-  const canonicalId = await getCanonicalUserId(company, sector, user_id);
 
   const { data, error } = await supabase
     .from('schedule_entries')
     .select('*, team_members(name,matricula,role,sector), editor:last_edited_by(full_name)')
-    .eq('user_id', canonicalId)
+    .eq('user_id', user_id)
     .gte('work_date', from)
     .lte('work_date', to);
+
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  res.json(data || []);
 });
 
-// GET /api/schedule/last-editor?user_id=&sector=&company=&year=&month=
+// GET /api/schedule/last-editor?user_id=&year=&month=
 router.get('/last-editor', async (req, res) => {
-  const { user_id, sector, company, year, month } = req.query;
+  const { user_id, year, month } = req.query;
+  if (!user_id) return res.json(null);
+
   const from = `${year}-${String(month).padStart(2,'0')}-01`;
   const to   = `${year}-${String(month).padStart(2,'0')}-31`;
-
-  const canonicalId = await getCanonicalUserId(company, sector, user_id);
 
   const { data } = await supabase
     .from('schedule_entries')
     .select('last_edited_by, last_edited_at, editor:last_edited_by(full_name)')
-    .eq('user_id', canonicalId)
+    .eq('user_id', user_id)
     .gte('work_date', from)
     .lte('work_date', to)
     .not('last_edited_at', 'is', null)
@@ -99,37 +60,74 @@ router.post('/save', async (req, res) => {
   if (!user_id || !team_member_id || !work_date)
     return res.status(400).json({ error: 'user_id, team_member_id e work_date são obrigatórios' });
 
-  // Resolve setor+empresa do editor
-  const editorProfile = await getProfileInfo(user_id);
-  const company  = editorProfile?.company  || null;
-  const sector   = editorProfile?.sector   || null;
-
-  // Canonical owner do setor
-  const canonicalId = await getCanonicalUserId(company, sector, user_id);
+  // Busca dados do perfil para preencher company/sector nos entries
+  const { data: prof } = await supabase
+    .from('profiles')
+    .select('company, sector, full_name')
+    .eq('id', user_id)
+    .maybeSingle();
 
   const week_start  = getWeekStart(work_date);
   const day_of_week = dayOfWeekPT(work_date);
-  const isWork      = status === 'trabalha';
+  const isWork      = (status || 'trabalha') === 'trabalha';
 
   const { data, error } = await supabase
     .from('schedule_entries')
     .upsert({
-      user_id: canonicalId,
-      team_member_id, work_date, week_start, day_of_week,
-      status: status || 'trabalha',
+      user_id,
+      team_member_id,
+      work_date,
+      week_start,
+      day_of_week,
+      status:            status || 'trabalha',
       entrada:           isWork ? (entrada || null)           : null,
       intervalo:         isWork ? (intervalo || null)         : null,
       retorno_intervalo: isWork ? (retorno_intervalo || null) : null,
       saida:             isWork ? (saida || null)             : null,
-      start_time: isWork ? (entrada || null) : null,
-      end_time:   isWork ? (saida   || null) : null,
-      // campos de colaboração
-      company,
-      sector,
-      last_edited_by:  user_id,
-      last_edited_at:  new Date().toISOString(),
+      start_time:        isWork ? (entrada || null)           : null,
+      end_time:          isWork ? (saida   || null)           : null,
+      company:           prof?.company || null,
+      sector:            prof?.sector  || null,
+      last_edited_by:    user_id,
+      last_edited_at:    new Date().toISOString(),
     }, { onConflict: 'user_id,team_member_id,work_date' })
-    .select().single();
+    .select('*, team_members(name,matricula,role,sector)')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// GET /api/schedule/submission?user_id=&year=&month=
+router.get('/submission', async (req, res) => {
+  const { user_id, year, month } = req.query;
+  if (!user_id) return res.json(null);
+
+  const { data, error } = await supabase
+    .from('schedule_submissions')
+    .select('*')
+    .eq('user_id', user_id)
+    .eq('year', parseInt(year))
+    .eq('month', parseInt(month))
+    .maybeSingle();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || null);
+});
+
+// POST /api/schedule/submit
+router.post('/submit', async (req, res) => {
+  const { user_id, year, month } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
+
+  const { data, error } = await supabase
+    .from('schedule_submissions')
+    .upsert(
+      { user_id, year: parseInt(year), month: parseInt(month), submitted_at: new Date().toISOString() },
+      { onConflict: 'user_id,year,month' }
+    )
+    .select()
+    .single();
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -137,23 +135,31 @@ router.post('/save', async (req, res) => {
 
 // DELETE /api/schedule/submission
 router.delete('/submission', async (req, res) => {
-  const { user_id, year, month, sector, company } = req.query;
-  const canonicalId = await getCanonicalUserId(company, sector, user_id);
+  const { user_id, year, month } = req.query;
+  if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
+
   const { error } = await supabase
     .from('schedule_submissions')
     .delete()
-    .eq('user_id', canonicalId)
+    .eq('user_id', user_id)
     .eq('year', parseInt(year))
     .eq('month', parseInt(month));
+
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
 });
 
-// DELETE /api/schedule/:id
-router.delete('/:id', async (req, res) => {
-  const { error } = await supabase.from('schedule_entries').delete().eq('id', req.params.id);
+// GET /api/schedule?user_id=&week_start= (legado)
+router.get('/', async (req, res) => {
+  const { user_id, week_start } = req.query;
+  const { data, error } = await supabase
+    .from('schedule_entries')
+    .select('*, team_members(id,name,matricula,role,sector)')
+    .eq('user_id', user_id)
+    .eq('week_start', week_start)
+    .order('work_date');
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ ok: true });
+  res.json(data || []);
 });
 
 // GET /api/schedule/operators?user_id=&day_of_week=
@@ -167,9 +173,7 @@ router.get('/operators', async (req, res) => {
     .eq('status', 'trabalha');
   if (error) return res.status(500).json({ error: error.message });
 
-  // Funções que operam caixa (inclui nome antigo para compatibilidade com registros existentes)
   const CASHIER_ROLES = ['operador loja', 'operador(a) de caixa'];
-
   const cashierEntries = (data || []).filter(e => {
     const role = (e.team_members?.role || '').toLowerCase();
     return CASHIER_ROLES.includes(role);
@@ -189,33 +193,11 @@ router.get('/operators', async (req, res) => {
   res.json(result);
 });
 
-// GET /api/schedule/submission?user_id=&year=&month=&sector=&company=
-router.get('/submission', async (req, res) => {
-  const { user_id, year, month, sector, company } = req.query;
-  const canonicalId = await getCanonicalUserId(company, sector, user_id);
-  const { data, error } = await supabase
-    .from('schedule_submissions')
-    .select('*')
-    .eq('user_id', canonicalId)
-    .eq('year', year)
-    .eq('month', month)
-    .maybeSingle();
+// DELETE /api/schedule/:id
+router.delete('/:id', async (req, res) => {
+  const { error } = await supabase.from('schedule_entries').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
-});
-
-// POST /api/schedule/submit
-router.post('/submit', async (req, res) => {
-  const { user_id, year, month } = req.body;
-  const editorProfile = await getProfileInfo(user_id);
-  const canonicalId = await getCanonicalUserId(editorProfile?.company, editorProfile?.sector, user_id);
-  const { data, error } = await supabase
-    .from('schedule_submissions')
-    .upsert({ user_id: canonicalId, year, month, submitted_at: new Date().toISOString() },
-      { onConflict: 'user_id,year,month' })
-    .select().single();
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  res.json({ ok: true });
 });
 
 module.exports = router;

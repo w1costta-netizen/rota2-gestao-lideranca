@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronLeft, ChevronRight, Download, Users, X, Save, Trash2, Plus, CheckCircle, AlertCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Users, X, Save, Trash2, Plus, CheckCircle } from 'lucide-react';
 import api from '../api';
+import { useToast } from '../components/Toast';
 
 const DAY_NAME  = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const DAY_FULL  = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
@@ -17,7 +18,6 @@ function saveCustomRole(role) {
 function getAllRoles() {
   return [...DEFAULT_ROLES, ...getCustomRoles().filter(r => !DEFAULT_ROLES.includes(r))];
 }
-const ROLES = getAllRoles();
 
 const STATUS = {
   trabalha: { label:'Trabalha', bg:'#e0f2fe', color:'#0369a1' },
@@ -33,7 +33,6 @@ function fmtDate(y, m, d) { return `${y}-${String(m).padStart(2,'0')}-${String(d
 function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
 function getDOW(dateStr) { return new Date(dateStr + 'T12:00:00Z').getUTCDay(); }
 
-/* divide os dias do mês em semanas (linhas de 7 dias, Dom→Sáb) */
 function buildWeeks(year, month) {
   const total = daysInMonth(year, month);
   const all   = Array.from({ length: total }, (_, i) => fmtDate(year, month, i + 1));
@@ -49,7 +48,7 @@ function buildWeeks(year, month) {
 }
 
 /* ── Editor de célula ── */
-function CellEditor({ entry, memberName, dateStr, dayName, allDatesOfMonth, onSave, onClose }) {
+function CellEditor({ entry, memberName, dateStr, dayName, allDatesOfMonth, onSave, onClose, saving }) {
   const [status,    setStatus]    = useState(entry?.status || 'trabalha');
   const [entrada,   setEntrada]   = useState(entry?.entrada || '');
   const [intervalo, setIntervalo] = useState(entry?.intervalo || '');
@@ -79,7 +78,6 @@ function CellEditor({ entry, memberName, dateStr, dayName, allDatesOfMonth, onSa
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:22, lineHeight:1 }}>×</button>
         </div>
 
-        {/* Status */}
         <div style={{ display:'flex', flexWrap:'wrap', gap:5, marginBottom:14 }}>
           {Object.entries(STATUS).map(([k, v]) => (
             <button key={k} onClick={() => setStatus(k)} style={{
@@ -91,7 +89,6 @@ function CellEditor({ entry, memberName, dateStr, dayName, allDatesOfMonth, onSa
           ))}
         </div>
 
-        {/* Horários */}
         {status === 'trabalha' && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
             {[
@@ -109,7 +106,6 @@ function CellEditor({ entry, memberName, dateStr, dayName, allDatesOfMonth, onSa
           </div>
         )}
 
-        {/* Copiar para outros dias */}
         <div style={{ marginBottom:14 }}>
           <button onClick={() => setShowCopy(s => !s)} style={{
             width:'100%', padding:'8px 12px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700,
@@ -154,14 +150,20 @@ function CellEditor({ entry, memberName, dateStr, dayName, allDatesOfMonth, onSa
         </div>
 
         <div style={{ display:'flex', gap:8 }}>
-          <button onClick={onClose} style={{
+          <button onClick={onClose} disabled={saving} style={{
             flex:1, padding:'10px', borderRadius:8, border:'1.5px solid #e2e8f0',
             background:'#f8fafc', cursor:'pointer', fontSize:13, color:'#475569', fontWeight:600,
           }}>Cancelar</button>
-          <button onClick={() => onSave({ status, entrada, intervalo, retorno_intervalo:retorno, saida, copyToDays:copyDays })} style={{
-            flex:2, padding:'10px', borderRadius:8, border:'none',
-            background:'#1d4ed8', color:'#fff', cursor:'pointer', fontSize:13, fontWeight:700,
-          }}>✓ Salvar{copyDays.length > 0 ? ` + copiar (${copyDays.length})` : ''}</button>
+          <button
+            onClick={() => onSave({ status, entrada, intervalo, retorno_intervalo:retorno, saida, copyToDays:copyDays })}
+            disabled={saving}
+            style={{
+              flex:2, padding:'10px', borderRadius:8, border:'none',
+              background: saving ? '#93c5fd' : '#1d4ed8',
+              color:'#fff', cursor: saving ? 'default' : 'pointer', fontSize:13, fontWeight:700,
+            }}>
+            {saving ? '⏳ Salvando...' : `✓ Salvar${copyDays.length > 0 ? ` + copiar (${copyDays.length})` : ''}`}
+          </button>
         </div>
       </div>
     </>
@@ -247,9 +249,7 @@ function TeamModal({ userId, userSector, onClose }) {
                       <option value="">Função...</option>
                       {roles.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
-                    <button
-                      onClick={() => setAddingRole(true)}
-                      title="Adicionar novo cargo"
+                    <button onClick={() => setAddingRole(true)} title="Adicionar novo cargo"
                       style={{ background:'#2a2a2a', border:'1px solid #444', borderRadius:6, color:'var(--primary)', fontWeight:800, fontSize:16, padding:'0 10px', cursor:'pointer', lineHeight:1, flexShrink:0 }}>
                       +
                     </button>
@@ -304,27 +304,29 @@ function TeamModal({ userId, userSector, onClose }) {
 const ELEVATED_LEVELS = ['admin', 'supervisor'];
 
 export default function NativeSchedule({ userId, profile }) {
+  const toast = useToast();
   const now = new Date();
   const [year,       setYear]       = useState(now.getFullYear());
   const [month,      setMonth]      = useState(now.getMonth() + 1);
   const [members,    setMembers]    = useState([]);
   const [entries,    setEntries]    = useState([]);
   const [openCell,   setOpenCell]   = useState(null);
+  const [cellSaving, setCellSaving] = useState(false);
   const [showTeam,   setShowTeam]   = useState(false);
   const [submission, setSubmission] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [loading,    setLoading]    = useState(false);
   const today = todayISO();
   const todayDay   = parseInt(today.split('-')[2]);
   const todayMonth = parseInt(today.split('-')[1]);
   const todayYear  = parseInt(today.split('-')[0]);
 
   const isElevated = ELEVATED_LEVELS.includes(profile?.access_level);
-  const [allProfiles,     setAllProfiles]     = useState([]);
   const [allSectors,      setAllSectors]      = useState([]);
   const [selectedSector,  setSelectedSector]  = useState('');
-  const [lastEditor,      setLastEditor]       = useState(null);
+  const [allProfiles,     setAllProfiles]     = useState([]);
+  const [lastEditor,      setLastEditor]      = useState(null);
 
-  // Para perfis elevados: carrega lista de todos os perfis e setores cadastrados
   useEffect(() => {
     if (!isElevated) return;
     api.get('/profile/all').then(r => setAllProfiles(r.data)).catch(() => {});
@@ -333,19 +335,14 @@ export default function NativeSchedule({ userId, profile }) {
       .catch(() => {});
   }, [isElevated, profile?.company]);
 
-  // Acha o perfil do líder responsável pelo setor selecionado (apenas supervisor)
+  // Para supervisores visualizando outro setor, resolve o user_id daquele setor
   const sectorProfile = selectedSector
     ? allProfiles.find(p => p.sector?.toLowerCase() === selectedSector.toLowerCase())
     : null;
 
-  // userId efetivo para supervisores vendo outro setor
-  const effectiveUserId = sectorProfile ? sectorProfile.id : userId;
+  // user_id efetivo: do setor visualizado (supervisor) ou do próprio usuário
+  const effectiveUserId = sectorProfile?.id || userId;
 
-  // Setor e empresa ativos — usados para queries de colaboração
-  const activeSector  = selectedSector || profile?.sector || '';
-  const activeCompany = profile?.company || '';
-
-  // Perfil sendo visualizado (para cabeçalho e PDF)
   const viewedProfile = sectorProfile || profile;
 
   const weeks   = buildWeeks(year, month);
@@ -358,20 +355,24 @@ export default function NativeSchedule({ userId, profile }) {
 
   const load = useCallback(async () => {
     if (!effectiveUserId) return;
-    const sectorParams = activeSector && activeCompany
-      ? `&sector=${encodeURIComponent(activeSector)}&company=${encodeURIComponent(activeCompany)}`
-      : '';
-    const [mRes, eRes, sRes, leRes] = await Promise.all([
-      api.get(`/team?user_id=${effectiveUserId}&active=true`),
-      api.get(`/schedule/month?user_id=${effectiveUserId}&year=${year}&month=${month}${sectorParams}`),
-      api.get(`/schedule/submission?user_id=${effectiveUserId}&year=${year}&month=${month}${sectorParams}`).catch(() => ({ data: null })),
-      api.get(`/schedule/last-editor?user_id=${effectiveUserId}&year=${year}&month=${month}${sectorParams}`).catch(() => ({ data: null })),
-    ]);
-    setMembers(mRes.data);
-    setEntries(eRes.data);
-    setSubmission(sRes.data);
-    setLastEditor(leRes.data);
-  }, [effectiveUserId, activeSector, activeCompany, year, month]);
+    setLoading(true);
+    try {
+      const [mRes, eRes, sRes, leRes] = await Promise.all([
+        api.get(`/team?user_id=${effectiveUserId}&active=true`),
+        api.get(`/schedule/month?user_id=${effectiveUserId}&year=${year}&month=${month}`),
+        api.get(`/schedule/submission?user_id=${effectiveUserId}&year=${year}&month=${month}`).catch(() => ({ data: null })),
+        api.get(`/schedule/last-editor?user_id=${effectiveUserId}&year=${year}&month=${month}`).catch(() => ({ data: null })),
+      ]);
+      setMembers(Array.isArray(mRes.data) ? mRes.data : []);
+      setEntries(Array.isArray(eRes.data) ? eRes.data : []);
+      setSubmission(sRes.data);
+      setLastEditor(leRes.data);
+    } catch (e) {
+      toast('Erro ao carregar escala. Verifique a conexão.', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [effectiveUserId, year, month]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -383,41 +384,64 @@ export default function NativeSchedule({ userId, profile }) {
 
   const saveCell = async ({ copyToDays = [], ...payload }) => {
     if (!openCell) return;
-    const dates   = [openCell.date, ...copyToDays];
-    // Sempre envia o userId do usuário logado — o backend resolve o canonical do setor
-    const results = await Promise.all(
-      dates.map(date => api.post('/schedule/save', { user_id: userId, team_member_id: openCell.memberId, work_date: date, ...payload }))
-    );
-    setEntries(prev => {
-      let next = [...prev];
-      results.forEach(res => {
-        const idx = next.findIndex(e => e.team_member_id === openCell.memberId && e.work_date === res.data.work_date);
-        if (idx >= 0) next[idx] = res.data; else next.push(res.data);
+    setCellSaving(true);
+    const dates = [openCell.date, ...copyToDays];
+    try {
+      const results = await Promise.all(
+        dates.map(date =>
+          api.post('/schedule/save', {
+            user_id: effectiveUserId,
+            team_member_id: openCell.memberId,
+            work_date: date,
+            ...payload,
+          })
+        )
+      );
+      setEntries(prev => {
+        let next = [...prev];
+        results.forEach(res => {
+          if (!res.data) return;
+          const idx = next.findIndex(e =>
+            e.team_member_id === openCell.memberId && e.work_date === res.data.work_date
+          );
+          if (idx >= 0) next[idx] = res.data;
+          else next.push(res.data);
+        });
+        return next;
       });
-      return next;
-    });
-    // Atualiza o last editor imediatamente (sem reload completo)
-    setLastEditor({ editor: { full_name: profile?.full_name }, last_edited_at: new Date().toISOString() });
-    setOpenCell(null);
+      setLastEditor({ editor: { full_name: profile?.full_name }, last_edited_at: new Date().toISOString() });
+      setOpenCell(null);
+      if (copyToDays.length > 0) {
+        toast(`✓ Salvo em ${dates.length} dia${dates.length > 1 ? 's' : ''}`);
+      }
+    } catch (e) {
+      toast('Erro ao salvar. Verifique a conexão e tente novamente.', 'error');
+    } finally {
+      setCellSaving(false);
+    }
   };
 
   const submitSchedule = async () => {
     setSubmitting(true);
     try {
-      const res = await api.post('/schedule/submit', { user_id: userId, year, month });
+      const res = await api.post('/schedule/submit', { user_id: effectiveUserId, year, month });
       setSubmission(res.data);
-    } catch {}
-    setSubmitting(false);
+      toast('Escala fechada com sucesso!');
+    } catch {
+      toast('Erro ao fechar escala.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const reopenSchedule = async () => {
-    const sectorParams = activeSector && activeCompany
-      ? `&sector=${encodeURIComponent(activeSector)}&company=${encodeURIComponent(activeCompany)}`
-      : '';
     try {
-      await api.delete(`/schedule/submission?user_id=${userId}&year=${year}&month=${month}${sectorParams}`);
+      await api.delete(`/schedule/submission?user_id=${effectiveUserId}&year=${year}&month=${month}`);
       setSubmission(null);
-    } catch {}
+      toast('Escala reaberta para edição.');
+    } catch {
+      toast('Erro ao reabrir escala.', 'error');
+    }
   };
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
@@ -439,18 +463,17 @@ export default function NativeSchedule({ userId, profile }) {
         .from(el)
         .save();
     } catch (e) {
-      console.error(e);
+      toast('Erro ao gerar PDF.', 'error');
+    } finally {
+      el.classList.remove('pdf-generating');
+      setGeneratingPdf(false);
     }
-    el.classList.remove('pdf-generating');
-    setGeneratingPdf(false);
   };
 
-  // progresso
   const filled = entries.filter(e => e.work_date >= allDates[0] && e.work_date <= allDates[allDates.length-1]).length;
   const total  = members.length * allDates.filter(d => getDOW(d) !== 0).length;
   const pct    = total > 0 ? Math.round(filled / total * 100) : 0;
 
-  /* ── Célula de dia ── */
   function DayCell({ m, date }) {
     if (!date) return <td style={{ background:'#f3f4f6', border:'1px solid #e5e7eb' }}/>;
 
@@ -459,30 +482,38 @@ export default function NativeSchedule({ userId, profile }) {
     const isSun   = getDOW(date) === 0;
     const isD26   = parseInt(date.split('-')[2]) === 26;
     const bg      = isToday ? '#eff6ff' : isD26 ? '#faf5ff' : isSun ? '#fafafa' : '#fff';
-    const open    = () => setOpenCell({ memberId:m.id, date, dow:getDOW(date) });
+    const open    = () => {
+      if (submission) return; // escala fechada, não permite editar
+      setOpenCell({ memberId:m.id, date, dow:getDOW(date) });
+    };
 
     if (!entry) return (
-      <td onClick={open} style={{ background:bg, cursor:'pointer', textAlign:'center',
+      <td onClick={open} style={{
+        background:bg, cursor: submission ? 'default' : 'pointer', textAlign:'center',
         verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'3px 1px',
-        opacity: isSun ? .35 : 1 }}>
-        <span style={{ color:'#d1d5db', fontSize:13, fontWeight:700 }}>+</span>
+        opacity: isSun ? .35 : 1,
+      }}>
+        {!submission && <span style={{ color:'#d1d5db', fontSize:13, fontWeight:700 }}>+</span>}
       </td>
     );
 
     if (entry.status !== 'trabalha') {
       const st = STATUS[entry.status] || STATUS.dsr;
       return (
-        <td onClick={open} style={{ background:st.bg, cursor:'pointer', textAlign:'center',
-          verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'2px 1px' }}>
+        <td onClick={open} style={{
+          background:st.bg, cursor: submission ? 'default' : 'pointer', textAlign:'center',
+          verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'2px 1px',
+        }}>
           <span style={{ fontWeight:800, fontSize:8, color:st.color }}>{st.label}</span>
         </td>
       );
     }
 
-    /* horários na horizontal: 2 colunas × 2 linhas */
     return (
-      <td onClick={open} style={{ background:bg, cursor:'pointer',
-        verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'2px 3px' }}>
+      <td onClick={open} style={{
+        background:bg, cursor: submission ? 'default' : 'pointer',
+        verticalAlign:'middle', border:`1px solid ${isD26?'#c4b5fd':'#e5e7eb'}`, padding:'2px 3px',
+      }}>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 4px', fontSize:9, lineHeight:1.45 }}>
           <span style={{ fontWeight:700, color:'#1d4ed8' }}>{entry.entrada||'—'}</span>
           <span style={{ color:'#6b7280' }}>{entry.intervalo||'—'}</span>
@@ -493,7 +524,6 @@ export default function NativeSchedule({ userId, profile }) {
     );
   }
 
-  /* ── Cabeçalho de uma semana ── */
   function WeekHeader({ week }) {
     return (
       <tr>
@@ -518,7 +548,6 @@ export default function NativeSchedule({ userId, profile }) {
             </th>
           );
         })}
-        {/* Assinatura e Data de Ciência: só aparecem no PDF */}
         <th className="print-only" style={{ background:'#c2410c', color:'#fff', padding:'3px 4px', fontSize:8, fontWeight:700, border:'1px solid #9a3412', width:70, textAlign:'center' }}>Assinatura</th>
         <th className="print-only" style={{ background:'#c2410c', color:'#fff', padding:'3px 4px', fontSize:8, fontWeight:700, border:'1px solid #9a3412', width:55, textAlign:'center' }}>Data Ciência</th>
       </tr>
@@ -527,20 +556,17 @@ export default function NativeSchedule({ userId, profile }) {
 
   return (
     <>
-      {/* Card — começa imediatamente, sem espaço morto */}
       <div id="schedule-print" style={{ background:'#fff', color:'#111', borderRadius:10, border:'1px solid #e5e7eb', boxShadow:'0 2px 12px rgba(0,0,0,.08)', overflow:'hidden' }}>
 
-        {/* Barra única: tudo numa linha */}
+        {/* Barra de controles */}
         <div style={{
           padding:'5px 10px', borderBottom:'1px solid #e5e7eb',
-          display:'flex', alignItems:'center', gap:10,
+          display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
           background:'#f8fafc',
         }}>
-          {/* Título */}
           <span style={{ fontWeight:800, fontSize:13, color:'#0f172a', whiteSpace:'nowrap' }}>Escala Mensal</span>
           <span style={{ color:'#e2e8f0' }}>|</span>
 
-          {/* Seletor de setor (apenas supervisor/gerente geral) */}
           {isElevated ? (
             <select
               value={selectedSector}
@@ -557,15 +583,17 @@ export default function NativeSchedule({ userId, profile }) {
           )}
           <span style={{ color:'#e2e8f0' }}>|</span>
 
-          {/* Legenda de cores */}
           <span style={{ fontSize:9, color:'#1d4ed8', fontWeight:700, whiteSpace:'nowrap' }}>■E</span>
           <span style={{ fontSize:9, color:'#6b7280', whiteSpace:'nowrap' }}>■I/R</span>
           <span style={{ fontSize:9, color:'#dc2626', fontWeight:700, whiteSpace:'nowrap' }}>■S</span>
           <span style={{ fontSize:9, color:'#7c3aed', fontWeight:700, whiteSpace:'nowrap' }}>■26=Prazo</span>
           <span style={{ color:'#e2e8f0' }}>|</span>
 
-          {/* Progresso */}
-          {members.length > 0 && (<>
+          {loading && (
+            <span style={{ fontSize:10, color:'#64748b', whiteSpace:'nowrap' }}>⏳ Carregando...</span>
+          )}
+
+          {!loading && members.length > 0 && (<>
             <div style={{ width:60, height:4, background:'#e5e7eb', borderRadius:2, overflow:'hidden', flexShrink:0 }}>
               <div style={{ width:`${pct}%`, height:'100%', background: pct===100?'#16a34a':'#1d4ed8' }}/>
             </div>
@@ -573,12 +601,12 @@ export default function NativeSchedule({ userId, profile }) {
             <span style={{ color:'#e2e8f0' }}>|</span>
           </>)}
 
-          {/* Alertas inline */}
           {alertDay && (
             <span style={{ fontSize:10, fontWeight:700, color: alertUrgent?'#991b1b':'#92400e', whiteSpace:'nowrap' }}>
               {alertUrgent ? '🚨 HOJE prazo!' : `⏰ ${daysLeft}d p/ fechar`}
             </span>
           )}
+
           {submission && (<>
             <span style={{ fontSize:10, fontWeight:700, color:'#166534', whiteSpace:'nowrap' }}>
               ✅ Fechada {new Date(submission.submitted_at).toLocaleDateString('pt-BR')}
@@ -588,21 +616,16 @@ export default function NativeSchedule({ userId, profile }) {
             </button>
           </>)}
 
-          {/* Última edição por */}
-          {lastEditor?.editor?.full_name && (
-            <>
-              <span style={{ color:'#e2e8f0' }}>|</span>
-              <span style={{ fontSize:9, color:'#64748b', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:3 }}>
-                ✏️ <b>{lastEditor.editor.full_name.split(' ')[0]}</b>
-                {lastEditor.last_edited_at && ` · ${new Date(lastEditor.last_edited_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}`}
-              </span>
-            </>
-          )}
+          {lastEditor?.editor?.full_name && (<>
+            <span style={{ color:'#e2e8f0' }}>|</span>
+            <span style={{ fontSize:9, color:'#64748b', whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:3 }}>
+              ✏️ <b>{lastEditor.editor.full_name.split(' ')[0]}</b>
+              {lastEditor.last_edited_at && ` · ${new Date(lastEditor.last_edited_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })}`}
+            </span>
+          </>)}
 
-          {/* Espaço flexível */}
           <div style={{ flex:1 }}/>
 
-          {/* Navegação mês */}
           <button onClick={prevMonth} style={{ background:'#f1f5f9', border:'1px solid #e2e8f0', borderRadius:4, cursor:'pointer', padding:'2px 5px', display:'flex', flexShrink:0 }}>
             <ChevronLeft size={12}/>
           </button>
@@ -612,9 +635,12 @@ export default function NativeSchedule({ userId, profile }) {
           </button>
           <span style={{ color:'#e2e8f0' }}>|</span>
 
-          {/* Ações */}
-          <button onClick={() => setShowTeam(true)} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}><Users size={11}/> Time</button>
-          <button onClick={downloadPDF} disabled={generatingPdf} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0, opacity: generatingPdf ? .6 : 1 }}><Download size={11}/> {generatingPdf ? 'Gerando...' : 'Baixar PDF'}</button>
+          <button onClick={() => setShowTeam(true)} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}>
+            <Users size={11}/> Time
+          </button>
+          <button onClick={downloadPDF} disabled={generatingPdf} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0, opacity: generatingPdf ? .6 : 1 }}>
+            <Download size={11}/> {generatingPdf ? 'Gerando...' : 'Baixar PDF'}
+          </button>
           {!submission && (
             <button onClick={submitSchedule} disabled={submitting} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:5, border:'none', background:'#16a34a', color:'#fff', cursor:'pointer', fontWeight:700, fontSize:11, whiteSpace:'nowrap', flexShrink:0 }}>
               <CheckCircle size={11}/> {submitting ? 'Fechando...' : 'Fechar Escala'}
@@ -622,14 +648,18 @@ export default function NativeSchedule({ userId, profile }) {
           )}
         </div>
 
-        {/* Semanas empilhadas */}
+        {/* Tabela de semanas */}
         <div style={{ padding:'0 0 8px' }}>
-          {members.length === 0 ? (
+          {loading ? (
+            <div style={{ textAlign:'center', padding:'40px', color:'#6b7280', fontSize:13 }}>
+              Carregando escala...
+            </div>
+          ) : members.length === 0 ? (
             <div style={{ textAlign:'center', padding:'40px', color:'#6b7280', fontSize:13 }}>
               Clique em <b>Time</b> para adicionar colaboradores.
             </div>
           ) : weeks.map((week, wi) => (
-            <div key={wi} style={{ marginBottom: wi < weeks.length-1 ? 0 : 0, borderBottom: wi < weeks.length-1 ? '3px solid #e5e7eb' : 'none' }}>
+            <div key={wi} style={{ borderBottom: wi < weeks.length-1 ? '3px solid #e5e7eb' : 'none' }}>
               <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
                 <thead><WeekHeader week={week}/></thead>
                 <tbody>
@@ -657,6 +687,7 @@ export default function NativeSchedule({ userId, profile }) {
         <div style={{ padding:'8px 18px', borderTop:'1px solid #e5e7eb', background:'#f9fafb', display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:8, alignItems:'center' }}>
           <p style={{ fontSize:10, color:'#6b7280', fontStyle:'italic', margin:0 }}>
             ** Escala deverá ser fechada até o dia <b>26</b> de cada mês.
+            {submission && <span style={{ marginLeft:8, color:'#16a34a', fontStyle:'normal', fontWeight:700 }}>✅ Esta escala está fechada — clique em "Reabrir" para editar.</span>}
           </p>
           <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
             {Object.entries(STATUS).map(([k, v]) => (
@@ -688,13 +719,17 @@ export default function NativeSchedule({ userId, profile }) {
           dayName={DAY_FULL[openCell.dow]}
           allDatesOfMonth={allDates}
           onSave={saveCell}
-          onClose={() => setOpenCell(null)}
+          onClose={() => !cellSaving && setOpenCell(null)}
+          saving={cellSaving}
         />
       )}
 
       {showTeam && (
-        <TeamModal userId={effectiveUserId} userSector={viewedProfile?.sector}
-          onClose={() => { setShowTeam(false); load(); }}/>
+        <TeamModal
+          userId={effectiveUserId}
+          userSector={viewedProfile?.sector}
+          onClose={() => { setShowTeam(false); load(); }}
+        />
       )}
     </>
   );
