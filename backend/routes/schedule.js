@@ -18,8 +18,9 @@ router.get('/month', async (req, res) => {
   const { user_id, year, month } = req.query;
   if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
 
+  const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
   const from = `${year}-${String(month).padStart(2,'0')}-01`;
-  const to   = `${year}-${String(month).padStart(2,'0')}-31`;
+  const to   = `${year}-${String(month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
   const { data, error } = await supabase
     .from('schedule_entries')
@@ -37,8 +38,9 @@ router.get('/last-editor', async (req, res) => {
   const { user_id, year, month } = req.query;
   if (!user_id) return res.json(null);
 
+  const lastDay2 = new Date(parseInt(year), parseInt(month), 0).getDate();
   const from = `${year}-${String(month).padStart(2,'0')}-01`;
-  const to   = `${year}-${String(month).padStart(2,'0')}-31`;
+  const to   = `${year}-${String(month).padStart(2,'0')}-${String(lastDay2).padStart(2,'0')}`;
 
   const { data } = await supabase
     .from('schedule_entries')
