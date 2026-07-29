@@ -164,20 +164,35 @@ router.get('/', async (req, res) => {
   res.json(data || []);
 });
 
-// GET /api/schedule/operators?user_id=&day_of_week=
+// GET /api/schedule/operators?user_id=&day_of_week=&year=&month=
 router.get('/operators', async (req, res) => {
-  const { user_id, day_of_week } = req.query;
+  const { user_id, day_of_week, year, month } = req.query;
+
+  // Busca empresa do usuário
+  const { data: prof } = await supabase
+    .from('profiles').select('company').eq('id', user_id).maybeSingle();
+  if (!prof?.company) return res.json([]);
+
+  // Faixa do mês (padrão: mês atual)
+  const y = parseInt(year)  || new Date().getFullYear();
+  const m = parseInt(month) || (new Date().getMonth() + 1);
+  const lastDay = new Date(y, m, 0).getDate();
+  const from = `${y}-${String(m).padStart(2,'0')}-01`;
+  const to   = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
   const { data, error } = await supabase
     .from('schedule_entries')
     .select('entrada, saida, status, team_members(name,sector,role)')
-    .eq('user_id', user_id)
+    .eq('company', prof.company)
     .eq('day_of_week', day_of_week)
-    .eq('status', 'trabalha');
+    .eq('status', 'trabalha')
+    .gte('work_date', from)
+    .lte('work_date', to);
   if (error) return res.status(500).json({ error: error.message });
 
-  const CASHIER_ROLES = ['operador loja', 'operador(a) de caixa'];
+  const CASHIER_ROLES = ['operador loja', 'aprendiz'];
   const cashierEntries = (data || []).filter(e => {
-    const role = (e.team_members?.role || '').toLowerCase();
+    const role = (e.team_members?.role || '').toLowerCase().trim();
     return CASHIER_ROLES.includes(role);
   });
 

@@ -203,7 +203,7 @@ function AppContent() {
     scale:        () => <Scale setPage={setPage} />,
     team:         () => <TeamMembers userId={userId} userSector={userSector} />,
     nscale:       () => has('escala')     ? <NativeSchedule userId={userId} profile={effectiveProfile} />           : <AccessDenied />,
-    cashier:      () => has('caixas')     ? <CashierAnalysis userId={userId} />                                    : <AccessDenied />,
+    cashier:      () => has('caixas')     ? <CashierAnalysis userId={userId} profile={effectiveProfile} />        : <AccessDenied />,
     profile:      () => <Profile />,
     comunicados:  () => <Comunicados userId={userId} profile={effectiveProfile} />,
     tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={effectiveProfile} />                  : <AccessDenied />,

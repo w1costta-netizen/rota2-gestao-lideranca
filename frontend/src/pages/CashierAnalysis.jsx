@@ -13,6 +13,7 @@ const DAYS = [
 
 const MAX_CAIXAS = 12;
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8..20
+const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 function fmt(h) { return `${String(h).padStart(2, '0')}:00`; }
 
@@ -25,21 +26,24 @@ function statusBar(count) {
   return { pct, color };
 }
 
-export default function CashierAnalysis({ userId }) {
+export default function CashierAnalysis({ userId, profile }) {
+  const now = new Date();
   const [selectedDay, setSelectedDay] = useState('segunda');
-  const [data, setData] = useState(null);
+  const [year,  setYear]  = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [data, setData]   = useState(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  const [error, setError]     = useState(null);
 
   useEffect(() => {
     if (!userId) return;
     setLoading(true);
     setError(null);
-    api.get(`/schedule/operators?user_id=${userId}&day_of_week=${selectedDay}`)
+    api.get(`/schedule/operators?user_id=${userId}&day_of_week=${selectedDay}&year=${year}&month=${month}`)
       .then(res => setData(res.data))
       .catch(() => setError('Erro ao carregar dados da escala'))
       .finally(() => setLoading(false));
-  }, [userId, selectedDay]);
+  }, [userId, selectedDay, year, month]);
 
   const totalOperadores = data
     ? Math.max(...data.map(h => h.operators), 0)
@@ -54,8 +58,18 @@ export default function CashierAnalysis({ userId }) {
         <div>
           <h1 className="page-title">Caixas — Frente de Caixa</h1>
           <p className="page-subtitle">
-            Operadores disponíveis por faixa horária baseado na escala importada • {MAX_CAIXAS} caixas no clube
+            Operadores disponíveis por faixa horária baseado na escala • {MAX_CAIXAS} caixas no clube
           </p>
+        </div>
+        {/* Seletor de mês/ano */}
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <button onClick={() => { const d = new Date(year, month-2); setYear(d.getFullYear()); setMonth(d.getMonth()+1); }}
+            style={{ background:'none', border:'1px solid var(--border)', borderRadius:8, padding:'4px 10px', cursor:'pointer', color:'var(--text)', fontSize:16 }}>‹</button>
+          <span style={{ fontWeight:700, fontSize:13, minWidth:110, textAlign:'center' }}>
+            {MONTHS_PT[month-1]} {year}
+          </span>
+          <button onClick={() => { const d = new Date(year, month); setYear(d.getFullYear()); setMonth(d.getMonth()+1); }}
+            style={{ background:'none', border:'1px solid var(--border)', borderRadius:8, padding:'4px 10px', cursor:'pointer', color:'var(--text)', fontSize:16 }}>›</button>
         </div>
       </div>
 
