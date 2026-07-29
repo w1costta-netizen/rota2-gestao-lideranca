@@ -605,8 +605,8 @@ export default function NativeSchedule({ userId, profile }) {
   function WeekHeader({ week }) {
     return (
       <tr>
-        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 5px', fontSize:9, fontWeight:700, border:'1px solid #0c6482', width:38 }}>Mat.</th>
-        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 8px', fontSize:10, fontWeight:700, border:'1px solid #0c6482', textAlign:'left', width:130 }}>Nome</th>
+        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 5px', fontSize:9, fontWeight:700, border:'1px solid #0c6482', width:45 }}>Mat.</th>
+        <th style={{ background:'#0e7490', color:'#fff', padding:'3px 8px', fontSize:10, fontWeight:700, border:'1px solid #0c6482', textAlign:'left', width:150 }}>Nome</th>
         {week.map((date, i) => {
           if (!date) return <th key={i} style={{ background:'#374151', border:'1px solid #374151' }}/>;
           const d    = parseInt(date.split('-')[2]);
@@ -792,7 +792,7 @@ export default function NativeSchedule({ userId, profile }) {
                         <tr key={m.id} style={{ background:rowBg }}>
                           <td style={{ background:rowBg, padding:'2px 3px', textAlign:'center', fontSize:9,
                             color:'#6b7280', fontWeight:600, border:'1px solid #e5e7eb' }}>{m.matricula||'—'}</td>
-                          <td style={{ background:rowBg, padding:'2px 8px', fontSize:10, fontWeight:700,
+                          <td className="nome-col" style={{ background:rowBg, padding:'2px 8px', fontSize:10, fontWeight:700,
                             color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</td>
                           {week.map((date, di) => <DayCell key={di} m={m} date={date}/>)}
                           <td className="print-only" style={{ background:rowBg, border:'1px solid #f97316' }}/>
@@ -828,7 +828,11 @@ export default function NativeSchedule({ userId, profile }) {
         .print-only { display: none; }
         .pdf-generating .print-only { display: table-cell !important; }
         .pdf-generating .pdf-page-break { page-break-before: always; }
-        .pdf-generating .week-block { border-radius:0 !important; margin:0 !important; box-shadow:none !important; }
+        .pdf-generating .week-block { border-radius:0 !important; margin:4px 0 !important; box-shadow:none !important; overflow:visible !important; }
+        /* Remove clipping para que colunas extras não sejam cortadas */
+        .pdf-generating { overflow:visible !important; border-radius:0 !important; box-shadow:none !important; }
+        /* Permite nomes completos no PDF */
+        .pdf-generating td.nome-col { white-space:normal !important; overflow:visible !important; text-overflow:unset !important; word-break:break-word !important; }
         @media print {
           .print-only { display: table-cell !important; }
           .pdf-page-break { page-break-before: always; }
