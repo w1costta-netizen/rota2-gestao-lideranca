@@ -353,9 +353,13 @@ export default function NativeSchedule({ userId, profile }) {
   const alertUrgent = isCurrentMonth && todayDay === 26 && !submission;
   const daysLeft    = 26 - todayDay;
 
-  // Warm-up: pinga o backend ao montar para acordar o Render (free tier dorme)
+  // Warm-up: pinga o backend para acordar o Render (free tier dorme)
+  // Aguarda 3s antes do primeiro load para dar tempo ao servidor acordar
+  const [warmupDone, setWarmupDone] = useState(false);
   useEffect(() => {
-    api.get('/health').catch(() => {});
+    api.get('/health').catch(() => {}).finally(() => {
+      setTimeout(() => setWarmupDone(true), 3000);
+    });
   }, []);
 
   const [loadError, setLoadError] = useState(false);
@@ -383,7 +387,7 @@ export default function NativeSchedule({ userId, profile }) {
     }
   }, [effectiveUserId, year, month]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (warmupDone) load(); }, [load, warmupDone]);
 
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y-1); } else setMonth(m => m-1); };
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y+1); } else setMonth(m => m+1); };
@@ -735,9 +739,9 @@ export default function NativeSchedule({ userId, profile }) {
 
         {/* Tabela de semanas */}
         <div style={{ padding:'0 0 8px' }}>
-          {loading ? (
+          {!warmupDone || loading ? (
             <div style={{ textAlign:'center', padding:'40px', color:'#6b7280', fontSize:13 }}>
-              ⏳ Carregando escala... (pode levar até 60s na primeira vez)
+              {!warmupDone ? '⏳ Conectando ao servidor... aguarde alguns segundos' : '⏳ Carregando escala...'}
             </div>
           ) : loadError ? (
             <div style={{ textAlign:'center', padding:'40px' }}>
