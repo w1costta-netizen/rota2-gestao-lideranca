@@ -130,11 +130,15 @@ router.post('/:id/fotos', async (req, res) => {
 
 // PUT /api/relatorios/fotos/:fotoId
 router.put('/fotos/:fotoId', async (req, res) => {
-  const { caption, annotations, order_index } = req.body;
+  const { caption, annotations, order_index, evidencia_url, evidencia_comentario, evidencia_at, evidencia_by } = req.body;
   const updates = {};
-  if (caption !== undefined)      updates.caption      = caption;
-  if (annotations !== undefined)  updates.annotations  = annotations;
-  if (order_index !== undefined)  updates.order_index  = order_index;
+  if (caption !== undefined)              updates.caption               = caption;
+  if (annotations !== undefined)          updates.annotations           = annotations;
+  if (order_index !== undefined)          updates.order_index           = order_index;
+  if (evidencia_url !== undefined)        updates.evidencia_url         = evidencia_url;
+  if (evidencia_comentario !== undefined) updates.evidencia_comentario  = evidencia_comentario;
+  if (evidencia_at !== undefined)         updates.evidencia_at          = evidencia_at;
+  if (evidencia_by !== undefined)         updates.evidencia_by          = evidencia_by;
 
   const { data, error } = await supabase.from('relatorio_fotos').update(updates).eq('id', req.params.fotoId).select().single();
   if (error) return res.status(500).json({ error: error.message });

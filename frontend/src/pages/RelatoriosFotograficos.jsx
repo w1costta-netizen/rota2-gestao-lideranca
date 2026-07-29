@@ -12,6 +12,15 @@ function formatDate(d) {
   return new Date(d).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric' });
 }
 
+function formatPrazoDisplay(val) {
+  if (!val) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+    const [y,m,d] = val.split('-');
+    return `${d}/${m}/${y}`;
+  }
+  return val;
+}
+
 // Serializa/desserializa campos extras dentro do campo description do tour
 function encodeDesc({ texto, clube, destinatario, departamento, prazo }) {
   return JSON.stringify({ texto, clube, destinatario, departamento, prazo });
@@ -493,6 +502,107 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
   );
 }
 
+// ─── Modal de evidência de conclusão ─────────────────────────────────────────
+function ModalEvidencia({ foto, userId, onSave, onClose }) {
+  const toast = useToast();
+  const fileRef = useRef();
+  const [imgFile, setImgFile]       = useState(null);
+  const [preview, setPreview]       = useState(null);
+  const [comentario, setComentario] = useState(foto.evidencia_comentario || '');
+  const [uploading, setUploading]   = useState(false);
+
+  const handleFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImgFile(file);
+    setPreview(URL.createObjectURL(file));
+  };
+
+  const handleSave = async () => {
+    if (!imgFile && !comentario.trim() && !foto.evidencia_url) return;
+    setUploading(true);
+    try {
+      let evidUrl = foto.evidencia_url || null;
+      if (imgFile) {
+        const blob = await resizeImage(imgFile);
+        const path = `relatorios/evidencias/${foto.id}_${Date.now()}.jpg`;
+        const { error: upErr } = await supabase.storage.from('evidencias')
+          .upload(path, blob, { contentType:'image/jpeg', upsert:true });
+        if (upErr) throw upErr;
+        const { data: { publicUrl } } = supabase.storage.from('evidencias').getPublicUrl(path);
+        evidUrl = publicUrl;
+      }
+      await onSave({ foto, evidUrl, comentario });
+    } catch (e) {
+      toast('Erro ao salvar: ' + e.message, 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const currentImg = preview || foto.evidencia_url;
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:9998, background:'rgba(0,0,0,.45)' }}/>
+      <div style={{
+        position:'fixed', zIndex:9999, top:'50%', left:'50%', transform:'translate(-50%,-50%)',
+        background:'var(--surface)', borderRadius:14, padding:22, width:340,
+        boxShadow:'0 24px 64px rgba(0,0,0,.3)', color:'var(--text)', maxHeight:'90vh', overflowY:'auto',
+      }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+          <div style={{ fontWeight:800, fontSize:14 }}>Registrar conclusão</div>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)' }}>
+            <X size={16}/>
+          </button>
+        </div>
+
+        {currentImg && (
+          <div style={{ position:'relative', marginBottom:12, borderRadius:8, overflow:'hidden' }}>
+            <img src={currentImg} alt="" style={{ width:'100%', borderRadius:8, maxHeight:200, objectFit:'cover' }}/>
+            {preview && (
+              <button onClick={() => { setImgFile(null); setPreview(null); }}
+                style={{ position:'absolute', top:6, right:6, background:'rgba(239,68,68,.8)',
+                  border:'none', borderRadius:6, padding:'4px 6px', cursor:'pointer', color:'#fff' }}>
+                <X size={12}/>
+              </button>
+            )}
+          </div>
+        )}
+
+        <button onClick={() => fileRef.current?.click()}
+          style={{ width:'100%', padding:'10px', borderRadius:8, border:'2px dashed var(--border)',
+            background:'var(--bg)', cursor:'pointer', color:'var(--text-muted)', fontSize:13, marginBottom:12,
+            display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+          <Camera size={16}/>
+          {currentImg ? 'Trocar foto de evidência' : 'Adicionar foto de evidência (opcional)'}
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" capture="environment"
+          style={{ display:'none' }} onChange={handleFile}/>
+
+        <div className="form-group">
+          <label className="form-label">Comentário</label>
+          <textarea className="input" rows={3}
+            placeholder="Descreva como o ponto foi resolvido..."
+            value={comentario} onChange={e => setComentario(e.target.value)}
+            style={{ resize:'vertical' }}/>
+        </div>
+
+        <div style={{ display:'flex', gap:10, marginTop:8 }}>
+          <button className="btn btn-ghost" style={{ flex:1, justifyContent:'center' }} onClick={onClose}>
+            Cancelar
+          </button>
+          <button className="btn btn-primary" style={{ flex:1, justifyContent:'center' }}
+            onClick={handleSave}
+            disabled={uploading || (!imgFile && !comentario.trim() && !foto.evidencia_url)}>
+            {uploading ? 'Salvando...' : <><Check size={14}/> Confirmar</>}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Tela de detalhe/edição ───────────────────────────────────────────────────
 function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
   const toast = useToast();
@@ -505,6 +615,8 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
   const [editandoCaption, setEditandoCaption] = useState(null);
   const [captionTexto, setCaptionTexto]       = useState('');
   const [captionPrazo, setCaptionPrazo]       = useState('');
+  const [evidenciando, setEvidenciando]       = useState(null);
+  const evidFileRef = useRef();
 
   const loadFotos = () => {
     api.get(`/relatorios/${rel.id}?requester_id=${userId}`)
@@ -580,6 +692,20 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
     await api.put(`/relatorios/fotos/${editandoCaption}`, { caption });
     setFotos(f => f.map(x => x.id === editandoCaption ? { ...x, caption } : x));
     setEditandoCaption(null);
+  };
+
+  const saveEvidencia = async ({ foto, evidUrl, comentario }) => {
+    await api.put(`/relatorios/fotos/${foto.id}`, {
+      evidencia_url:        evidUrl,
+      evidencia_comentario: comentario,
+      evidencia_at:         new Date().toISOString(),
+      evidencia_by:         userId,
+    });
+    setFotos(f => f.map(x => x.id === foto.id
+      ? { ...x, evidencia_url: evidUrl, evidencia_comentario: comentario, evidencia_at: new Date().toISOString() }
+      : x));
+    setEvidenciando(null);
+    toast('Conclusão registrada!');
   };
 
   const finalizarRelatorio = async () => {
@@ -681,6 +807,12 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
                     ✏ {foto.annotations.shapes.length} anotaç{foto.annotations.shapes.length === 1 ? 'ão' : 'ões'}
                   </div>
                 )}
+                {(foto.evidencia_url || foto.evidencia_comentario) && (
+                  <div style={{ position:'absolute', top:6, left:6, background:'#10b981',
+                    borderRadius:4, padding:'2px 8px', fontSize:10, color:'#fff', fontWeight:700 }}>
+                    ✓ Concluído
+                  </div>
+                )}
               </div>
               <div style={{ padding:'8px 10px', display:'flex', flexDirection:'column', gap:6 }}>
                 {editandoCaption === foto.id ? (
@@ -688,8 +820,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
                     <input autoFocus className="input" style={{ fontSize:12, padding:'4px 8px' }}
                       placeholder="Descrição do ponto..."
                       value={captionTexto} onChange={e => setCaptionTexto(e.target.value)}/>
-                    <input className="input" style={{ fontSize:12, padding:'4px 8px' }}
-                      placeholder="Prazo (ex: até sexta-feira)"
+                    <input type="date" className="input" style={{ fontSize:12, padding:'4px 8px' }}
                       value={captionPrazo} onChange={e => setCaptionPrazo(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') saveCaption(); if (e.key === 'Escape') setEditandoCaption(null); }}/>
                     <div style={{ display:'flex', gap:6 }}>
@@ -715,12 +846,24 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
                       </div>
                       {c.prazo && (
                         <div style={{ fontSize:11, color:'var(--primary)', fontWeight:600, marginTop:3 }}>
-                          ⏱ {c.prazo}
+                          ⏱ {formatPrazoDisplay(c.prazo)}
                         </div>
                       )}
                     </div>
                   );
                 })()}
+
+                {/* Botão de evidência de conclusão */}
+                <button
+                  onClick={() => setEvidenciando(foto)}
+                  style={{
+                    width:'100%', padding:'5px 0', borderRadius:6, fontSize:11, fontWeight:600,
+                    cursor:'pointer', border:'none', marginTop:2,
+                    background: (foto.evidencia_url || foto.evidencia_comentario) ? '#10b98120' : '#f1f5f9',
+                    color: (foto.evidencia_url || foto.evidencia_comentario) ? '#10b981' : 'var(--text-muted)',
+                  }}>
+                  {(foto.evidencia_url || foto.evidencia_comentario) ? '✓ Ver / editar conclusão' : '+ Registrar conclusão'}
+                </button>
               </div>
             </div>
           ))}
@@ -754,6 +897,16 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
           rel={rel} fotos={fotos}
           creatorName={rel.creator?.full_name || 'Usuário'}
           userId={userId}
+        />
+      )}
+
+      {/* Modal de evidência de conclusão */}
+      {evidenciando && (
+        <ModalEvidencia
+          foto={evidenciando}
+          userId={userId}
+          onSave={saveEvidencia}
+          onClose={() => setEvidenciando(null)}
         />
       )}
     </div>
