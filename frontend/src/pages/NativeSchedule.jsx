@@ -453,6 +453,67 @@ export default function NativeSchedule({ userId, profile }) {
     }
   };
 
+  // Copiar horários do mês anterior (por dia-da-semana) para o mês atual vazio
+  const [copying, setCopying] = useState(false);
+  const copyFromPreviousMonth = async () => {
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear  = month === 1 ? year - 1 : year;
+    setCopying(true);
+    try {
+      const res = await api.get(`/schedule/month?user_id=${effectiveUserId}&year=${prevYear}&month=${prevMonth}`);
+      const prevEntries = Array.isArray(res.data) ? res.data : [];
+      if (!prevEntries.length) {
+        toast('Mês anterior sem horários para copiar.', 'error');
+        return;
+      }
+      // Monta mapa: member_id → day_of_week → primeira entrada encontrada
+      const dowMap = {};
+      prevEntries.forEach(e => {
+        const dow = getDOW(e.work_date);
+        if (!dowMap[e.team_member_id]) dowMap[e.team_member_id] = {};
+        if (!dowMap[e.team_member_id][dow]) dowMap[e.team_member_id][dow] = e;
+      });
+      // Para cada data do mês atual, copia se não tiver entrada e houver template
+      const saves = [];
+      allDates.forEach(date => {
+        const dow = getDOW(date);
+        if (dow === 0) return; // pula domingos
+        members.forEach(m => {
+          if (getEntry(m.id, date)) return; // já tem entrada
+          const tmpl = dowMap[m.id]?.[dow];
+          if (!tmpl) return;
+          saves.push(api.post('/schedule/save', {
+            user_id: effectiveUserId,
+            team_member_id: m.id,
+            work_date: date,
+            status:            tmpl.status,
+            entrada:           tmpl.entrada,
+            intervalo:         tmpl.intervalo,
+            retorno_intervalo: tmpl.retorno_intervalo,
+            saida:             tmpl.saida,
+          }));
+        });
+      });
+      if (!saves.length) { toast('Todos os dias já preenchidos ou sem padrão anterior.'); return; }
+      const results = await Promise.all(saves);
+      const newEntries = results.map(r => r.data).filter(Boolean);
+      setEntries(prev => {
+        const next = [...prev];
+        newEntries.forEach(e => {
+          if (!e?.work_date) return;
+          const idx = next.findIndex(x => x.team_member_id === e.team_member_id && x.work_date === e.work_date);
+          if (idx >= 0) next[idx] = e; else next.push(e);
+        });
+        return next;
+      });
+      toast(`✓ ${newEntries.length} horários copiados do mês anterior!`);
+    } catch {
+      toast('Erro ao copiar mês anterior.', 'error');
+    } finally {
+      setCopying(false);
+    }
+  };
+
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const downloadPDF = async () => {
     const el = document.getElementById('schedule-print');
@@ -650,6 +711,11 @@ export default function NativeSchedule({ userId, profile }) {
           <button onClick={downloadPDF} disabled={generatingPdf} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0, opacity: generatingPdf ? .6 : 1 }}>
             <Download size={11}/> {generatingPdf ? 'Gerando...' : 'Baixar PDF'}
           </button>
+          {!submission && members.length > 0 && (
+            <button onClick={copyFromPreviousMonth} disabled={copying} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:5, border:'none', background:'#0891b2', color:'#fff', cursor:'pointer', fontWeight:700, fontSize:11, whiteSpace:'nowrap', flexShrink:0, opacity: copying ? .6 : 1 }}>
+              📋 {copying ? 'Copiando...' : 'Copiar mês anterior'}
+            </button>
+          )}
           {!submission && (
             <button onClick={submitSchedule} disabled={submitting} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:5, border:'none', background:'#16a34a', color:'#fff', cursor:'pointer', fontWeight:700, fontSize:11, whiteSpace:'nowrap', flexShrink:0 }}>
               <CheckCircle size={11}/> {submitting ? 'Fechando...' : 'Fechar Escala'}
