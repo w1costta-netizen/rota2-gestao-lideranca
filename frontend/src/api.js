@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
-const api = axios.create({ baseURL: BASE });
+const api = axios.create({ baseURL: BASE, timeout: 90000 });
 
 export const leadersAPI = {
   list: () => api.get('/leaders'),

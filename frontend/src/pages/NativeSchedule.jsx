@@ -357,13 +357,8 @@ export default function NativeSchedule({ userId, profile }) {
   const daysLeft    = 26 - todayDay;
 
   // Warm-up: pinga o backend para acordar o Render (free tier dorme)
-  // Aguarda 3s antes do primeiro load para dar tempo ao servidor acordar
-  const [warmupDone, setWarmupDone] = useState(false);
-  useEffect(() => {
-    api.get('/health').catch(() => {}).finally(() => {
-      setTimeout(() => setWarmupDone(true), 3000);
-    });
-  }, []);
+  useEffect(() => { api.get('/health').catch(() => {}); }, []);
+  const warmupDone = true;
 
   const [loadError, setLoadError] = useState(false);
 
