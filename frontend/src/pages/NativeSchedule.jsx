@@ -523,26 +523,56 @@ export default function NativeSchedule({ userId, profile }) {
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const downloadPDF = async () => {
-    const el = document.getElementById('schedule-print');
-    if (!el) return;
     setGeneratingPdf(true);
-    el.classList.add('pdf-generating');
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      await html2pdf()
-        .set({
-          margin: [4, 4, 4, 4],
-          filename: `Escala_${MONTHS_PT[month-1]}_${year}_${viewedProfile?.sector||'depto'}.pdf`,
-          image: { type:'jpeg', quality:0.95 },
-          html2canvas: { scale:2, useCORS:true, logging:false },
-          jsPDF: { unit:'mm', format:'a4', orientation:'landscape' },
-        })
-        .from(el)
-        .save();
+      const weekEls = document.querySelectorAll('.week-block');
+      if (!weekEls.length) { toast('Nada para imprimir.', 'error'); return; }
+
+      const filename = `Escala_${MONTHS_PT[month-1]}_${year}_${viewedProfile?.sector||'depto'}.pdf`;
+      const opts = {
+        margin: [5, 5, 5, 5],
+        filename,
+        image: { type:'jpeg', quality:0.95 },
+        html2canvas: { scale:2, useCORS:true, logging:false, backgroundColor:'#fff' },
+        jsPDF: { unit:'mm', format:'a4', orientation:'landscape' },
+        pagebreak: { mode:'avoid-all' },
+      };
+
+      // Gera um wrapper com todos os blocos de semana e quebra de página entre elas
+      const wrapper = document.createElement('div');
+      wrapper.style.cssText = 'background:#fff;font-family:sans-serif;';
+      // Cabeçalho do documento
+      const header = document.createElement('div');
+      header.style.cssText = 'text-align:center;padding:6px 0 4px;border-bottom:2px solid #0e7490;margin-bottom:8px;';
+      header.innerHTML = `<strong style="font-size:13px;color:#0e7490">ESCALA MENSAL — ${(viewedProfile?.sector||'').toUpperCase()} · ${MONTHS_PT[month-1].toUpperCase()} ${year}</strong>`;
+
+      weekEls.forEach((el, i) => {
+        if (i > 0) {
+          // Quebra de página entre semanas para o html2pdf
+          const br = document.createElement('div');
+          br.style.cssText = 'page-break-before:always;height:0;';
+          wrapper.appendChild(br);
+          // Repete cabeçalho em cada página
+          const hClone = header.cloneNode(true);
+          wrapper.appendChild(hClone);
+        } else {
+          wrapper.appendChild(header.cloneNode(true));
+        }
+        wrapper.appendChild(el.cloneNode(true));
+      });
+
+      document.body.appendChild(wrapper);
+      wrapper.style.position = 'absolute';
+      wrapper.style.left = '-9999px';
+      wrapper.style.top = '0';
+      wrapper.style.width = '277mm'; // A4 landscape width - margins
+
+      await html2pdf().set(opts).from(wrapper).save();
+      document.body.removeChild(wrapper);
     } catch (e) {
       toast('Erro ao gerar PDF.', 'error');
     } finally {
-      el.classList.remove('pdf-generating');
       setGeneratingPdf(false);
     }
   };
@@ -757,29 +787,53 @@ export default function NativeSchedule({ userId, profile }) {
             <div style={{ textAlign:'center', padding:'40px', color:'#6b7280', fontSize:13 }}>
               Clique em <b>Time</b> para adicionar colaboradores.
             </div>
-          ) : weeks.map((week, wi) => (
-            <div key={wi} style={{ borderBottom: wi < weeks.length-1 ? '3px solid #e5e7eb' : 'none' }}>
-              <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
-                <thead><WeekHeader week={week}/></thead>
-                <tbody>
-                  {members.map((m, ri) => {
-                    const rowBg = ri%2===0 ? '#fff' : '#f9fafb';
-                    return (
-                      <tr key={m.id} style={{ background:rowBg }}>
-                        <td style={{ background:rowBg, padding:'2px 3px', textAlign:'center', fontSize:9,
-                          color:'#6b7280', fontWeight:600, border:'1px solid #e5e7eb' }}>{m.matricula||'—'}</td>
-                        <td style={{ background:rowBg, padding:'2px 8px', fontSize:10, fontWeight:700,
-                          color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</td>
-                        {week.map((date, di) => <DayCell key={di} m={m} date={date}/>)}
-                        <td className="print-only" style={{ background:rowBg, border:'1px solid #f97316' }}/>
-                        <td className="print-only" style={{ background:rowBg, border:'1px solid #f97316' }}/>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          ))}
+          ) : weeks.map((week, wi) => {
+            const validDates = week.filter(Boolean);
+            const first = validDates[0];
+            const last  = validDates[validDates.length - 1];
+            const fmt   = d => d ? `${d.split('-')[2]}/${d.split('-')[1]}` : '';
+            return (
+              <div key={wi} className="week-block" style={{
+                margin:'8px 8px', borderRadius:8,
+                border:'1px solid #d1d5db',
+                boxShadow:'0 1px 4px rgba(0,0,0,.06)',
+                overflow:'hidden',
+                breakInside:'avoid',
+              }}>
+                {/* Cabeçalho da semana */}
+                <div style={{
+                  background:'#f1f5f9', borderBottom:'1px solid #d1d5db',
+                  padding:'4px 10px', display:'flex', alignItems:'center', gap:8,
+                }}>
+                  <span style={{ fontWeight:800, fontSize:11, color:'#0e7490' }}>
+                    Semana {wi + 1}
+                  </span>
+                  <span style={{ fontSize:10, color:'#64748b' }}>
+                    {fmt(first)} – {fmt(last)}
+                  </span>
+                </div>
+                <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
+                  <thead><WeekHeader week={week}/></thead>
+                  <tbody>
+                    {members.map((m, ri) => {
+                      const rowBg = ri%2===0 ? '#fff' : '#f9fafb';
+                      return (
+                        <tr key={m.id} style={{ background:rowBg }}>
+                          <td style={{ background:rowBg, padding:'2px 3px', textAlign:'center', fontSize:9,
+                            color:'#6b7280', fontWeight:600, border:'1px solid #e5e7eb' }}>{m.matricula||'—'}</td>
+                          <td style={{ background:rowBg, padding:'2px 8px', fontSize:10, fontWeight:700,
+                            color:'#111', border:'1px solid #e5e7eb', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</td>
+                          {week.map((date, di) => <DayCell key={di} m={m} date={date}/>)}
+                          <td className="print-only" style={{ background:rowBg, border:'1px solid #f97316' }}/>
+                          <td className="print-only" style={{ background:rowBg, border:'1px solid #f97316' }}/>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })}
         </div>
 
         {/* Rodapé */}
