@@ -182,7 +182,7 @@ router.get('/operators', async (req, res) => {
 
   const { data, error } = await supabase
     .from('schedule_entries')
-    .select('team_member_id, entrada, saida, status, team_members(name,sector,role)')
+    .select('team_member_id, entrada, intervalo, retorno_intervalo, saida, status, team_members(name,sector,role)')
     .eq('company', prof.company)
     .eq('day_of_week', day_of_week)
     .eq('status', 'trabalha')
@@ -191,13 +191,21 @@ router.get('/operators', async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   const CASHIER_ROLES = ['operador loja', 'aprendiz'];
+
+  // Converte "HH:MM" em minutos, retorna null se inválido
+  const toMin = (t) => {
+    if (!t) return null;
+    const [hh, mm] = t.split(':').map(Number);
+    return isNaN(hh) ? null : hh * 60 + (mm || 0);
+  };
+
+  // Filtra apenas cargos de caixa com horários preenchidos
   const filtered = (data || []).filter(e => {
     const role = (e.team_members?.role || '').toLowerCase().trim();
-    return CASHIER_ROLES.includes(role);
+    return CASHIER_ROLES.includes(role) && e.entrada && e.saida;
   });
 
-  // Deduplica: mesmo operador pode ter várias datas para o mesmo dia da semana.
-  // Mantém apenas a primeira ocorrência de cada team_member_id.
+  // Deduplica por team_member_id mantendo a entrada com horário válido
   const seen = new Set();
   const cashierEntries = filtered.filter(e => {
     if (seen.has(e.team_member_id)) return false;
@@ -209,10 +217,20 @@ router.get('/operators', async (req, res) => {
   const result = hours.map(h => {
     const hMin = h * 60;
     const active = cashierEntries.filter(e => {
-      const [sh, sm] = (e.entrada || '').split(':').map(Number);
-      const [eh, em] = (e.saida   || '').split(':').map(Number);
-      if (isNaN(sh) || isNaN(eh)) return false;
-      return (sh*60+(sm||0)) <= hMin && (eh*60+(em||0)) > hMin;
+      const entMin = toMin(e.entrada);
+      const saiMin = toMin(e.saida);
+      const intMin = toMin(e.intervalo);
+      const retMin = toMin(e.retorno_intervalo);
+
+      if (entMin === null || saiMin === null) return false;
+
+      // Operador cobre esta faixa horária?
+      if (entMin > hMin || saiMin <= hMin) return false;
+
+      // Operador está no intervalo durante esta faixa?
+      if (intMin !== null && retMin !== null && intMin <= hMin && retMin > hMin) return false;
+
+      return true;
     });
     return { hour: h, operators: active.length, names: active.map(e => e.team_members?.name).filter(Boolean) };
   });
