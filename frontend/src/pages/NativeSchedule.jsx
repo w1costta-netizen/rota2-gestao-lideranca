@@ -20,12 +20,15 @@ function getAllRoles() {
 }
 
 const STATUS = {
-  trabalha: { label:'Trabalha', bg:'#e0f2fe', color:'#0369a1' },
-  dsr:      { label:'DSR',      bg:'#dbeafe', color:'#1d4ed8' },
-  ferias:   { label:'FÉRIAS',   bg:'#fef9c3', color:'#92400e' },
-  feriado:  { label:'FERIADO',  bg:'#dcfce7', color:'#166534' },
-  falta:    { label:'FALTA',    bg:'#fee2e2', color:'#991b1b' },
-  folga:    { label:'FOLGA',    bg:'#f3e8ff', color:'#6b21a8' },
+  trabalha:      { label:'Trabalha',      bg:'#e0f2fe', color:'#0369a1' },
+  dsr:           { label:'DSR',           bg:'#dbeafe', color:'#1d4ed8' },
+  ferias:        { label:'FÉRIAS',        bg:'#fef9c3', color:'#92400e' },
+  feriado:       { label:'FERIADO',       bg:'#dcfce7', color:'#166534' },
+  falta:         { label:'FALTA',         bg:'#fee2e2', color:'#991b1b' },
+  folga:         { label:'FOLGA',         bg:'#f3e8ff', color:'#6b21a8' },
+  folga_premio:  { label:'FOLGA PRÊMIO',  bg:'#fce7f3', color:'#9d174d' },
+  folga_feriado: { label:'FOLGA FERIADO', bg:'#d1fae5', color:'#065f46' },
+  curso:         { label:'CURSO',         bg:'#ffedd5', color:'#9a3412' },
 };
 
 function todayISO() { return new Date().toISOString().split('T')[0]; }
