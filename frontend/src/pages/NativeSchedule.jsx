@@ -361,9 +361,12 @@ export default function NativeSchedule({ userId, profile }) {
   const warmupDone = true;
 
   const [loadError, setLoadError] = useState(false);
+  const retryTimerRef = useRef(null);
 
   const load = useCallback(async (retryCount = 0) => {
     if (!effectiveUserId) return;
+    // Cancela qualquer retry pendente de load anterior (evita sobrescrever estado ao trocar de mês)
+    clearTimeout(retryTimerRef.current);
     setLoading(true);
     setLoadError(false);
     try {
@@ -379,8 +382,7 @@ export default function NativeSchedule({ userId, profile }) {
       setLastEditor(leRes.data);
     } catch (e) {
       if (retryCount < 3) {
-        // auto-retry com backoff: 5s, 10s, 20s
-        setTimeout(() => load(retryCount + 1), 5000 * (retryCount + 1));
+        retryTimerRef.current = setTimeout(() => load(retryCount + 1), 5000 * (retryCount + 1));
         return;
       }
       setLoadError(true);
@@ -390,7 +392,10 @@ export default function NativeSchedule({ userId, profile }) {
     }
   }, [effectiveUserId, year, month]);
 
-  useEffect(() => { if (warmupDone) load(); }, [load, warmupDone]);
+  useEffect(() => {
+    if (warmupDone) load();
+    return () => clearTimeout(retryTimerRef.current);
+  }, [load, warmupDone]);
 
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y-1); } else setMonth(m => m-1); };
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y+1); } else setMonth(m => m+1); };
