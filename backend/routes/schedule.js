@@ -180,10 +180,18 @@ router.get('/operators', async (req, res) => {
   const from = `${y}-${String(m).padStart(2,'0')}-01`;
   const to   = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
 
+  // Busca todos os user_ids da mesma empresa (mais robusto que filtrar por company no entry)
+  const { data: companyUsers } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('company', prof.company);
+  const companyUserIds = (companyUsers || []).map(p => p.id);
+  if (!companyUserIds.length) return res.json([]);
+
   const { data, error } = await supabase
     .from('schedule_entries')
     .select('team_member_id, entrada, intervalo, retorno_intervalo, saida, status, team_members(name,sector,role)')
-    .eq('company', prof.company)
+    .in('user_id', companyUserIds)
     .eq('day_of_week', day_of_week)
     .eq('status', 'trabalha')
     .gte('work_date', from)
