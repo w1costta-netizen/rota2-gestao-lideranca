@@ -20,11 +20,6 @@ router.get('/', async (req, res) => {
     .eq('company', me.company)
     .order('created_at', { ascending: false });
 
-  // Não-admin vê apenas os próprios relatórios
-  if (!['admin', 'supervisor'].includes(me.access_level)) {
-    query = query.eq('created_by', requester_id);
-  }
-
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
