@@ -523,56 +523,27 @@ export default function NativeSchedule({ userId, profile }) {
 
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const downloadPDF = async () => {
+    const el = document.getElementById('schedule-print');
+    if (!el) return;
     setGeneratingPdf(true);
+    el.classList.add('pdf-generating');
     try {
       const html2pdf = (await import('html2pdf.js')).default;
-      const weekEls = document.querySelectorAll('.week-block');
-      if (!weekEls.length) { toast('Nada para imprimir.', 'error'); return; }
-
-      const filename = `Escala_${MONTHS_PT[month-1]}_${year}_${viewedProfile?.sector||'depto'}.pdf`;
-      const opts = {
-        margin: [5, 5, 5, 5],
-        filename,
-        image: { type:'jpeg', quality:0.95 },
-        html2canvas: { scale:2, useCORS:true, logging:false, backgroundColor:'#fff' },
-        jsPDF: { unit:'mm', format:'a4', orientation:'landscape' },
-        pagebreak: { mode:'avoid-all' },
-      };
-
-      // Gera um wrapper com todos os blocos de semana e quebra de página entre elas
-      const wrapper = document.createElement('div');
-      wrapper.style.cssText = 'background:#fff;font-family:sans-serif;';
-      // Cabeçalho do documento
-      const header = document.createElement('div');
-      header.style.cssText = 'text-align:center;padding:6px 0 4px;border-bottom:2px solid #0e7490;margin-bottom:8px;';
-      header.innerHTML = `<strong style="font-size:13px;color:#0e7490">ESCALA MENSAL — ${(viewedProfile?.sector||'').toUpperCase()} · ${MONTHS_PT[month-1].toUpperCase()} ${year}</strong>`;
-
-      weekEls.forEach((el, i) => {
-        if (i > 0) {
-          // Quebra de página entre semanas para o html2pdf
-          const br = document.createElement('div');
-          br.style.cssText = 'page-break-before:always;height:0;';
-          wrapper.appendChild(br);
-          // Repete cabeçalho em cada página
-          const hClone = header.cloneNode(true);
-          wrapper.appendChild(hClone);
-        } else {
-          wrapper.appendChild(header.cloneNode(true));
-        }
-        wrapper.appendChild(el.cloneNode(true));
-      });
-
-      document.body.appendChild(wrapper);
-      wrapper.style.position = 'absolute';
-      wrapper.style.left = '-9999px';
-      wrapper.style.top = '0';
-      wrapper.style.width = '277mm'; // A4 landscape width - margins
-
-      await html2pdf().set(opts).from(wrapper).save();
-      document.body.removeChild(wrapper);
+      await html2pdf()
+        .set({
+          margin: [5, 4, 5, 4],
+          filename: `Escala_${MONTHS_PT[month-1]}_${year}_${viewedProfile?.sector||'depto'}.pdf`,
+          image: { type:'jpeg', quality:0.97 },
+          html2canvas: { scale:2, useCORS:true, logging:false, backgroundColor:'#fff' },
+          jsPDF: { unit:'mm', format:'a4', orientation:'landscape' },
+          pagebreak: { mode:['css','legacy'], before:'.pdf-page-break' },
+        })
+        .from(el)
+        .save();
     } catch (e) {
       toast('Erro ao gerar PDF.', 'error');
     } finally {
+      el.classList.remove('pdf-generating');
       setGeneratingPdf(false);
     }
   };
@@ -793,7 +764,7 @@ export default function NativeSchedule({ userId, profile }) {
             const last  = validDates[validDates.length - 1];
             const fmt   = d => d ? `${d.split('-')[2]}/${d.split('-')[1]}` : '';
             return (
-              <div key={wi} className="week-block" style={{
+              <div key={wi} className={`week-block${wi > 0 ? ' pdf-page-break' : ''}`} style={{
                 margin:'8px 8px', borderRadius:8,
                 border:'1px solid #d1d5db',
                 boxShadow:'0 1px 4px rgba(0,0,0,.06)',
@@ -856,8 +827,11 @@ export default function NativeSchedule({ userId, profile }) {
       <style>{`
         .print-only { display: none; }
         .pdf-generating .print-only { display: table-cell !important; }
+        .pdf-generating .pdf-page-break { page-break-before: always; }
+        .pdf-generating .week-block { border-radius:0 !important; margin:0 !important; box-shadow:none !important; }
         @media print {
           .print-only { display: table-cell !important; }
+          .pdf-page-break { page-break-before: always; }
           body * { visibility:hidden !important; }
           #schedule-print, #schedule-print * { visibility:visible !important; }
           #schedule-print { position:fixed; top:0; left:0; width:100%; }
