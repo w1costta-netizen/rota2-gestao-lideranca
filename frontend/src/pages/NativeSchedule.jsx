@@ -353,9 +353,17 @@ export default function NativeSchedule({ userId, profile }) {
   const alertUrgent = isCurrentMonth && todayDay === 26 && !submission;
   const daysLeft    = 26 - todayDay;
 
+  // Warm-up: pinga o backend ao montar para acordar o Render (free tier dorme)
+  useEffect(() => {
+    api.get('/health').catch(() => {});
+  }, []);
+
+  const [loadError, setLoadError] = useState(false);
+
   const load = useCallback(async () => {
     if (!effectiveUserId) return;
     setLoading(true);
+    setLoadError(false);
     try {
       const [mRes, eRes, sRes, leRes] = await Promise.all([
         api.get(`/team?user_id=${effectiveUserId}&active=true`),
@@ -368,6 +376,7 @@ export default function NativeSchedule({ userId, profile }) {
       setSubmission(sRes.data);
       setLastEditor(leRes.data);
     } catch (e) {
+      setLoadError(true);
       toast('Erro ao carregar escala. Verifique a conexão.', 'error');
     } finally {
       setLoading(false);
@@ -411,9 +420,9 @@ export default function NativeSchedule({ userId, profile }) {
       });
       setLastEditor({ editor: { full_name: profile?.full_name }, last_edited_at: new Date().toISOString() });
       setOpenCell(null);
-      if (copyToDays.length > 0) {
-        toast(`✓ Salvo em ${dates.length} dia${dates.length > 1 ? 's' : ''}`);
-      }
+      toast(copyToDays.length > 0
+        ? `✓ Salvo em ${dates.length} dia${dates.length > 1 ? 's' : ''}`
+        : '✓ Horário salvo com sucesso');
     } catch (e) {
       toast('Erro ao salvar. Verifique a conexão e tente novamente.', 'error');
     } finally {
@@ -652,7 +661,14 @@ export default function NativeSchedule({ userId, profile }) {
         <div style={{ padding:'0 0 8px' }}>
           {loading ? (
             <div style={{ textAlign:'center', padding:'40px', color:'#6b7280', fontSize:13 }}>
-              Carregando escala...
+              ⏳ Carregando escala... (pode levar até 60s na primeira vez)
+            </div>
+          ) : loadError ? (
+            <div style={{ textAlign:'center', padding:'40px' }}>
+              <div style={{ color:'#dc2626', fontSize:13, marginBottom:12 }}>⚠️ Não foi possível carregar. Verifique a conexão.</div>
+              <button onClick={load} style={{ padding:'8px 20px', borderRadius:8, background:'#1d4ed8', color:'#fff', border:'none', cursor:'pointer', fontWeight:700, fontSize:13 }}>
+                🔄 Tentar novamente
+              </button>
             </div>
           ) : members.length === 0 ? (
             <div style={{ textAlign:'center', padding:'40px', color:'#6b7280', fontSize:13 }}>
