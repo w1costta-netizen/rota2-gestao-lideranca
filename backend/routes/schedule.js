@@ -182,7 +182,7 @@ router.get('/operators', async (req, res) => {
 
   const { data, error } = await supabase
     .from('schedule_entries')
-    .select('entrada, saida, status, team_members(name,sector,role)')
+    .select('team_member_id, entrada, saida, status, team_members(name,sector,role)')
     .eq('company', prof.company)
     .eq('day_of_week', day_of_week)
     .eq('status', 'trabalha')
@@ -191,9 +191,18 @@ router.get('/operators', async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   const CASHIER_ROLES = ['operador loja', 'aprendiz'];
-  const cashierEntries = (data || []).filter(e => {
+  const filtered = (data || []).filter(e => {
     const role = (e.team_members?.role || '').toLowerCase().trim();
     return CASHIER_ROLES.includes(role);
+  });
+
+  // Deduplica: mesmo operador pode ter várias datas para o mesmo dia da semana.
+  // Mantém apenas a primeira ocorrência de cada team_member_id.
+  const seen = new Set();
+  const cashierEntries = filtered.filter(e => {
+    if (seen.has(e.team_member_id)) return false;
+    seen.add(e.team_member_id);
+    return true;
   });
 
   const hours = Array.from({ length: 13 }, (_, i) => i + 8);
