@@ -364,7 +364,7 @@ export default function NativeSchedule({ userId, profile }) {
 
   const [loadError, setLoadError] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (retryCount = 0) => {
     if (!effectiveUserId) return;
     setLoading(true);
     setLoadError(false);
@@ -380,6 +380,11 @@ export default function NativeSchedule({ userId, profile }) {
       setSubmission(sRes.data);
       setLastEditor(leRes.data);
     } catch (e) {
+      if (retryCount < 3) {
+        // auto-retry com backoff: 5s, 10s, 20s
+        setTimeout(() => load(retryCount + 1), 5000 * (retryCount + 1));
+        return;
+      }
       setLoadError(true);
       toast('Erro ao carregar escala. Verifique a conexão.', 'error');
     } finally {
