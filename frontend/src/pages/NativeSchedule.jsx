@@ -365,10 +365,10 @@ export default function NativeSchedule({ userId, profile }) {
 
   const load = useCallback(async (retryCount = 0) => {
     if (!effectiveUserId) return;
-    // Cancela qualquer retry pendente de load anterior (evita sobrescrever estado ao trocar de mês)
     clearTimeout(retryTimerRef.current);
     setLoading(true);
     setLoadError(false);
+    let willRetry = false;
     try {
       const [mRes, eRes, sRes, leRes] = await Promise.all([
         api.get(`/team?user_id=${effectiveUserId}&active=true`),
@@ -382,13 +382,15 @@ export default function NativeSchedule({ userId, profile }) {
       setLastEditor(leRes.data);
     } catch (e) {
       if (retryCount < 3) {
-        retryTimerRef.current = setTimeout(() => load(retryCount + 1), 5000 * (retryCount + 1));
-        return;
+        // Mantém loading=true durante o retry para não mostrar tabela vazia
+        willRetry = true;
+        retryTimerRef.current = setTimeout(() => load(retryCount + 1), 8000);
+      } else {
+        setLoadError(true);
+        toast('Erro ao carregar escala. Verifique a conexão.', 'error');
       }
-      setLoadError(true);
-      toast('Erro ao carregar escala. Verifique a conexão.', 'error');
     } finally {
-      setLoading(false);
+      if (!willRetry) setLoading(false);
     }
   }, [effectiveUserId, year, month]);
 
@@ -509,16 +511,9 @@ export default function NativeSchedule({ userId, profile }) {
       if (!saves.length) { toast('Todos os dias já preenchidos ou sem padrão anterior.'); return; }
       const results = await Promise.all(saves);
       const newEntries = results.map(r => r.data).filter(Boolean);
-      setEntries(prev => {
-        const next = [...prev];
-        newEntries.forEach(e => {
-          if (!e?.work_date) return;
-          const idx = next.findIndex(x => x.team_member_id === e.team_member_id && x.work_date === e.work_date);
-          if (idx >= 0) next[idx] = e; else next.push(e);
-        });
-        return next;
-      });
       toast(`✓ ${newEntries.length} horários copiados do mês anterior!`);
+      // Recarrega do servidor para confirmar persistência no banco
+      await load();
     } catch {
       toast('Erro ao copiar mês anterior.', 'error');
     } finally {
