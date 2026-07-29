@@ -723,6 +723,16 @@ export default function NativeSchedule({ userId, profile }) {
           )}
         </div>
 
+        {/* Banner: copiar mês anterior */}
+        {!loading && !loadError && !submission && members.length > 0 && entries.length === 0 && (
+          <div style={{ margin:'8px 10px', padding:'10px 16px', borderRadius:8, background:'#e0f2fe', border:'1px solid #7dd3fc', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+            <span style={{ fontSize:12, color:'#0369a1', flex:1, minWidth:150 }}>📋 Mês vazio — quer copiar os horários do mês anterior como base?</span>
+            <button onClick={copyFromPreviousMonth} disabled={copying} style={{ padding:'6px 16px', borderRadius:6, border:'none', background:'#0891b2', color:'#fff', cursor:'pointer', fontWeight:700, fontSize:12, whiteSpace:'nowrap', opacity: copying ? .6 : 1 }}>
+              {copying ? 'Copiando...' : 'Copiar mês anterior'}
+            </button>
+          </div>
+        )}
+
         {/* Tabela de semanas */}
         <div style={{ padding:'0 0 8px' }}>
           {loading ? (
