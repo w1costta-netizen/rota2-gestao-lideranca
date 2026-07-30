@@ -334,26 +334,23 @@ async function _syncBackend(){
   if(!_co) return;
   try{
     const _r=await fetch(`${_ap}/estoque/payload?company=${encodeURIComponent(_co)}`);
+    if(!_r.ok) return;
     const _j=await _r.json();
     if(!_j||!_j.payload) return;
-    const newKey=_j.updated_at||_j.payload.gerado_em||'';
-    if(_lastKey===null){
-      // Primeira sync bem-sucedida: compara com localStorage antes de registrar a chave
-      const localKey=_localData.gerado_em||localStorage.getItem('rota2_payload_key')||'';
-      if(newKey && newKey!==localKey){
-        localStorage.setItem('rota2_payload',JSON.stringify(_j.payload));
-        localStorage.setItem('rota2_payload_key',newKey);
-        location.reload();
-      } else {
-        // Dados já atualizados — registra a chave para detectar mudanças futuras
-        _lastKey=newKey;
-        localStorage.setItem('rota2_payload_key',newKey);
-      }
-    } else if(newKey!==_lastKey){
-      // Dado novo detectado enquanto página estava aberta → recarrega
+    // Usa updated_at do backend como chave única de versão
+    const newKey=_j.updated_at||'';
+    if(!newKey) return;
+    // Chave salva localmente — não usa gerado_em do HTML para evitar ambiguidade
+    const localKey=localStorage.getItem('rota2_payload_key')||'';
+    if(newKey!==localKey){
+      // Dado mais novo no servidor → salva e recarrega
       localStorage.setItem('rota2_payload',JSON.stringify(_j.payload));
+      localStorage.setItem('rota2_payload_key',newKey);
       location.reload();
+      return;
     }
+    // Dados já em dia — registra para detectar mudanças enquanto a página fica aberta
+    _lastKey=newKey;
   }catch(_e){}
 }
 
