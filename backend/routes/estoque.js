@@ -28,6 +28,7 @@ router.get('/payload', async (req, res) => {
 
   if (error && error.code !== 'PGRST116') return res.status(500).json({ error: error.message });
   if (!data) return res.json({ payload: null });
+  res.set('Cache-Control', 'no-store');
   res.json({ payload: data.payload, updated_at: data.updated_at });
 });
 

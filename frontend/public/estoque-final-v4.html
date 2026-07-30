@@ -331,7 +331,7 @@ const _ap=_qp.get('api')||'/api';
     return;
   }
   try{
-    const _r=await fetch(`${_ap}/estoque/payload?company=${encodeURIComponent(_co)}`);
+    const _r=await fetch(`${_ap}/estoque/payload?company=${encodeURIComponent(_co)}&_t=${Date.now()}`,{cache:'no-store'});
     const _j=_r.ok ? await _r.json() : null;
     if(_j&&_j.payload){
       renderAll(_j.payload);

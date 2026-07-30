@@ -6,7 +6,8 @@ const API = import.meta.env.VITE_API_URL || '/api';
 export default function Estoque() {
   const { profile } = useAuth();
   const company = profile?.company || '';
-  const src = `/estoque-final-v4.html?company=${encodeURIComponent(company)}&api=${encodeURIComponent(API)}`;
+  // _t garante que o iframe recarrega o HTML sempre que o componente monta
+  const src = `/estoque-final-v4.html?company=${encodeURIComponent(company)}&api=${encodeURIComponent(API)}&_t=${Date.now()}`;
   return (
     <iframe
       src={src}
