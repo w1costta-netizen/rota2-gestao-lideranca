@@ -423,7 +423,7 @@ const ABA_CONFIG = [
 function RelatorioLista({ userId, profile, onOpen, onCreate }) {
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
-  const [aba, setAba]         = useState('rascunho');
+  const [aba, setAba]         = useState(null);
   const toast = useToast();
 
   const load = () => {
@@ -461,36 +461,6 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
         </button>
       </div>
 
-      {/* Abas de status */}
-      {!loading && list.length > 0 && (
-        <div style={{ display:'flex', gap:8, marginBottom:16, overflowX:'auto', paddingBottom:2 }}>
-          {ABA_CONFIG.map(({ id, label, cor, bg }) => {
-            const count = grupos[id].length;
-            const ativa = aba === id;
-            return (
-              <button key={id} onClick={() => setAba(id)}
-                style={{
-                  display:'flex', alignItems:'center', gap:6, padding:'8px 16px',
-                  borderRadius:20, fontSize:13, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap',
-                  background: ativa ? bg : 'var(--surface)',
-                  color: ativa ? cor : 'var(--text-muted)',
-                  border: `2px solid ${ativa ? cor : 'var(--border)'}`,
-                  transition:'all .15s',
-                }}>
-                {label}
-                <span style={{
-                  background: ativa ? cor : 'var(--border)',
-                  color: ativa ? '#fff' : 'var(--text-muted)',
-                  borderRadius:20, padding:'1px 7px', fontSize:11, fontWeight:800,
-                }}>
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-
       {loading && <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)' }}>Carregando...</div>}
 
       {!loading && list.length === 0 && (
@@ -503,14 +473,96 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
         </div>
       )}
 
-      {!loading && list.length > 0 && filtrados.length === 0 && (
-        <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)', fontSize:13 }}>
-          Nenhum tour nesta categoria.
+      {/* Tela inicial — cards de resumo por categoria */}
+      {!loading && list.length > 0 && aba === null && (
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          {ABA_CONFIG.map(({ id, label, cor, bg }) => {
+            const count = grupos[id].length;
+            const icone = id === 'rascunho' ? '●' : id === 'parcial' ? '◑' : '✓';
+            const desc  = id === 'rascunho'
+              ? 'Tours em andamento, ainda não finalizados'
+              : id === 'parcial'
+              ? 'Finalizados, mas com pontos sem evidência'
+              : 'Todos os pontos com evidência registrada';
+            return (
+              <div key={id} onClick={() => setAba(id)}
+                style={{
+                  background:'var(--surface)', borderRadius:14, padding:'18px 20px',
+                  border:`2px solid ${cor}30`, cursor:'pointer', display:'flex',
+                  alignItems:'center', gap:16, transition:'border-color .15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = cor}
+                onMouseLeave={e => e.currentTarget.style.borderColor = `${cor}30`}
+              >
+                <div style={{
+                  width:52, height:52, borderRadius:12, background: bg,
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  fontSize:22, color: cor, fontWeight:900, flexShrink:0,
+                }}>
+                  {icone}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:800, fontSize:15, color:'var(--text)', marginBottom:3 }}>{label}</div>
+                  <div style={{ fontSize:12, color:'var(--text-muted)' }}>{desc}</div>
+                </div>
+                <div style={{
+                  minWidth:36, height:36, borderRadius:10, background: bg,
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  fontSize:18, fontWeight:900, color: cor,
+                }}>
+                  {count}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-        {filtrados.map(r => {
+      {/* Lista filtrada por aba */}
+      {!loading && list.length > 0 && aba !== null && (
+        <>
+          {/* Navegação de volta + abas */}
+          <div style={{ display:'flex', gap:8, marginBottom:16, overflowX:'auto', paddingBottom:2, alignItems:'center' }}>
+            <button onClick={() => setAba(null)}
+              style={{ background:'none', border:'1px solid var(--border)', borderRadius:20,
+                padding:'7px 14px', fontSize:13, fontWeight:700, cursor:'pointer', color:'var(--text-muted)',
+                whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}>
+              ← Voltar
+            </button>
+            {ABA_CONFIG.map(({ id, label, cor, bg }) => {
+              const count = grupos[id].length;
+              const ativa = aba === id;
+              return (
+                <button key={id} onClick={() => setAba(id)}
+                  style={{
+                    display:'flex', alignItems:'center', gap:6, padding:'7px 14px',
+                    borderRadius:20, fontSize:13, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap',
+                    background: ativa ? bg : 'var(--surface)',
+                    color: ativa ? cor : 'var(--text-muted)',
+                    border: `2px solid ${ativa ? cor : 'var(--border)'}`,
+                    transition:'all .15s',
+                  }}>
+                  {label}
+                  <span style={{
+                    background: ativa ? cor : 'var(--border)',
+                    color: ativa ? '#fff' : 'var(--text-muted)',
+                    borderRadius:20, padding:'1px 7px', fontSize:11, fontWeight:800,
+                  }}>
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {filtrados.length === 0 && (
+            <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)', fontSize:13 }}>
+              Nenhum tour nesta categoria.
+            </div>
+          )}
+
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {filtrados.map(r => {
           const fotos = r.fotos || [];
           const thumb = [...fotos].sort((a,b) => a.order_index - b.order_index)[0]?.photo_url;
           const concluidos = fotos.filter(f => f.evidencia_url || f.evidencia_comentario).length;
@@ -559,7 +611,9 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
             </div>
           );
         })}
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
