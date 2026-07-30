@@ -129,7 +129,7 @@ export async function parseEstoqueXlsx(file) {
       sum_QTD_VENDAS_SEMANA_4:       s4,
       total_4s:                      s1 + s2 + s3 + s4,
       dias_cobertura:                diasCob ? Math.round(diasCob * 10) / 10 : null,
-      venda_mes_vlr,
+      venda_mes_vlr: vendaMesVlr,
       estoque_cd_cxs,
     });
   }
