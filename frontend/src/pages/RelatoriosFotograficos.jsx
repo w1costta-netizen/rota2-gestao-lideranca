@@ -420,10 +420,106 @@ const ABA_CONFIG = [
 ];
 
 // ─── Tela de lista ────────────────────────────────────────────────────────────
+function FiltroSetores({ setores, selecionados, onChange }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const toggle = (s) => {
+    const novo = selecionados.includes(s)
+      ? selecionados.filter(x => x !== s)
+      : [...selecionados, s];
+    onChange(novo);
+  };
+
+  const limpar = (e) => { e.stopPropagation(); onChange([]); };
+
+  const label = selecionados.length === 0
+    ? 'Todos os setores'
+    : selecionados.length === 1
+    ? selecionados[0]
+    : `${selecionados.length} setores selecionados`;
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        onClick={() => setAberto(v => !v)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: selecionados.length > 0 ? '#e8681a15' : 'var(--surface)',
+          border: `1px solid ${selecionados.length > 0 ? '#e8681a' : 'var(--border)'}`,
+          borderRadius: 20, padding: '7px 14px', fontSize: 13, cursor: 'pointer',
+          color: selecionados.length > 0 ? '#e8681a' : 'var(--text-muted)',
+          fontWeight: selecionados.length > 0 ? 700 : 400,
+          whiteSpace: 'nowrap', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis',
+        }}
+      >
+        <span style={{ fontSize: 14 }}>🏷️</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+        {selecionados.length > 0 && (
+          <span onClick={limpar}
+            style={{ marginLeft: 4, fontWeight: 900, fontSize: 15, lineHeight: 1, opacity: .7, cursor: 'pointer' }}>×</span>
+        )}
+      </button>
+
+      {aberto && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 300,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
+          minWidth: 220, maxWidth: 300, maxHeight: 320, overflowY: 'auto',
+        }}>
+          <div style={{ padding: '10px 14px 6px', borderBottom: '1px solid var(--border)',
+            fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: .5 }}>
+            Selecionar setores
+          </div>
+          {setores.map(s => {
+            const sel = selecionados.includes(s);
+            return (
+              <button key={s} onClick={() => toggle(s)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  width: '100%', background: sel ? '#e8681a10' : 'none',
+                  border: 'none', padding: '10px 14px', cursor: 'pointer',
+                  fontSize: 13, color: sel ? '#e8681a' : 'var(--text)',
+                  textAlign: 'left', transition: 'background .1s',
+                }}
+                onMouseEnter={e => { if (!sel) e.currentTarget.style.background = 'var(--background)'; }}
+                onMouseLeave={e => { if (!sel) e.currentTarget.style.background = 'none'; }}
+              >
+                <span style={{
+                  width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                  border: `2px solid ${sel ? '#e8681a' : 'var(--border)'}`,
+                  background: sel ? '#e8681a' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {sel && <span style={{ color: '#fff', fontSize: 11, fontWeight: 900 }}>✓</span>}
+                </span>
+                {s}
+              </button>
+            );
+          })}
+          {setores.length === 0 && (
+            <div style={{ padding: '16px 14px', fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>
+              Nenhum setor cadastrado nos tours
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RelatorioLista({ userId, profile, onOpen, onCreate }) {
-  const [list, setList]       = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [aba, setAba]         = useState(null);
+  const [list, setList]             = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [aba, setAba]               = useState(null);
+  const [setoresSel, setSetoresSel] = useState([]);
   const toast = useToast();
 
   const load = () => {
@@ -444,9 +540,22 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
     toast('Relatório removido');
   };
 
-  // Agrupa tours por aba
+  // Setores únicos presentes nos tours
+  const setoresDisponiveis = [...new Set(
+    list.map(r => decodeDesc(r.description).departamento).filter(Boolean)
+  )].sort();
+
+  // Filtra por setores selecionados
+  const listFiltrada = setoresSel.length === 0
+    ? list
+    : list.filter(r => {
+        const dep = decodeDesc(r.description).departamento || '';
+        return setoresSel.includes(dep);
+      });
+
+  // Agrupa tours por aba (usando lista já filtrada)
   const grupos = { rascunho: [], parcial: [], concluido: [] };
-  list.forEach(r => grupos[classificarTour(r)].push(r));
+  listFiltrada.forEach(r => grupos[classificarTour(r)].push(r));
   const filtrados = grupos[aba] || [];
 
   return (
@@ -454,11 +563,24 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
       <div className="page-header">
         <div>
           <div className="page-title">Tour 4x4</div>
-          <div className="page-subtitle">{list.length} tour{list.length !== 1 ? 's' : ''}</div>
+          <div className="page-subtitle">
+            {setoresSel.length > 0
+              ? `${listFiltrada.length} de ${list.length} tour${list.length !== 1 ? 's' : ''}`
+              : `${list.length} tour${list.length !== 1 ? 's' : ''}`}
+          </div>
         </div>
-        <button className="btn btn-primary" onClick={onCreate}>
-          <Plus size={15}/> Novo Tour
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {setoresDisponiveis.length > 0 && (
+            <FiltroSetores
+              setores={setoresDisponiveis}
+              selecionados={setoresSel}
+              onChange={novos => { setSetoresSel(novos); setAba(null); }}
+            />
+          )}
+          <button className="btn btn-primary" onClick={onCreate}>
+            <Plus size={15}/> Novo Tour
+          </button>
+        </div>
       </div>
 
       {loading && <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)' }}>Carregando...</div>}
@@ -474,7 +596,12 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
       )}
 
       {/* Tela inicial — cards de resumo por categoria */}
-      {!loading && list.length > 0 && aba === null && (
+      {!loading && list.length > 0 && aba === null && listFiltrada.length === 0 && (
+        <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)', fontSize:13 }}>
+          Nenhum tour encontrado para {setoresSel.length === 1 ? 'o setor selecionado' : 'os setores selecionados'}.
+        </div>
+      )}
+      {!loading && list.length > 0 && aba === null && listFiltrada.length > 0 && (
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
           {ABA_CONFIG.map(({ id, label, cor, bg }) => {
             const count = grupos[id].length;
