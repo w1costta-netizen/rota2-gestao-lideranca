@@ -12,6 +12,7 @@ const COL_MAP = {
   IDADE_ULTIMA_NF:               ['IDADE_ULTIMA_NF','IDADE_NF','DIAS_ULTIMA_NF'],
   DT_ULTIMA_VENDA:               ['DT_ULTIMA_VENDA','DATA_ULTIMA_VENDA','ULTIMA_VENDA'],
   sum_ESTOQUE_ON_HAND_LOJA_QTD:  ['sum_ESTOQUE_ON_HAND_LOJA_QTD','ESTOQUE_ON_HAND_LOJA_QTD','ESTOQUE_QTD','QTD_ESTOQUE'],
+  ESTOQUE_ON_HAND_CD_CXS:        ['ESTOQUE_ON_HAND_CD_CXS','ESTOQUE_CD_CXS','ESTOQUE_CD','QTD_CD'],
   sum_VALOR_ESTOQUE_LOJA_A_CUSTO:['sum_VALOR_ESTOQUE_LOJA_A_CUSTO','VALOR_ESTOQUE_CUSTO','VLR_ESTOQUE_CUSTO'],
   sum_VALOR_ESTOQUE_LOJA_A_PRECO:['sum_VALOR_ESTOQUE_LOJA_A_PRECO','VALOR_ESTOQUE_PRECO','VLR_ESTOQUE_PRECO'],
   sum_CUSTO_MEDIO:               ['sum_CUSTO_MEDIO','CUSTO_MEDIO'],
@@ -71,8 +72,10 @@ export async function parseEstoqueXlsx(file) {
   const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
   if (!rows.length) throw new Error('Planilha sem dados na aba "Dados"');
 
+  const COLUNAS_OPCIONAIS = new Set(['ESTOQUE_ON_HAND_CD_CXS']);
   const { result: colMap, missing } = resolveColumns(Object.keys(rows[0]));
-  if (missing.length) throw new Error(`Colunas não encontradas: ${missing.join(', ')}`);
+  const missingObrigatorias = missing.filter(c => !COLUNAS_OPCIONAIS.has(c));
+  if (missingObrigatorias.length) throw new Error(`Colunas não encontradas: ${missingObrigatorias.join(', ')}`);
 
   const get = (row, col) => row[colMap[col]];
 
@@ -97,6 +100,7 @@ export async function parseEstoqueXlsx(file) {
     const estoque    = parseFloat(get(row, 'sum_ESTOQUE_ON_HAND_LOJA_QTD')) || 0;
     const diasCob    = vendMedia > 0 ? estoque / (vendMedia / 7) : null;
     const vendaMesVlr = Math.round(qtdMesAtual * precoMedio * 100) / 100;
+    const estoque_cd_cxs = parseFloat(get(row, 'ESTOQUE_ON_HAND_CD_CXS')) || 0;
 
     items.push({
       CD_PRODUTO:                    parseInt(get(row, 'CD_PRODUTO')) || 0,
@@ -126,6 +130,7 @@ export async function parseEstoqueXlsx(file) {
       total_4s:                      s1 + s2 + s3 + s4,
       dias_cobertura:                diasCob ? Math.round(diasCob * 10) / 10 : null,
       venda_mes_vlr,
+      estoque_cd_cxs,
     });
   }
 
@@ -224,8 +229,10 @@ export async function parseEstoqueXlsx(file) {
       ruptura_count:         ruptura.length,
       ruptura_venda_mes:     sum(ruptura, 'sum_QTD_VENDAS_MES_ATUAL'),
       ruptura_venda_mes_vlr: Math.round(sum(ruptura, 'venda_mes_vlr') * 100) / 100,
+      ruptura_com_cd_count:  ruptura.filter(r => r.estoque_cd_cxs > 0).length,
       urgente_count:         urgente_15.length,
       urgente_30_count:      urgente.length,
+      urgente_com_cd_count:  urgente.filter(r => r.estoque_cd_cxs > 0).length,
       aging_count:           aging.length,
       aging_custo:           Math.round(sum(aging, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO') * 100) / 100,
       sem4s_count:           sem4s.length,

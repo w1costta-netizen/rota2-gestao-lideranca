@@ -370,6 +370,9 @@ function TabRuptura({ d }) {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
         <KpiCard label="Total em ruptura" value={n0(d.totais.ruptura_count)} cor="#ef4444" sub="itens ativos sem estoque com venda" />
         <KpiCard label="Venda perdida/mês" value={n0(d.totais.ruptura_venda_mes)} cor="#ef4444" sub="unidades no mês atual" />
+        {d.totais.ruptura_com_cd_count > 0 && (
+          <KpiCard label="Com estoque no CD" value={n0(d.totais.ruptura_com_cd_count)} cor="#10b981" sub="reposição disponível no CD" />
+        )}
       </div>
       <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10 }}>Por seção</h4>
       <SecaoTable rows={d.secao_ruptura} colunas={[
@@ -385,6 +388,9 @@ function TabRuptura({ d }) {
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_QTD_VENDAS_MES_ATUAL', label: 'Venda mês (un)', right: true, fmt: v => n0(v) },
         { key: 'venda_mes_vlr', label: 'Venda mês R$', right: true, fmt: v => brl(v), cor: () => '#ef4444' },
+        { key: 'estoque_cd_cxs', label: 'CD (cx)', right: true,
+          fmt: v => v > 0 ? n0(v) : '—',
+          cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
       ]} />
     </>
   );
@@ -396,6 +402,9 @@ function TabUrgente({ d }) {
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
         <KpiCard label="Crítico (< 15d)" value={n0(d.totais.urgente_count)} cor="#ef4444" sub="cobertura abaixo de 15 dias" />
         <KpiCard label="Monitoramento (< 30d)" value={n0(d.totais.urgente_30_count)} cor="#f59e0b" sub="cobertura abaixo de 30 dias" />
+        {d.totais.urgente_com_cd_count > 0 && (
+          <KpiCard label="Com estoque no CD" value={n0(d.totais.urgente_com_cd_count)} cor="#10b981" sub="reposição disponível no CD" />
+        )}
       </div>
       <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10 }}>Top itens (menor cobertura — até 30 dias)</h4>
       <SecaoTable rows={d.urgente_top} colunas={[
@@ -408,6 +417,9 @@ function TabUrgente({ d }) {
           cor: r => r.dias_cobertura < 7 ? '#ef4444' : r.dias_cobertura < 15 ? '#f59e0b' : '#f97316' },
         { key: 'criticidade', label: 'Status', right: false,
           fmt: v => v === 'critico' ? '🔴 Crítico' : v === 'urgente' ? '🟡 Urgente' : '🟠 Atenção' },
+        { key: 'estoque_cd_cxs', label: 'CD (cx)', right: true,
+          fmt: v => v > 0 ? n0(v) : '—',
+          cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
       ]} />
     </>
   );
