@@ -664,8 +664,16 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
 
   const saveAnnotations = async ({ dataUrl, shapes }) => {
     const foto = editandoFoto;
+    if (!dataUrl) { toast('Erro ao exportar imagem anotada.', 'error'); return; }
     try {
-      const blob = await (await fetch(dataUrl)).blob();
+      // Converte dataUrl → Blob sem usar fetch (mais confiável em todos os browsers)
+      const [header, b64] = dataUrl.split(',');
+      const mime = header.match(/:(.*?);/)[1];
+      const binary = atob(b64);
+      const arr = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
+      const blob = new Blob([arr], { type: mime });
+
       const path = `relatorios/${rel.id}/annotated_${foto.id}.jpg`;
       const { error: upErr } = await supabase.storage.from('evidencias')
         .upload(path, blob, { contentType:'image/jpeg', upsert:true });
