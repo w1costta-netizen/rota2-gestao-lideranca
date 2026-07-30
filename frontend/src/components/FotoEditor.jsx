@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Stage, Layer, Image as KonvaImage, Arrow, Circle, Rect, Text, Transformer } from 'react-konva';
-import { Minus, Type, Circle as CircleIcon, ArrowRight, Square, Trash2, RotateCcw, Check } from 'lucide-react';
+import { Type, Circle as CircleIcon, ArrowRight, Square, Trash2, RotateCcw, Check } from 'lucide-react';
 
 const COLORS = ['#ef4444','#f59e0b','#22c55e','#3b82f6','#ffffff','#000000'];
 const TOOLS  = [
@@ -10,14 +10,33 @@ const TOOLS  = [
   { id: 'text',   label: 'Texto',     Icon: Type },
 ];
 
+// Carrega imagem via blob para evitar problema de CORS no canvas (toDataURL)
 function useImage(url) {
   const [img, setImg] = useState(null);
   useEffect(() => {
     if (!url) return;
-    const i = new window.Image();
-    i.crossOrigin = 'anonymous';
-    i.onload = () => setImg(i);
-    i.src = url;
+    let cancelled = false;
+    fetch(url)
+      .then(r => r.blob())
+      .then(blob => {
+        if (cancelled) return;
+        const blobUrl = URL.createObjectURL(blob);
+        const i = new window.Image();
+        i.onload = () => {
+          if (!cancelled) setImg(i);
+          URL.revokeObjectURL(blobUrl);
+        };
+        i.src = blobUrl;
+      })
+      .catch(() => {
+        // fallback direto se fetch falhar
+        if (cancelled) return;
+        const i = new window.Image();
+        i.crossOrigin = 'anonymous';
+        i.onload = () => { if (!cancelled) setImg(i); };
+        i.src = url;
+      });
+    return () => { cancelled = true; };
   }, [url]);
   return img;
 }
@@ -38,12 +57,19 @@ export default function FotoEditor({ photoUrl, initialAnnotations, onSave, onCan
   const imgRef = useRef(null);
   const photo  = useImage(photoUrl);
 
+  // Bloqueia scroll da página enquanto editor está aberto
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   // Calcula dimensões responsivas
   useEffect(() => {
     if (!containerRef.current || !photo) return;
     const cw = containerRef.current.clientWidth;
     const ratio = photo.height / photo.width;
-    const maxH  = window.innerHeight * 0.55;
+    const maxH  = window.innerHeight * 0.52;
     let w = cw, h = cw * ratio;
     if (h > maxH) { h = maxH; w = maxH / ratio; }
     setDims({ w, h });
@@ -78,21 +104,21 @@ export default function FotoEditor({ photoUrl, initialAnnotations, onSave, onCan
 
   const deleteSelected = () => {
     if (!selId) return;
-    const next = shapes.filter(s => s.id !== selId);
-    pushHistory(next);
+    pushHistory(shapes.filter(s => s.id !== selId));
     setSelId(null);
   };
 
   const getId = () => `s_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
 
   const getPos = (e) => {
-    const stage = stageRef.current;
-    const ptr   = stage.getPointerPosition();
+    const ptr = stageRef.current.getPointerPosition();
     return { x: ptr.x / scale, y: ptr.y / scale };
   };
 
   const onMouseDown = (e) => {
     if (e.target !== imgRef.current) return;
+    // Impede scroll da página durante desenho no touch
+    if (e.evt?.cancelable) e.evt.preventDefault();
     const pos = getPos(e);
     const id  = getId();
     if (tool === 'arrow') {
@@ -102,7 +128,7 @@ export default function FotoEditor({ photoUrl, initialAnnotations, onSave, onCan
     } else if (tool === 'rect') {
       setDrawing({ id, type: 'rect', color, x: pos.x, y: pos.y, width: 0, height: 0 });
     } else if (tool === 'text') {
-      const text = window.prompt('Digite o texto da anotação:');
+      const text = window.prompt('Digite o texto:');
       if (!text?.trim()) return;
       pushHistory([...shapes, { id, type: 'text', color, x: pos.x, y: pos.y, text: text.trim(), fontSize: 18 }]);
     }
@@ -111,12 +137,12 @@ export default function FotoEditor({ photoUrl, initialAnnotations, onSave, onCan
 
   const onMouseMove = (e) => {
     if (!drawing) return;
+    if (e.evt?.cancelable) e.evt.preventDefault();
     const pos = getPos(e);
     if (drawing.type === 'arrow') {
       setDrawing(d => ({ ...d, points: [d.points[0], d.points[1], pos.x, pos.y] }));
     } else if (drawing.type === 'circle') {
-      const r = Math.hypot(pos.x - drawing.x, pos.y - drawing.y);
-      setDrawing(d => ({ ...d, radius: r }));
+      setDrawing(d => ({ ...d, radius: Math.hypot(pos.x - d.x, pos.y - d.y) }));
     } else if (drawing.type === 'rect') {
       setDrawing(d => ({ ...d, width: pos.x - d.x, height: pos.y - d.y }));
     }
@@ -134,39 +160,49 @@ export default function FotoEditor({ photoUrl, initialAnnotations, onSave, onCan
   };
 
   const updateShape = (id, attrs) => {
-    const next = shapes.map(s => s.id === id ? { ...s, ...attrs } : s);
-    pushHistory(next);
-  };
-
-  const exportAnnotations = () => {
-    // Exporta como imagem com anotações renderizadas
-    if (!stageRef.current) return null;
-    setSelId(null);
-    setTimeout(() => {}, 0);
-    const dataUrl = stageRef.current.toDataURL({ pixelRatio: 1 / scale });
-    return { dataUrl, shapes };
+    pushHistory(shapes.map(s => s.id === id ? { ...s, ...attrs } : s));
   };
 
   const handleSave = () => {
     setSelId(null);
-    // Espera transformer sumir antes de capturar
     requestAnimationFrame(() => {
-      const dataUrl = stageRef.current?.toDataURL({ pixelRatio: 1 / scale });
-      onSave({ dataUrl, shapes });
+      try {
+        const dataUrl = stageRef.current?.toDataURL({ pixelRatio: 1 / scale });
+        onSave({ dataUrl, shapes });
+      } catch (err) {
+        console.error('Erro ao exportar canvas:', err);
+        onSave({ dataUrl: null, shapes });
+      }
     });
   };
 
+  // onDragEnd corrigido: divide por scale para manter coordenadas originais
+  // Para setas: aplica o delta nos points e reseta posição do nó
+  const makeDragEnd = (s) => (e) => {
+    if (s.type === 'arrow') {
+      const dx = e.target.x() / scale;
+      const dy = e.target.y() / scale;
+      e.target.position({ x: 0, y: 0 });
+      updateShape(s.id, {
+        points: s.points.map((p, i) => i % 2 === 0 ? p + dx : p + dy),
+      });
+    } else {
+      updateShape(s.id, { x: e.target.x() / scale, y: e.target.y() / scale });
+    }
+  };
+
   const renderShape = (s, isPreview = false) => {
+    const sx = isPreview ? 1 : scale;
     const common = {
       key: s.id, id: s.id,
       draggable: !isPreview,
       onClick: isPreview ? undefined : () => setSelId(s.id),
       onTap:   isPreview ? undefined : () => setSelId(s.id),
-      onDragEnd: isPreview ? undefined : (e) => updateShape(s.id, { x: e.target.x(), y: e.target.y() }),
+      onDragEnd: isPreview ? undefined : makeDragEnd(s),
     };
-    const sx = isPreview ? 1 : scale;
     if (s.type === 'arrow') return (
-      <Arrow {...common} points={s.points.map((p,i) => i % 2 === 0 ? p * sx : p * sx)}
+      <Arrow {...common}
+        points={s.points.map(p => p * sx)}
         stroke={s.color} strokeWidth={3} fill={s.color} pointerLength={10} pointerWidth={8}/>
     );
     if (s.type === 'circle') return (
@@ -212,7 +248,7 @@ export default function FotoEditor({ photoUrl, initialAnnotations, onSave, onCan
         {COLORS.map(c => (
           <button key={c} onClick={() => setColor(c)}
             style={{
-              width:24, height:24, borderRadius:'50%', background:c, border:'none', cursor:'pointer',
+              width:26, height:26, borderRadius:'50%', background:c, border:'none', cursor:'pointer',
               outline: color === c ? `3px solid var(--primary)` : `2px solid var(--border)`,
               outlineOffset:2, flexShrink:0,
             }}/>
@@ -225,15 +261,18 @@ export default function FotoEditor({ photoUrl, initialAnnotations, onSave, onCan
           </button>
           {selId && (
             <button title="Apagar selecionado" onClick={deleteSelected}
-              style={{ background:'#ef444420', border:'1px solid #ef4444', borderRadius:8, padding:'6px 10px', cursor:'pointer', color:'#ef4444' }}>
+              style={{ background:'#ef444420', border:'1px solid #ef4444', borderRadius:8,
+                padding:'6px 10px', cursor:'pointer', color:'#ef4444' }}>
               <Trash2 size={14}/>
             </button>
           )}
         </div>
       </div>
 
-      {/* Canvas */}
-      <div ref={containerRef} style={{ width:'100%', touchAction:'none', cursor: tool === 'text' ? 'text' : 'crosshair' }}>
+      {/* Canvas — touch-action none impede scroll durante desenho */}
+      <div ref={containerRef}
+        style={{ width:'100%', touchAction:'none', cursor: tool === 'text' ? 'text' : 'crosshair',
+          userSelect:'none', WebkitUserSelect:'none' }}>
         {dims.w > 0 && (
           <Stage ref={stageRef} width={dims.w} height={dims.h}
             onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp}
@@ -241,7 +280,7 @@ export default function FotoEditor({ photoUrl, initialAnnotations, onSave, onCan
             <Layer>
               <KonvaImage ref={imgRef} image={photo} width={dims.w} height={dims.h}/>
               {shapes.map(s => renderShape(s))}
-              {drawing && renderShape(drawing)}
+              {drawing && renderShape(drawing, false)}
               <Transformer ref={trRef} rotateEnabled={false}
                 boundBoxFunc={(old, n) => ({ ...n, width: Math.max(20, n.width), height: Math.max(20, n.height) })}/>
             </Layer>
@@ -250,10 +289,9 @@ export default function FotoEditor({ photoUrl, initialAnnotations, onSave, onCan
       </div>
 
       <p style={{ fontSize:11, color:'var(--text-muted)', margin:0 }}>
-        Clique e arraste para desenhar • Clique numa forma para selecionar e mover • Texto: clique no ponto desejado
+        Toque e arraste para desenhar • Toque numa forma para selecionar e mover
       </p>
 
-      {/* Ações */}
       <div style={{ display:'flex', gap:10 }}>
         <button className="btn btn-ghost" style={{ flex:1, justifyContent:'center' }} onClick={onCancel}>
           Cancelar
