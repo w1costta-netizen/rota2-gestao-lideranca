@@ -383,7 +383,8 @@ function TabRuptura({ d }) {
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 220, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
-        { key: 'sum_QTD_VENDAS_MES_ATUAL', label: 'Venda mês', right: true, fmt: v => n0(v) },
+        { key: 'sum_QTD_VENDAS_MES_ATUAL', label: 'Venda mês (un)', right: true, fmt: v => n0(v) },
+        { key: 'venda_mes_vlr', label: 'Venda mês R$', right: true, fmt: v => brl(v), cor: () => '#ef4444' },
       ]} />
     </>
   );
@@ -393,9 +394,10 @@ function TabUrgente({ d }) {
   return (
     <>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <KpiCard label="Itens urgentes" value={n0(d.totais.urgente_count)} cor="#f59e0b" sub="cobertura < 15 dias" />
+        <KpiCard label="Crítico (< 15d)" value={n0(d.totais.urgente_count)} cor="#ef4444" sub="cobertura abaixo de 15 dias" />
+        <KpiCard label="Monitoramento (< 30d)" value={n0(d.totais.urgente_30_count)} cor="#f59e0b" sub="cobertura abaixo de 30 dias" />
       </div>
-      <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10 }}>Top itens (menor cobertura)</h4>
+      <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10 }}>Top itens (menor cobertura — até 30 dias)</h4>
       <SecaoTable rows={d.urgente_top} colunas={[
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
@@ -403,7 +405,9 @@ function TabUrgente({ d }) {
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Estoque', right: true, fmt: v => n1(v) },
         { key: 'dias_cobertura', label: 'Cobertura', right: true,
           fmt: v => v != null ? `${n1(v)}d` : '—',
-          cor: r => r.dias_cobertura < 7 ? '#ef4444' : '#f59e0b' },
+          cor: r => r.dias_cobertura < 7 ? '#ef4444' : r.dias_cobertura < 15 ? '#f59e0b' : '#f97316' },
+        { key: 'criticidade', label: 'Status', right: false,
+          fmt: v => v === 'critico' ? '🔴 Crítico' : v === 'urgente' ? '🟡 Urgente' : '🟠 Atenção' },
       ]} />
     </>
   );
@@ -428,6 +432,7 @@ function TabAging({ d }) {
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'IDADE_ULTIMA_NF', label: 'Dias NF', right: true, fmt: v => n0(v), cor: () => '#6366f1' },
+        { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
     </>
@@ -452,6 +457,7 @@ function TabSem4s({ d }) {
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
+        { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
     </>
@@ -476,6 +482,7 @@ function TabGiroLento({ d }) {
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
+        { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
         { key: 'dias_cobertura', label: 'Cobertura', right: true, fmt: v => v != null ? `${n1(v)}d` : '—', cor: () => '#f59e0b' },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
@@ -496,6 +503,7 @@ function TabNegativo({ d }) {
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd', right: true,
           fmt: v => n1(v), cor: () => '#ef4444' },
+        { key: 'IDADE_ULTIMA_NF', label: 'Dias sem NF', right: true, fmt: v => v != null ? `${n0(v)}d` : '—', cor: () => '#6b7280' },
       ]} />
     </>
   );

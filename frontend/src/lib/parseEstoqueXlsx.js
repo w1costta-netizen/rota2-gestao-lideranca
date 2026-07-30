@@ -91,9 +91,12 @@ export async function parseEstoqueXlsx(file) {
     const s2 = parseFloat(get(row, 'sum_QTD_VENDAS_SEMANA_2')) || 0;
     const s3 = parseFloat(get(row, 'sum_QTD_VENDAS_SEMANA_3')) || 0;
     const s4 = parseFloat(get(row, 'sum_QTD_VENDAS_SEMANA_4')) || 0;
-    const vendMedia = parseFloat(get(row, 'sum_VENDA_MEDIA')) || 0;
-    const estoque   = parseFloat(get(row, 'sum_ESTOQUE_ON_HAND_LOJA_QTD')) || 0;
-    const diasCob   = vendMedia > 0 ? estoque / (vendMedia / 7) : null;
+    const vendMedia  = parseFloat(get(row, 'sum_VENDA_MEDIA')) || 0;
+    const precoMedio = parseFloat(get(row, 'sum_PRECO_VENDA_MEDIO')) || 0;
+    const qtdMesAtual = parseFloat(get(row, 'sum_QTD_VENDAS_MES_ATUAL')) || 0;
+    const estoque    = parseFloat(get(row, 'sum_ESTOQUE_ON_HAND_LOJA_QTD')) || 0;
+    const diasCob    = vendMedia > 0 ? estoque / (vendMedia / 7) : null;
+    const vendaMesVlr = Math.round(qtdMesAtual * precoMedio * 100) / 100;
 
     items.push({
       CD_PRODUTO:                    parseInt(get(row, 'CD_PRODUTO')) || 0,
@@ -114,7 +117,7 @@ export async function parseEstoqueXlsx(file) {
       sum_PRECO_VENDA_MEDIO:         parseFloat(get(row, 'sum_PRECO_VENDA_MEDIO')) || null,
       sum_ESTOQUE_MINIMO_LOJA:       parseFloat(get(row, 'sum_ESTOQUE_MINIMO_LOJA')) || null,
       sum_VENDA_MEDIA:               vendMedia || null,
-      sum_QTD_VENDAS_MES_ATUAL:      parseFloat(get(row, 'sum_QTD_VENDAS_MES_ATUAL')) || null,
+      sum_QTD_VENDAS_MES_ATUAL:      qtdMesAtual || null,
       sum_QTD_VENDAS_MES_ANTERIOR:   parseFloat(get(row, 'sum_QTD_VENDAS_MES_ANTERIOR')) || null,
       sum_QTD_VENDAS_SEMANA_1:       s1,
       sum_QTD_VENDAS_SEMANA_2:       s2,
@@ -122,6 +125,7 @@ export async function parseEstoqueXlsx(file) {
       sum_QTD_VENDAS_SEMANA_4:       s4,
       total_4s:                      s1 + s2 + s3 + s4,
       dias_cobertura:                diasCob ? Math.round(diasCob * 10) / 10 : null,
+      venda_mes_vlr,
     });
   }
 
@@ -181,7 +185,14 @@ export async function parseEstoqueXlsx(file) {
   const ativos            = com_estoque.filter(r => r.STATUS_REAL === 'Ativo');
   const ativos_geral      = items.filter(r => r.STATUS_REAL === 'Ativo'); // todos ativos, com ou sem estoque
   const ruptura           = items.filter(r => r.STATUS_REAL === 'Ativo' && r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0 && (r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0);
-  const urgente           = ativos.filter(r => r.sum_VENDA_MEDIA && r.dias_cobertura < 15).sort((a, b) => a.dias_cobertura - b.dias_cobertura);
+  const urgente           = ativos
+    .filter(r => r.sum_VENDA_MEDIA && r.dias_cobertura != null && r.dias_cobertura < 30)
+    .map(r => ({
+      ...r,
+      criticidade: r.dias_cobertura < 7 ? 'critico' : r.dias_cobertura < 15 ? 'urgente' : 'atencao',
+    }))
+    .sort((a, b) => a.dias_cobertura - b.dias_cobertura);
+  const urgente_15        = urgente.filter(r => r.dias_cobertura < 15);
   const aging             = ativos.filter(r => (r.IDADE_ULTIMA_NF || 0) > 365);
   const sem4s             = ativos.filter(r => r.total_4s === 0);
   const giro_lento        = ativos.filter(r => r.sum_VENDA_MEDIA && r.dias_cobertura >= 45).sort((a, b) => b.sum_VALOR_ESTOQUE_LOJA_A_CUSTO - a.sum_VALOR_ESTOQUE_LOJA_A_CUSTO);
@@ -212,7 +223,9 @@ export async function parseEstoqueXlsx(file) {
     totais: {
       ruptura_count:         ruptura.length,
       ruptura_venda_mes:     sum(ruptura, 'sum_QTD_VENDAS_MES_ATUAL'),
-      urgente_count:         urgente.length,
+      ruptura_venda_mes_vlr: Math.round(sum(ruptura, 'venda_mes_vlr') * 100) / 100,
+      urgente_count:         urgente_15.length,
+      urgente_30_count:      urgente.length,
       aging_count:           aging.length,
       aging_custo:           Math.round(sum(aging, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO') * 100) / 100,
       sem4s_count:           sem4s.length,
