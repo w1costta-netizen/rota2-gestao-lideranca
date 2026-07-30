@@ -160,7 +160,7 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       </div>
 
       {/* Grade de conteúdo */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:20 }} className="dashboard-grid">
 
         {/* Agenda de hoje */}
         <div className="card">
