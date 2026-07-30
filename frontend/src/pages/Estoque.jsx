@@ -78,7 +78,7 @@ function PctBar({ value, total, cor = '#0ea5e9' }) {
 
 function TabAcervo({ d }) {
   const t = d.totais;
-  const [visao, setVisao] = useState('divisao'); // divisao | depto | zero4s | zeromes
+  const [visao, setVisao] = useState('divisao');
 
   const SUB_TABS = [
     { id: 'divisao', label: 'Por Divisão' },
@@ -86,6 +86,146 @@ function TabAcervo({ d }) {
     { id: 'zero4s',  label: 'Zero c/ venda 4s' },
     { id: 'zeromes', label: 'Zero c/ venda mês' },
   ];
+
+  function handlePDF() {
+    gerarPDF({
+      titulo: 'Acervo Ativo — Relatório',
+      subtitulo: `Total: ${n0(t.ativos_total)} itens ativos`,
+      secoes: [
+        {
+          titulo: 'Resumo',
+          colunas: [
+            { header: 'Indicador', dataKey: 'ind' },
+            { header: 'Qtd', dataKey: 'qtd' },
+            { header: '%', dataKey: 'pct' },
+          ],
+          rows: [
+            { ind: 'Total ativos',       qtd: n0(t.ativos_total),         pct: '100%' },
+            { ind: 'Com estoque',        qtd: n0(t.ativos_com_estoque),    pct: `${t.ativos_total > 0 ? Math.round(t.ativos_com_estoque / t.ativos_total * 100) : 0}%` },
+            { ind: 'Zero estoque',       qtd: n0(t.ativos_zero_count),     pct: `${t.ativos_total > 0 ? Math.round(t.ativos_zero_count / t.ativos_total * 100) : 0}%` },
+            { ind: 'Zero c/ venda 4s',  qtd: n0(t.ativos_zero_venda_4s),  pct: '' },
+            { ind: 'Zero c/ venda mês', qtd: n0(t.ativos_zero_venda_mes), pct: '' },
+          ],
+        },
+        {
+          titulo: 'Por Divisão',
+          colunas: [
+            { header: 'Divisão',            dataKey: 'DESCRICAO_SETOR' },
+            { header: 'Total Ativos',        dataKey: 'itens' },
+            { header: 'Zero estoque',        dataKey: 'zero_estoque' },
+            { header: 'Zero c/ venda 4s',   dataKey: 'zero_venda_4s' },
+            { header: 'Zero c/ venda mês',  dataKey: 'zero_venda_mes' },
+          ],
+          rows: d.divisao_ativos || [],
+        },
+        {
+          titulo: 'Por Departamento',
+          colunas: [
+            { header: 'Departamento',        dataKey: 'DESCRICAO_DEPARTAMENTO' },
+            { header: 'Divisão',             dataKey: 'DESCRICAO_SETOR' },
+            { header: 'Total Ativos',        dataKey: 'itens' },
+            { header: 'Zero estoque',        dataKey: 'zero_estoque' },
+            { header: 'Zero c/ venda 4s',   dataKey: 'zero_venda_4s' },
+            { header: 'Zero c/ venda mês',  dataKey: 'zero_venda_mes' },
+          ],
+          rows: d.depto_ativos || [],
+        },
+        {
+          titulo: 'Zero c/ venda nas 4 semanas',
+          colunas: [
+            { header: 'Cód.',       dataKey: 'CD_PRODUTO' },
+            { header: 'Produto',    dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Seção',      dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Depto',      dataKey: 'DESCRICAO_DEPARTAMENTO' },
+            { header: 'Venda 4s',   dataKey: 'total_4s' },
+            { header: 'Venda mês',  dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
+          ],
+          rows: d.zero_venda_4s_top || [],
+        },
+        {
+          titulo: 'Zero c/ venda no mês atual',
+          colunas: [
+            { header: 'Cód.',       dataKey: 'CD_PRODUTO' },
+            { header: 'Produto',    dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Seção',      dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Depto',      dataKey: 'DESCRICAO_DEPARTAMENTO' },
+            { header: 'Venda mês',  dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
+            { header: 'Venda 4s',   dataKey: 'total_4s' },
+          ],
+          rows: d.zero_venda_mes_top || [],
+        },
+      ],
+    });
+  }
+
+  function handleExcel() {
+    gerarExcel({
+      nomeArquivo: 'AcervoAtivo',
+      abas: [
+        {
+          nome: 'Por Divisão',
+          colunas: ['Divisão', 'Total Ativos', 'Com estoque', 'Zero estoque', 'Zero c/ venda 4s', 'Zero c/ venda mês'],
+          rows: (d.divisao_ativos || []).map(r => [
+            r.DESCRICAO_SETOR, r.itens, r.itens - r.zero_estoque,
+            r.zero_estoque, r.zero_venda_4s, r.zero_venda_mes,
+          ]),
+        },
+        {
+          nome: 'Por Departamento',
+          colunas: ['Departamento', 'Divisão', 'Total Ativos', 'Zero estoque', 'Zero c/ venda 4s', 'Zero c/ venda mês'],
+          rows: (d.depto_ativos || []).map(r => [
+            r.DESCRICAO_DEPARTAMENTO, r.DESCRICAO_SETOR, r.itens,
+            r.zero_estoque, r.zero_venda_4s, r.zero_venda_mes,
+          ]),
+        },
+        {
+          nome: 'Zero venda 4s',
+          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Venda 4s', 'Venda mês', 'Mês anterior'],
+          rows: (d.zero_venda_4s_top || []).map(r => [
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.DESCRICAO_DEPARTAMENTO, r.total_4s,
+            r.sum_QTD_VENDAS_MES_ATUAL, r.sum_QTD_VENDAS_MES_ANTERIOR,
+          ]),
+        },
+        {
+          nome: 'Zero venda mês',
+          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Venda mês', 'Venda 4s', 'Mês anterior'],
+          rows: (d.zero_venda_mes_top || []).map(r => [
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.DESCRICAO_DEPARTAMENTO, r.sum_QTD_VENDAS_MES_ATUAL,
+            r.total_4s, r.sum_QTD_VENDAS_MES_ANTERIOR,
+          ]),
+        },
+      ],
+    });
+  }
+
+  function handleWhatsApp() {
+    compartilharWhatsApp([
+      `🏪 *Acervo Ativo no Clube*`,
+      ``,
+      `📦 Total ativos: ${n0(t.ativos_total)} itens`,
+      `✅ Com estoque: ${n0(t.ativos_com_estoque)} (${t.ativos_total > 0 ? Math.round(t.ativos_com_estoque / t.ativos_total * 100) : 0}%)`,
+      `⚪ Zero estoque: ${n0(t.ativos_zero_count)} (${t.ativos_total > 0 ? Math.round(t.ativos_zero_count / t.ativos_total * 100) : 0}%)`,
+      `🟡 Zero c/ venda 4s: ${n0(t.ativos_zero_venda_4s)} itens`,
+      `🔴 Zero c/ venda mês: ${n0(t.ativos_zero_venda_mes)} itens`,
+    ].join('\n'));
+  }
+
+  function handleEmail() {
+    compartilharEmail({
+      assunto: `Acervo Ativo — ${n0(t.ativos_total)} itens`,
+      corpo: [
+        `Acervo Ativo no Clube`,
+        ``,
+        `Total ativos: ${n0(t.ativos_total)} itens`,
+        `Com estoque: ${n0(t.ativos_com_estoque)}`,
+        `Zero estoque: ${n0(t.ativos_zero_count)}`,
+        `Zero c/ venda 4s: ${n0(t.ativos_zero_venda_4s)} itens`,
+        `Zero c/ venda mês: ${n0(t.ativos_zero_venda_mes)} itens`,
+      ].join('\n'),
+    });
+  }
 
   return (
     <>
@@ -98,18 +238,30 @@ function TabAcervo({ d }) {
         <KpiCard label="Zero c/ venda mês"  value={n0(t.ativos_zero_venda_mes)} cor="#ef4444" sub="risco de ruptura real" />
       </div>
 
-      {/* Sub-tabs */}
-      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border)', marginBottom: 16, overflowX: 'auto' }}>
-        {SUB_TABS.map(s => (
-          <button key={s.id} onClick={() => setVisao(s.id)}
-            style={{ background: 'none', border: 'none',
-              borderBottom: visao === s.id ? '2px solid #0ea5e9' : '2px solid transparent',
-              color: visao === s.id ? '#0ea5e9' : 'var(--text-muted)',
-              fontWeight: visao === s.id ? 700 : 400, fontSize: 12,
-              padding: '7px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-            {s.label}
-          </button>
-        ))}
+      {/* Sub-tabs + botão exportar */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        borderBottom: '1px solid var(--border)', marginBottom: 16, gap: 8 }}>
+        <div style={{ display: 'flex', gap: 2, overflowX: 'auto' }}>
+          {SUB_TABS.map(s => (
+            <button key={s.id} onClick={() => setVisao(s.id)}
+              style={{ background: 'none', border: 'none',
+                borderBottom: visao === s.id ? '2px solid #0ea5e9' : '2px solid transparent',
+                color: visao === s.id ? '#0ea5e9' : 'var(--text-muted)',
+                fontWeight: visao === s.id ? 700 : 400, fontSize: 12,
+                padding: '7px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ flexShrink: 0, paddingBottom: 4 }}>
+          <ExportMenu
+            onPDF={handlePDF}
+            onExcel={handleExcel}
+            onWhatsApp={handleWhatsApp}
+            onEmail={handleEmail}
+            label="Exportar acervo"
+          />
+        </div>
       </div>
 
       {/* Por Divisão */}
