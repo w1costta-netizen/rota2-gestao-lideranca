@@ -148,19 +148,50 @@ export async function parseEstoqueXlsx(file) {
     }
     return Object.values(m).sort((a, b) => b.venda_mes - a.venda_mes);
   };
+  const byDivisao = (arr) => {
+    const m = {};
+    for (const r of arr) {
+      const d = r.DESCRICAO_SETOR || 'Sem divisão';
+      if (!m[d]) m[d] = { DESCRICAO_SETOR: d, itens: 0, zero_estoque: 0, zero_venda_4s: 0, zero_venda_mes: 0 };
+      m[d].itens++;
+      if (r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0) {
+        m[d].zero_estoque++;
+        if (r.total_4s > 0)                      m[d].zero_venda_4s++;
+        if ((r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0) m[d].zero_venda_mes++;
+      }
+    }
+    return Object.values(m).sort((a, b) => b.itens - a.itens);
+  };
+  const byDepto = (arr) => {
+    const m = {};
+    for (const r of arr) {
+      const d = r.DESCRICAO_DEPARTAMENTO || 'Sem departamento';
+      if (!m[d]) m[d] = { DESCRICAO_DEPARTAMENTO: d, DESCRICAO_SETOR: r.DESCRICAO_SETOR, itens: 0, zero_estoque: 0, zero_venda_4s: 0, zero_venda_mes: 0 };
+      m[d].itens++;
+      if (r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0) {
+        m[d].zero_estoque++;
+        if (r.total_4s > 0)                      m[d].zero_venda_4s++;
+        if ((r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0) m[d].zero_venda_mes++;
+      }
+    }
+    return Object.values(m).sort((a, b) => b.itens - a.itens);
+  };
 
-  const com_estoque    = items.filter(r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD > 0);
-  const ativos         = com_estoque.filter(r => r.STATUS_REAL === 'Ativo');
-  const ruptura        = items.filter(r => r.STATUS_REAL === 'Ativo' && r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0 && (r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0);
-  const urgente        = ativos.filter(r => r.sum_VENDA_MEDIA && r.dias_cobertura < 15).sort((a, b) => a.dias_cobertura - b.dias_cobertura);
-  const aging          = ativos.filter(r => (r.IDADE_ULTIMA_NF || 0) > 365);
-  const sem4s          = ativos.filter(r => r.total_4s === 0);
-  const giro_lento     = ativos.filter(r => r.sum_VENDA_MEDIA && r.dias_cobertura >= 45).sort((a, b) => b.sum_VALOR_ESTOQUE_LOJA_A_CUSTO - a.sum_VALOR_ESTOQUE_LOJA_A_CUSTO);
-  const estq_neg       = items.filter(r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD < 0);
-  const suspensos_est  = com_estoque.filter(r => r.STATUS_REAL === 'Suspenso');
-  const deletados_est  = com_estoque.filter(r => r.STATUS_REAL === 'Deletado');
-  const ativos_zer_lst = items.filter(r => r.STATUS_REAL === 'Ativo' && r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0);
-  const sem_mov        = ativos_zer_lst.filter(r => !(r.sum_QTD_VENDAS_MES_ATUAL > 0));
+  const com_estoque       = items.filter(r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD > 0);
+  const ativos            = com_estoque.filter(r => r.STATUS_REAL === 'Ativo');
+  const ativos_geral      = items.filter(r => r.STATUS_REAL === 'Ativo'); // todos ativos, com ou sem estoque
+  const ruptura           = items.filter(r => r.STATUS_REAL === 'Ativo' && r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0 && (r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0);
+  const urgente           = ativos.filter(r => r.sum_VENDA_MEDIA && r.dias_cobertura < 15).sort((a, b) => a.dias_cobertura - b.dias_cobertura);
+  const aging             = ativos.filter(r => (r.IDADE_ULTIMA_NF || 0) > 365);
+  const sem4s             = ativos.filter(r => r.total_4s === 0);
+  const giro_lento        = ativos.filter(r => r.sum_VENDA_MEDIA && r.dias_cobertura >= 45).sort((a, b) => b.sum_VALOR_ESTOQUE_LOJA_A_CUSTO - a.sum_VALOR_ESTOQUE_LOJA_A_CUSTO);
+  const estq_neg          = items.filter(r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD < 0);
+  const suspensos_est     = com_estoque.filter(r => r.STATUS_REAL === 'Suspenso');
+  const deletados_est     = com_estoque.filter(r => r.STATUS_REAL === 'Deletado');
+  const ativos_zer_lst    = items.filter(r => r.STATUS_REAL === 'Ativo' && r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0);
+  const sem_mov           = ativos_zer_lst.filter(r => !(r.sum_QTD_VENDAS_MES_ATUAL > 0));
+  const zero_venda_4s     = ativos_zer_lst.filter(r => r.total_4s > 0);
+  const zero_venda_mes    = ativos_zer_lst.filter(r => (r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0);
 
   const hoje    = new Date();
   const pad     = n => String(n).padStart(2, '0');
@@ -193,9 +224,13 @@ export async function parseEstoqueXlsx(file) {
       suspensos_custo:       Math.round(sum(suspensos_est, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO') * 100) / 100,
       deletados_com_estoque: deletados_est.length,
       deletados_custo:       Math.round(sum(deletados_est, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO') * 100) / 100,
-      ativos_zerados:        ativos_zer_lst.length,
-      ativos_com_estoque:    ativos.length,
-      com_estoque:           com_estoque.length,
+      ativos_zerados:           ativos_zer_lst.length,
+      ativos_com_estoque:       ativos.length,
+      com_estoque:              com_estoque.length,
+      ativos_total:             ativos_geral.length,
+      ativos_zero_count:        ativos_zer_lst.length,
+      ativos_zero_venda_4s:     zero_venda_4s.length,
+      ativos_zero_venda_mes:    zero_venda_mes.length,
     },
     secao_ruptura:    bySecaoQtd(ruptura),
     secao_urgente:    bySecao(urgente, 'sum_ESTOQUE_ON_HAND_LOJA_QTD'),
@@ -216,5 +251,10 @@ export async function parseEstoqueXlsx(file) {
     dep_aging:        bySecao(aging),
     dep_sem4s:        bySecao(sem4s),
     status_com_estoque: Object.values(statusMap).sort((a, b) => b.custo_total - a.custo_total),
+    // acervo ativo
+    divisao_ativos:       byDivisao(ativos_geral),
+    depto_ativos:         byDepto(ativos_geral),
+    zero_venda_4s_top:    topN(zero_venda_4s, 'total_4s'),
+    zero_venda_mes_top:   topN(zero_venda_mes, 'sum_QTD_VENDAS_MES_ATUAL'),
   };
 }

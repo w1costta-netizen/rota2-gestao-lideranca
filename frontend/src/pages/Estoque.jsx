@@ -9,6 +9,7 @@ const n0  = v => v == null ? '—' : Math.round(v).toLocaleString('pt-BR');
 const n1  = v => v == null ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 
 const TABS = [
+  { id: 'acervo',     label: 'Acervo Ativo', cor: '#0ea5e9' },
   { id: 'ruptura',    label: 'Ruptura',      cor: '#ef4444' },
   { id: 'urgente',    label: 'Urgente',      cor: '#f59e0b' },
   { id: 'aging',      label: 'Aging +365d',  cor: '#6366f1' },
@@ -60,6 +61,152 @@ function SecaoTable({ rows, colunas }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+function PctBar({ value, total, cor = '#0ea5e9' }) {
+  const pct = total > 0 ? Math.round((value / total) * 100) : 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ flex: 1, height: 6, background: 'var(--border)', borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: cor, borderRadius: 3 }} />
+      </div>
+      <span style={{ fontSize: 11, color: 'var(--text-muted)', minWidth: 32, textAlign: 'right' }}>{pct}%</span>
+    </div>
+  );
+}
+
+function TabAcervo({ d }) {
+  const t = d.totais;
+  const [visao, setVisao] = useState('divisao'); // divisao | depto | zero4s | zeromes
+
+  const SUB_TABS = [
+    { id: 'divisao', label: 'Por Divisão' },
+    { id: 'depto',   label: 'Por Departamento' },
+    { id: 'zero4s',  label: 'Zero c/ venda 4s' },
+    { id: 'zeromes', label: 'Zero c/ venda mês' },
+  ];
+
+  return (
+    <>
+      {/* KPIs */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 20 }}>
+        <KpiCard label="Total ativos"        value={n0(t.ativos_total)}         cor="#0ea5e9" sub="itens ativos no clube" />
+        <KpiCard label="Com estoque"         value={n0(t.ativos_com_estoque)}    cor="#10b981" sub={`${t.ativos_total > 0 ? Math.round(t.ativos_com_estoque / t.ativos_total * 100) : 0}% do acervo`} />
+        <KpiCard label="Zero estoque"        value={n0(t.ativos_zero_count)}     cor="#6b7280" sub={`${t.ativos_total > 0 ? Math.round(t.ativos_zero_count / t.ativos_total * 100) : 0}% do acervo`} />
+        <KpiCard label="Zero c/ venda 4s"   value={n0(t.ativos_zero_venda_4s)}  cor="#f59e0b" sub="vendeu mas sem estoque" />
+        <KpiCard label="Zero c/ venda mês"  value={n0(t.ativos_zero_venda_mes)} cor="#ef4444" sub="risco de ruptura real" />
+      </div>
+
+      {/* Sub-tabs */}
+      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border)', marginBottom: 16, overflowX: 'auto' }}>
+        {SUB_TABS.map(s => (
+          <button key={s.id} onClick={() => setVisao(s.id)}
+            style={{ background: 'none', border: 'none',
+              borderBottom: visao === s.id ? '2px solid #0ea5e9' : '2px solid transparent',
+              color: visao === s.id ? '#0ea5e9' : 'var(--text-muted)',
+              fontWeight: visao === s.id ? 700 : 400, fontSize: 12,
+              padding: '7px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Por Divisão */}
+      {visao === 'divisao' && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Divisão','Total Ativos','Com estoque','Zero estoque','Zero c/ venda 4s','Zero c/ venda mês','% zero'].map(h => (
+                  <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Divisão' ? 'left' : 'right',
+                    color: 'var(--text-muted)', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(d.divisao_ativos || []).map((r, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '10px 10px', color: 'var(--text)', fontWeight: 500, maxWidth: 220, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.DESCRICAO_SETOR}</td>
+                  <td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 700, color: '#0ea5e9' }}>{n0(r.itens)}</td>
+                  <td style={{ padding: '10px 10px', textAlign: 'right', color: '#10b981' }}>{n0(r.itens - r.zero_estoque)}</td>
+                  <td style={{ padding: '10px 10px', textAlign: 'right', color: 'var(--text-muted)' }}>{n0(r.zero_estoque)}</td>
+                  <td style={{ padding: '10px 10px', textAlign: 'right', color: '#f59e0b' }}>{n0(r.zero_venda_4s)}</td>
+                  <td style={{ padding: '10px 10px', textAlign: 'right', color: '#ef4444' }}>{n0(r.zero_venda_mes)}</td>
+                  <td style={{ padding: '10px 10px', minWidth: 100 }}>
+                    <PctBar value={r.zero_estoque} total={r.itens} cor="#6b7280" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Por Departamento */}
+      {visao === 'depto' && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {['Departamento','Divisão','Total Ativos','Zero estoque','Zero c/ venda 4s','Zero c/ venda mês'].map(h => (
+                  <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Departamento' || h === 'Divisão' ? 'left' : 'right',
+                    color: 'var(--text-muted)', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(d.depto_ativos || []).map((r, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid var(--border)' }}>
+                  <td style={{ padding: '9px 10px', color: 'var(--text)', fontWeight: 500, maxWidth: 200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.DESCRICAO_DEPARTAMENTO}</td>
+                  <td style={{ padding: '9px 10px', color: 'var(--text-muted)', fontSize: 11, maxWidth: 160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.DESCRICAO_SETOR}</td>
+                  <td style={{ padding: '9px 10px', textAlign: 'right', fontWeight: 700, color: '#0ea5e9' }}>{n0(r.itens)}</td>
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-muted)' }}>{n0(r.zero_estoque)}</td>
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: '#f59e0b' }}>{n0(r.zero_venda_4s)}</td>
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: '#ef4444' }}>{n0(r.zero_venda_mes)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Zero c/ venda 4 semanas */}
+      {visao === 'zero4s' && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+            Itens ativos com <strong>estoque zero</strong> que tiveram venda nas últimas 4 semanas — risco real de ruptura.
+          </p>
+          <SecaoTable rows={d.zero_venda_4s_top || []} colunas={[
+            { key: 'CD_PRODUTO',                 label: 'Cód.' },
+            { key: 'DESCRICAO_PRODUTO',           label: 'Produto', maxW: 220, wrap: true },
+            { key: 'DESCRICAO_SECAO',             label: 'Seção' },
+            { key: 'DESCRICAO_DEPARTAMENTO',      label: 'Depto' },
+            { key: 'total_4s',                    label: 'Venda 4s', right: true, fmt: v => n0(v), cor: () => '#f59e0b' },
+            { key: 'sum_QTD_VENDAS_MES_ATUAL',    label: 'Venda mês', right: true, fmt: v => n0(v) },
+            { key: 'sum_QTD_VENDAS_MES_ANTERIOR', label: 'Mês ant.', right: true, fmt: v => n0(v) },
+          ]} />
+        </>
+      )}
+
+      {/* Zero c/ venda último mês */}
+      {visao === 'zeromes' && (
+        <>
+          <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+            Itens ativos com <strong>estoque zero</strong> que tiveram venda no último mês — prioridade máxima de reposição.
+          </p>
+          <SecaoTable rows={d.zero_venda_mes_top || []} colunas={[
+            { key: 'CD_PRODUTO',                 label: 'Cód.' },
+            { key: 'DESCRICAO_PRODUTO',           label: 'Produto', maxW: 220, wrap: true },
+            { key: 'DESCRICAO_SECAO',             label: 'Seção' },
+            { key: 'DESCRICAO_DEPARTAMENTO',      label: 'Depto' },
+            { key: 'sum_QTD_VENDAS_MES_ATUAL',    label: 'Venda mês', right: true, fmt: v => n0(v), cor: () => '#ef4444' },
+            { key: 'total_4s',                    label: 'Venda 4s', right: true, fmt: v => n0(v) },
+            { key: 'sum_QTD_VENDAS_MES_ANTERIOR', label: 'Mês ant.', right: true, fmt: v => n0(v) },
+          ]} />
+        </>
+      )}
+    </>
   );
 }
 
@@ -435,6 +582,40 @@ export default function Estoque({ profile }) {
 
       {!loading && dados && (
         <>
+          {/* KPI destaque — acervo ativo */}
+          <div
+            onClick={() => setTab(0)}
+            style={{ cursor: 'pointer', background: 'linear-gradient(135deg,#0ea5e9 0%,#0284c7 100%)',
+              borderRadius: 14, padding: '16px 20px', marginBottom: 14,
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, color: 'rgba(255,255,255,.75)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: .5 }}>
+                Acervo Ativo no Clube
+              </div>
+              <div style={{ fontSize: 32, fontWeight: 900, color: '#fff', lineHeight: 1.1 }}>
+                {n0(t.ativos_total)}
+                <span style={{ fontSize: 13, fontWeight: 400, marginLeft: 8 }}>itens ativos</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>{n0(t.ativos_zero_count)}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>Zero estoque</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#fde68a' }}>{n0(t.ativos_zero_venda_4s)}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>Zero c/ venda 4s</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#fca5a5' }}>{n0(t.ativos_zero_venda_mes)}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>Zero c/ venda mês</div>
+              </div>
+              <div style={{ textAlign: 'center', color: 'rgba(255,255,255,.6)', fontSize: 11, alignSelf: 'center' }}>
+                Ver relatório →
+              </div>
+            </div>
+          </div>
+
           {/* KPIs resumo */}
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 24 }}>
             <KpiCard label="Ruptura"       value={n0(t.ruptura_count)}    cor="#ef4444" sub="itens sem estoque" />
@@ -462,13 +643,14 @@ export default function Estoque({ profile }) {
           </div>
 
           <div>
-            {tab === 0 && <TabRuptura    d={dados} />}
-            {tab === 1 && <TabUrgente    d={dados} />}
-            {tab === 2 && <TabAging      d={dados} />}
-            {tab === 3 && <TabSem4s      d={dados} />}
-            {tab === 4 && <TabGiroLento  d={dados} />}
-            {tab === 5 && <TabNegativo   d={dados} />}
-            {tab === 6 && <TabSuspensos  d={dados} />}
+            {tab === 0 && <TabAcervo     d={dados} />}
+            {tab === 1 && <TabRuptura    d={dados} />}
+            {tab === 2 && <TabUrgente    d={dados} />}
+            {tab === 3 && <TabAging      d={dados} />}
+            {tab === 4 && <TabSem4s      d={dados} />}
+            {tab === 5 && <TabGiroLento  d={dados} />}
+            {tab === 6 && <TabNegativo   d={dados} />}
+            {tab === 7 && <TabSuspensos  d={dados} />}
           </div>
         </>
       )}
