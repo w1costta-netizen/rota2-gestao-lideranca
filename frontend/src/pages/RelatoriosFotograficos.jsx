@@ -403,10 +403,27 @@ function PainelCompartilhar({ rel, fotos, creatorName, userId }) {
   );
 }
 
+// Classifica um tour em uma das 3 abas
+function classificarTour(r) {
+  const fotos = r.fotos || [];
+  if (r.status !== 'finalizado') return 'rascunho';
+  if (fotos.length === 0) return 'parcial';
+  const concluidos = fotos.filter(f => f.evidencia_url || f.evidencia_comentario).length;
+  if (concluidos >= fotos.length) return 'concluido';
+  return 'parcial';
+}
+
+const ABA_CONFIG = [
+  { id: 'rascunho',  label: 'Rascunho',   cor: '#f59e0b', bg: '#f59e0b20' },
+  { id: 'parcial',   label: 'Parcial',     cor: '#6366f1', bg: '#6366f120' },
+  { id: 'concluido', label: 'Concluído',   cor: '#10b981', bg: '#10b98120' },
+];
+
 // ─── Tela de lista ────────────────────────────────────────────────────────────
 function RelatorioLista({ userId, profile, onOpen, onCreate }) {
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
+  const [aba, setAba]         = useState('rascunho');
   const toast = useToast();
 
   const load = () => {
@@ -427,6 +444,11 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
     toast('Relatório removido');
   };
 
+  // Agrupa tours por aba
+  const grupos = { rascunho: [], parcial: [], concluido: [] };
+  list.forEach(r => grupos[classificarTour(r)].push(r));
+  const filtrados = grupos[aba] || [];
+
   return (
     <div>
       <div className="page-header">
@@ -438,6 +460,36 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
           <Plus size={15}/> Novo Tour
         </button>
       </div>
+
+      {/* Abas de status */}
+      {!loading && list.length > 0 && (
+        <div style={{ display:'flex', gap:8, marginBottom:16, overflowX:'auto', paddingBottom:2 }}>
+          {ABA_CONFIG.map(({ id, label, cor, bg }) => {
+            const count = grupos[id].length;
+            const ativa = aba === id;
+            return (
+              <button key={id} onClick={() => setAba(id)}
+                style={{
+                  display:'flex', alignItems:'center', gap:6, padding:'8px 16px',
+                  borderRadius:20, fontSize:13, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap',
+                  background: ativa ? bg : 'var(--surface)',
+                  color: ativa ? cor : 'var(--text-muted)',
+                  border: `2px solid ${ativa ? cor : 'var(--border)'}`,
+                  transition:'all .15s',
+                }}>
+                {label}
+                <span style={{
+                  background: ativa ? cor : 'var(--border)',
+                  color: ativa ? '#fff' : 'var(--text-muted)',
+                  borderRadius:20, padding:'1px 7px', fontSize:11, fontWeight:800,
+                }}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {loading && <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)' }}>Carregando...</div>}
 
@@ -451,9 +503,18 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
         </div>
       )}
 
+      {!loading && list.length > 0 && filtrados.length === 0 && (
+        <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)', fontSize:13 }}>
+          Nenhum tour nesta categoria.
+        </div>
+      )}
+
       <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-        {list.map(r => {
-          const thumb = r.fotos?.sort((a,b) => a.order_index - b.order_index)[0]?.photo_url;
+        {filtrados.map(r => {
+          const fotos = r.fotos || [];
+          const thumb = [...fotos].sort((a,b) => a.order_index - b.order_index)[0]?.photo_url;
+          const concluidos = fotos.filter(f => f.evidencia_url || f.evidencia_comentario).length;
+          const abaCfg = ABA_CONFIG.find(a => a.id === classificarTour(r));
           return (
             <div key={r.id} onClick={() => onOpen(r)}
               style={{ background:'var(--surface)', borderRadius:12, padding:'14px 16px',
@@ -472,19 +533,20 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
                 </div>
                 <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                   <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20,
-                    background: r.status === 'finalizado' ? '#10b98120' : '#f59e0b20',
-                    color: r.status === 'finalizado' ? '#10b981' : '#f59e0b' }}>
-                    {r.status === 'finalizado' ? '✓ Finalizado' : '● Rascunho'}
+                    background: abaCfg?.bg, color: abaCfg?.cor }}>
+                    {abaCfg?.id === 'rascunho' ? '● Rascunho' : abaCfg?.id === 'concluido' ? '✓ Concluído' : '◑ Parcial'}
                   </span>
+                  {fotos.length > 0 && (
+                    <span style={{ fontSize:11, color:'var(--text-muted)' }}>
+                      {concluidos}/{fotos.length} ponto{fotos.length !== 1 ? 's' : ''} com evidência
+                    </span>
+                  )}
                   {r.pdf_url && (
                     <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20,
                       background:'#6366f120', color:'#6366f1' }}>
                       📄 PDF
                     </span>
                   )}
-                  <span style={{ fontSize:11, color:'var(--text-muted)' }}>
-                    {r.fotos?.length || 0} foto{(r.fotos?.length || 0) !== 1 ? 's' : ''}
-                  </span>
                 </div>
               </div>
               <div style={{ display:'flex', gap:8, flexShrink:0 }}>
