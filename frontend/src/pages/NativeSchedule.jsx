@@ -332,15 +332,19 @@ export default function NativeSchedule({ userId, profile }) {
 
   useEffect(() => {
     if (!isElevated) return;
-    api.get('/profile/all').then(r => setAllProfiles(r.data)).catch(() => {});
-    api.get(`/admin/sectors?company=${encodeURIComponent(profile?.company || '')}`)
+    const company = encodeURIComponent(profile?.company || '');
+    api.get(`/profile/all?company=${company}`).then(r => setAllProfiles(r.data)).catch(() => {});
+    api.get(`/admin/sectors?company=${company}`)
       .then(r => setAllSectors(r.data.map(s => s.sector_name)))
       .catch(() => {});
   }, [isElevated, profile?.company]);
 
-  // Para supervisores visualizando outro setor, resolve o user_id daquele setor
-  const sectorProfile = selectedSector
-    ? allProfiles.find(p => p.sector?.toLowerCase() === selectedSector.toLowerCase())
+  // Para supervisores: usa setor selecionado; se vazio, usa setor do próprio perfil
+  const activeSector = selectedSector || (isElevated ? (profile?.sector || '') : '');
+
+  // Resolve o perfil (e portanto o user_id) do setor sendo visualizado
+  const sectorProfile = activeSector
+    ? allProfiles.find(p => p.sector?.toLowerCase() === activeSector.toLowerCase())
     : null;
 
   // user_id efetivo: do setor visualizado (supervisor) ou do próprio usuário

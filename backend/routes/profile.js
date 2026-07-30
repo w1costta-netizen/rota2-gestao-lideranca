@@ -2,12 +2,12 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../supabase');
 
-// Lista todos os perfis (id, full_name, sector) — para seletores de setor
+// Lista perfis por empresa (id, full_name, sector) — para seletores de setor
 router.get('/all', async (req, res) => {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, full_name, sector, access_level')
-    .order('sector');
+  const { company } = req.query;
+  let query = supabase.from('profiles').select('id, full_name, sector, access_level').order('sector');
+  if (company) query = query.eq('company', company);
+  const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
