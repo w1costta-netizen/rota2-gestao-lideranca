@@ -330,13 +330,14 @@ function TabAcervo({ d }) {
             Itens ativos com <strong>estoque zero</strong> que tiveram venda nas últimas 4 semanas — risco real de ruptura.
           </p>
           <SecaoTable rows={d.zero_venda_4s_top || []} colunas={[
-            { key: 'CD_PRODUTO',                 label: 'Cód.' },
-            { key: 'DESCRICAO_PRODUTO',           label: 'Produto', maxW: 220, wrap: true },
-            { key: 'DESCRICAO_SECAO',             label: 'Seção' },
-            { key: 'DESCRICAO_DEPARTAMENTO',      label: 'Depto' },
-            { key: 'total_4s',                    label: 'Venda 4s', right: true, fmt: v => n0(v), cor: () => '#f59e0b' },
-            { key: 'sum_QTD_VENDAS_MES_ATUAL',    label: 'Venda mês', right: true, fmt: v => n0(v) },
-            { key: 'sum_QTD_VENDAS_MES_ANTERIOR', label: 'Mês ant.', right: true, fmt: v => n0(v) },
+            { key: 'CD_PRODUTO',                    label: 'Cód.' },
+            { key: 'DESCRICAO_PRODUTO',              label: 'Produto', maxW: 220, wrap: true },
+            { key: 'DESCRICAO_SECAO',                label: 'Seção' },
+            { key: 'DESCRICAO_DEPARTAMENTO',         label: 'Depto' },
+            { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD',  label: 'Estoque', right: true, fmt: v => n1(v), cor: () => '#6b7280' },
+            { key: 'total_4s',                       label: 'Venda 4s', right: true, fmt: v => n0(v), cor: () => '#f59e0b' },
+            { key: 'sum_QTD_VENDAS_MES_ATUAL',       label: 'Venda mês', right: true, fmt: v => n0(v) },
+            { key: 'sum_QTD_VENDAS_MES_ANTERIOR',    label: 'Mês ant.', right: true, fmt: v => n0(v) },
           ]} />
         </>
       )}
@@ -348,13 +349,14 @@ function TabAcervo({ d }) {
             Itens ativos com <strong>estoque zero</strong> que tiveram venda no último mês — prioridade máxima de reposição.
           </p>
           <SecaoTable rows={d.zero_venda_mes_top || []} colunas={[
-            { key: 'CD_PRODUTO',                 label: 'Cód.' },
-            { key: 'DESCRICAO_PRODUTO',           label: 'Produto', maxW: 220, wrap: true },
-            { key: 'DESCRICAO_SECAO',             label: 'Seção' },
-            { key: 'DESCRICAO_DEPARTAMENTO',      label: 'Depto' },
-            { key: 'sum_QTD_VENDAS_MES_ATUAL',    label: 'Venda mês', right: true, fmt: v => n0(v), cor: () => '#ef4444' },
-            { key: 'total_4s',                    label: 'Venda 4s', right: true, fmt: v => n0(v) },
-            { key: 'sum_QTD_VENDAS_MES_ANTERIOR', label: 'Mês ant.', right: true, fmt: v => n0(v) },
+            { key: 'CD_PRODUTO',                    label: 'Cód.' },
+            { key: 'DESCRICAO_PRODUTO',              label: 'Produto', maxW: 220, wrap: true },
+            { key: 'DESCRICAO_SECAO',                label: 'Seção' },
+            { key: 'DESCRICAO_DEPARTAMENTO',         label: 'Depto' },
+            { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD',  label: 'Estoque', right: true, fmt: v => n1(v), cor: () => '#6b7280' },
+            { key: 'sum_QTD_VENDAS_MES_ATUAL',       label: 'Venda mês', right: true, fmt: v => n0(v), cor: () => '#ef4444' },
+            { key: 'total_4s',                       label: 'Venda 4s', right: true, fmt: v => n0(v) },
+            { key: 'sum_QTD_VENDAS_MES_ANTERIOR',    label: 'Mês ant.', right: true, fmt: v => n0(v) },
           ]} />
         </>
       )}
