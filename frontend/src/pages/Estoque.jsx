@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AlertTriangle, Package } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ExportMenu from '../components/ExportMenu';
@@ -372,10 +372,138 @@ function TabSuspensos({ d }) {
   );
 }
 
+/* ── filtro helper ──────────────────────────────────────────────── */
+function filtrarPorSecao(dados, secoesSel) {
+  if (!secoesSel.length) return dados;
+  const ok = s => secoesSel.includes(s);
+  const fArr = arr => (arr || []).filter(r => ok(r.DESCRICAO_SECAO));
+  const fSecao = arr => (arr || []).filter(r => ok(r.DESCRICAO_SECAO));
+
+  const ruptura_top     = fArr(dados.ruptura_top);
+  const urgente_top     = fArr(dados.urgente_top);
+  const aging_top       = fArr(dados.aging_top);
+  const sem4s_top       = fArr(dados.sem4s_top);
+  const giro_lento_top  = fArr(dados.giro_lento_top);
+  const estq_neg_top    = fArr(dados.estq_neg_top);
+  const suspensos_top   = fArr(dados.suspensos_top);
+  const zero_v4s        = fArr(dados.zero_venda_4s_top);
+  const zero_vmes       = fArr(dados.zero_venda_mes_top);
+
+  const sumF = (arr, k) => arr.reduce((a, r) => a + (r[k] || 0), 0);
+
+  return {
+    ...dados,
+    ruptura_top,  urgente_top, aging_top, sem4s_top,
+    giro_lento_top, estq_neg_top, suspensos_top,
+    zero_venda_4s_top: zero_v4s,
+    zero_venda_mes_top: zero_vmes,
+    secao_ruptura:    fSecao(dados.secao_ruptura),
+    secao_urgente:    fSecao(dados.secao_urgente),
+    secao_aging:      fSecao(dados.secao_aging),
+    secao_sem4s:      fSecao(dados.secao_sem4s),
+    secao_giro_lento: fSecao(dados.secao_giro_lento),
+    dep_suspensos:    fSecao(dados.dep_suspensos),
+    totais: {
+      ...dados.totais,
+      ruptura_count:    ruptura_top.length,
+      ruptura_venda_mes: sumF(ruptura_top, 'sum_QTD_VENDAS_MES_ATUAL'),
+      urgente_count:    urgente_top.length,
+      aging_count:      aging_top.length,
+      aging_custo:      sumF(aging_top, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
+      sem4s_count:      sem4s_top.length,
+      sem4s_custo:      sumF(sem4s_top, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
+      giro_lento_count: giro_lento_top.length,
+      giro_lento_custo: sumF(giro_lento_top, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
+      estq_neg_count:   estq_neg_top.length,
+      suspensos_count:  suspensos_top.length,
+      suspensos_custo:  sumF(suspensos_top, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
+    },
+  };
+}
+
+/* ── filtro UI ──────────────────────────────────────────────────── */
+function FiltroSecoes({ secoes, selecionadas, onChange }) {
+  const [aberto, setAberto] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const h = e => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
+
+  const toggle = s => onChange(selecionadas.includes(s) ? selecionadas.filter(x => x !== s) : [...selecionadas, s]);
+  const limpar = e => { e.stopPropagation(); onChange([]); };
+
+  const label = selecionadas.length === 0
+    ? 'Todas as seções'
+    : selecionadas.length === 1
+    ? selecionadas[0]
+    : `${selecionadas.length} seções selecionadas`;
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setAberto(v => !v)} style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        background: selecionadas.length > 0 ? '#e8681a15' : 'var(--surface)',
+        border: `1px solid ${selecionadas.length > 0 ? '#e8681a' : 'var(--border)'}`,
+        borderRadius: 20, padding: '7px 14px', fontSize: 13, cursor: 'pointer',
+        color: selecionadas.length > 0 ? '#e8681a' : 'var(--text-muted)',
+        fontWeight: selecionadas.length > 0 ? 700 : 400,
+        whiteSpace: 'nowrap', maxWidth: 240,
+      }}>
+        <span>🏷️</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
+        {selecionadas.length > 0 && (
+          <span onClick={limpar} style={{ marginLeft: 4, fontWeight: 900, fontSize: 15, opacity: .7 }}>×</span>
+        )}
+      </button>
+
+      {aberto && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 300,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
+          minWidth: 240, maxWidth: 320, maxHeight: 360, overflowY: 'auto',
+        }}>
+          <div style={{ padding: '10px 14px 6px', borderBottom: '1px solid var(--border)',
+            fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: .5 }}>
+            Filtrar por seção
+          </div>
+          {secoes.map(s => {
+            const sel = selecionadas.includes(s);
+            return (
+              <button key={s} onClick={() => toggle(s)} style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                width: '100%', background: sel ? '#e8681a10' : 'none',
+                border: 'none', padding: '10px 14px', cursor: 'pointer',
+                fontSize: 12, color: sel ? '#e8681a' : 'var(--text)', textAlign: 'left',
+              }}
+              onMouseEnter={e => { if (!sel) e.currentTarget.style.background = 'var(--background)'; }}
+              onMouseLeave={e => { if (!sel) e.currentTarget.style.background = sel ? '#e8681a10' : 'none'; }}>
+                <span style={{
+                  width: 16, height: 16, borderRadius: 4, flexShrink: 0,
+                  border: `2px solid ${sel ? '#e8681a' : 'var(--border)'}`,
+                  background: sel ? '#e8681a' : 'transparent',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  {sel && <span style={{ color: '#fff', fontSize: 10, fontWeight: 900 }}>✓</span>}
+                </span>
+                {s}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Estoque({ profile }) {
-  const [dados, setDados]   = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [tab, setTab]       = useState(0);
+  const [dados, setDados]       = useState(null);
+  const [loading, setLoading]   = useState(true);
+  const [tab, setTab]           = useState(0);
+  const [secoesSel, setSecoesSel] = useState([]);
   const company = profile?.company;
 
   const carregar = useCallback(async () => {
@@ -392,13 +520,29 @@ export default function Estoque({ profile }) {
 
   useEffect(() => { carregar(); }, [carregar]);
 
-  const t = dados?.totais;
+  // Seções únicas disponíveis (de todos os arrays de itens)
+  const secoesDisponiveis = dados ? [...new Set([
+    ...(dados.ruptura_top    || []).map(r => r.DESCRICAO_SECAO),
+    ...(dados.urgente_top    || []).map(r => r.DESCRICAO_SECAO),
+    ...(dados.aging_top      || []).map(r => r.DESCRICAO_SECAO),
+    ...(dados.sem4s_top      || []).map(r => r.DESCRICAO_SECAO),
+    ...(dados.giro_lento_top || []).map(r => r.DESCRICAO_SECAO),
+    ...(dados.suspensos_top  || []).map(r => r.DESCRICAO_SECAO),
+  ].filter(Boolean))].sort() : [];
+
+  // Dados com filtro aplicado
+  const d = dados ? filtrarPorSecao(dados, secoesSel) : null;
+  const t = d?.totais;
+
+  const filtroLabel = secoesSel.length
+    ? ` · ${secoesSel.length} seção${secoesSel.length > 1 ? 'ões' : ''} filtrada${secoesSel.length > 1 ? 's' : ''}`
+    : '';
 
   function handlePDF() {
-    if (!dados) return;
+    if (!d) return;
     gerarPDF({
-      titulo: 'Painel de Estoque',
-      subtitulo: `Extração: ${dados.gerado_em} · ${dados.arquivo}`,
+      titulo: 'Painel de Estoque' + filtroLabel,
+      subtitulo: `Extração: ${d.gerado_em} · ${d.arquivo}`,
       secoes: [
         {
           titulo: 'Resumo de Indicadores',
@@ -418,31 +562,76 @@ export default function Estoque({ profile }) {
           ],
         },
         {
-          titulo: 'Top Rupturas',
+          titulo: 'Ruptura — Top itens',
           colunas: [
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Departamento', dataKey: 'DESCRICAO_DEPARTAMENTO' },
             { header: 'Venda mês', dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
           ],
-          rows: (dados.ruptura_top || []).slice(0, 20),
+          rows: (d.ruptura_top || []).slice(0, 30),
         },
         {
-          titulo: 'Top Aging',
+          titulo: 'Urgente — Top itens',
           colunas: [
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
-            { header: 'Dias NF', dataKey: 'IDADE_ULTIMA_NF' },
-            { header: 'Custo', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
+            { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Estoque', dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
+            { header: 'Cobertura (d)', dataKey: 'dias_cobertura' },
           ],
-          rows: (dados.aging_top || []).slice(0, 20),
+          rows: (d.urgente_top || []).slice(0, 30),
+        },
+        {
+          titulo: 'Aging +365 dias — Top itens',
+          colunas: [
+            { header: 'Cód.', dataKey: 'CD_PRODUTO' },
+            { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Dias NF', dataKey: 'IDADE_ULTIMA_NF' },
+            { header: 'Custo R$', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
+          ],
+          rows: (d.aging_top || []).slice(0, 30),
+        },
+        {
+          titulo: 'Sem venda 4 semanas — Top itens',
+          colunas: [
+            { header: 'Cód.', dataKey: 'CD_PRODUTO' },
+            { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Custo R$', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
+          ],
+          rows: (d.sem4s_top || []).slice(0, 30),
+        },
+        {
+          titulo: 'Giro Lento — Top itens',
+          colunas: [
+            { header: 'Cód.', dataKey: 'CD_PRODUTO' },
+            { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Cobertura (d)', dataKey: 'dias_cobertura' },
+            { header: 'Custo R$', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
+          ],
+          rows: (d.giro_lento_top || []).slice(0, 30),
+        },
+        {
+          titulo: 'Suspensos com estoque — Top itens',
+          colunas: [
+            { header: 'Cód.', dataKey: 'CD_PRODUTO' },
+            { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Motivo', dataKey: 'DESC_MOTIVO_SUSPENCAO' },
+            { header: 'Custo R$', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
+          ],
+          rows: (d.suspensos_top || []).slice(0, 30),
         },
       ],
     });
   }
 
   function handleExcel() {
-    if (!dados) return;
+    if (!d) return;
     gerarExcel({
       nomeArquivo: 'Estoque',
       abas: [
@@ -462,7 +651,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Ruptura',
           colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Venda mês'],
-          rows: (dados.ruptura_top || []).map(r => [
+          rows: (d.ruptura_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.DESCRICAO_DEPARTAMENTO, r.sum_QTD_VENDAS_MES_ATUAL,
           ]),
@@ -470,7 +659,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Urgente',
           colunas: ['Cód.', 'Produto', 'Seção', 'Estoque', 'Cobertura (dias)'],
-          rows: (dados.urgente_top || []).map(r => [
+          rows: (d.urgente_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.dias_cobertura,
           ]),
@@ -478,7 +667,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Aging',
           colunas: ['Cód.', 'Produto', 'Seção', 'Dias NF', 'Custo R$'],
-          rows: (dados.aging_top || []).map(r => [
+          rows: (d.aging_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.IDADE_ULTIMA_NF, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
@@ -486,7 +675,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Sem venda 4s',
           colunas: ['Cód.', 'Produto', 'Seção', 'Custo R$'],
-          rows: (dados.sem4s_top || []).map(r => [
+          rows: (d.sem4s_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
@@ -494,15 +683,23 @@ export default function Estoque({ profile }) {
         {
           nome: 'Giro Lento',
           colunas: ['Cód.', 'Produto', 'Seção', 'Cobertura (dias)', 'Custo R$'],
-          rows: (dados.giro_lento_top || []).map(r => [
+          rows: (d.giro_lento_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.dias_cobertura, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
         },
         {
+          nome: 'Est. Negativo',
+          colunas: ['Cód.', 'Produto', 'Seção', 'Qtd'],
+          rows: (d.estq_neg_top || []).map(r => [
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.sum_ESTOQUE_ON_HAND_LOJA_QTD,
+          ]),
+        },
+        {
           nome: 'Suspensos',
           colunas: ['Cód.', 'Produto', 'Seção', 'Motivo', 'Custo R$'],
-          rows: (dados.suspensos_top || []).map(r => [
+          rows: (d.suspensos_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.DESC_MOTIVO_SUSPENCAO, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
@@ -512,10 +709,11 @@ export default function Estoque({ profile }) {
   }
 
   function handleWhatsApp() {
-    if (!dados) return;
-    const txt = [
-      `📦 *Painel de Estoque*`,
-      `📅 Extração: ${dados.gerado_em}`,
+    if (!d) return;
+    const filtroTxt = secoesSel.length ? `\n🏷️ Seções: ${secoesSel.join(', ')}` : '';
+    compartilharWhatsApp([
+      `📦 *Painel de Estoque*${filtroTxt}`,
+      `📅 Extração: ${d.gerado_em}`,
       ``,
       `🔴 Ruptura: ${n0(t.ruptura_count)} itens`,
       `🟡 Urgente <15d: ${n0(t.urgente_count)} itens`,
@@ -524,17 +722,17 @@ export default function Estoque({ profile }) {
       `🟡 Giro lento: ${n0(t.giro_lento_count)} itens — ${brl(t.giro_lento_custo)}`,
       `🔴 Est. negativo: ${n0(t.estq_neg_count)} itens`,
       `🟠 Suspensos c/ estoque: ${n0(t.suspensos_count)} itens — ${brl(t.suspensos_custo)}`,
-    ].join('\n');
-    compartilharWhatsApp(txt);
+    ].join('\n'));
   }
 
   function handleEmail() {
-    if (!dados) return;
+    if (!d) return;
     compartilharEmail({
-      assunto: `Painel de Estoque — ${dados.gerado_em}`,
+      assunto: `Painel de Estoque — ${d.gerado_em}${filtroLabel}`,
       corpo: [
         `Painel de Estoque`,
-        `Extração: ${dados.gerado_em} | Arquivo: ${dados.arquivo}`,
+        `Extração: ${d.gerado_em} | Arquivo: ${d.arquivo}`,
+        secoesSel.length ? `Seções filtradas: ${secoesSel.join(', ')}` : '',
         ``,
         `Ruptura: ${n0(t.ruptura_count)} itens`,
         `Urgente <15d: ${n0(t.urgente_count)} itens`,
@@ -543,7 +741,7 @@ export default function Estoque({ profile }) {
         `Giro lento: ${n0(t.giro_lento_count)} itens — ${brl(t.giro_lento_custo)}`,
         `Estoque negativo: ${n0(t.estq_neg_count)} itens`,
         `Suspensos c/ estoque: ${n0(t.suspensos_count)} itens — ${brl(t.suspensos_custo)}`,
-      ].join('\n'),
+      ].filter(l => l !== '').join('\n'),
     });
   }
 
@@ -555,16 +753,26 @@ export default function Estoque({ profile }) {
           {dados?.gerado_em && (
             <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '4px 0 0' }}>
               Extração: {dados.gerado_em} · {dados.arquivo}
+              {filtroLabel && <span style={{ color: '#e8681a', fontWeight: 600 }}>{filtroLabel}</span>}
             </p>
           )}
         </div>
-        <ExportMenu
-          disabled={!dados}
-          onPDF={handlePDF}
-          onExcel={handleExcel}
-          onWhatsApp={handleWhatsApp}
-          onEmail={handleEmail}
-        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {secoesDisponiveis.length > 0 && (
+            <FiltroSecoes
+              secoes={secoesDisponiveis}
+              selecionadas={secoesSel}
+              onChange={setSecoesSel}
+            />
+          )}
+          <ExportMenu
+            disabled={!d}
+            onPDF={handlePDF}
+            onExcel={handleExcel}
+            onWhatsApp={handleWhatsApp}
+            onEmail={handleEmail}
+          />
+        </div>
       </div>
 
       {loading && (
@@ -580,9 +788,9 @@ export default function Estoque({ profile }) {
         </div>
       )}
 
-      {!loading && dados && (
+      {!loading && d && (
         <>
-          {/* KPI destaque — acervo ativo */}
+          {/* KPI destaque — acervo ativo (sempre total, sem filtro de seção) */}
           <div
             onClick={() => setTab(0)}
             style={{ cursor: 'pointer', background: 'linear-gradient(135deg,#0ea5e9 0%,#0284c7 100%)',
@@ -593,21 +801,21 @@ export default function Estoque({ profile }) {
                 Acervo Ativo no Clube
               </div>
               <div style={{ fontSize: 32, fontWeight: 900, color: '#fff', lineHeight: 1.1 }}>
-                {n0(t.ativos_total)}
+                {n0(dados.totais.ativos_total)}
                 <span style={{ fontSize: 13, fontWeight: 400, marginLeft: 8 }}>itens ativos</span>
               </div>
             </div>
             <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>{n0(t.ativos_zero_count)}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#fff' }}>{n0(dados.totais.ativos_zero_count)}</div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>Zero estoque</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#fde68a' }}>{n0(t.ativos_zero_venda_4s)}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#fde68a' }}>{n0(dados.totais.ativos_zero_venda_4s)}</div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>Zero c/ venda 4s</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#fca5a5' }}>{n0(t.ativos_zero_venda_mes)}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#fca5a5' }}>{n0(dados.totais.ativos_zero_venda_mes)}</div>
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>Zero c/ venda mês</div>
               </div>
               <div style={{ textAlign: 'center', color: 'rgba(255,255,255,.6)', fontSize: 11, alignSelf: 'center' }}>
@@ -643,14 +851,14 @@ export default function Estoque({ profile }) {
           </div>
 
           <div>
-            {tab === 0 && <TabAcervo     d={dados} />}
-            {tab === 1 && <TabRuptura    d={dados} />}
-            {tab === 2 && <TabUrgente    d={dados} />}
-            {tab === 3 && <TabAging      d={dados} />}
-            {tab === 4 && <TabSem4s      d={dados} />}
-            {tab === 5 && <TabGiroLento  d={dados} />}
-            {tab === 6 && <TabNegativo   d={dados} />}
-            {tab === 7 && <TabSuspensos  d={dados} />}
+            {tab === 0 && <TabAcervo     d={d} />}
+            {tab === 1 && <TabRuptura    d={d} />}
+            {tab === 2 && <TabUrgente    d={d} />}
+            {tab === 3 && <TabAging      d={d} />}
+            {tab === 4 && <TabSem4s      d={d} />}
+            {tab === 5 && <TabGiroLento  d={d} />}
+            {tab === 6 && <TabNegativo   d={d} />}
+            {tab === 7 && <TabSuspensos  d={d} />}
           </div>
         </>
       )}
