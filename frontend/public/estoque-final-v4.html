@@ -323,40 +323,27 @@ const _qp=new URLSearchParams(location.search);
 const _co=_qp.get('company');
 const _ap=_qp.get('api')||'/api';
 
-// ─── Renderiza UMA vez com dados locais (sem espera, sem re-render) ───
-const _localData=(()=>{const _s=localStorage.getItem('rota2_payload');return _s?JSON.parse(_s):JSON.parse(document.getElementById('dp').textContent);})();
-try{renderAll(_localData);}catch(e){console.error('Estoque render error:',e);}
-
-// ─── Sync em background: detecta dado novo → salva localStorage → reload ───
-// reload() no iframe é rápido (lê do localStorage) e evita event listeners duplicados
-let _lastKey=null;
-async function _syncBackend(){
-  if(!_co) return;
+// ─── Carrega sempre direto do backend (sem localStorage, sem reload) ───
+(async function(){
+  if(!_co){
+    // sem company — renderiza vazio
+    try{renderAll(JSON.parse(document.getElementById('dp').textContent));}catch(e){}
+    return;
+  }
   try{
     const _r=await fetch(`${_ap}/estoque/payload?company=${encodeURIComponent(_co)}`);
-    if(!_r.ok) return;
-    const _j=await _r.json();
-    if(!_j||!_j.payload) return;
-    // Usa updated_at do backend como chave única de versão
-    const newKey=_j.updated_at||'';
-    if(!newKey) return;
-    // Chave salva localmente — não usa gerado_em do HTML para evitar ambiguidade
-    const localKey=localStorage.getItem('rota2_payload_key')||'';
-    if(newKey!==localKey){
-      // Dado mais novo no servidor → salva e recarrega
-      localStorage.setItem('rota2_payload',JSON.stringify(_j.payload));
-      localStorage.setItem('rota2_payload_key',newKey);
-      location.reload();
-      return;
+    const _j=_r.ok ? await _r.json() : null;
+    if(_j&&_j.payload){
+      renderAll(_j.payload);
+    } else {
+      // sem dado no servidor ainda
+      try{renderAll(JSON.parse(document.getElementById('dp').textContent));}catch(e){}
     }
-    // Dados já em dia — registra para detectar mudanças enquanto a página fica aberta
-    _lastKey=newKey;
-  }catch(_e){}
-}
-
-// Verifica ao abrir e a cada 15s (detecta importações de outros dispositivos)
-_syncBackend();
-setInterval(_syncBackend,15000);
+  }catch(_e){
+    // fallback para dado embutido no HTML
+    try{renderAll(JSON.parse(document.getElementById('dp').textContent));}catch(e){}
+  }
+})();
 
 function renderAll(D){
 const t=D.totais;
