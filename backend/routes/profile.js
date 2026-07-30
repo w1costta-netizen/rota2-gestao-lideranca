@@ -30,6 +30,34 @@ router.post('/upsert', async (req, res) => {
   res.json(data);
 });
 
+// GET /api/profile/debug-schedule?company=&sector=&year=&month= — diagnóstico temporário
+router.get('/debug-schedule', async (req, res) => {
+  const { company, sector, year, month } = req.query;
+
+  // Perfis com esse setor nessa empresa
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, full_name, sector, access_level, company')
+    .eq('company', company)
+    .ilike('sector', sector || '%');
+
+  // Entradas de escala em agosto para cada perfil encontrado
+  const results = [];
+  for (const p of (profiles || [])) {
+    const from = `${year}-${String(month).padStart(2,'0')}-01`;
+    const to   = `${year}-${String(month).padStart(2,'0')}-31`;
+    const { data: entries, count } = await supabase
+      .from('schedule_entries')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', p.id)
+      .gte('work_date', from)
+      .lte('work_date', to);
+    results.push({ ...p, entries_count: count });
+  }
+
+  res.json(results);
+});
+
 // POST /api/profile/first-access-done — marca first_access como false
 router.post('/first-access-done', async (req, res) => {
   const { user_id } = req.body;
