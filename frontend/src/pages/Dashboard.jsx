@@ -266,18 +266,19 @@ export default function Dashboard({ setPage, profile: propProfile }) {
             : <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 {comunicados.slice(0,4).map(c => (
                   <div key={c.id} style={{
-                    padding:'10px 12px', borderRadius:8,
-                    background: !c.lido ? 'var(--primary)10' : 'var(--bg)',
-                    border:`1px solid ${!c.lido ? 'var(--primary)40' : 'var(--border)'}`,
+                    padding:'10px 12px', borderRadius:10,
+                    background: !c.lido ? 'rgba(232,104,26,0.07)' : 'var(--bg)',
+                    border:`1px solid ${!c.lido ? 'rgba(232,104,26,0.3)' : 'var(--border)'}`,
                   }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:2 }}>
-                      {c.prioridade === 'urgente' && <AlertTriangle size={12} color="#ef4444"/>}
-                      <span style={{ fontWeight:600, fontSize:13 }}>{c.titulo}</span>
-                      {!c.lido && <span style={{ marginLeft:'auto', fontSize:10, fontWeight:700,
-                        color:'var(--primary)', background:'var(--primary)20',
-                        padding:'1px 6px', borderRadius:99 }}>NOVO</span>}
+                    <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:4, flexWrap:'wrap' }}>
+                      {c.prioridade === 'urgente' && <AlertTriangle size={12} color="#ef4444" style={{ flexShrink:0 }}/>}
+                      <span style={{ fontWeight:700, fontSize:13, flex:1, minWidth:0,
+                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{c.titulo}</span>
+                      {!c.lido && <span style={{ fontSize:10, fontWeight:700, flexShrink:0,
+                        color:'var(--primary)', background:'rgba(232,104,26,0.15)',
+                        padding:'2px 8px', borderRadius:99 }}>NOVO</span>}
                     </div>
-                    <div style={{ fontSize:11, color:'var(--text-muted)', overflow:'hidden',
+                    <div style={{ fontSize:12, color:'var(--text-muted)', lineHeight:1.4, overflow:'hidden',
                       display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
                       {c.mensagem}
                     </div>

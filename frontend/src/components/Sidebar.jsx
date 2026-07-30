@@ -33,7 +33,7 @@ const NAV_GROUPS = [
   },
   {
     id:    'tempo_produtividade',
-    label: 'Tempo & Produtividade',
+    label: 'Gestão do Tempo e Produtividade',
     icon:  Clock,
     items: [
       { id: 'tarefas', label: 'Tarefas', icon: CheckSquare,  perm: 'tarefas' },
