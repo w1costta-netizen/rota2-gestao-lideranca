@@ -214,8 +214,8 @@ function AppContent() {
     vendas_painel:() => has('vendas_painel') ? <PainelVendas userId={userId} profile={effectiveProfile} />           : <AccessDenied />,
     usersadmin:   () => has('usuarios')      ? <UsersAdmin userId={userId} profile={effectiveProfile} />             : <AccessDenied />,
     lojas:        () => has('lojas')         ? <MasterDashboard userId={userId} viewingStore={viewingStore} onSelectStore={(name) => { setViewingStoreAndSave(name); setPage('dashboard'); }} /> : <AccessDenied />,
-    estoque:          () => has('estoque')          ? <Estoque />           : <AccessDenied />,
-    importador_estoque: () => has('importador_estoque') ? <ImportadorEstoque /> : <AccessDenied />,
+    estoque:          () => has('estoque')          ? <Estoque profile={effectiveProfile} />           : <AccessDenied />,
+    importador_estoque: () => has('importador_estoque') ? <ImportadorEstoque profile={effectiveProfile} /> : <AccessDenied />,
     organograma:        () => has('organograma')        ? <Organograma userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
   };
 
