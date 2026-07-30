@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, ChevronDown, AlertTriangle, Users, ShoppingCart, DollarSign, BarChart2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import ExportMenu from '../components/ExportMenu';
+import { gerarPDF, gerarExcel, compartilharWhatsApp, compartilharEmail } from '../lib/exportUtils';
 
 const TABS = ['Geral', 'Departamentos', 'Categorias', 'Itens', 'Atenção'];
 
@@ -235,6 +237,105 @@ export default function PainelVendas({ profile }) {
 
   const corCrescimento = crescimento > 0 ? '#22c55e' : crescimento < 0 ? '#ef4444' : 'var(--text-muted)';
 
+  const plabel = periodoLabel(periodo);
+
+  function handlePDF() {
+    gerarPDF({
+      titulo: 'Painel de Vendas',
+      subtitulo: `Período: ${plabel}`,
+      secoes: [
+        {
+          titulo: 'Resumo Geral',
+          colunas: [
+            { header: 'Indicador', dataKey: 'ind' },
+            { header: 'Valor', dataKey: 'val' },
+          ],
+          rows: [
+            { ind: 'Receita Total',   val: fmtR(totalReceita) },
+            { ind: 'Saldo vs Meta',   val: fmtR(totalSaldo) },
+            { ind: 'Margem Total',    val: fmtR(totalMargem) },
+            { ind: 'Sócios',          val: fmtN(totalSocios) },
+            { ind: 'Crescimento YoY', val: `${crescimento > 0 ? '+' : ''}${crescimento}%` },
+          ],
+        },
+        {
+          titulo: 'Por Departamento',
+          colunas: [
+            { header: 'Departamento', dataKey: 'nome' },
+            { header: 'Realizado', dataKey: 'realizado' },
+            { header: 'Meta', dataKey: 'meta' },
+            { header: '%', dataKey: 'percentual' },
+          ],
+          rows: deptos.map(d => ({
+            nome: d.nome,
+            realizado: fmtR(d.realizado),
+            meta: fmtR(d.meta),
+            percentual: `${d.percentual ?? 0}%`,
+          })),
+        },
+      ],
+    });
+  }
+
+  function handleExcel() {
+    gerarExcel({
+      nomeArquivo: 'PainelVendas',
+      abas: [
+        {
+          nome: 'Departamentos',
+          colunas: ['Departamento', 'Realizado', 'Meta', 'Saldo', '% vs Meta', 'Margem', 'YoY%'],
+          rows: deptos.map(d => [
+            d.nome, d.realizado, d.meta,
+            d.extras?.saldo_receita ?? (d.realizado - d.meta),
+            d.percentual,
+            d.extras?.margem,
+            d.extras?.yoy_receita ?? d.percentual,
+          ]),
+        },
+        {
+          nome: 'Categorias',
+          colunas: ['Categoria', 'Realizado', 'Meta', '% vs Meta'],
+          rows: cats.map(d => [d.nome, d.realizado, d.meta, d.percentual]),
+        },
+        {
+          nome: 'Atenção',
+          colunas: ['Item', 'YoY%'],
+          rows: atencao.map(d => [d.nome || d.item || d.categoria || d.departamento, d.extras?.yoy_receita ?? d.percentual]),
+        },
+      ],
+    });
+  }
+
+  function handleWhatsApp() {
+    const sinal = crescimento >= 0 ? '📈' : '📉';
+    compartilharWhatsApp([
+      `📊 *Painel de Vendas — ${plabel}*`,
+      ``,
+      `💰 Receita: ${fmtR(totalReceita)}`,
+      `📊 Saldo vs Meta: ${fmtR(totalSaldo)}`,
+      `🏷️ Margem: ${fmtR(totalMargem)}`,
+      `👥 Sócios: ${fmtN(totalSocios)}`,
+      `${sinal} Crescimento YoY: ${crescimento > 0 ? '+' : ''}${crescimento}%`,
+      atencao.length ? `⚠️ ${atencao.length} itens em atenção` : '',
+    ].filter(Boolean).join('\n'));
+  }
+
+  function handleEmail() {
+    compartilharEmail({
+      assunto: `Painel de Vendas — ${plabel}`,
+      corpo: [
+        `Painel de Vendas — ${plabel}`,
+        ``,
+        `Receita Total: ${fmtR(totalReceita)}`,
+        `Saldo vs Meta: ${fmtR(totalSaldo)}`,
+        `Margem Total: ${fmtR(totalMargem)}`,
+        `Sócios: ${fmtN(totalSocios)}`,
+        `Crescimento YoY: ${crescimento > 0 ? '+' : ''}${crescimento}%`,
+        atencao.length ? `\nAtenção: ${atencao.length} itens com performance negativa` : '',
+      ].join('\n'),
+    });
+  }
+
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 16px' }}>
       {/* Header */}
@@ -243,15 +344,24 @@ export default function PainelVendas({ profile }) {
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)', margin: 0 }}>Painel de Vendas</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>Receita, margem e crescimento por canal</p>
         </div>
-        <div style={{ position: 'relative' }}>
-          <select value={periodo} onChange={e => setPeriodo(e.target.value)}
-            style={{ appearance: 'none', background: 'var(--surface)', border: '1px solid var(--border)',
-              color: 'var(--text)', borderRadius: 8, padding: '8px 32px 8px 12px', fontSize: 13, cursor: 'pointer' }}>
-            <option value="atual">Período Atual</option>
-            {periodos.map(p => <option key={p} value={p}>{periodoLabel(p)}</option>)}
-          </select>
-          <ChevronDown size={14} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-            color: 'var(--text-muted)', pointerEvents: 'none' }} />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <div style={{ position: 'relative' }}>
+            <select value={periodo} onChange={e => setPeriodo(e.target.value)}
+              style={{ appearance: 'none', background: 'var(--surface)', border: '1px solid var(--border)',
+                color: 'var(--text)', borderRadius: 8, padding: '8px 32px 8px 12px', fontSize: 13, cursor: 'pointer' }}>
+              <option value="atual">Período Atual</option>
+              {periodos.map(p => <option key={p} value={p}>{periodoLabel(p)}</option>)}
+            </select>
+            <ChevronDown size={14} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          </div>
+          <ExportMenu
+            disabled={!dados.length}
+            onPDF={handlePDF}
+            onExcel={handleExcel}
+            onWhatsApp={handleWhatsApp}
+            onEmail={handleEmail}
+          />
         </div>
       </div>
 

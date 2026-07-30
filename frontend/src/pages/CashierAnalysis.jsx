@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../api';
+import ExportMenu from '../components/ExportMenu';
+import { gerarPDF, gerarExcel, compartilharWhatsApp, compartilharEmail } from '../lib/exportUtils';
 
 const DAYS = [
   { key: 'segunda', label: 'Segunda' },
@@ -52,6 +54,69 @@ export default function CashierAnalysis({ userId, profile }) {
   const peakHour = data?.reduce((best, h) =>
     h.operators > (best?.operators ?? -1) ? h : best, null);
 
+  const dayLabel = DAYS.find(d => d.key === selectedDay)?.label || selectedDay;
+  const periodoLabel = `${MONTHS_PT[month - 1]} ${year} — ${dayLabel}`;
+
+  function handlePDF() {
+    if (!data) return;
+    gerarPDF({
+      titulo: 'Análise de Caixas',
+      subtitulo: periodoLabel,
+      secoes: [{
+        titulo: 'Operadores por Horário',
+        colunas: [
+          { header: 'Horário', dataKey: 'horario' },
+          { header: 'Operadores', dataKey: 'operadores' },
+          { header: 'Caixas disponíveis', dataKey: 'disponivel' },
+        ],
+        rows: data.map(h => ({
+          horario: `${fmt(h.hour)} – ${fmt(h.hour + 1)}`,
+          operadores: h.operators,
+          disponivel: Math.min(h.operators, MAX_CAIXAS),
+        })),
+      }],
+    });
+  }
+
+  function handleExcel() {
+    if (!data) return;
+    gerarExcel({
+      nomeArquivo: 'Caixas',
+      abas: [{
+        nome: periodoLabel.slice(0, 31),
+        colunas: ['Horário', 'Operadores', 'Caixas disponíveis'],
+        rows: data.map(h => [
+          `${fmt(h.hour)} – ${fmt(h.hour + 1)}`,
+          h.operators,
+          Math.min(h.operators, MAX_CAIXAS),
+        ]),
+      }],
+    });
+  }
+
+  function handleWhatsApp() {
+    compartilharWhatsApp([
+      `🏪 *Análise de Caixas — ${periodoLabel}*`,
+      ``,
+      `👥 Máx. operadores: ${totalOperadores}`,
+      peakHour ? `⏰ Pico: ${fmt(peakHour.hour)} com ${peakHour.operators} operadores` : '',
+      `🔢 Caixas disponíveis: ${Math.min(totalOperadores, MAX_CAIXAS)} de ${MAX_CAIXAS}`,
+    ].filter(Boolean).join('\n'));
+  }
+
+  function handleEmail() {
+    compartilharEmail({
+      assunto: `Análise de Caixas — ${periodoLabel}`,
+      corpo: [
+        `Análise de Caixas — ${periodoLabel}`,
+        ``,
+        `Máx. operadores no dia: ${totalOperadores}`,
+        peakHour ? `Horário de pico: ${fmt(peakHour.hour)} com ${peakHour.operators} operadores` : '',
+        `Caixas disponíveis no pico: ${Math.min(totalOperadores, MAX_CAIXAS)} de ${MAX_CAIXAS}`,
+      ].filter(Boolean).join('\n'),
+    });
+  }
+
   return (
     <div style={{ maxWidth: 900, margin: '0 auto' }}>
       <div className="page-header">
@@ -61,8 +126,17 @@ export default function CashierAnalysis({ userId, profile }) {
             Operadores disponíveis por faixa horária baseado na escala • {MAX_CAIXAS} caixas no clube
           </p>
         </div>
-        {/* Seletor de mês/ano */}
+        {/* Ações */}
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <ExportMenu
+            disabled={!data}
+            onPDF={handlePDF}
+            onExcel={handleExcel}
+            onWhatsApp={handleWhatsApp}
+            onEmail={handleEmail}
+          />
+          {/* Seletor de mês/ano */}
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
           <button onClick={() => { const d = new Date(year, month-2); setYear(d.getFullYear()); setMonth(d.getMonth()+1); }}
             style={{ background:'none', border:'1px solid var(--border)', borderRadius:8, padding:'4px 10px', cursor:'pointer', color:'var(--text)', fontSize:16 }}>‹</button>
           <span style={{ fontWeight:700, fontSize:13, minWidth:110, textAlign:'center' }}>
@@ -70,6 +144,7 @@ export default function CashierAnalysis({ userId, profile }) {
           </span>
           <button onClick={() => { const d = new Date(year, month); setYear(d.getFullYear()); setMonth(d.getMonth()+1); }}
             style={{ background:'none', border:'1px solid var(--border)', borderRadius:8, padding:'4px 10px', cursor:'pointer', color:'var(--text)', fontSize:16 }}>›</button>
+          </div>
         </div>
       </div>
 

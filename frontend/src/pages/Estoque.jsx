@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { AlertTriangle, Package } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import ExportMenu from '../components/ExportMenu';
+import { gerarPDF, gerarExcel, compartilharWhatsApp, compartilharEmail } from '../lib/exportUtils';
 
 const brl = v => v == null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 const n0  = v => v == null ? '—' : Math.round(v).toLocaleString('pt-BR');
@@ -245,6 +247,159 @@ export default function Estoque({ profile }) {
 
   const t = dados?.totais;
 
+  function handlePDF() {
+    if (!dados) return;
+    gerarPDF({
+      titulo: 'Painel de Estoque',
+      subtitulo: `Extração: ${dados.gerado_em} · ${dados.arquivo}`,
+      secoes: [
+        {
+          titulo: 'Resumo de Indicadores',
+          colunas: [
+            { header: 'Indicador', dataKey: 'indicador' },
+            { header: 'Qtd', dataKey: 'qtd' },
+            { header: 'Valor (R$)', dataKey: 'valor' },
+          ],
+          rows: [
+            { indicador: 'Ruptura',          qtd: n0(t.ruptura_count),    valor: '—' },
+            { indicador: 'Urgente <15d',     qtd: n0(t.urgente_count),    valor: '—' },
+            { indicador: 'Aging +365d',      qtd: n0(t.aging_count),      valor: brl(t.aging_custo) },
+            { indicador: 'Sem venda 4 sem.', qtd: n0(t.sem4s_count),      valor: brl(t.sem4s_custo) },
+            { indicador: 'Giro lento',       qtd: n0(t.giro_lento_count), valor: brl(t.giro_lento_custo) },
+            { indicador: 'Est. negativo',    qtd: n0(t.estq_neg_count),   valor: '—' },
+            { indicador: 'Suspensos',        qtd: n0(t.suspensos_count),  valor: brl(t.suspensos_custo) },
+          ],
+        },
+        {
+          titulo: 'Top Rupturas',
+          colunas: [
+            { header: 'Cód.', dataKey: 'CD_PRODUTO' },
+            { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Venda mês', dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
+          ],
+          rows: (dados.ruptura_top || []).slice(0, 20),
+        },
+        {
+          titulo: 'Top Aging',
+          colunas: [
+            { header: 'Cód.', dataKey: 'CD_PRODUTO' },
+            { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Dias NF', dataKey: 'IDADE_ULTIMA_NF' },
+            { header: 'Custo', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
+          ],
+          rows: (dados.aging_top || []).slice(0, 20),
+        },
+      ],
+    });
+  }
+
+  function handleExcel() {
+    if (!dados) return;
+    gerarExcel({
+      nomeArquivo: 'Estoque',
+      abas: [
+        {
+          nome: 'Resumo',
+          colunas: ['Indicador', 'Quantidade', 'Valor R$'],
+          rows: [
+            ['Ruptura',          t.ruptura_count,    ''],
+            ['Urgente <15d',     t.urgente_count,    ''],
+            ['Aging +365d',      t.aging_count,      t.aging_custo],
+            ['Sem venda 4 sem.', t.sem4s_count,      t.sem4s_custo],
+            ['Giro lento',       t.giro_lento_count, t.giro_lento_custo],
+            ['Est. negativo',    t.estq_neg_count,   ''],
+            ['Suspensos',        t.suspensos_count,  t.suspensos_custo],
+          ],
+        },
+        {
+          nome: 'Ruptura',
+          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Venda mês'],
+          rows: (dados.ruptura_top || []).map(r => [
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.DESCRICAO_DEPARTAMENTO, r.sum_QTD_VENDAS_MES_ATUAL,
+          ]),
+        },
+        {
+          nome: 'Urgente',
+          colunas: ['Cód.', 'Produto', 'Seção', 'Estoque', 'Cobertura (dias)'],
+          rows: (dados.urgente_top || []).map(r => [
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.dias_cobertura,
+          ]),
+        },
+        {
+          nome: 'Aging',
+          colunas: ['Cód.', 'Produto', 'Seção', 'Dias NF', 'Custo R$'],
+          rows: (dados.aging_top || []).map(r => [
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.IDADE_ULTIMA_NF, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
+          ]),
+        },
+        {
+          nome: 'Sem venda 4s',
+          colunas: ['Cód.', 'Produto', 'Seção', 'Custo R$'],
+          rows: (dados.sem4s_top || []).map(r => [
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
+          ]),
+        },
+        {
+          nome: 'Giro Lento',
+          colunas: ['Cód.', 'Produto', 'Seção', 'Cobertura (dias)', 'Custo R$'],
+          rows: (dados.giro_lento_top || []).map(r => [
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.dias_cobertura, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
+          ]),
+        },
+        {
+          nome: 'Suspensos',
+          colunas: ['Cód.', 'Produto', 'Seção', 'Motivo', 'Custo R$'],
+          rows: (dados.suspensos_top || []).map(r => [
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.DESC_MOTIVO_SUSPENCAO, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
+          ]),
+        },
+      ],
+    });
+  }
+
+  function handleWhatsApp() {
+    if (!dados) return;
+    const txt = [
+      `📦 *Painel de Estoque*`,
+      `📅 Extração: ${dados.gerado_em}`,
+      ``,
+      `🔴 Ruptura: ${n0(t.ruptura_count)} itens`,
+      `🟡 Urgente <15d: ${n0(t.urgente_count)} itens`,
+      `🟣 Aging +365d: ${n0(t.aging_count)} itens — ${brl(t.aging_custo)}`,
+      `🟣 Sem venda 4s: ${n0(t.sem4s_count)} itens — ${brl(t.sem4s_custo)}`,
+      `🟡 Giro lento: ${n0(t.giro_lento_count)} itens — ${brl(t.giro_lento_custo)}`,
+      `🔴 Est. negativo: ${n0(t.estq_neg_count)} itens`,
+      `🟠 Suspensos c/ estoque: ${n0(t.suspensos_count)} itens — ${brl(t.suspensos_custo)}`,
+    ].join('\n');
+    compartilharWhatsApp(txt);
+  }
+
+  function handleEmail() {
+    if (!dados) return;
+    compartilharEmail({
+      assunto: `Painel de Estoque — ${dados.gerado_em}`,
+      corpo: [
+        `Painel de Estoque`,
+        `Extração: ${dados.gerado_em} | Arquivo: ${dados.arquivo}`,
+        ``,
+        `Ruptura: ${n0(t.ruptura_count)} itens`,
+        `Urgente <15d: ${n0(t.urgente_count)} itens`,
+        `Aging +365d: ${n0(t.aging_count)} itens — ${brl(t.aging_custo)}`,
+        `Sem venda 4s: ${n0(t.sem4s_count)} itens — ${brl(t.sem4s_custo)}`,
+        `Giro lento: ${n0(t.giro_lento_count)} itens — ${brl(t.giro_lento_custo)}`,
+        `Estoque negativo: ${n0(t.estq_neg_count)} itens`,
+        `Suspensos c/ estoque: ${n0(t.suspensos_count)} itens — ${brl(t.suspensos_custo)}`,
+      ].join('\n'),
+    });
+  }
+
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 24 }}>
@@ -256,6 +411,13 @@ export default function Estoque({ profile }) {
             </p>
           )}
         </div>
+        <ExportMenu
+          disabled={!dados}
+          onPDF={handlePDF}
+          onExcel={handleExcel}
+          onWhatsApp={handleWhatsApp}
+          onEmail={handleEmail}
+        />
       </div>
 
       {loading && (
