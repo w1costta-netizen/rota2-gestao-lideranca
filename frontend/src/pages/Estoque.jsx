@@ -13,7 +13,7 @@ const TABS = [
   { id: 'ruptura',    label: 'Ruptura',      cor: '#ef4444' },
   { id: 'urgente',    label: 'Urgente',      cor: '#f59e0b' },
   { id: 'aging',      label: 'Aging +365d',  cor: '#6366f1' },
-  { id: 'sem4s',      label: 'Sem venda 4s', cor: '#8b5cf6' },
+  { id: 'sem4s',      label: 'Sem venda 5s', cor: '#8b5cf6' },
   { id: 'giro_lento', label: 'Giro Lento',   cor: '#f59e0b' },
   { id: 'negativo',   label: 'Negativo',     cor: '#ef4444' },
   { id: 'suspensos',  label: 'Suspensos',    cor: '#e8681a' },
@@ -83,7 +83,7 @@ function TabAcervo({ d }) {
   const SUB_TABS = [
     { id: 'divisao', label: 'Por Divisão' },
     { id: 'depto',   label: 'Por Departamento' },
-    { id: 'zero4s',  label: 'Zero c/ venda 4s' },
+    { id: 'zero5s',  label: 'Zero c/ venda 5s' },
     { id: 'zeromes', label: 'Zero c/ venda mês' },
   ];
 
@@ -103,7 +103,7 @@ function TabAcervo({ d }) {
             { ind: 'Total ativos',       qtd: n0(t.ativos_total),         pct: '100%' },
             { ind: 'Com estoque',        qtd: n0(t.ativos_com_estoque),    pct: `${t.ativos_total > 0 ? Math.round(t.ativos_com_estoque / t.ativos_total * 100) : 0}%` },
             { ind: 'Zero estoque',       qtd: n0(t.ativos_zero_count),     pct: `${t.ativos_total > 0 ? Math.round(t.ativos_zero_count / t.ativos_total * 100) : 0}%` },
-            { ind: 'Zero c/ venda 4s',  qtd: n0(t.ativos_zero_venda_4s),  pct: '' },
+            { ind: 'Zero c/ venda 5s',  qtd: n0(t.ativos_zero_venda_5s),  pct: '' },
             { ind: 'Zero c/ venda mês', qtd: n0(t.ativos_zero_venda_mes), pct: '' },
           ],
         },
@@ -113,7 +113,7 @@ function TabAcervo({ d }) {
             { header: 'Divisão',            dataKey: 'DESCRICAO_SETOR' },
             { header: 'Total Ativos',        dataKey: 'itens' },
             { header: 'Zero estoque',        dataKey: 'zero_estoque' },
-            { header: 'Zero c/ venda 4s',   dataKey: 'zero_venda_4s' },
+            { header: 'Zero c/ venda 5s',   dataKey: 'zero_venda_5s' },
             { header: 'Zero c/ venda mês',  dataKey: 'zero_venda_mes' },
           ],
           rows: d.divisao_ativos || [],
@@ -125,36 +125,40 @@ function TabAcervo({ d }) {
             { header: 'Divisão',             dataKey: 'DESCRICAO_SETOR' },
             { header: 'Total Ativos',        dataKey: 'itens' },
             { header: 'Zero estoque',        dataKey: 'zero_estoque' },
-            { header: 'Zero c/ venda 4s',   dataKey: 'zero_venda_4s' },
+            { header: 'Zero c/ venda 5s',   dataKey: 'zero_venda_5s' },
             { header: 'Zero c/ venda mês',  dataKey: 'zero_venda_mes' },
           ],
           rows: d.depto_ativos || [],
         },
         {
-          titulo: 'Zero c/ venda nas 4 semanas',
+          titulo: 'Zero c/ venda nas 5 semanas',
           colunas: [
-            { header: 'Cód.',          dataKey: 'CD_PRODUTO' },
-            { header: 'Produto',       dataKey: 'DESCRICAO_PRODUTO' },
-            { header: 'Seção',         dataKey: 'DESCRICAO_SECAO' },
-            { header: 'Depto',         dataKey: 'DESCRICAO_DEPARTAMENTO' },
-            { header: 'Estoque loja',  dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
-            { header: 'CD (cx)',        dataKey: 'estoque_cd_cxs' },
-            { header: 'Venda 4s',      dataKey: 'total_4s' },
-            { header: 'Venda mês',     dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
+            { header: 'Cód.',           dataKey: 'CD_PRODUTO' },
+            { header: 'Produto',        dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Seção',          dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Depto',          dataKey: 'DESCRICAO_DEPARTAMENTO' },
+            { header: 'Estoque loja',   dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
+            { header: 'CD (cx)',         dataKey: 'estoque_cd_cxs' },
+            { header: 'Separ. CD',      dataKey: 'estoque_separado_cd' },
+            { header: 'Trânsito Loja',  dataKey: 'estoque_transito_loja' },
+            { header: 'Venda 5s',       dataKey: 'total_5s' },
+            { header: 'Venda mês',      dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
           ],
-          rows: d.zero_venda_4s_top || [],
+          rows: d.zero_venda_5s_top || [],
         },
         {
           titulo: 'Zero c/ venda no mês atual',
           colunas: [
-            { header: 'Cód.',          dataKey: 'CD_PRODUTO' },
-            { header: 'Produto',       dataKey: 'DESCRICAO_PRODUTO' },
-            { header: 'Seção',         dataKey: 'DESCRICAO_SECAO' },
-            { header: 'Depto',         dataKey: 'DESCRICAO_DEPARTAMENTO' },
-            { header: 'Estoque loja',  dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
-            { header: 'CD (cx)',        dataKey: 'estoque_cd_cxs' },
-            { header: 'Venda mês',     dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
-            { header: 'Venda 4s',      dataKey: 'total_4s' },
+            { header: 'Cód.',           dataKey: 'CD_PRODUTO' },
+            { header: 'Produto',        dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Seção',          dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Depto',          dataKey: 'DESCRICAO_DEPARTAMENTO' },
+            { header: 'Estoque loja',   dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
+            { header: 'CD (cx)',         dataKey: 'estoque_cd_cxs' },
+            { header: 'Separ. CD',      dataKey: 'estoque_separado_cd' },
+            { header: 'Trânsito Loja',  dataKey: 'estoque_transito_loja' },
+            { header: 'Venda mês',      dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
+            { header: 'Venda 5s',       dataKey: 'total_5s' },
           ],
           rows: d.zero_venda_mes_top || [],
         },
@@ -168,38 +172,38 @@ function TabAcervo({ d }) {
       abas: [
         {
           nome: 'Por Divisão',
-          colunas: ['Divisão', 'Total Ativos', 'Com estoque', 'Zero estoque', 'Zero c/ venda 4s', 'Zero c/ venda mês'],
+          colunas: ['Divisão', 'Total Ativos', 'Com estoque', 'Zero estoque', 'Zero c/ venda 5s', 'Zero c/ venda mês'],
           rows: (d.divisao_ativos || []).map(r => [
             r.DESCRICAO_SETOR, r.itens, r.itens - r.zero_estoque,
-            r.zero_estoque, r.zero_venda_4s, r.zero_venda_mes,
+            r.zero_estoque, r.zero_venda_5s, r.zero_venda_mes,
           ]),
         },
         {
           nome: 'Por Departamento',
-          colunas: ['Departamento', 'Divisão', 'Total Ativos', 'Zero estoque', 'Zero c/ venda 4s', 'Zero c/ venda mês'],
+          colunas: ['Departamento', 'Divisão', 'Total Ativos', 'Zero estoque', 'Zero c/ venda 5s', 'Zero c/ venda mês'],
           rows: (d.depto_ativos || []).map(r => [
             r.DESCRICAO_DEPARTAMENTO, r.DESCRICAO_SETOR, r.itens,
-            r.zero_estoque, r.zero_venda_4s, r.zero_venda_mes,
+            r.zero_estoque, r.zero_venda_5s, r.zero_venda_mes,
           ]),
         },
         {
-          nome: 'Zero venda 4s',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Estoque loja', 'CD (cx)', 'Venda 4s', 'Venda mês', 'Mês anterior'],
-          rows: (d.zero_venda_4s_top || []).map(r => [
+          nome: 'Zero venda 5s',
+          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Estoque loja', 'CD (cx)', 'Separ. CD', 'Trânsito Loja', 'Venda 5s', 'Venda mês', 'Mês anterior'],
+          rows: (d.zero_venda_5s_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.DESCRICAO_DEPARTAMENTO, r.sum_ESTOQUE_ON_HAND_LOJA_QTD,
-            r.estoque_cd_cxs || 0, r.total_4s,
-            r.sum_QTD_VENDAS_MES_ATUAL, r.sum_QTD_VENDAS_MES_ANTERIOR,
+            r.estoque_cd_cxs || 0, r.estoque_separado_cd || 0, r.estoque_transito_loja || 0,
+            r.total_5s, r.sum_QTD_VENDAS_MES_ATUAL, r.sum_QTD_VENDAS_MES_ANTERIOR,
           ]),
         },
         {
           nome: 'Zero venda mês',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Estoque loja', 'CD (cx)', 'Venda mês', 'Venda 4s', 'Mês anterior'],
+          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Estoque loja', 'CD (cx)', 'Separ. CD', 'Trânsito Loja', 'Venda mês', 'Venda 5s', 'Mês anterior'],
           rows: (d.zero_venda_mes_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.DESCRICAO_DEPARTAMENTO, r.sum_ESTOQUE_ON_HAND_LOJA_QTD,
-            r.estoque_cd_cxs || 0, r.sum_QTD_VENDAS_MES_ATUAL,
-            r.total_4s, r.sum_QTD_VENDAS_MES_ANTERIOR,
+            r.estoque_cd_cxs || 0, r.estoque_separado_cd || 0, r.estoque_transito_loja || 0,
+            r.sum_QTD_VENDAS_MES_ATUAL, r.total_5s, r.sum_QTD_VENDAS_MES_ANTERIOR,
           ]),
         },
       ],
@@ -213,7 +217,7 @@ function TabAcervo({ d }) {
       `📦 Total ativos: ${n0(t.ativos_total)} itens`,
       `✅ Com estoque: ${n0(t.ativos_com_estoque)} (${t.ativos_total > 0 ? Math.round(t.ativos_com_estoque / t.ativos_total * 100) : 0}%)`,
       `⚪ Zero estoque: ${n0(t.ativos_zero_count)} (${t.ativos_total > 0 ? Math.round(t.ativos_zero_count / t.ativos_total * 100) : 0}%)`,
-      `🟡 Zero c/ venda 4s: ${n0(t.ativos_zero_venda_4s)} itens`,
+      `🟡 Zero c/ venda 5s: ${n0(t.ativos_zero_venda_5s)} itens`,
       `🔴 Zero c/ venda mês: ${n0(t.ativos_zero_venda_mes)} itens`,
     ].join('\n'));
   }
@@ -227,7 +231,7 @@ function TabAcervo({ d }) {
         `Total ativos: ${n0(t.ativos_total)} itens`,
         `Com estoque: ${n0(t.ativos_com_estoque)}`,
         `Zero estoque: ${n0(t.ativos_zero_count)}`,
-        `Zero c/ venda 4s: ${n0(t.ativos_zero_venda_4s)} itens`,
+        `Zero c/ venda 5s: ${n0(t.ativos_zero_venda_5s)} itens`,
         `Zero c/ venda mês: ${n0(t.ativos_zero_venda_mes)} itens`,
       ].join('\n'),
     });
@@ -240,7 +244,7 @@ function TabAcervo({ d }) {
         <KpiCard label="Total ativos"        value={n0(t.ativos_total)}         cor="#0ea5e9" sub="itens ativos no clube" />
         <KpiCard label="Com estoque"         value={n0(t.ativos_com_estoque)}    cor="#10b981" sub={`${t.ativos_total > 0 ? Math.round(t.ativos_com_estoque / t.ativos_total * 100) : 0}% do acervo`} />
         <KpiCard label="Zero estoque"        value={n0(t.ativos_zero_count)}     cor="#6b7280" sub={`${t.ativos_total > 0 ? Math.round(t.ativos_zero_count / t.ativos_total * 100) : 0}% do acervo`} />
-        <KpiCard label="Zero c/ venda 4s"   value={n0(t.ativos_zero_venda_4s)}  cor="#f59e0b" sub="vendeu mas sem estoque" />
+        <KpiCard label="Zero c/ venda 5s"   value={n0(t.ativos_zero_venda_5s)}  cor="#f59e0b" sub="vendeu mas sem estoque" />
         <KpiCard label="Zero c/ venda mês"  value={n0(t.ativos_zero_venda_mes)} cor="#ef4444" sub="risco de ruptura real" />
       </div>
 
@@ -276,7 +280,7 @@ function TabAcervo({ d }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Divisão','Total Ativos','Com estoque','Zero estoque','Zero c/ venda 4s','Zero c/ venda mês','% zero'].map(h => (
+                {['Divisão','Total Ativos','Com estoque','Zero estoque','Zero c/ venda 5s','Zero c/ venda mês','% zero'].map(h => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Divisão' ? 'left' : 'right',
                     color: 'var(--text-muted)', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
@@ -289,7 +293,7 @@ function TabAcervo({ d }) {
                   <td style={{ padding: '10px 10px', textAlign: 'right', fontWeight: 700, color: '#0ea5e9' }}>{n0(r.itens)}</td>
                   <td style={{ padding: '10px 10px', textAlign: 'right', color: '#10b981' }}>{n0(r.itens - r.zero_estoque)}</td>
                   <td style={{ padding: '10px 10px', textAlign: 'right', color: 'var(--text-muted)' }}>{n0(r.zero_estoque)}</td>
-                  <td style={{ padding: '10px 10px', textAlign: 'right', color: '#f59e0b' }}>{n0(r.zero_venda_4s)}</td>
+                  <td style={{ padding: '10px 10px', textAlign: 'right', color: '#f59e0b' }}>{n0(r.zero_venda_5s)}</td>
                   <td style={{ padding: '10px 10px', textAlign: 'right', color: '#ef4444' }}>{n0(r.zero_venda_mes)}</td>
                   <td style={{ padding: '10px 10px', minWidth: 100 }}>
                     <PctBar value={r.zero_estoque} total={r.itens} cor="#6b7280" />
@@ -307,7 +311,7 @@ function TabAcervo({ d }) {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Departamento','Divisão','Total Ativos','Zero estoque','Zero c/ venda 4s','Zero c/ venda mês'].map(h => (
+                {['Departamento','Divisão','Total Ativos','Zero estoque','Zero c/ venda 5s','Zero c/ venda mês'].map(h => (
                   <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Departamento' || h === 'Divisão' ? 'left' : 'right',
                     color: 'var(--text-muted)', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
                 ))}
@@ -320,7 +324,7 @@ function TabAcervo({ d }) {
                   <td style={{ padding: '9px 10px', color: 'var(--text-muted)', fontSize: 11, maxWidth: 160, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.DESCRICAO_SETOR}</td>
                   <td style={{ padding: '9px 10px', textAlign: 'right', fontWeight: 700, color: '#0ea5e9' }}>{n0(r.itens)}</td>
                   <td style={{ padding: '9px 10px', textAlign: 'right', color: 'var(--text-muted)' }}>{n0(r.zero_estoque)}</td>
-                  <td style={{ padding: '9px 10px', textAlign: 'right', color: '#f59e0b' }}>{n0(r.zero_venda_4s)}</td>
+                  <td style={{ padding: '9px 10px', textAlign: 'right', color: '#f59e0b' }}>{n0(r.zero_venda_5s)}</td>
                   <td style={{ padding: '9px 10px', textAlign: 'right', color: '#ef4444' }}>{n0(r.zero_venda_mes)}</td>
                 </tr>
               ))}
@@ -329,20 +333,22 @@ function TabAcervo({ d }) {
         </div>
       )}
 
-      {/* Zero c/ venda 4 semanas */}
-      {visao === 'zero4s' && (
+      {/* Zero c/ venda 5 semanas */}
+      {visao === 'zero5s' && (
         <>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
-            Itens ativos com <strong>estoque zero</strong> que tiveram venda nas últimas 4 semanas — risco real de ruptura.
+            Itens ativos com <strong>estoque zero</strong> que tiveram venda nas últimas 5 semanas — risco real de ruptura.
           </p>
-          <SecaoTable rows={d.zero_venda_4s_top || []} colunas={[
+          <SecaoTable rows={d.zero_venda_5s_top || []} colunas={[
             { key: 'CD_PRODUTO',                    label: 'Cód.' },
             { key: 'DESCRICAO_PRODUTO',              label: 'Produto', maxW: 220, wrap: true },
             { key: 'DESCRICAO_SECAO',                label: 'Seção' },
             { key: 'DESCRICAO_DEPARTAMENTO',         label: 'Depto' },
             { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD',  label: 'Estoque', right: true, fmt: v => n1(v), cor: () => '#6b7280' },
             { key: 'estoque_cd_cxs',                 label: 'CD (cx)', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
-            { key: 'total_4s',                       label: 'Venda 4s', right: true, fmt: v => n0(v), cor: () => '#f59e0b' },
+            { key: 'estoque_separado_cd',            label: 'Separ. CD', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_separado_cd > 0 ? '#10b981' : '#6b7280' },
+            { key: 'estoque_transito_loja',          label: 'Trânsito Loja', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_transito_loja > 0 ? '#0ea5e9' : '#6b7280' },
+            { key: 'total_5s',                       label: 'Venda 5s', right: true, fmt: v => n0(v), cor: () => '#f59e0b' },
             { key: 'sum_QTD_VENDAS_MES_ATUAL',       label: 'Venda mês', right: true, fmt: v => n0(v) },
             { key: 'sum_QTD_VENDAS_MES_ANTERIOR',    label: 'Mês ant.', right: true, fmt: v => n0(v) },
           ]} />
@@ -362,8 +368,10 @@ function TabAcervo({ d }) {
             { key: 'DESCRICAO_DEPARTAMENTO',         label: 'Depto' },
             { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD',  label: 'Estoque', right: true, fmt: v => n1(v), cor: () => '#6b7280' },
             { key: 'estoque_cd_cxs',                 label: 'CD (cx)', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
+            { key: 'estoque_separado_cd',            label: 'Separ. CD', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_separado_cd > 0 ? '#10b981' : '#6b7280' },
+            { key: 'estoque_transito_loja',          label: 'Trânsito Loja', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_transito_loja > 0 ? '#0ea5e9' : '#6b7280' },
             { key: 'sum_QTD_VENDAS_MES_ATUAL',       label: 'Venda mês', right: true, fmt: v => n0(v), cor: () => '#ef4444' },
-            { key: 'total_4s',                       label: 'Venda 4s', right: true, fmt: v => n0(v) },
+            { key: 'total_5s',                       label: 'Venda 5s', right: true, fmt: v => n0(v) },
             { key: 'sum_QTD_VENDAS_MES_ANTERIOR',    label: 'Mês ant.', right: true, fmt: v => n0(v) },
           ]} />
         </>
@@ -399,6 +407,12 @@ function TabRuptura({ d }) {
         { key: 'estoque_cd_cxs', label: 'CD (cx)', right: true,
           fmt: v => v > 0 ? n0(v) : '—',
           cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
+        { key: 'estoque_separado_cd', label: 'Separ. CD', right: true,
+          fmt: v => v > 0 ? n0(v) : '—',
+          cor: r => r.estoque_separado_cd > 0 ? '#10b981' : '#6b7280' },
+        { key: 'estoque_transito_loja', label: 'Trânsito Loja', right: true,
+          fmt: v => v > 0 ? n0(v) : '—',
+          cor: r => r.estoque_transito_loja > 0 ? '#0ea5e9' : '#6b7280' },
       ]} />
     </>
   );
@@ -428,6 +442,12 @@ function TabUrgente({ d }) {
         { key: 'estoque_cd_cxs', label: 'CD (cx)', right: true,
           fmt: v => v > 0 ? n0(v) : '—',
           cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
+        { key: 'estoque_separado_cd', label: 'Separ. CD', right: true,
+          fmt: v => v > 0 ? n0(v) : '—',
+          cor: r => r.estoque_separado_cd > 0 ? '#10b981' : '#6b7280' },
+        { key: 'estoque_transito_loja', label: 'Trânsito Loja', right: true,
+          fmt: v => v > 0 ? n0(v) : '—',
+          cor: r => r.estoque_transito_loja > 0 ? '#0ea5e9' : '#6b7280' },
       ]} />
     </>
   );
@@ -463,7 +483,7 @@ function TabSem4s({ d }) {
   return (
     <>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <KpiCard label="Sem venda nas 4 semanas" value={n0(d.totais.sem4s_count)} cor="#8b5cf6" />
+        <KpiCard label="Sem venda nas 5 semanas" value={n0(d.totais.sem4s_count)} cor="#8b5cf6" />
         <KpiCard label="Custo parado" value={brl(d.totais.sem4s_custo)} cor="#8b5cf6" />
       </div>
       <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10 }}>Por seção</h4>
@@ -568,7 +588,7 @@ function filtrarPorSecao(dados, secoesSel) {
   const giro_lento_top  = fArr(dados.giro_lento_top);
   const estq_neg_top    = fArr(dados.estq_neg_top);
   const suspensos_top   = fArr(dados.suspensos_top);
-  const zero_v4s        = fArr(dados.zero_venda_4s_top);
+  const zero_v5s        = fArr(dados.zero_venda_5s_top);
   const zero_vmes       = fArr(dados.zero_venda_mes_top);
 
   const sumF = (arr, k) => arr.reduce((a, r) => a + (r[k] || 0), 0);
@@ -577,7 +597,7 @@ function filtrarPorSecao(dados, secoesSel) {
     ...dados,
     ruptura_top,  urgente_top, aging_top, sem4s_top,
     giro_lento_top, estq_neg_top, suspensos_top,
-    zero_venda_4s_top: zero_v4s,
+    zero_venda_5s_top: zero_v5s,
     zero_venda_mes_top: zero_vmes,
     secao_ruptura:    fSecao(dados.secao_ruptura),
     secao_urgente:    fSecao(dados.secao_urgente),
@@ -737,7 +757,7 @@ export default function Estoque({ profile }) {
             { indicador: 'Ruptura',                   qtd: n0(t.ruptura_count),       valor: t.ruptura_com_cd_count > 0 ? `${n0(t.ruptura_com_cd_count)} c/ CD` : '—' },
             { indicador: 'Urgente <15d / <30d',       qtd: `${n0(t.urgente_count)} / ${n0(t.urgente_30_count)}`, valor: t.urgente_com_cd_count > 0 ? `${n0(t.urgente_com_cd_count)} c/ CD` : '—' },
             { indicador: 'Aging +365d',      qtd: n0(t.aging_count),      valor: brl(t.aging_custo) },
-            { indicador: 'Sem venda 4 sem.', qtd: n0(t.sem4s_count),      valor: brl(t.sem4s_custo) },
+            { indicador: 'Sem venda 5 sem.', qtd: n0(t.sem4s_count),      valor: brl(t.sem4s_custo) },
             { indicador: 'Giro lento',       qtd: n0(t.giro_lento_count), valor: brl(t.giro_lento_custo) },
             { indicador: 'Est. negativo',    qtd: n0(t.estq_neg_count),   valor: '—' },
             { indicador: 'Suspensos',        qtd: n0(t.suspensos_count),  valor: brl(t.suspensos_custo) },
@@ -753,6 +773,8 @@ export default function Estoque({ profile }) {
             { header: 'Venda mês (un)', dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
             { header: 'Venda mês R$', dataKey: 'venda_mes_vlr' },
             { header: 'CD (cx)', dataKey: 'estoque_cd_cxs' },
+            { header: 'Separ. CD', dataKey: 'estoque_separado_cd' },
+            { header: 'Trânsito Loja', dataKey: 'estoque_transito_loja' },
           ],
           rows: (d.ruptura_top || []).slice(0, 30),
         },
@@ -766,6 +788,8 @@ export default function Estoque({ profile }) {
             { header: 'Cobertura (d)', dataKey: 'dias_cobertura' },
             { header: 'Status', dataKey: 'criticidade_label' },
             { header: 'CD (cx)', dataKey: 'estoque_cd_cxs' },
+            { header: 'Separ. CD', dataKey: 'estoque_separado_cd' },
+            { header: 'Trânsito Loja', dataKey: 'estoque_transito_loja' },
           ],
           rows: (d.urgente_top || []).slice(0, 30).map(r => ({
             ...r,
@@ -785,7 +809,7 @@ export default function Estoque({ profile }) {
           rows: (d.aging_top || []).slice(0, 30),
         },
         {
-          titulo: 'Sem venda 4 semanas — Top itens',
+          titulo: 'Sem venda 5 semanas — Top itens',
           colunas: [
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
@@ -834,7 +858,7 @@ export default function Estoque({ profile }) {
             ['Ruptura',          t.ruptura_count,    ''],
             ['Urgente <15d',     t.urgente_count,    ''],
             ['Aging +365d',      t.aging_count,      t.aging_custo],
-            ['Sem venda 4 sem.', t.sem4s_count,      t.sem4s_custo],
+            ['Sem venda 5 sem.', t.sem4s_count,      t.sem4s_custo],
             ['Giro lento',       t.giro_lento_count, t.giro_lento_custo],
             ['Est. negativo',    t.estq_neg_count,   ''],
             ['Suspensos',        t.suspensos_count,  t.suspensos_custo],
@@ -842,21 +866,23 @@ export default function Estoque({ profile }) {
         },
         {
           nome: 'Ruptura',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Venda mês (un)', 'Venda mês R$', 'CD (cx)'],
+          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Venda mês (un)', 'Venda mês R$', 'CD (cx)', 'Separ. CD', 'Trânsito Loja'],
           rows: (d.ruptura_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.DESCRICAO_DEPARTAMENTO, r.sum_QTD_VENDAS_MES_ATUAL,
             r.venda_mes_vlr, r.estoque_cd_cxs || 0,
+            r.estoque_separado_cd || 0, r.estoque_transito_loja || 0,
           ]),
         },
         {
           nome: 'Urgente',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Estoque', 'Cobertura (dias)', 'Status', 'CD (cx)'],
+          colunas: ['Cód.', 'Produto', 'Seção', 'Estoque', 'Cobertura (dias)', 'Status', 'CD (cx)', 'Separ. CD', 'Trânsito Loja'],
           rows: (d.urgente_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.dias_cobertura,
             r.criticidade === 'critico' ? 'Crítico' : r.criticidade === 'urgente' ? 'Urgente' : 'Atenção',
             r.estoque_cd_cxs || 0,
+            r.estoque_separado_cd || 0, r.estoque_transito_loja || 0,
           ]),
         },
         {
@@ -868,7 +894,7 @@ export default function Estoque({ profile }) {
           ]),
         },
         {
-          nome: 'Sem venda 4s',
+          nome: 'Sem venda 5s',
           colunas: ['Cód.', 'Produto', 'Seção', 'Qtd estoque', 'Custo R$'],
           rows: (d.sem4s_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
@@ -913,7 +939,7 @@ export default function Estoque({ profile }) {
       `🔴 Ruptura: ${n0(t.ruptura_count)} itens${t.ruptura_com_cd_count > 0 ? ` (${n0(t.ruptura_com_cd_count)} c/ CD disponível)` : ''}`,
       `🟡 Urgente <15d: ${n0(t.urgente_count)} itens | <30d: ${n0(t.urgente_30_count)} itens${t.urgente_com_cd_count > 0 ? ` (${n0(t.urgente_com_cd_count)} c/ CD)` : ''}`,
       `🟣 Aging +365d: ${n0(t.aging_count)} itens — ${brl(t.aging_custo)}`,
-      `🟣 Sem venda 4s: ${n0(t.sem4s_count)} itens — ${brl(t.sem4s_custo)}`,
+      `🟣 Sem venda 5s: ${n0(t.sem4s_count)} itens — ${brl(t.sem4s_custo)}`,
       `🟡 Giro lento: ${n0(t.giro_lento_count)} itens — ${brl(t.giro_lento_custo)}`,
       `🔴 Est. negativo: ${n0(t.estq_neg_count)} itens`,
       `🟠 Suspensos c/ estoque: ${n0(t.suspensos_count)} itens — ${brl(t.suspensos_custo)}`,
@@ -932,7 +958,7 @@ export default function Estoque({ profile }) {
         `Ruptura: ${n0(t.ruptura_count)} itens${t.ruptura_com_cd_count > 0 ? ` (${n0(t.ruptura_com_cd_count)} com CD disponível)` : ''}`,
         `Urgente <15d: ${n0(t.urgente_count)} itens | <30d: ${n0(t.urgente_30_count)} itens${t.urgente_com_cd_count > 0 ? ` (${n0(t.urgente_com_cd_count)} com CD)` : ''}`,
         `Aging +365d: ${n0(t.aging_count)} itens — ${brl(t.aging_custo)}`,
-        `Sem venda 4s: ${n0(t.sem4s_count)} itens — ${brl(t.sem4s_custo)}`,
+        `Sem venda 5s: ${n0(t.sem4s_count)} itens — ${brl(t.sem4s_custo)}`,
         `Giro lento: ${n0(t.giro_lento_count)} itens — ${brl(t.giro_lento_custo)}`,
         `Estoque negativo: ${n0(t.estq_neg_count)} itens`,
         `Suspensos c/ estoque: ${n0(t.suspensos_count)} itens — ${brl(t.suspensos_custo)}`,
@@ -1006,8 +1032,8 @@ export default function Estoque({ profile }) {
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>Zero estoque</div>
               </div>
               <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#fde68a' }}>{n0(dados.totais.ativos_zero_venda_4s)}</div>
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>Zero c/ venda 4s</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#fde68a' }}>{n0(dados.totais.ativos_zero_venda_5s)}</div>
+                <div style={{ fontSize: 10, color: 'rgba(255,255,255,.7)' }}>Zero c/ venda 5s</div>
               </div>
               <div style={{ textAlign: 'center' }}>
                 <div style={{ fontSize: 20, fontWeight: 800, color: '#fca5a5' }}>{n0(dados.totais.ativos_zero_venda_mes)}</div>
@@ -1024,7 +1050,7 @@ export default function Estoque({ profile }) {
             <KpiCard label="Ruptura"       value={n0(t.ruptura_count)}    cor="#ef4444" sub="itens sem estoque" />
             <KpiCard label="Urgente <15d"  value={n0(t.urgente_count)}    cor="#f59e0b" sub="risco de ruptura" />
             <KpiCard label="Aging +365d"   value={n0(t.aging_count)}      cor="#6366f1" sub={brl(t.aging_custo)} />
-            <KpiCard label="Sem venda 4s"  value={n0(t.sem4s_count)}      cor="#8b5cf6" sub={brl(t.sem4s_custo)} />
+            <KpiCard label="Sem venda 5s"  value={n0(t.sem4s_count)}      cor="#8b5cf6" sub={brl(t.sem4s_custo)} />
             <KpiCard label="Giro lento"    value={n0(t.giro_lento_count)} cor="#f59e0b" sub={brl(t.giro_lento_custo)} />
             <KpiCard label="Est. negativo" value={n0(t.estq_neg_count)}   cor="#ef4444" />
             <KpiCard label="Suspensos"     value={n0(t.suspensos_count)}  cor="#e8681a" sub={brl(t.suspensos_custo)} />

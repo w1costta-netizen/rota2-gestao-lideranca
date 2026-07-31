@@ -21,10 +21,13 @@ const COL_MAP = {
   sum_VENDA_MEDIA:               ['sum_VENDA_MEDIA','VENDA_MEDIA','MEDIA_VENDA'],
   sum_QTD_VENDAS_MES_ATUAL:      ['sum_QTD_VENDAS_MES_ATUAL','QTD_VENDAS_MES_ATUAL','VENDAS_MES_ATUAL'],
   sum_QTD_VENDAS_MES_ANTERIOR:   ['sum_QTD_VENDAS_MES_ANTERIOR','QTD_VENDAS_MES_ANTERIOR','VENDAS_MES_ANT'],
-  sum_QTD_VENDAS_SEMANA_1:       ['sum_QTD_VENDAS_SEMANA_1','QTD_VENDAS_SEMANA_1','VENDAS_S1'],
-  sum_QTD_VENDAS_SEMANA_2:       ['sum_QTD_VENDAS_SEMANA_2','QTD_VENDAS_SEMANA_2','VENDAS_S2'],
-  sum_QTD_VENDAS_SEMANA_3:       ['sum_QTD_VENDAS_SEMANA_3','QTD_VENDAS_SEMANA_3','VENDAS_S3'],
-  sum_QTD_VENDAS_SEMANA_4:       ['sum_QTD_VENDAS_SEMANA_4','QTD_VENDAS_SEMANA_4','VENDAS_S4'],
+  sum_QTD_VENDAS_SEMANA_1:          ['sum_QTD_VENDAS_SEMANA_1','QTD_VENDAS_SEMANA_1','VENDAS_S1'],
+  sum_QTD_VENDAS_SEMANA_2:          ['sum_QTD_VENDAS_SEMANA_2','QTD_VENDAS_SEMANA_2','VENDAS_S2'],
+  sum_QTD_VENDAS_SEMANA_3:          ['sum_QTD_VENDAS_SEMANA_3','QTD_VENDAS_SEMANA_3','VENDAS_S3'],
+  sum_QTD_VENDAS_SEMANA_4:          ['sum_QTD_VENDAS_SEMANA_4','QTD_VENDAS_SEMANA_4','VENDAS_S4'],
+  sum_QTD_VENDAS_SEMANA_5:          ['sum_QTD_VENDAS_SEMANA_5','QTD_VENDAS_SEMANA_5','VENDAS_S5'],
+  sum_ESTOQUE_SEPARADO_CD_LOJA_QTD: ['sum_ESTOQUE_SEPARADO_CD_LOJA_QTD','ESTOQUE_SEPARADO_CD_LOJA_QTD','SEPARADO_CD'],
+  sum_ESTOQUE_TRANSITO_LOJA_QTD:    ['sum_ESTOQUE_TRANSITO_LOJA_QTD','ESTOQUE_TRANSITO_LOJA_QTD','TRANSITO_LOJA'],
 };
 
 const norm = s => String(s || '').toUpperCase().trim().replace(/\s+/g, '_').replace(/[^A-Z0-9_]/g, '');
@@ -72,7 +75,12 @@ export async function parseEstoqueXlsx(file) {
   const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
   if (!rows.length) throw new Error('Planilha sem dados na aba "Dados"');
 
-  const COLUNAS_OPCIONAIS = new Set(['ESTOQUE_ON_HAND_CD_CXS']);
+  const COLUNAS_OPCIONAIS = new Set([
+    'ESTOQUE_ON_HAND_CD_CXS',
+    'sum_QTD_VENDAS_SEMANA_5',
+    'sum_ESTOQUE_SEPARADO_CD_LOJA_QTD',
+    'sum_ESTOQUE_TRANSITO_LOJA_QTD',
+  ]);
   const { result: colMap, missing } = resolveColumns(Object.keys(rows[0]));
   const missingObrigatorias = missing.filter(c => !COLUNAS_OPCIONAIS.has(c));
   if (missingObrigatorias.length) throw new Error(`Colunas não encontradas: ${missingObrigatorias.join(', ')}`);
@@ -94,15 +102,18 @@ export async function parseEstoqueXlsx(file) {
     const s2 = parseFloat(get(row, 'sum_QTD_VENDAS_SEMANA_2')) || 0;
     const s3 = parseFloat(get(row, 'sum_QTD_VENDAS_SEMANA_3')) || 0;
     const s4 = parseFloat(get(row, 'sum_QTD_VENDAS_SEMANA_4')) || 0;
+    const s5 = parseFloat(get(row, 'sum_QTD_VENDAS_SEMANA_5')) || 0;
     const vendMedia  = parseFloat(get(row, 'sum_VENDA_MEDIA')) || 0;
     const precoMedio = parseFloat(get(row, 'sum_PRECO_VENDA_MEDIO')) || 0;
     const qtdMesAtual = parseFloat(get(row, 'sum_QTD_VENDAS_MES_ATUAL')) || 0;
     const estoque    = parseFloat(get(row, 'sum_ESTOQUE_ON_HAND_LOJA_QTD')) || 0;
-    const venda4s    = s1 + s2 + s3 + s4;
-    const vendaDiaria = venda4s > 0 ? venda4s / 35 : 0;
+    const venda5s    = s1 + s2 + s3 + s4 + s5;
+    const vendaDiaria = venda5s > 0 ? venda5s / 35 : 0;
     const diasCob    = vendaDiaria > 0 ? estoque / vendaDiaria : null;
     const vendaMesVlr = Math.round(qtdMesAtual * precoMedio * 100) / 100;
-    const estoque_cd_cxs = parseFloat(get(row, 'ESTOQUE_ON_HAND_CD_CXS')) || 0;
+    const estoque_cd_cxs     = parseFloat(get(row, 'ESTOQUE_ON_HAND_CD_CXS')) || 0;
+    const estoque_separado_cd = parseFloat(get(row, 'sum_ESTOQUE_SEPARADO_CD_LOJA_QTD')) || 0;
+    const estoque_transito_loja = parseFloat(get(row, 'sum_ESTOQUE_TRANSITO_LOJA_QTD')) || 0;
 
     items.push({
       CD_PRODUTO:                    parseInt(get(row, 'CD_PRODUTO')) || 0,
@@ -129,10 +140,14 @@ export async function parseEstoqueXlsx(file) {
       sum_QTD_VENDAS_SEMANA_2:       s2,
       sum_QTD_VENDAS_SEMANA_3:       s3,
       sum_QTD_VENDAS_SEMANA_4:       s4,
+      sum_QTD_VENDAS_SEMANA_5:       s5,
       total_4s:                      s1 + s2 + s3 + s4,
+      total_5s:                      s1 + s2 + s3 + s4 + s5,
       dias_cobertura:                diasCob ? Math.round(diasCob * 10) / 10 : null,
       venda_mes_vlr: vendaMesVlr,
       estoque_cd_cxs,
+      estoque_separado_cd,
+      estoque_transito_loja,
     });
   }
 
@@ -163,11 +178,11 @@ export async function parseEstoqueXlsx(file) {
     const m = {};
     for (const r of arr) {
       const d = r.DESCRICAO_SETOR || 'Sem divisão';
-      if (!m[d]) m[d] = { DESCRICAO_SETOR: d, itens: 0, zero_estoque: 0, zero_venda_4s: 0, zero_venda_mes: 0 };
+      if (!m[d]) m[d] = { DESCRICAO_SETOR: d, itens: 0, zero_estoque: 0, zero_venda_5s: 0, zero_venda_mes: 0 };
       m[d].itens++;
       if (r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0) {
         m[d].zero_estoque++;
-        if (r.total_4s > 0)                      m[d].zero_venda_4s++;
+        if (r.total_5s > 0)                      m[d].zero_venda_5s++;
         if ((r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0) m[d].zero_venda_mes++;
       }
     }
@@ -177,11 +192,11 @@ export async function parseEstoqueXlsx(file) {
     const m = {};
     for (const r of arr) {
       const d = r.DESCRICAO_DEPARTAMENTO || 'Sem departamento';
-      if (!m[d]) m[d] = { DESCRICAO_DEPARTAMENTO: d, DESCRICAO_SETOR: r.DESCRICAO_SETOR, itens: 0, zero_estoque: 0, zero_venda_4s: 0, zero_venda_mes: 0 };
+      if (!m[d]) m[d] = { DESCRICAO_DEPARTAMENTO: d, DESCRICAO_SETOR: r.DESCRICAO_SETOR, itens: 0, zero_estoque: 0, zero_venda_5s: 0, zero_venda_mes: 0 };
       m[d].itens++;
       if (r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0) {
         m[d].zero_estoque++;
-        if (r.total_4s > 0)                      m[d].zero_venda_4s++;
+        if (r.total_5s > 0)                      m[d].zero_venda_5s++;
         if ((r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0) m[d].zero_venda_mes++;
       }
     }
@@ -201,14 +216,14 @@ export async function parseEstoqueXlsx(file) {
     .sort((a, b) => a.dias_cobertura - b.dias_cobertura);
   const urgente_15        = urgente.filter(r => r.dias_cobertura < 15);
   const aging             = ativos.filter(r => (r.IDADE_ULTIMA_NF || 0) > 365);
-  const sem4s             = ativos.filter(r => r.total_4s === 0);
+  const sem4s             = ativos.filter(r => r.total_5s === 0);
   const giro_lento        = ativos.filter(r => r.dias_cobertura != null && r.dias_cobertura >= 45).sort((a, b) => b.sum_VALOR_ESTOQUE_LOJA_A_CUSTO - a.sum_VALOR_ESTOQUE_LOJA_A_CUSTO);
   const estq_neg          = items.filter(r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD < 0);
   const suspensos_est     = com_estoque.filter(r => r.STATUS_REAL === 'Suspenso');
   const deletados_est     = com_estoque.filter(r => r.STATUS_REAL === 'Deletado');
   const ativos_zer_lst    = items.filter(r => r.STATUS_REAL === 'Ativo' && r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0);
   const sem_mov           = ativos_zer_lst.filter(r => !(r.sum_QTD_VENDAS_MES_ATUAL > 0));
-  const zero_venda_4s     = ativos_zer_lst.filter(r => r.total_4s > 0);
+  const zero_venda_5s     = ativos_zer_lst.filter(r => r.total_5s > 0);
   const zero_venda_mes    = ativos_zer_lst.filter(r => (r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0);
 
   const hoje    = new Date();
@@ -251,7 +266,7 @@ export async function parseEstoqueXlsx(file) {
       com_estoque:              com_estoque.length,
       ativos_total:             ativos_geral.length,
       ativos_zero_count:        ativos_zer_lst.length,
-      ativos_zero_venda_4s:     zero_venda_4s.length,
+      ativos_zero_venda_5s:     zero_venda_5s.length,
       ativos_zero_venda_mes:    zero_venda_mes.length,
     },
     secao_ruptura:    bySecaoQtd(ruptura),
@@ -276,7 +291,7 @@ export async function parseEstoqueXlsx(file) {
     // acervo ativo
     divisao_ativos:       byDivisao(ativos_geral),
     depto_ativos:         byDepto(ativos_geral),
-    zero_venda_4s_top:    topN(zero_venda_4s, 'total_4s'),
+    zero_venda_5s_top:    topN(zero_venda_5s, 'total_5s'),
     zero_venda_mes_top:   topN(zero_venda_mes, 'sum_QTD_VENDAS_MES_ATUAL'),
   };
 }
