@@ -154,7 +154,7 @@ export async function parseEstoqueXlsx(file) {
   if (!items.length) throw new Error('Nenhum item encontrado após aplicar os filtros de divisão/seção.');
 
   const sum     = (arr, k) => arr.reduce((a, r) => a + (r[k] || 0), 0);
-  const topN    = (arr, key, asc = false, n = 50) =>
+  const topN    = (arr, key, asc = false, n = 9999) =>
     [...arr].sort((a, b) => asc ? (a[key] || 0) - (b[key] || 0) : (b[key] || 0) - (a[key] || 0)).slice(0, n);
   const bySecao = (arr, valKey = 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO') => {
     const m = {};
