@@ -255,8 +255,8 @@ export default function PainelVendas({ profile }) {
     ? Math.round((totalSaldo / (totalReceita - totalSaldo)) * 100 * 10) / 10
     : 0;
 
-  // Atenção: YoY receita negativo
-  const atencao = [...canais, ...deptos, ...cats, ...itens]
+  // Atenção: YoY receita negativo — apenas itens individuais (produtos)
+  const atencao = itens
     .filter(d => {
       const yoy = d.extras?.yoy_receita ?? d.percentual ?? 0;
       return yoy < 0;
