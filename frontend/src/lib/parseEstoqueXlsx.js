@@ -98,7 +98,9 @@ export async function parseEstoqueXlsx(file) {
     const precoMedio = parseFloat(get(row, 'sum_PRECO_VENDA_MEDIO')) || 0;
     const qtdMesAtual = parseFloat(get(row, 'sum_QTD_VENDAS_MES_ATUAL')) || 0;
     const estoque    = parseFloat(get(row, 'sum_ESTOQUE_ON_HAND_LOJA_QTD')) || 0;
-    const diasCob    = vendMedia > 0 ? estoque / (vendMedia / 7) : null;
+    const venda4s    = s1 + s2 + s3 + s4;
+    const vendaDiaria = venda4s > 0 ? venda4s / 35 : 0;
+    const diasCob    = vendaDiaria > 0 ? estoque / vendaDiaria : null;
     const vendaMesVlr = Math.round(qtdMesAtual * precoMedio * 100) / 100;
     const estoque_cd_cxs = parseFloat(get(row, 'ESTOQUE_ON_HAND_CD_CXS')) || 0;
 
@@ -191,7 +193,7 @@ export async function parseEstoqueXlsx(file) {
   const ativos_geral      = items.filter(r => r.STATUS_REAL === 'Ativo'); // todos ativos, com ou sem estoque
   const ruptura           = items.filter(r => r.STATUS_REAL === 'Ativo' && r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0 && (r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0);
   const urgente           = ativos
-    .filter(r => r.sum_VENDA_MEDIA && r.dias_cobertura != null && r.dias_cobertura < 30)
+    .filter(r => r.dias_cobertura != null && r.dias_cobertura < 30)
     .map(r => ({
       ...r,
       criticidade: r.dias_cobertura < 7 ? 'critico' : r.dias_cobertura < 15 ? 'urgente' : 'atencao',
@@ -200,7 +202,7 @@ export async function parseEstoqueXlsx(file) {
   const urgente_15        = urgente.filter(r => r.dias_cobertura < 15);
   const aging             = ativos.filter(r => (r.IDADE_ULTIMA_NF || 0) > 365);
   const sem4s             = ativos.filter(r => r.total_4s === 0);
-  const giro_lento        = ativos.filter(r => r.sum_VENDA_MEDIA && r.dias_cobertura >= 45).sort((a, b) => b.sum_VALOR_ESTOQUE_LOJA_A_CUSTO - a.sum_VALOR_ESTOQUE_LOJA_A_CUSTO);
+  const giro_lento        = ativos.filter(r => r.dias_cobertura != null && r.dias_cobertura >= 45).sort((a, b) => b.sum_VALOR_ESTOQUE_LOJA_A_CUSTO - a.sum_VALOR_ESTOQUE_LOJA_A_CUSTO);
   const estq_neg          = items.filter(r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD < 0);
   const suspensos_est     = com_estoque.filter(r => r.STATUS_REAL === 'Suspenso');
   const deletados_est     = com_estoque.filter(r => r.STATUS_REAL === 'Deletado');
