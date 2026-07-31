@@ -72,7 +72,7 @@ export async function parseEstoqueXlsx(file) {
   if (abaIdx === -1) throw new Error(`Aba "Dados" não encontrada. Abas: ${wb.SheetNames.join(', ')}`);
 
   const ws = wb.Sheets[wb.SheetNames[abaIdx]];
-  const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true });
   if (!rows.length) throw new Error('Planilha sem dados na aba "Dados"');
 
   const COLUNAS_OPCIONAIS = new Set([
