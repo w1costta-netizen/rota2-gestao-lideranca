@@ -99,8 +99,22 @@ function CardItem({ l, isTotal }) {
   );
 }
 
+const COLUNAS_TABELA = [
+  { label: 'Nome',    key: 'nome',       left: true,  fn: l => l.nome },
+  { label: 'Receita', key: 'realizado',  left: false, fn: l => l.realizado || 0 },
+  { label: 'YoY',     key: 'yoy',        left: false, fn: l => l.extras?.yoy_receita ?? l.percentual ?? 0 },
+  { label: 'Saldo',   key: 'saldo',      left: false, fn: l => { const e = l.extras || {}; return e.saldo_receita ?? (l.realizado - l.meta); } },
+  { label: 'Margem',  key: 'margem',     left: false, fn: l => l.extras?.margem || 0 },
+  { label: '% Marg.', key: 'pct_margem', left: false, fn: l => l.extras?.pct_margem || 0 },
+  { label: 'Sócios',  key: 'socios',     left: false, fn: l => l.extras?.socios || 0 },
+  { label: 'Volume',  key: 'volume',     left: false, fn: l => l.extras?.volume || 0 },
+];
+
 function TabelaVendas({ linhas, marcarTotal }) {
   const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 640);
+  const [sortKey, setSortKey]   = React.useState(null);
+  const [sortAsc, setSortAsc]   = React.useState(false);
+
   React.useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 640);
     window.addEventListener('resize', fn);
@@ -108,12 +122,27 @@ function TabelaVendas({ linhas, marcarTotal }) {
   }, []);
 
   if (!linhas.length) return <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Sem dados.</p>;
-  const { totalRow } = marcarTotal ? detectarTotal(linhas) : { totalRow: null };
+  const { totalRow, subRows } = marcarTotal ? detectarTotal(linhas) : { totalRow: null, subRows: linhas };
+
+  const handleSort = (key) => {
+    if (sortKey === key) setSortAsc(a => !a);
+    else { setSortKey(key); setSortAsc(false); }
+  };
+
+  const col = COLUNAS_TABELA.find(c => c.key === sortKey);
+  const sorted = col
+    ? [...subRows].sort((a, b) => {
+        const va = col.fn(a), vb = col.fn(b);
+        if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+        return sortAsc ? va - vb : vb - va;
+      })
+    : subRows;
+  const linhasFinais = totalRow ? [...sorted, totalRow] : sorted;
 
   if (isMobile) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {linhas.map((l, i) => {
+        {linhasFinais.map((l, i) => {
           const isTotal = totalRow && l.nome === totalRow.nome;
           return <CardItem key={i} l={l} isTotal={isTotal} />;
         })}
@@ -126,14 +155,20 @@ function TabelaVendas({ linhas, marcarTotal }) {
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead>
           <tr style={{ borderBottom: '1px solid var(--border)' }}>
-            {['Nome','Receita','YoY','Saldo','Margem','% Marg.','Sócios','Volume'].map(h => (
-              <th key={h} style={{ textAlign: h === 'Nome' ? 'left' : 'right', padding: '8px 6px',
-                color: 'var(--text-muted)', fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap' }}>{h}</th>
+            {COLUNAS_TABELA.map(c => (
+              <th key={c.key}
+                onClick={() => handleSort(c.key)}
+                style={{ textAlign: c.left ? 'left' : 'right', padding: '8px 6px',
+                  color: sortKey === c.key ? 'var(--primary)' : 'var(--text-muted)',
+                  fontWeight: 600, fontSize: 11, whiteSpace: 'nowrap',
+                  cursor: 'pointer', userSelect: 'none' }}>
+                {c.label}{sortKey === c.key ? (sortAsc ? ' ▲' : ' ▼') : ''}
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {linhas.map((l, i) => {
+          {linhasFinais.map((l, i) => {
             const e = l.extras || {};
             const saldo = e.saldo_receita ?? (l.realizado - l.meta);
             const corSaldo = saldo >= 0 ? '#22c55e' : '#ef4444';
