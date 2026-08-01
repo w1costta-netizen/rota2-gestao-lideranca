@@ -222,21 +222,8 @@ export default function PainelVendas({ profile }) {
 
   const carregarPeriodos = useCallback(async () => {
     if (!company) return;
-    // Busca períodos mensais (periodo < 'A') e anuais (periodo >= 'A') separadamente
-    // para garantir que ambos apareçam independente do volume de linhas
-    const [{ data: mensais }, { data: anuais }] = await Promise.all([
-      supabase.from('vendas_historico').select('periodo')
-        .eq('company', company).lt('periodo', 'A')
-        .order('periodo', { ascending: false }).limit(24),
-      supabase.from('vendas_historico').select('periodo')
-        .eq('company', company).gte('periodo', 'A')
-        .order('periodo', { ascending: false }).limit(10),
-    ]);
-    const todos = [
-      ...(anuais || []).map(d => d.periodo),
-      ...(mensais || []).map(d => d.periodo),
-    ];
-    setPeriodos([...new Set(todos)]);
+    const { data } = await supabase.rpc('get_vendas_periodos', { company_param: company });
+    setPeriodos((data || []).map(d => d.periodo));
   }, [company]);
 
   const carregarDados = useCallback(async () => {
