@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, TrendingDown, ChevronDown, AlertTriangle, Users, ShoppingCart, DollarSign, BarChart2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, ChevronDown, AlertTriangle, Users, ShoppingCart, DollarSign, BarChart2, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ExportMenu from '../components/ExportMenu';
 import { gerarPDF, gerarExcel, compartilharWhatsApp, compartilharEmail } from '../lib/exportUtils';
@@ -218,10 +218,25 @@ export default function PainelVendas({ profile }) {
   const [loading, setLoading] = useState(false);
   const company = profile?.company;
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
   const carregarPeriodos = useCallback(async () => {
-    const { data } = await supabase.from('vendas_historico').select('periodo')
-      .eq('company', company).order('periodo', { ascending: false });
-    setPeriodos([...new Set((data || []).map(d => d.periodo))]);
+    if (!company) return;
+    // Busca períodos mensais (periodo < 'A') e anuais (periodo >= 'A') separadamente
+    // para garantir que ambos apareçam independente do volume de linhas
+    const [{ data: mensais }, { data: anuais }] = await Promise.all([
+      supabase.from('vendas_historico').select('periodo')
+        .eq('company', company).lt('periodo', 'A')
+        .order('periodo', { ascending: false }).limit(24),
+      supabase.from('vendas_historico').select('periodo')
+        .eq('company', company).gte('periodo', 'A')
+        .order('periodo', { ascending: false }).limit(10),
+    ]);
+    const todos = [
+      ...(anuais || []).map(d => d.periodo),
+      ...(mensais || []).map(d => d.periodo),
+    ];
+    setPeriodos([...new Set(todos)]);
   }, [company]);
 
   const carregarDados = useCallback(async () => {
@@ -235,7 +250,7 @@ export default function PainelVendas({ profile }) {
     setLoading(false);
   }, [company, periodo]);
 
-  useEffect(() => { carregarPeriodos(); }, [carregarPeriodos]);
+  useEffect(() => { carregarPeriodos(); }, [carregarPeriodos, refreshKey]);
   useEffect(() => { carregarDados(); }, [carregarDados]);
 
   // Agrupa por tipo de bloco
@@ -382,16 +397,23 @@ export default function PainelVendas({ profile }) {
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: '4px 0 0' }}>Receita, margem e crescimento por canal</p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ position: 'relative' }}>
-            <select value={periodo} onChange={e => setPeriodo(e.target.value)}
-              style={{ appearance: 'none', background: 'var(--surface)', border: '1px solid var(--border)',
-                color: 'var(--text)', borderRadius: 8, padding: '8px 32px 8px 12px', fontSize: 13, cursor: 'pointer' }}>
-              <option value="" disabled>Selecione o período</option>
-              <option value="atual">Período Atual</option>
-              {periodos.map(p => <option key={p} value={p}>{periodoLabel(p)}</option>)}
-            </select>
-            <ChevronDown size={14} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-              color: 'var(--text-muted)', pointerEvents: 'none' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ position: 'relative' }}>
+              <select value={periodo} onChange={e => setPeriodo(e.target.value)}
+                style={{ appearance: 'none', background: 'var(--surface)', border: '1px solid var(--border)',
+                  color: 'var(--text)', borderRadius: 8, padding: '8px 32px 8px 12px', fontSize: 13, cursor: 'pointer' }}>
+                <option value="" disabled>Selecione o período</option>
+                <option value="atual">Período Atual</option>
+                {periodos.map(p => <option key={p} value={p}>{periodoLabel(p)}</option>)}
+              </select>
+              <ChevronDown size={14} style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                color: 'var(--text-muted)', pointerEvents: 'none' }} />
+            </div>
+            <button onClick={() => setRefreshKey(k => k + 1)} title="Atualizar períodos"
+              style={{ background: 'none', border: '1px solid var(--border)', borderRadius: 8,
+                padding: '8px', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+              <RefreshCw size={14} />
+            </button>
           </div>
           <ExportMenu
             disabled={!dados.length}
