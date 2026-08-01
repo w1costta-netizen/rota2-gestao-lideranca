@@ -20,19 +20,23 @@ export default function GestaoVendas({ userId, profile }) {
 
   const carregarDados = useCallback(async () => {
     setLoading(true);
-    const [{ count }, { data: hist }, { count: countAnual }] = await Promise.all([
-      supabase.from('vendas_atual').select('*', { count: 'exact', head: true }).eq('company', company),
-      supabase.from('vendas_historico').select('periodo, created_at').eq('company', company)
-        .order('created_at', { ascending: false }),
-      supabase.from('vendas_historico').select('*', { count: 'exact', head: true })
-        .eq('company', company).like('periodo', 'ANUAL-%'),
-    ]);
-    setTotalAtual(count || 0);
-    setTotalAnual(countAnual || 0);
+    try {
+      const [{ count }, { data: hist }] = await Promise.all([
+        supabase.from('vendas_atual').select('*', { count: 'exact', head: true }).eq('company', company),
+        supabase.from('vendas_historico').select('periodo, created_at').eq('company', company)
+          .order('created_at', { ascending: false }),
+      ]);
+      setTotalAtual(count || 0);
 
-    // Separa períodos mensais dos anuais
-    const todos = [...new Set((hist || []).map(h => h.periodo))];
-    setHistorico(todos.filter(p => !p.startsWith('ANUAL-')));
+      const todos = [...new Set((hist || []).map(h => h.periodo))];
+      const temAnual = todos.some(p => p.startsWith('ANUAL-'));
+      setTotalAnual(temAnual ? 1 : 0);
+      setHistorico(todos.filter(p => !p.startsWith('ANUAL-')));
+    } catch {
+      // libera loading mesmo em caso de erro
+    } finally {
+      setLoading(false);
+    }
   }, [company]);
 
   useEffect(() => { carregarDados(); }, [carregarDados]);
