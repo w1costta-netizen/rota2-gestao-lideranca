@@ -431,8 +431,9 @@ export default function PainelVendas({ profile }) {
         </div>
       ) : !dados.length ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)' }}>
-          <AlertTriangle size={32} style={{ marginBottom: 12, opacity: .4 }} />
-          <p>Nenhum dado para este período.<br />Importe um arquivo na tela Gest. Vendas.</p>
+          <p style={{ fontSize: 15 }}>
+            <span style={{ color: '#22c55e', fontWeight: 700 }}>Selecione o período</span> acima e comece a sua análise.
+          </p>
         </div>
       ) : (
         <>
