@@ -212,10 +212,10 @@ function detectarTotal(linhas) {
 // ─── Tela principal ──────────────────────────────────────
 export default function PainelVendas({ profile }) {
   const [tab, setTab] = useState(0);
-  const [periodo, setPeriodo] = useState('atual');
+  const [periodo, setPeriodo] = useState('');
   const [periodos, setPeriodos] = useState([]);
   const [dados, setDados] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const company = profile?.company;
 
   const carregarPeriodos = useCallback(async () => {
@@ -225,6 +225,7 @@ export default function PainelVendas({ profile }) {
   }, [company]);
 
   const carregarDados = useCallback(async () => {
+    if (!periodo) { setDados([]); return; }
     setLoading(true);
     const tabela = periodo === 'atual' ? 'vendas_atual' : 'vendas_historico';
     let q = supabase.from(tabela).select('*').eq('company', company);
@@ -385,6 +386,7 @@ export default function PainelVendas({ profile }) {
             <select value={periodo} onChange={e => setPeriodo(e.target.value)}
               style={{ appearance: 'none', background: 'var(--surface)', border: '1px solid var(--border)',
                 color: 'var(--text)', borderRadius: 8, padding: '8px 32px 8px 12px', fontSize: 13, cursor: 'pointer' }}>
+              <option value="" disabled>Selecione o período</option>
               <option value="atual">Período Atual</option>
               {periodos.map(p => <option key={p} value={p}>{periodoLabel(p)}</option>)}
             </select>
