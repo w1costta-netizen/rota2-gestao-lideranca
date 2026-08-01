@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, Trash2, Archive, RefreshCw, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Upload, Trash2, Archive, RefreshCw, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { parseVendasXlsx } from '../lib/parseVendasXlsx';
 import { useToast } from '../components/Toast';
@@ -12,22 +12,27 @@ export default function GestaoVendas({ userId, profile }) {
   const [totalAtual, setTotalAtual] = useState(null);
   const [loading, setLoading] = useState(true);
   const [erroUpload, setErroUpload] = useState('');
+  const [uploadingAnual, setUploadingAnual] = useState(false);
+  const [totalAnual, setTotalAnual] = useState(null);
+  const [erroAnual, setErroAnual] = useState('');
 
   const company = profile?.company;
 
   const carregarDados = useCallback(async () => {
     setLoading(true);
-    const [{ count }, { data: hist }] = await Promise.all([
+    const [{ count }, { data: hist }, { count: countAnual }] = await Promise.all([
       supabase.from('vendas_atual').select('*', { count: 'exact', head: true }).eq('company', company),
       supabase.from('vendas_historico').select('periodo, created_at').eq('company', company)
         .order('created_at', { ascending: false }),
+      supabase.from('vendas_historico').select('*', { count: 'exact', head: true })
+        .eq('company', company).like('periodo', 'ANUAL-%'),
     ]);
     setTotalAtual(count || 0);
+    setTotalAnual(countAnual || 0);
 
-    // Agrupa períodos únicos
-    const periodos = [...new Set((hist || []).map(h => h.periodo))];
-    setHistorico(periodos);
-    setLoading(false);
+    // Separa períodos mensais dos anuais
+    const todos = [...new Set((hist || []).map(h => h.periodo))];
+    setHistorico(todos.filter(p => !p.startsWith('ANUAL-')));
   }, [company]);
 
   useEffect(() => { carregarDados(); }, [carregarDados]);
@@ -80,7 +85,14 @@ export default function GestaoVendas({ userId, profile }) {
   }
 
   async function handleFecharMes() {
-    if (!window.confirm('Fechar o mês atual? Os dados serão salvos no histórico.')) return;
+    // Mês anterior = período que está sendo encerrado
+    const agora = new Date();
+    const d = new Date(agora.getFullYear(), agora.getMonth() - 1, 1);
+    const periodo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    const labelPeriodo = `${nomes[d.getMonth()]}/${d.getFullYear()}`;
+
+    if (!window.confirm(`Fechar o período ${labelPeriodo}? Os dados serão salvos no histórico.`)) return;
     setFechando(true);
     try {
       const { data: linhas, error: errLer } = await supabase
@@ -88,23 +100,66 @@ export default function GestaoVendas({ userId, profile }) {
       if (errLer) throw errLer;
       if (!linhas?.length) { showToast('Não há dados atuais para fechar.', 'error'); return; }
 
-      const agora = new Date();
-      const periodo = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`;
+      const rows = linhas.map(({ id, uploaded_by, uploaded_at, ...l }) => ({ ...l, periodo }));
 
-      const rows = linhas.map(({ id, uploaded_by, uploaded_at, ...l }) => ({
-        ...l,
+      const { error } = await supabase.from('vendas_historico').insert(rows);
+      if (error) throw error;
+
+      showToast(`Mês ${labelPeriodo} fechado com sucesso!`, 'success');
+      carregarDados();
+    } catch (err) {
+      showToast('Erro ao fechar mês: ' + err.message, 'error');
+    } finally {
+      setFechando(false);
+    }
+  }
+
+  async function handleUploadAnual(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+
+    setUploadingAnual(true);
+    setErroAnual('');
+    try {
+      const { linhas } = await parseVendasXlsx(file);
+      if (!linhas.length) {
+        const msg = 'Nenhum dado encontrado no arquivo.';
+        showToast(msg, 'error');
+        setErroAnual(msg);
+        return;
+      }
+
+      const ano = new Date().getFullYear();
+      const periodo = `ANUAL-${ano}`;
+
+      // Remove acumulado anterior do mesmo ano
+      await supabase.from('vendas_historico').delete().eq('company', company).eq('periodo', periodo);
+
+      const rows = linhas.map(l => ({
+        company,
+        canal:        l.tipo === 'CANAL'        ? l.nome : null,
+        departamento: l.tipo === 'DEPARTAMENTO' ? l.nome : null,
+        categoria:    l.tipo === 'CATEGORIA'    ? l.nome : null,
+        item:         l.tipo === 'ITEM'         ? l.nome : null,
+        meta:         l.meta,
+        realizado:    l.realizado,
+        percentual:   l.percentual,
+        extras:       l.extras || null,
         periodo,
       }));
 
       const { error } = await supabase.from('vendas_historico').insert(rows);
       if (error) throw error;
 
-      showToast(`Mês ${periodo} fechado com sucesso!`, 'success');
+      showToast(`Acumulado ${ano} importado — ${linhas.length} linhas!`, 'success');
       carregarDados();
     } catch (err) {
-      showToast('Erro ao fechar mês: ' + err.message, 'error');
+      const msg = 'Erro ao processar arquivo: ' + (err.message || JSON.stringify(err));
+      showToast(msg, 'error');
+      setErroAnual(msg);
     } finally {
-      setFechando(false);
+      setUploadingAnual(false);
     }
   }
 
@@ -181,6 +236,43 @@ export default function GestaoVendas({ userId, profile }) {
         <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: 0 }}>
           O arquivo deve conter blocos de CANAL, DEPARTAMENTO, CATEGORIA e ITEM com colunas META e REALIZADO.
           Ao importar, os dados atuais são substituídos.
+        </p>
+      </div>
+
+      {/* Card: venda acumulada no ano */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: 20, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <TrendingUp size={15} style={{ color: '#10b981' }}/> Venda Acumulada no Ano
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              {totalAnual > 0
+                ? <span style={{ color: '#22c55e', display:'flex', alignItems:'center', gap: 4 }}><CheckCircle size={13}/> {totalAnual} linhas carregadas ({new Date().getFullYear()})</span>
+                : <span style={{ color: 'var(--text-muted)' }}>Nenhum acumulado importado ainda</span>
+              }
+            </div>
+          </div>
+          <button
+            onClick={() => document.getElementById('upload-anual').click()}
+            disabled={uploadingAnual}
+            style={{ display:'flex', alignItems:'center', gap: 6, background:'#10b981', color:'#fff',
+              border:'none', borderRadius: 8, padding:'8px 14px', fontSize: 13, fontWeight: 600, cursor:'pointer' }}
+          >
+            {uploadingAnual ? <RefreshCw size={14} style={{ animation:'spin 1s linear infinite' }}/> : <Upload size={14}/>}
+            {uploadingAnual ? 'Importando...' : 'Importar acumulado'}
+          </button>
+        </div>
+        <input id="upload-anual" type="file" accept=".xlsx,.xls" style={{ display:'none' }} onChange={handleUploadAnual}/>
+        {erroAnual && (
+          <div style={{ background:'#ef444420', border:'1px solid #ef4444', borderRadius:8, padding:'10px 14px',
+            fontSize:12, color:'#ef4444', display:'flex', gap:8, alignItems:'flex-start', marginTop: 8 }}>
+            <AlertTriangle size={14} style={{ flexShrink:0, marginTop:1 }}/>
+            <div>{erroAnual} <button onClick={() => setErroAnual('')} style={{ marginLeft:8, background:'none', border:'none', color:'#ef4444', cursor:'pointer', fontWeight:700 }}>✕</button></div>
+          </div>
+        )}
+        <p style={{ fontSize: 12, color: 'var(--text-muted)', margin: '10px 0 0' }}>
+          Mesmo formato do relatório mensal. Ao reimportar, substitui o acumulado do ano atual.
         </p>
       </div>
 
