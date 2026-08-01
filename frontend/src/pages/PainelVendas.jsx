@@ -265,6 +265,7 @@ export default function PainelVendas({ profile }) {
 
   const periodoLabel = (p) => {
     if (p === 'atual') return 'Período Atual';
+    if (p.startsWith('ANUAL-')) return `Acumulado ${p.split('-')[1]}`;
     const [ano, mes] = p.split('-');
     const nomes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
     return `${nomes[parseInt(mes) - 1]}/${ano}`;
