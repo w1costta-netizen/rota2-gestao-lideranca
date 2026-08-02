@@ -606,11 +606,10 @@ export default function Tarefas({ userId, profile }) {
             const isTomorrow = selectedCalDay === toYMD(addDaysTo(new Date(), 1));
             const isPast = selDate < todayDate && !isToday;
             const dayTasks = calList.filter(t => {
-              if (t.status !== 'pendente') return false;
               const rec = t.recorrencia && t.recorrencia !== 'nenhuma';
-              // Tarefas sem recorrência: só mostra se a data bate
-              if (!rec) return t.due_date === selectedCalDay;
-              // Tarefas recorrentes: mostra em todos os dias aplicáveis
+              // Tarefas normais: só mostra pendentes no dia exato
+              if (!rec) return t.status === 'pendente' && t.due_date === selectedCalDay;
+              // Tarefas recorrentes: aparecem em todos os dias aplicáveis (são lembretes fixos)
               if (t.recorrencia === 'diaria') return true;
               if (!t.due_date) return false;
               if (t.recorrencia === 'semanal') {
