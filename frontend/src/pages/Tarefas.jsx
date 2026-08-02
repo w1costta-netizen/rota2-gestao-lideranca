@@ -606,12 +606,10 @@ export default function Tarefas({ userId, profile }) {
             const isTomorrow = selectedCalDay === toYMD(addDaysTo(new Date(), 1));
             const isPast = selDate < todayDate && !isToday;
             const dayTasks = calList.filter(t => {
-              if (t.status === 'concluida') return false;
-              // Data exata
-              if (t.due_date === selectedCalDay) return true;
-              // Sem recorrência e data diferente → não mostra
-              if (!t.recorrencia || t.recorrencia === 'nenhuma') return false;
-              // Recorrências: ignora direção do due_date (backend recria com nova data)
+              const rec = t.recorrencia && t.recorrencia !== 'nenhuma';
+              // Tarefas sem recorrência: só mostra se a data bate e não está concluída
+              if (!rec) return t.due_date === selectedCalDay && t.status !== 'concluida';
+              // Tarefas recorrentes: mostra independente do status (repetem sempre)
               if (t.recorrencia === 'diaria') return true;
               if (!t.due_date) return false;
               if (t.recorrencia === 'semanal') {
