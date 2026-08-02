@@ -234,6 +234,19 @@ export default function Comunicados({ userId, profile }) {
           </button>
         </div>
       </Modal>
+
+      {/* FAB mobile */}
+      {isAdmin && (
+        <button onClick={openNew} style={{
+          position: 'fixed', bottom: 24, right: 20, zIndex: 500,
+          width: 52, height: 52, borderRadius: '50%',
+          background: 'var(--primary)', color: '#fff', border: 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 4px 16px rgba(232,98,42,.5)', cursor: 'pointer',
+        }} aria-label="Novo comunicado">
+          <Plus size={24} />
+        </button>
+      )}
     </div>
   );
 }
