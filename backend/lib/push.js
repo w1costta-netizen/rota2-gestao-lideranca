@@ -10,7 +10,7 @@ webpush.setVapidDetails(
 // Retorna user_ids afetados pelo targetType
 async function getAffectedUserIds(targetType, targetValue, requesterCompany) {
   // lider = targetValue é o user_id diretamente
-  if (targetType === 'lider') return targetValue ? [targetValue] : [];
+  if (targetType === 'lider') return targetValue ? targetValue.split(',').filter(Boolean) : [];
 
   let query = supabase.from('profiles').select('id').eq('active', true).eq('company', requesterCompany);
   if (targetType === 'setor') query = query.eq('sector', targetValue);

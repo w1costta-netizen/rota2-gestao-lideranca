@@ -64,14 +64,18 @@ export default function Agenda({ userId, profile }) {
   useEffect(() => {
     leadersAPI.list().then(r => {
       setLeaders(r.data);
-      setSectors([...new Set(r.data.map(l => l.sector))]);
     });
-    // Carrega usuários do novo sistema para o modal de envio
+    // Carrega usuários do novo sistema para o modal de envio e para montar setores
     if (userId) {
       const company = profile?.company || '';
       const cq = company ? `&company=${encodeURIComponent(company)}` : '';
       api.get(`/admin/users?requester_id=${userId}${cq}`)
-        .then(r => setProfiles(r.data || []))
+        .then(r => {
+          const users = r.data || [];
+          setProfiles(users);
+          const setoresUnicos = [...new Set(users.map(u => u.sector).filter(Boolean))].sort();
+          setSectors(setoresUnicos);
+        })
         .catch(() => {});
     }
   }, [userId, profile?.company]);
@@ -86,12 +90,14 @@ export default function Agenda({ userId, profile }) {
   const getAffectedLeaders = (item) => {
     if (item.target_type === 'geral') return leaders;
     if (item.target_type === 'setor') return leaders.filter(l => l.sector === item.target_value);
-    return leaders.filter(l => String(l.id) === String(item.target_value));
+    const ids = item.target_value ? item.target_value.split(',') : [];
+    return leaders.filter(l => ids.includes(String(l.id)));
   };
 
   const save = async () => {
     if (!form.title || !form.day_of_week) { toast('Título e dia são obrigatórios', 'error'); return; }
-    if (form.target_type !== 'geral' && !form.target_value) { toast('Selecione o destino', 'error'); return; }
+    if (form.target_type === 'setor' && !form.target_value) { toast('Selecione o setor', 'error'); return; }
+    if (form.target_type === 'lider' && !form.target_value.split(',').filter(Boolean).length) { toast('Selecione ao menos um líder', 'error'); return; }
     setSaving(true);
     try {
       let saved;
@@ -173,7 +179,7 @@ export default function Agenda({ userId, profile }) {
     const userItems = items.filter(item => {
       if (item.target_type === 'geral') return true;
       if (item.target_type === 'setor') return item.target_value === profile.sector;
-      if (item.target_type === 'lider') return item.target_value === profile.id;
+      if (item.target_type === 'lider') return item.target_value.split(',').includes(profile.id);
       return false;
     });
     const firstName = profile.full_name?.split(' ')[0] || profile.full_name;
@@ -228,8 +234,12 @@ export default function Agenda({ userId, profile }) {
   const targetLabel = (item) => {
     if (item.target_type === 'geral') return { label: 'Geral', cls: 'badge-green' };
     if (item.target_type === 'setor') return { label: `Setor: ${item.target_value}`, cls: 'badge-amber' };
-    const l = leaders.find(x => String(x.id) === String(item.target_value));
-    return { label: l ? l.name : 'Individual', cls: 'badge-purple' };
+    const ids = item.target_value ? item.target_value.split(',') : [];
+    const nomes = ids.map(id => {
+      const p = profiles.find(x => x.id === id);
+      return p ? p.full_name.split(' ')[0] : null;
+    }).filter(Boolean);
+    return { label: nomes.length ? nomes.join(', ') : 'Individual', cls: 'badge-purple' };
   };
 
   return (
@@ -451,11 +461,42 @@ export default function Agenda({ userId, profile }) {
         )}
         {form.target_type === 'lider' && (
           <div className="form-group">
-            <label className="form-label">Líder</label>
-            <select className="select" value={form.target_value} onChange={e => setForm(f => ({ ...f, target_value: e.target.value }))}>
-              <option value="">Selecionar líder...</option>
-              {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}{p.sector ? ` (${p.sector})` : ''}</option>)}
-            </select>
+            <label className="form-label">
+              Líderes
+              {form.target_value && (
+                <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
+                  {form.target_value.split(',').filter(Boolean).length} selecionado(s)
+                </span>
+              )}
+            </label>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto',
+              border: '1px solid var(--border)', borderRadius: 8, padding: '8px 4px' }}>
+              {profiles.length === 0 && (
+                <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
+                  Nenhum usuário cadastrado.
+                </p>
+              )}
+              {profiles.map(p => {
+                const selected = form.target_value.split(',').includes(p.id);
+                return (
+                  <label key={p.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6,
+                    cursor: 'pointer', background: selected ? 'rgba(232,98,42,.08)' : 'transparent',
+                    transition: 'background .15s',
+                  }}>
+                    <input type="checkbox" checked={selected} onChange={() => {
+                      const ids = form.target_value.split(',').filter(Boolean);
+                      const next = selected ? ids.filter(x => x !== p.id) : [...ids, p.id];
+                      setForm(f => ({ ...f, target_value: next.join(',') }));
+                    }} style={{ accentColor: 'var(--primary)', width: 15, height: 15, flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{p.full_name}</div>
+                      {p.sector && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.sector}</div>}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
           </div>
         )}
       </Modal>

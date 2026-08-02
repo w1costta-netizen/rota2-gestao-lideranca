@@ -10,33 +10,35 @@ const TOOLS  = [
   { id: 'text',   label: 'Texto',     Icon: Type },
 ];
 
-// Carrega imagem via blob para evitar problema de CORS no canvas (toDataURL)
+// Carrega imagem via blob para evitar CORS taint no canvas (toDataURL)
+// O blobUrl é mantido vivo até o componente desmontar para não tachar o canvas
 function useImage(url) {
   const [img, setImg] = useState(null);
   useEffect(() => {
     if (!url) return;
     let cancelled = false;
+    let blobUrl = null;
     fetch(url)
       .then(r => r.blob())
       .then(blob => {
         if (cancelled) return;
-        const blobUrl = URL.createObjectURL(blob);
+        blobUrl = URL.createObjectURL(blob);
         const i = new window.Image();
-        i.onload = () => {
-          if (!cancelled) setImg(i);
-          URL.revokeObjectURL(blobUrl);
-        };
+        i.onload = () => { if (!cancelled) setImg(i); };
         i.src = blobUrl;
+        // NÃO revogar aqui — o canvas precisa do blob ativo durante toDataURL
       })
       .catch(() => {
-        // fallback direto se fetch falhar
         if (cancelled) return;
         const i = new window.Image();
         i.crossOrigin = 'anonymous';
         i.onload = () => { if (!cancelled) setImg(i); };
         i.src = url;
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
   }, [url]);
   return img;
 }

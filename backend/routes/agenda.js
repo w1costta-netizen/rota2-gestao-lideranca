@@ -17,7 +17,7 @@ router.get('/', async (req, res) => {
     const filtered = data.filter(item => {
       if (item.target_type === 'geral') return true;
       if (item.target_type === 'setor') return item.target_value === sector;
-      if (item.target_type === 'lider') return item.target_value === user_id;
+      if (item.target_type === 'lider') return item.target_value.split(',').includes(user_id);
       return false;
     });
     return res.json(filtered);
@@ -38,7 +38,7 @@ router.get('/leader/:id', async (req, res) => {
     if (!leader.work_days.includes(item.day_of_week)) return false;
     if (item.target_type === 'geral') return true;
     if (item.target_type === 'setor') return item.target_value === leader.sector;
-    if (item.target_type === 'lider') return item.target_value === String(leader.id);
+    if (item.target_type === 'lider') return item.target_value.split(',').includes(String(leader.id));
     return false;
   });
   res.json({ leader, items: filtered });

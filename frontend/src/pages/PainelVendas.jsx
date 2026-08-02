@@ -141,11 +141,35 @@ function TabelaVendas({ linhas, marcarTotal }) {
 
   if (isMobile) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {linhasFinais.map((l, i) => {
-          const isTotal = totalRow && l.nome === totalRow.nome;
-          return <CardItem key={i} l={l} isTotal={isTotal} />;
-        })}
+      <div>
+        {/* Ordenação mobile */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>Ordenar por:</span>
+          <select
+            value={sortKey || ''}
+            onChange={e => { setSortKey(e.target.value || null); setSortAsc(false); }}
+            style={{ flex: 1, background: 'var(--surface)', border: '1px solid var(--border)',
+              color: 'var(--text)', borderRadius: 8, padding: '6px 10px', fontSize: 12 }}>
+            <option value="">Padrão</option>
+            {COLUNAS_TABELA.filter(c => c.key !== 'nome').map(c => (
+              <option key={c.key} value={c.key}>{c.label}</option>
+            ))}
+          </select>
+          {sortKey && (
+            <button
+              onClick={() => setSortAsc(a => !a)}
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 8, padding: '6px 10px', fontSize: 12, color: 'var(--text)', cursor: 'pointer' }}>
+              {sortAsc ? '▲' : '▼'}
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {linhasFinais.map((l, i) => {
+            const isTotal = totalRow && l.nome === totalRow.nome;
+            return <CardItem key={i} l={l} isTotal={isTotal} />;
+          })}
+        </div>
       </div>
     );
   }
