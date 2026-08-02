@@ -71,7 +71,7 @@ export default function Agenda({ userId, profile }) {
     }
   };
 
-  useEffect(() => { load(); }, [week, company]);
+  useEffect(() => { if (userId) load(); }, [week, company, userId, seeAll]);
   useEffect(() => {
     leadersAPI.list().then(r => {
       setLeaders(r.data);
