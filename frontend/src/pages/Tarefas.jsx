@@ -609,42 +609,35 @@ export default function Tarefas({ userId, profile }) {
             const isToday = selectedCalDay === todayYMD;
             const isTomorrow = selectedCalDay === toYMD(addDaysTo(new Date(), 1));
             const isPast = selDate < todayDate && !isToday;
-            // Helper: checa se a tarefa recorrente cai no selectedCalDay com base no padrão
-            const recMatches = (t) => {
-              if (!t.due_date) return false;
-              const origin = t.due_date; // data de origem da instância mais recente
-              if (t.recorrencia === 'diaria') {
-                // Bate em qualquer dia >= origin
-                return selectedCalDay >= origin;
-              }
-              if (t.recorrencia === 'semanal') {
-                const [dy,dm,dd] = origin.split('-').map(Number);
-                const [sy2,sm2,sd2] = selectedCalDay.split('-').map(Number);
-                return new Date(dy,dm-1,dd).getDay() === new Date(sy2,sm2-1,sd2).getDay()
-                  && selectedCalDay >= origin;
-              }
-              if (t.recorrencia === 'quinzenal') {
-                const diff = Math.round((new Date(selectedCalDay) - new Date(origin)) / 86400000);
-                return diff >= 0 && diff % 14 === 0;
-              }
-              if (t.recorrencia === 'mensal') {
-                return origin.split('-')[2] === selectedCalDay.split('-')[2]
-                  && selectedCalDay >= origin;
-              }
-              return false;
-            };
-
             const dayTasksRaw = calList.filter(t => {
               const rec = t.recorrencia && t.recorrencia !== 'nenhuma';
               // Tarefas normais: só mostra pendentes no dia exato
               if (!rec) return t.status === 'pendente' && t.due_date === selectedCalDay;
-              // Tarefas recorrentes pendentes: mostrar no dia exato OU em dias futuros que batem no padrão
-              if (t.status !== 'pendente') return t.due_date === selectedCalDay;
-              // Pendente: mostra no dia exato (instância real) ou como lembrete em dias >= hoje que batem
+              // Instância real para o dia exato (qualquer status): sempre mostra
               if (t.due_date === selectedCalDay) return true;
-              // Só mostra como lembrete futuro (não em dias passados sem instância)
-              if (selectedCalDay < todayYMD) return false;
-              return recMatches(t);
+              // Dias passados sem instância real: não mostra
+              if (selectedCalDay <= todayYMD) return false;
+              // Dias FUTUROS: projeta como lembrete apenas se a instância pendente
+              // é "recente" (dentro de 1 ciclo de hoje) e o padrão bate no dia
+              if (t.status !== 'pendente' || !t.due_date) return false;
+              const daysOld = Math.round((new Date(todayYMD) - new Date(t.due_date)) / 86400000);
+              const maxCycle = t.recorrencia === 'diaria' ? 1
+                : t.recorrencia === 'semanal' ? 7
+                : t.recorrencia === 'quinzenal' ? 14
+                : t.recorrencia === 'mensal' ? 31 : 0;
+              if (daysOld > maxCycle) return false; // muito atrasada, não projeta no futuro
+              // Checa padrão do dia
+              if (t.recorrencia === 'diaria') return true;
+              const [dy,dm,dd] = t.due_date.split('-').map(Number);
+              const [sy2,sm2,sd2] = selectedCalDay.split('-').map(Number);
+              if (t.recorrencia === 'semanal')
+                return new Date(dy,dm-1,dd).getDay() === new Date(sy2,sm2-1,sd2).getDay();
+              if (t.recorrencia === 'quinzenal') {
+                const diff = Math.round((new Date(selectedCalDay) - new Date(t.due_date)) / 86400000);
+                return diff % 14 === 0;
+              }
+              if (t.recorrencia === 'mensal') return t.due_date.split('-')[2] === selectedCalDay.split('-')[2];
+              return false;
             });
             // Deduplica recorrentes: por título+responsável, mantém pendente > em_andamento > concluída
             const STATUS_RANK = { pendente: 0, em_andamento: 1, concluida: 2 };
