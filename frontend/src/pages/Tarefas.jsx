@@ -607,27 +607,24 @@ export default function Tarefas({ userId, profile }) {
             const isPast = selDate < todayDate && !isToday;
             const dayTasks = calList.filter(t => {
               if (t.status === 'concluida') return false;
-              // Tarefa com data exata nesse dia
+              // Data exata
               if (t.due_date === selectedCalDay) return true;
-              if (!t.due_date || t.due_date > selectedCalDay) return false;
-              // Recorrência diária: aparece em todos os dias a partir da due_date
+              // Sem recorrência e data diferente → não mostra
+              if (!t.recorrencia || t.recorrencia === 'nenhuma') return false;
+              // Recorrências: ignora direção do due_date (backend recria com nova data)
               if (t.recorrencia === 'diaria') return true;
-              // Recorrência semanal: aparece se o dia da semana bate
+              if (!t.due_date) return false;
               if (t.recorrencia === 'semanal') {
                 const [dy,dm,dd] = t.due_date.split('-').map(Number);
                 const [sy,sm,sd] = selectedCalDay.split('-').map(Number);
                 return new Date(dy,dm-1,dd).getDay() === new Date(sy,sm-1,sd).getDay();
               }
-              // Quinzenal: a cada 14 dias
               if (t.recorrencia === 'quinzenal') {
                 const diff = Math.round((new Date(selectedCalDay) - new Date(t.due_date)) / 86400000);
-                return diff >= 0 && diff % 14 === 0;
+                return diff % 14 === 0;
               }
-              // Mensal: mesmo dia do mês
               if (t.recorrencia === 'mensal') {
-                const [dy,,dd] = t.due_date.split('-').map(Number);
-                const [sy,,sd] = selectedCalDay.split('-').map(Number);
-                return dd === sd;
+                return t.due_date.split('-')[2] === selectedCalDay.split('-')[2];
               }
               return false;
             });
