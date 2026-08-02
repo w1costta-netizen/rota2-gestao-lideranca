@@ -43,10 +43,15 @@ function formatDate(d) {
   const [y, m, day] = d.split('-');
   return `${day}/${m}/${y}`;
 }
-function isOverdue(due_date, status) {
+function isOverdue(due_date, due_time, status) {
   if (!due_date || status === 'concluida') return false;
-  const today = new Date(); today.setHours(0,0,0,0);
-  return new Date(due_date) < today;
+  const now = new Date();
+  const [y, mo, d] = due_date.split('-').map(Number);
+  if (due_time) {
+    const [h, min] = due_time.split(':').map(Number);
+    return now > new Date(y, mo-1, d, h, min, 0);
+  }
+  return now > new Date(y, mo-1, d, 23, 59, 59);
 }
 
 // ─── Componentes utilitários ─────────────────────────
@@ -157,7 +162,7 @@ export default function Tarefas({ userId, profile }) {
   const [editing, setEditing]   = useState(null);
   const [form, setForm]         = useState(EMPTY);
   const [saving, setSaving]     = useState(false);
-  const [filter, setFilter]     = useState('todas');
+  const [filter, setFilter]     = useState('hoje');
   const [filterResp, setFilterResp] = useState('');
   const [filterTag,  setFilterTag]  = useState('');
   const [viewMode, setViewMode] = useState('lista');       // 'lista' | 'calendario'
@@ -247,20 +252,27 @@ export default function Tarefas({ userId, profile }) {
     .map(([id, name]) => ({ id, name }));
 
   // ── Visão Lista ──────────────────────────────────────
-  let filtered = filter === 'todas' ? list : list.filter(t => t.status === filter);
+  const todayYMDList = toYMD(new Date());
+  let filtered = list.filter(t => {
+    if (filter === 'hoje')        return t.due_date === todayYMDList;
+    if (filter === 'pendente')    return isOverdue(t.due_date, t.due_time, t.status);
+    if (filter === 'em_andamento') return t.status === 'em_andamento';
+    if (filter === 'concluida')   return t.status === 'concluida';
+    return true;
+  });
   if (filterResp) filtered = filtered.filter(t => t.assigned_to === filterResp);
   if (filterTag)  filtered = filtered.filter(t => (t.tags || []).includes(filterTag));
   filtered = [...filtered].sort((a, b) => {
-    const oA = isOverdue(a.due_date, a.status) ? 0 : 1;
-    const oB = isOverdue(b.due_date, b.status) ? 0 : 1;
+    const oA = isOverdue(a.due_date, a.due_time, a.status) ? 0 : 1;
+    const oB = isOverdue(b.due_date, b.due_time, b.status) ? 0 : 1;
     if (oA !== oB) return oA - oB;
     const ord = { pendente:0, em_andamento:1, concluida:2 };
     return (ord[a.status]??1) - (ord[b.status]??1);
   });
 
   const counts = {
-    todas: list.length,
-    pendente: list.filter(t => t.status === 'pendente').length,
+    hoje: list.filter(t => t.due_date === todayYMDList).length,
+    pendente: list.filter(t => isOverdue(t.due_date, t.due_time, t.status)).length,
     em_andamento: list.filter(t => t.status === 'em_andamento').length,
     concluida: list.filter(t => t.status === 'concluida').length,
   };
@@ -282,7 +294,7 @@ export default function Tarefas({ userId, profile }) {
   if (filterTag)  calList = calList.filter(t => (t.tags||[]).includes(filterTag));
 
   const todayDate = new Date(); todayDate.setHours(0,0,0,0);
-  const overdueList  = calList.filter(t => t.status !== 'concluida' && t.due_date && new Date(t.due_date) < todayDate);
+  const overdueList  = calList.filter(t => isOverdue(t.due_date, t.due_time, t.status));
   const noDueList    = calList.filter(t => !t.due_date && t.status !== 'concluida');
   const byDate = {};
   calList.filter(t => t.due_date && new Date(t.due_date) >= todayDate).forEach(t => {
@@ -302,7 +314,7 @@ export default function Tarefas({ userId, profile }) {
 
   // ── Card de tarefa ────────────────────────────────────
   const renderTask = (t, hideDate = false) => {
-    const overdue   = isOverdue(t.due_date, t.status);
+    const overdue   = isOverdue(t.due_date, t.due_time, t.status);
     const concluida = t.status === 'concluida';
     const recorre   = t.recorrencia && t.recorrencia !== 'nenhuma';
     return (
@@ -473,10 +485,10 @@ export default function Tarefas({ userId, profile }) {
         <>
           {/* Filtros de status */}
           <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-            {[['todas','Todas'],['pendente','Pendentes'],['em_andamento','Em andamento'],['concluida','Concluídas']].map(([key,label]) => (
+            {[['hoje','Hoje','var(--primary)'],['pendente','Pendentes','#f59e0b'],['em_andamento','Em andamento','#6366f1'],['concluida','Concluídas','#10b981']].map(([key,label,color]) => (
               <button key={key} onClick={() => setFilter(key)} style={{
                 padding:'6px 14px', borderRadius:20, fontSize:12, fontWeight:600, cursor:'pointer',
-                background: filter===key ? (STATUS_COLOR[key]||'var(--primary)') : 'var(--surface)',
+                background: filter===key ? color : 'var(--surface)',
                 color: filter===key ? '#fff' : 'var(--text-muted)',
                 border:`1px solid ${filter===key ? 'transparent' : 'var(--border)'}`,
               }}>{label} ({counts[key]})</button>
