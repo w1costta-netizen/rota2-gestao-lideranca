@@ -609,26 +609,42 @@ export default function Tarefas({ userId, profile }) {
             const isToday = selectedCalDay === todayYMD;
             const isTomorrow = selectedCalDay === toYMD(addDaysTo(new Date(), 1));
             const isPast = selDate < todayDate && !isToday;
+            // Helper: checa se a tarefa recorrente cai no selectedCalDay com base no padrão
+            const recMatches = (t) => {
+              if (!t.due_date) return false;
+              const origin = t.due_date; // data de origem da instância mais recente
+              if (t.recorrencia === 'diaria') {
+                // Bate em qualquer dia >= origin
+                return selectedCalDay >= origin;
+              }
+              if (t.recorrencia === 'semanal') {
+                const [dy,dm,dd] = origin.split('-').map(Number);
+                const [sy2,sm2,sd2] = selectedCalDay.split('-').map(Number);
+                return new Date(dy,dm-1,dd).getDay() === new Date(sy2,sm2-1,sd2).getDay()
+                  && selectedCalDay >= origin;
+              }
+              if (t.recorrencia === 'quinzenal') {
+                const diff = Math.round((new Date(selectedCalDay) - new Date(origin)) / 86400000);
+                return diff >= 0 && diff % 14 === 0;
+              }
+              if (t.recorrencia === 'mensal') {
+                return origin.split('-')[2] === selectedCalDay.split('-')[2]
+                  && selectedCalDay >= origin;
+              }
+              return false;
+            };
+
             const dayTasksRaw = calList.filter(t => {
               const rec = t.recorrencia && t.recorrencia !== 'nenhuma';
               // Tarefas normais: só mostra pendentes no dia exato
               if (!rec) return t.status === 'pendente' && t.due_date === selectedCalDay;
-              // Tarefas recorrentes: aparecem em todos os dias aplicáveis (são lembretes fixos)
-              if (t.recorrencia === 'diaria') return true;
-              if (!t.due_date) return false;
-              if (t.recorrencia === 'semanal') {
-                const [dy,dm,dd] = t.due_date.split('-').map(Number);
-                const [sy2,sm2,sd2] = selectedCalDay.split('-').map(Number);
-                return new Date(dy,dm-1,dd).getDay() === new Date(sy2,sm2-1,sd2).getDay();
-              }
-              if (t.recorrencia === 'quinzenal') {
-                const diff = Math.round((new Date(selectedCalDay) - new Date(t.due_date)) / 86400000);
-                return diff >= 0 && diff % 14 === 0;
-              }
-              if (t.recorrencia === 'mensal') {
-                return t.due_date.split('-')[2] === selectedCalDay.split('-')[2];
-              }
-              return false;
+              // Tarefas recorrentes pendentes: mostrar no dia exato OU em dias futuros que batem no padrão
+              if (t.status !== 'pendente') return t.due_date === selectedCalDay;
+              // Pendente: mostra no dia exato (instância real) ou como lembrete em dias >= hoje que batem
+              if (t.due_date === selectedCalDay) return true;
+              // Só mostra como lembrete futuro (não em dias passados sem instância)
+              if (selectedCalDay < todayYMD) return false;
+              return recMatches(t);
             });
             // Deduplica recorrentes: por título+responsável, mantém pendente > em_andamento > concluída
             const STATUS_RANK = { pendente: 0, em_andamento: 1, concluida: 2 };
@@ -663,7 +679,7 @@ export default function Tarefas({ userId, profile }) {
                 icon={icon}
                 emptyMsg="Será que não está esquecendo de agendar uma tarefa? 🤔"
                 renderFn={t => t.recorrencia && t.recorrencia !== 'nenhuma'
-                  ? renderTask(t, false, true)
+                  ? renderTask({ ...t, due_date: selectedCalDay }, false, true)
                   : renderTask(t, true)}
               />
             );
