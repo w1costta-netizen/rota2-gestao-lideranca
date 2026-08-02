@@ -167,6 +167,7 @@ export default function Tarefas({ userId, profile }) {
   const [filterTag,  setFilterTag]  = useState('');
   const [viewMode, setViewMode] = useState('lista');       // 'lista' | 'calendario'
   const [calWeekOffset, setCalWeekOffset] = useState(0);  // semanas a partir da atual
+  const [selectedCalDay, setSelectedCalDay] = useState(() => toYMD(new Date()));
   const loadingRef = useRef(false);
   const company = profile?.company || '';
 
@@ -519,7 +520,7 @@ export default function Tarefas({ userId, profile }) {
 
             {/* Navegação mês */}
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 }}>
-              <button onClick={() => setCalWeekOffset(o => o - 1)} style={{
+              <button onClick={() => { setCalWeekOffset(o => o - 1); setSelectedCalDay(toYMD(addDaysTo(calMonday, -7))); }} style={{
                 background:'none', border:'1px solid var(--border)', borderRadius:8,
                 padding:'4px 10px', cursor:'pointer', color:'var(--text-muted)',
                 display:'flex', alignItems:'center' }}>
@@ -528,7 +529,7 @@ export default function Tarefas({ userId, profile }) {
               <span style={{ fontSize:14, fontWeight:700, color:'var(--text)', textTransform:'capitalize' }}>
                 {calMonthLabel}
               </span>
-              <button onClick={() => setCalWeekOffset(o => o + 1)} style={{
+              <button onClick={() => { setCalWeekOffset(o => o + 1); setSelectedCalDay(toYMD(addDaysTo(calMonday, 7))); }} style={{
                 background:'none', border:'1px solid var(--border)', borderRadius:8,
                 padding:'4px 10px', cursor:'pointer', color:'var(--text-muted)',
                 display:'flex', alignItems:'center' }}>
@@ -541,18 +542,20 @@ export default function Tarefas({ userId, profile }) {
               {calWeekDays.map((day, i) => {
                 const ymd = toYMD(day);
                 const isToday = ymd === todayYMD;
+                const isSelected = ymd === selectedCalDay;
                 const hasTasks = hasTasksOn(ymd);
                 const isPast = day < todayDate;
                 return (
-                  <button key={ymd} onClick={() => scrollToDate(ymd)}
+                  <button key={ymd} onClick={() => setSelectedCalDay(ymd)}
                     style={{
                       display:'flex', flexDirection:'column', alignItems:'center', gap:4,
-                      padding:'8px 4px', borderRadius:10, border:'none', cursor:'pointer',
-                      background: isToday ? 'var(--primary)' : 'transparent',
+                      padding:'8px 4px', borderRadius:10, border: isSelected && !isToday ? '2px solid var(--primary)' : '2px solid transparent',
+                      cursor:'pointer',
+                      background: isToday ? 'var(--primary)' : isSelected ? 'rgba(232,98,42,.12)' : 'transparent',
                       transition:'background .15s',
                     }}>
                     <span style={{ fontSize:10, fontWeight:600,
-                      color: isToday ? '#fff' : isPast ? 'var(--text-muted)' : 'var(--text-muted)',
+                      color: isToday ? '#fff' : 'var(--text-muted)',
                       opacity: isPast && !isToday ? 0.5 : 1 }}>
                       {WEEK_LETTERS[i]}
                     </span>
@@ -573,7 +576,7 @@ export default function Tarefas({ userId, profile }) {
             {/* Botão voltar para hoje */}
             {calWeekOffset !== 0 && (
               <div style={{ textAlign:'center', marginTop:10 }}>
-                <button onClick={() => setCalWeekOffset(0)} style={{
+                <button onClick={() => { setCalWeekOffset(0); setSelectedCalDay(todayYMD); }} style={{
                   fontSize:12, color:'var(--primary)', background:'none', border:'none',
                   cursor:'pointer', fontWeight:600, textDecoration:'underline',
                 }}>
@@ -583,15 +586,7 @@ export default function Tarefas({ userId, profile }) {
             )}
           </div>
 
-          {/* Seções por data */}
-          {list.length === 0 && (
-            <div style={{ textAlign:'center', padding:60, color:'var(--text-muted)' }}>
-              <ClipboardList size={40} style={{ opacity:.3, marginBottom:12 }}/>
-              <p>Nenhuma tarefa criada ainda.</p>
-            </div>
-          )}
-
-          {/* Atrasadas */}
+          {/* Atrasadas — sempre visíveis se existirem */}
           {overdueList.length > 0 && (
             <CalSection
               id="cal-section-atrasadas"
@@ -602,45 +597,33 @@ export default function Tarefas({ userId, profile }) {
             />
           )}
 
-          {/* Hoje (sempre mostra, mesmo vazia) */}
-          <CalSection
-            id={`cal-section-${todayYMD}`}
-            label={`Hoje · ${dayLabel(todayYMD)} · ${todayDate.getDate()} ${MONTHS_PT[todayDate.getMonth()]}.`}
-            labelColor="var(--primary)"
-            tasks={byDate[todayYMD] || []}
-            icon="📌"
-            emptyMsg="Nenhuma tarefa para hoje. Aproveite! 🎉"
-          />
-
-          {/* Datas futuras com tarefas */}
-          {futureDates.filter(d => d !== todayYMD).map(ymd => {
-            const [y,m,d] = ymd.split('-').map(Number);
-            const dt = new Date(y, m-1, d);
+          {/* Tarefas do dia selecionado */}
+          {(() => {
+            const [sy, sm, sd] = selectedCalDay.split('-').map(Number);
+            const selDate = new Date(sy, sm-1, sd);
             const WEEKDAY = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
-            const label = `${WEEKDAY[dt.getDay()]} · ${d} ${MONTHS_PT[dt.getMonth()]}.`;
-            const isTomorrow = ymd === toYMD(addDaysTo(new Date(), 1));
+            const isToday = selectedCalDay === todayYMD;
+            const isTomorrow = selectedCalDay === toYMD(addDaysTo(new Date(), 1));
+            const isPast = selDate < todayDate && !isToday;
+            const dayTasks = calList.filter(t => t.due_date === selectedCalDay && !isOverdue(t.due_date, t.due_time, t.status));
+            const label = isToday
+              ? `Hoje · ${sd} ${MONTHS_PT[sm-1]}.`
+              : isTomorrow
+              ? `Amanhã · ${WEEKDAY[selDate.getDay()]} · ${sd} ${MONTHS_PT[sm-1]}.`
+              : `${WEEKDAY[selDate.getDay()]} · ${sd} ${MONTHS_PT[sm-1]}.`;
+            const color = isToday ? 'var(--primary)' : isTomorrow ? '#f59e0b' : isPast ? 'var(--text-muted)' : 'var(--text)';
+            const icon = isToday ? '📌' : isTomorrow ? '🔜' : isPast ? '📂' : '📅';
             return (
               <CalSection
-                key={ymd}
-                id={`cal-section-${ymd}`}
-                label={isTomorrow ? `Amanhã · ${label}` : label}
-                labelColor={isTomorrow ? '#f59e0b' : undefined}
-                tasks={byDate[ymd]}
-                icon={isTomorrow ? '🔜' : undefined}
+                id={`cal-section-${selectedCalDay}`}
+                label={label}
+                labelColor={color}
+                tasks={dayTasks}
+                icon={icon}
+                emptyMsg="Será que não está esquecendo de agendar uma tarefa? 🤔"
               />
             );
-          })}
-
-          {/* Sem prazo */}
-          {noDueList.length > 0 && (
-            <CalSection
-              id="cal-section-nodate"
-              label="Sem prazo definido"
-              labelColor="var(--text-muted)"
-              tasks={noDueList}
-              icon="📋"
-            />
-          )}
+          })()}
         </div>
       )}
 
