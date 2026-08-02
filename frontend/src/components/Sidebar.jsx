@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 
@@ -41,6 +41,17 @@ const NAV_GROUPS = [
     ],
   },
   {
+    id:    'operacoes',
+    label: 'Operações',
+    icon:  Briefcase,
+    items: [
+      { id: 'nscale',    label: 'Escala',    icon: CalendarRange, perm: 'escala' },
+      { id: 'cashier',   label: 'Caixas',    icon: ShoppingCart,  perm: 'caixas' },
+      { id: 'relatorios',label: 'Tour 4x4',  icon: Camera,        perm: 'relatorios' },
+      { id: 'campanhas', label: 'Flyers',    icon: Tag,           perm: 'campanhas' },
+    ],
+  },
+  {
     id:    'equipe',
     label: 'Equipe',
     icon:  UserCircle,
@@ -55,7 +66,7 @@ const NAV_GROUPS = [
 // Ordem final na sidebar: solos intercalados com grupos na posição certa
 // dashboard → grupos → resto
 const SOLO_BEFORE = ['lojas', 'dashboard'];
-const SOLO_AFTER  = ['campanhas','relatorios','vendas_gestao','vendas_painel','estoque','importador_estoque','nscale','cashier'];
+const SOLO_AFTER  = ['vendas_gestao','vendas_painel','estoque','importador_estoque'];
 
 export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, isMobile }) {
   const { profile, signOut } = useAuth();
