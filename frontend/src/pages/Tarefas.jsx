@@ -313,60 +313,18 @@ export default function Tarefas({ userId, profile }) {
     if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
   };
 
-  // ── Card de tarefa recorrente (lembrete no calendário) ───
-  const renderRecurringReminder = (t) => (
-    <div key={t.id} style={{
-      background:'var(--surface)', borderRadius:12, padding:'12px 16px',
-      border:'1px solid var(--border)',
-      borderLeft:`4px solid #6366f1`,
-    }}>
-      <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
-        <RefreshCw size={18} style={{ color:'#6366f1', flexShrink:0, marginTop:2 }}/>
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:4 }}>
-            <span style={{ fontWeight:700, fontSize:14, color:'var(--text)' }}>{t.title}</span>
-            <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
-              background:'#6366f122', color:'#6366f1' }}>
-              <RefreshCw size={9} style={{ display:'inline', marginRight:3 }}/>{RECORRENCIA_LABEL[t.recorrencia]}
-            </span>
-            <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
-              background:PRIORITY_COLOR[t.priority]+'22', color:PRIORITY_COLOR[t.priority] }}>
-              {PRIORITY_LABEL[t.priority]}
-            </span>
-          </div>
-          {t.description && (
-            <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:6, lineHeight:1.4 }}>{t.description}</div>
-          )}
-          {(t.tags||[]).length > 0 && (
-            <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:6 }}>
-              {t.tags.map(tag => <TagChip key={tag} tag={tag} small/>)}
-            </div>
-          )}
-          <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:12, color:'var(--text-muted)' }}>
-            <span>👤 {t.assigned?.full_name || '—'}</span>
-            {t.due_time && <span>🕐 {t.due_time}</span>}
-          </div>
-        </div>
-        {canEdit(t) && (
-          <button className="btn-icon" onClick={() => openEdit(t)} title="Editar" style={{ flexShrink:0 }}>
-            <Pencil size={14}/>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-
   // ── Card de tarefa ────────────────────────────────────
-  const renderTask = (t, hideDate = false) => {
+  const renderTask = (t, hideDate = false, asRecurring = false) => {
     const overdue   = isOverdue(t.due_date, t.due_time, t.status);
     const concluida = t.status === 'concluida';
+    const borderColor = asRecurring ? '#6366f1' : PRIORITY_COLOR[t.priority] || 'var(--border)';
     const recorre   = t.recorrencia && t.recorrencia !== 'nenhuma';
     return (
       <div key={t.id} style={{
         background:'var(--surface)', borderRadius:12, padding:'14px 16px',
         border:`1px solid ${overdue ? '#ef444450' : 'var(--border)'}`,
-        borderLeft:`4px solid ${PRIORITY_COLOR[t.priority]||'var(--border)'}`,
-        opacity: concluida ? 0.65 : 1, transition:'opacity .2s',
+        borderLeft:`4px solid ${borderColor}`,
+        opacity: concluida && !asRecurring ? 0.65 : 1, transition:'opacity .2s',
       }}>
         <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
           <button onClick={() => updateStatus(t, nextStatus(t.status))}
@@ -378,26 +336,29 @@ export default function Tarefas({ userId, profile }) {
           </button>
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:4 }}>
+              {asRecurring && <RefreshCw size={14} style={{ color:'#6366f1', flexShrink:0 }}/>}
               <span style={{ fontWeight:700, fontSize:14,
-                textDecoration: concluida ? 'line-through' : 'none',
-                color: concluida ? 'var(--text-muted)' : 'var(--text)' }}>
+                textDecoration: 'none',
+                color: 'var(--text)' }}>
                 {t.title}
               </span>
               <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
                 background:PRIORITY_COLOR[t.priority]+'22', color:PRIORITY_COLOR[t.priority] }}>
                 {PRIORITY_LABEL[t.priority]}
               </span>
-              <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
-                background:STATUS_COLOR[t.status]+'22', color:STATUS_COLOR[t.status] }}>
-                {STATUS_LABEL[t.status]}
-              </span>
-              {overdue && (
+              {!asRecurring && (
+                <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
+                  background:STATUS_COLOR[t.status]+'22', color:STATUS_COLOR[t.status] }}>
+                  {STATUS_LABEL[t.status]}
+                </span>
+              )}
+              {!asRecurring && overdue && (
                 <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
                   background:'#ef444422', color:'#ef4444' }}>⚠ Atrasada</span>
               )}
               {recorre && (
                 <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
-                  background:'#06b6d422', color:'#06b6d4', display:'flex', alignItems:'center', gap:3 }}>
+                  background:'#6366f122', color:'#6366f1', display:'flex', alignItems:'center', gap:3 }}>
                   <RefreshCw size={9}/> {RECORRENCIA_LABEL[t.recorrencia]}
                 </span>
               )}
@@ -414,12 +375,12 @@ export default function Tarefas({ userId, profile }) {
             )}
             <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:12, color:'var(--text-muted)' }}>
               <span>👤 {t.assigned?.full_name || '—'}</span>
-              {!hideDate && t.due_date && (
-                <span style={{ color: overdue ? '#ef4444' : 'var(--text-muted)', fontWeight: overdue ? 700 : 400 }}>
-                  📅 {formatDate(t.due_date)}{t.due_time ? ` às ${t.due_time}` : ''}{overdue ? ' · vencida' : ''}
+              {t.due_date && (
+                <span style={{ color: overdue && !asRecurring ? '#ef4444' : 'var(--text-muted)', fontWeight: overdue && !asRecurring ? 700 : 400 }}>
+                  📅 {formatDate(t.due_date)}{t.due_time ? ` às ${t.due_time}` : ''}{overdue && !asRecurring ? ' · vencida' : ''}
                 </span>
               )}
-              {hideDate && t.due_time && (
+              {!t.due_date && t.due_time && (
                 <span>🕐 {t.due_time}</span>
               )}
               <span>Por {t.creator?.full_name || '—'}</span>
@@ -648,7 +609,7 @@ export default function Tarefas({ userId, profile }) {
             const isToday = selectedCalDay === todayYMD;
             const isTomorrow = selectedCalDay === toYMD(addDaysTo(new Date(), 1));
             const isPast = selDate < todayDate && !isToday;
-            const dayTasks = calList.filter(t => {
+            const dayTasksRaw = calList.filter(t => {
               const rec = t.recorrencia && t.recorrencia !== 'nenhuma';
               // Tarefas normais: só mostra pendentes no dia exato
               if (!rec) return t.status === 'pendente' && t.due_date === selectedCalDay;
@@ -657,18 +618,35 @@ export default function Tarefas({ userId, profile }) {
               if (!t.due_date) return false;
               if (t.recorrencia === 'semanal') {
                 const [dy,dm,dd] = t.due_date.split('-').map(Number);
-                const [sy,sm,sd] = selectedCalDay.split('-').map(Number);
-                return new Date(dy,dm-1,dd).getDay() === new Date(sy,sm-1,sd).getDay();
+                const [sy2,sm2,sd2] = selectedCalDay.split('-').map(Number);
+                return new Date(dy,dm-1,dd).getDay() === new Date(sy2,sm2-1,sd2).getDay();
               }
               if (t.recorrencia === 'quinzenal') {
                 const diff = Math.round((new Date(selectedCalDay) - new Date(t.due_date)) / 86400000);
-                return diff % 14 === 0;
+                return diff >= 0 && diff % 14 === 0;
               }
               if (t.recorrencia === 'mensal') {
                 return t.due_date.split('-')[2] === selectedCalDay.split('-')[2];
               }
               return false;
             });
+            // Deduplica recorrentes: por título+responsável, mantém pendente > em_andamento > concluída
+            const STATUS_RANK = { pendente: 0, em_andamento: 1, concluida: 2 };
+            const recMap = new Map();
+            const dayTasks = [];
+            for (const t of dayTasksRaw) {
+              const rec = t.recorrencia && t.recorrencia !== 'nenhuma';
+              if (!rec) { dayTasks.push(t); continue; }
+              const key = `${t.title}||${t.assigned_to}`;
+              const existing = recMap.get(key);
+              if (!existing) { recMap.set(key, t); }
+              else {
+                const er = STATUS_RANK[existing.status] ?? 2;
+                const tr = STATUS_RANK[t.status] ?? 2;
+                if (tr < er || (tr === er && t.due_date > existing.due_date)) recMap.set(key, t);
+              }
+            }
+            for (const t of recMap.values()) dayTasks.push(t);
             const label = isToday
               ? `Hoje · ${sd} ${MONTHS_PT[sm-1]}.`
               : isTomorrow
@@ -685,7 +663,7 @@ export default function Tarefas({ userId, profile }) {
                 icon={icon}
                 emptyMsg="Será que não está esquecendo de agendar uma tarefa? 🤔"
                 renderFn={t => t.recorrencia && t.recorrencia !== 'nenhuma'
-                  ? renderRecurringReminder(t)
+                  ? renderTask(t, false, true)
                   : renderTask(t, true)}
               />
             );
