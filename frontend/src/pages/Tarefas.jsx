@@ -597,11 +597,6 @@ export default function Tarefas({ userId, profile }) {
             />
           )}
 
-          {/* Debug temporário */}
-          <div style={{ fontSize:11, color:'#888', marginBottom:8, padding:'6px 10px', background:'#1a1a1a', borderRadius:6 }}>
-            Total lista: {list.length} | Diárias pendentes: {list.filter(t => t.recorrencia === 'diaria' && t.status !== 'concluida').length} | Dia selecionado: {selectedCalDay}
-          </div>
-
           {/* Tarefas do dia selecionado */}
           {(() => {
             const [sy, sm, sd] = selectedCalDay.split('-').map(Number);

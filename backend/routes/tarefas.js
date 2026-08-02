@@ -115,7 +115,7 @@ router.put('/:id', async (req, res) => {
 
   const { data: task } = await supabase
     .from('tarefas')
-    .select('created_by, assigned_to, title, due_date, due_time, recorrencia, tags, company, description, priority')
+    .select('created_by, assigned_to, title, due_date, due_time, recorrencia, tags, company, description, priority, lembrete_minutos')
     .eq('id', req.params.id).single();
 
   const isOwner = task?.created_by === requester_id && task?.assigned_to === requester_id;
@@ -148,18 +148,21 @@ router.put('/:id', async (req, res) => {
     const proxData = nextDueDate(task.due_date, task.recorrencia);
     if (proxData) {
       supabase.from('tarefas').insert({
-        company:     task.company,
-        title:       task.title,
-        description: task.description,
-        assigned_to: task.assigned_to,
-        created_by:  task.created_by,
-        due_date:    proxData,
-        due_time:    task.due_time,
-        priority:    task.priority,
-        recorrencia: task.recorrencia,
-        tags:        task.tags || [],
-        status:      'pendente',
-      }).then(() => {}).catch(() => {});
+        company:          task.company,
+        title:            task.title,
+        description:      task.description || null,
+        assigned_to:      task.assigned_to,
+        created_by:       task.created_by,
+        due_date:         proxData,
+        due_time:         task.due_time || null,
+        priority:         task.priority || 'normal',
+        recorrencia:      task.recorrencia,
+        tags:             task.tags || [],
+        lembrete_minutos: task.lembrete_minutos || null,
+        status:           'pendente',
+      }).then(({ error: e }) => {
+        if (e) console.error('[recorrencia] falha ao criar próxima instância:', e.message);
+      }).catch(err => console.error('[recorrencia] erro inesperado:', err));
     }
   }
 
