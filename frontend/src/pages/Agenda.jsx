@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, FileDown, Send } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, FileDown, Send, CalendarDays } from 'lucide-react';
 import { agendaAPI, leadersAPI, pdfAPI } from '../api';
 import api from '../api';
 import { useToast } from '../components/Toast';
@@ -21,14 +21,22 @@ export default function Agenda({ userId, profile }) {
   const toast = useToast();
   // canManage: pode criar/editar/deletar itens de agenda
   // seeAll: vê todos os itens da empresa (só admin/master — master já vira admin via effectiveProfile)
-  const canManage = ['admin', 'supervisor'].includes(profile?.access_level);
+  const canManage = ['admin', 'supervisor', 'lider'].includes(profile?.access_level);
   const seeAll    = profile?.access_level === 'admin';
-  const isAdmin   = canManage; // mantido para compatibilidade com UI
-  const [week, setWeek]       = useState(getWeekStart());
-  const [items, setItems]     = useState([]);
-  const [leaders, setLeaders] = useState([]);   // tabela antiga (pdf/whatsapp individual)
-  const [profiles, setProfiles] = useState([]); // usuários do novo sistema
-  const [sectors, setSectors] = useState([]);
+  const isAdmin   = canManage;
+  const [week, setWeek]         = useState(getWeekStart());
+  const [items, setItems]       = useState([]);
+  const [leaders, setLeaders]   = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [sectors, setSectors]   = useState([]);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [selectedDay, setSelectedDay] = useState(() => {
+    // Começa no dia atual da semana (ou segunda se fim de semana)
+    const jsDay = new Date().getDay(); // 0=Dom
+    const map = [6, 0, 1, 2, 3, 4, 5]; // Dom→índice6, Seg→0, ...
+    const idx = map[jsDay];
+    return DAYS[idx < 6 ? idx : 0]; // Se sábado/domingo, cai na segunda
+  });
   const [modal, setModal]     = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm]       = useState(EMPTY_ITEM);
@@ -41,11 +49,14 @@ export default function Agenda({ userId, profile }) {
   const [sendQueue, setSendQueue] = useState([]); // modal sequencial
   const [sendQueueIdx, setSendQueueIdx] = useState(0);
 
-  // Registra push na primeira visita
   useEffect(() => {
-    if (userId && Notification.permission !== 'denied') {
-      registerPush(userId);
-    }
+    const fn = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+
+  useEffect(() => {
+    if (userId && Notification.permission !== 'denied') registerPush(userId);
   }, [userId]);
 
   const company = profile?.company || '';
@@ -284,12 +295,46 @@ export default function Agenda({ userId, profile }) {
         </div>
       )}
 
+      {/* ── Seletor de dia (só mobile) ──────────────────── */}
+      {isMobile && (
+        <div style={{ background:'var(--surface)', border:'1px solid var(--border)',
+          borderRadius:14, padding:'12px 10px', marginBottom:16 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
+            {DAYS.map(day => {
+              const hasItems = byDay[day]?.length > 0;
+              const isActive = selectedDay === day;
+              return (
+                <button key={day} onClick={() => setSelectedDay(day)} style={{
+                  display:'flex', flexDirection:'column', alignItems:'center', gap:3,
+                  padding:'8px 2px', borderRadius:10, border:'none', cursor:'pointer',
+                  background: isActive ? 'var(--primary)' : 'transparent',
+                  transition:'background .15s',
+                }}>
+                  <span style={{ fontSize:9, fontWeight:600, color: isActive ? '#fff' : 'var(--text-muted)' }}>
+                    {DAY_LABELS[day].slice(0,3).toUpperCase()}
+                  </span>
+                  <div style={{ width:6, height:6, borderRadius:'50%',
+                    background: hasItems ? (isActive ? '#fff' : 'var(--primary)') : 'transparent' }}/>
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ textAlign:'center', marginTop:8, fontSize:13, fontWeight:700, color:'var(--text)' }}>
+            {DAY_LABELS[selectedDay]}
+            <span style={{ fontSize:12, fontWeight:400, color:'var(--text-muted)', marginLeft:6 }}>
+              {byDay[selectedDay]?.length || 0} item{byDay[selectedDay]?.length !== 1 ? 's' : ''}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* ── Grade de dias ────────────────────────────────── */}
       <div className="agenda-grid">
-        {DAYS.map(day => (
+        {DAYS.filter(day => !isMobile || day === selectedDay).map(day => (
           <div className="agenda-day-col" key={day}>
             <div className="agenda-day-title">
               <span>{DAY_LABELS[day]}</span>
-              {isAdmin && (
+              {canManage && (
                 <button
                   style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 6, padding: '2px 8px', color: 'white', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
                   onClick={() => openNew(day)} title="Adicionar item"
@@ -307,7 +352,7 @@ export default function Agenda({ userId, profile }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
                         <div className="agenda-item-title">{item.title}</div>
-                        {isAdmin && (
+                        {canManage && (
                           <div className="agenda-item-actions">
                             <button className="btn-icon" style={{ padding: 4 }} onClick={() => openEdit(item)}><Pencil size={12} /></button>
                             <button className="btn-icon danger" style={{ padding: 4 }} onClick={() => remove(item.id)}><Trash2 size={12} /></button>
@@ -327,6 +372,19 @@ export default function Agenda({ userId, profile }) {
           </div>
         ))}
       </div>
+
+      {/* FAB mobile */}
+      {canManage && (
+        <button onClick={() => openNew(isMobile ? selectedDay : 'segunda')} style={{
+          position:'fixed', bottom:24, right:20, zIndex:500,
+          width:52, height:52, borderRadius:'50%',
+          background:'var(--primary)', color:'#fff', border:'none',
+          display:'flex', alignItems:'center', justifyContent:'center',
+          boxShadow:'0 4px 16px rgba(232,98,42,.5)', cursor:'pointer',
+        }} aria-label="Novo item">
+          <Plus size={24}/>
+        </button>
+      )}
 
       {/* Modal — Selecionar líderes para envio */}
       {sendAllModal && (
