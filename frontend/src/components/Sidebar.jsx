@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 
@@ -41,6 +41,24 @@ const NAV_GROUPS = [
     ],
   },
   {
+    id:    'vendas',
+    label: 'Vendas',
+    icon:  TrendingUp,
+    items: [
+      { id: 'vendas_gestao', label: 'Gestão de Vendas', icon: FolderOpen, perm: 'vendas_gestao' },
+      { id: 'vendas_painel', label: 'Painel de Vendas', icon: BarChart2,  perm: 'vendas_painel' },
+    ],
+  },
+  {
+    id:    'estoque_grupo',
+    label: 'Estoque',
+    icon:  Package,
+    items: [
+      { id: 'estoque',           label: 'Estoque',         icon: Package,    perm: 'estoque' },
+      { id: 'importador_estoque',label: 'Importar Estoque',icon: PackagePlus,perm: 'importador_estoque' },
+    ],
+  },
+  {
     id:    'operacoes',
     label: 'Operações',
     icon:  Briefcase,
@@ -66,7 +84,7 @@ const NAV_GROUPS = [
 // Ordem final na sidebar: solos intercalados com grupos na posição certa
 // dashboard → grupos → resto
 const SOLO_BEFORE = ['lojas', 'dashboard'];
-const SOLO_AFTER  = ['vendas_gestao','vendas_painel','estoque','importador_estoque'];
+const SOLO_AFTER  = [];
 
 export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, isMobile }) {
   const { profile, signOut } = useAuth();
