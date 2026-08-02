@@ -313,6 +313,49 @@ export default function Tarefas({ userId, profile }) {
     if (el) el.scrollIntoView({ behavior:'smooth', block:'start' });
   };
 
+  // ── Card de tarefa recorrente (lembrete no calendário) ───
+  const renderRecurringReminder = (t) => (
+    <div key={t.id} style={{
+      background:'var(--surface)', borderRadius:12, padding:'12px 16px',
+      border:'1px solid var(--border)',
+      borderLeft:`4px solid #6366f1`,
+    }}>
+      <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
+        <RefreshCw size={18} style={{ color:'#6366f1', flexShrink:0, marginTop:2 }}/>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:6, flexWrap:'wrap', marginBottom:4 }}>
+            <span style={{ fontWeight:700, fontSize:14, color:'var(--text)' }}>{t.title}</span>
+            <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
+              background:'#6366f122', color:'#6366f1' }}>
+              <RefreshCw size={9} style={{ display:'inline', marginRight:3 }}/>{RECORRENCIA_LABEL[t.recorrencia]}
+            </span>
+            <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
+              background:PRIORITY_COLOR[t.priority]+'22', color:PRIORITY_COLOR[t.priority] }}>
+              {PRIORITY_LABEL[t.priority]}
+            </span>
+          </div>
+          {t.description && (
+            <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:6, lineHeight:1.4 }}>{t.description}</div>
+          )}
+          {(t.tags||[]).length > 0 && (
+            <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:6 }}>
+              {t.tags.map(tag => <TagChip key={tag} tag={tag} small/>)}
+            </div>
+          )}
+          <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:12, color:'var(--text-muted)' }}>
+            <span>👤 {t.assigned?.full_name || '—'}</span>
+            {t.due_time && <span>🕐 {t.due_time}</span>}
+          </div>
+        </div>
+        {canEdit(t) && (
+          <button className="btn-icon" onClick={() => openEdit(t)} title="Editar" style={{ flexShrink:0 }}>
+            <Pencil size={14}/>
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   // ── Card de tarefa ────────────────────────────────────
   const renderTask = (t, hideDate = false) => {
     const overdue   = isOverdue(t.due_date, t.due_time, t.status);
@@ -395,7 +438,7 @@ export default function Tarefas({ userId, profile }) {
   };
 
   // ── Seção de data (calendário) ────────────────────────
-  const CalSection = ({ id, label, labelColor, tasks, icon, emptyMsg }) => (
+  const CalSection = ({ id, label, labelColor, tasks, icon, emptyMsg, renderFn }) => (
     <div id={id} style={{ marginBottom:24 }}>
       <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10,
         paddingBottom:8, borderBottom:`2px solid ${labelColor||'var(--border)'}` }}>
@@ -408,7 +451,7 @@ export default function Tarefas({ userId, profile }) {
       {tasks.length === 0
         ? <p style={{ fontSize:13, color:'var(--text-muted)', paddingLeft:4 }}>{emptyMsg || 'Nenhuma tarefa.'}</p>
         : <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            {tasks.map(t => renderTask(t, true))}
+            {tasks.map(t => (renderFn ? renderFn(t) : renderTask(t, true)))}
           </div>
       }
     </div>
@@ -641,6 +684,9 @@ export default function Tarefas({ userId, profile }) {
                 tasks={dayTasks}
                 icon={icon}
                 emptyMsg="Será que não está esquecendo de agendar uma tarefa? 🤔"
+                renderFn={t => t.recorrencia && t.recorrencia !== 'nenhuma'
+                  ? renderRecurringReminder(t)
+                  : renderTask(t, true)}
               />
             );
           })()}
