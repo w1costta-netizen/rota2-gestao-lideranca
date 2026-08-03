@@ -749,6 +749,7 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
 function ModalEvidencia({ foto, userId, onSave, onClose }) {
   const toast = useToast();
   const fileRef = useRef();
+  const ignorarBackdrop = useRef(false);
   const [imgFile, setImgFile]       = useState(null);
   const [preview, setPreview]       = useState(null);
   const [comentario, setComentario] = useState(foto.evidencia_comentario || '');
@@ -759,6 +760,10 @@ function ModalEvidencia({ foto, userId, onSave, onClose }) {
     if (!file) return;
     setImgFile(file);
     setPreview(URL.createObjectURL(file));
+    // No celular, ao retornar da câmera o browser dispara um clique espúrio no backdrop.
+    // Ignoramos o backdrop por 600ms após o retorno da câmera/galeria.
+    ignorarBackdrop.current = true;
+    setTimeout(() => { ignorarBackdrop.current = false; }, 600);
   };
 
   const handleSave = async () => {
@@ -787,7 +792,7 @@ function ModalEvidencia({ foto, userId, onSave, onClose }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:9998, background:'rgba(0,0,0,.45)' }}/>
+      <div onClick={() => { if (!ignorarBackdrop.current) onClose(); }} style={{ position:'fixed', inset:0, zIndex:9998, background:'rgba(0,0,0,.45)' }}/>
       <div style={{
         position:'fixed', zIndex:9999, top:'50%', left:'50%', transform:'translate(-50%,-50%)',
         background:'var(--surface)', borderRadius:14, padding:22, width:340,
