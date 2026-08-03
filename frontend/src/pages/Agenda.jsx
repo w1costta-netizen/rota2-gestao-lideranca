@@ -245,7 +245,7 @@ export default function Agenda({ userId, profile }) {
     const targetProfile = profiles.find(p => p.id === viewUserId);
     if (item.target_type === 'geral') return true;
     if (item.target_type === 'setor') return targetProfile?.sector === item.target_value;
-    if (item.target_type === 'individual') {
+    if (item.target_type === 'lider') {
       const ids = item.target_value ? item.target_value.split(',') : [];
       return ids.includes(viewUserId);
     }
