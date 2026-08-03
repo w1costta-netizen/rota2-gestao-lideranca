@@ -669,8 +669,7 @@ export default function Tarefas({ userId, profile }) {
             const isToday = selectedCalDay === todayYMD;
             const isTomorrow = selectedCalDay === toYMD(addDaysTo(new Date(), 1));
             const isPast = selDate < todayDate && !isToday;
-            console.log('[cal] selectedCalDay:', selectedCalDay, '| todayYMD:', todayYMD);
-            calList.forEach(t => console.log(`  tarefa: "${t.title}" | rec=${t.recorrencia} | status=${t.status} | due=${t.due_date}`));
+
             const dayTasksRaw = calList.filter(t => {
               const rec = t.recorrencia && t.recorrencia !== 'nenhuma';
               // Normais: só pendentes no dia exato

@@ -17,7 +17,8 @@ function timeAgo(dateStr) {
 
 export default function Comunicados({ userId, profile }) {
   const toast = useToast();
-  const isAdmin = ['admin', 'supervisor', 'master', 'lider', 'colaborador'].includes(profile?.access_level);
+  const isAdmin = true; // todos podem criar comunicados
+  const canManage = ['admin', 'supervisor', 'master'].includes(profile?.access_level);
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(false);
@@ -176,7 +177,7 @@ export default function Comunicados({ userId, profile }) {
                   stopPropagation
                 />
               </div>
-              {isAdmin && (
+              {canManage && (
                 <div style={{ display:'flex', gap:6, flexShrink:0 }} onClick={e => e.stopPropagation()}>
                   <button className="btn-icon" onClick={() => openEdit(c)} title="Editar">
                     <Pencil size={14}/>

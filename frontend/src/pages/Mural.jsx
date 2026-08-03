@@ -18,7 +18,8 @@ function getCat(key) { return CATEGORIES.find(c => c.key === key) || CATEGORIES[
 
 export default function Mural({ userId, profile }) {
   const toast = useToast();
-  const isAdmin = ['admin', 'supervisor', 'master', 'lider', 'colaborador'].includes(profile?.access_level);
+  const isAdmin = true; // todos podem criar cards no mural
+  const canManage = ['admin', 'supervisor', 'master'].includes(profile?.access_level);
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(false);
@@ -161,7 +162,7 @@ export default function Mural({ userId, profile }) {
                   </span>
                   <div style={{ fontWeight:700, fontSize:15 }}>{m.title}</div>
                 </div>
-                {isAdmin && (
+                {canManage && (
                   <div style={{ display:'flex', gap:4, flexShrink:0 }}>
                     <button className="btn-icon" onClick={() => openEdit(m)}><Pencil size={13}/></button>
                     <button className="btn-icon" onClick={() => remove(m.id)} style={{ color:'#ef4444' }}><Trash2 size={13}/></button>
