@@ -167,7 +167,8 @@ export default function Tarefas({ userId, profile }) {
   const [filterTag,  setFilterTag]  = useState('');
   const [viewMode, setViewMode] = useState('lista');       // 'lista' | 'calendario'
   const [calWeekOffset, setCalWeekOffset] = useState(0);  // semanas a partir da atual
-  const [selectedCalDay, setSelectedCalDay] = useState(() => toYMD(new Date()));
+  const [selectedCalDay, setSelectedCalDay] = useState(() =>
+    new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }));
   const loadingRef = useRef(false);
   const company = profile?.company || '';
 
@@ -279,7 +280,8 @@ export default function Tarefas({ userId, profile }) {
   };
 
   // ── Visão Calendário ─────────────────────────────────
-  const todayYMD = toYMD(new Date());
+  // Usa fuso de Brasília explícito para evitar bug de meia-noite em UTC
+  const todayYMD = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
   const calMonday = (() => { const m = getMonday(new Date()); m.setDate(m.getDate() + calWeekOffset * 7); return m; })();
   const calWeekDays = Array.from({length:7}, (_,i) => addDaysTo(calMonday, i));
   const WEEK_LETTERS = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
@@ -609,6 +611,8 @@ export default function Tarefas({ userId, profile }) {
             const isToday = selectedCalDay === todayYMD;
             const isTomorrow = selectedCalDay === toYMD(addDaysTo(new Date(), 1));
             const isPast = selDate < todayDate && !isToday;
+            console.log('[cal] selectedCalDay:', selectedCalDay, '| todayYMD:', todayYMD);
+            calList.forEach(t => console.log(`  tarefa: "${t.title}" | rec=${t.recorrencia} | status=${t.status} | due=${t.due_date}`));
             const dayTasksRaw = calList.filter(t => {
               const rec = t.recorrencia && t.recorrencia !== 'nenhuma';
               // Normais: só pendentes no dia exato
@@ -617,8 +621,8 @@ export default function Tarefas({ userId, profile }) {
               if (t.due_date === selectedCalDay) return true;
               // Dias passados sem instância real: não mostra virtual
               if (selectedCalDay < todayYMD) return false;
-              // Hoje e futuro: só tarefas pendentes, a partir da data de início
-              if (t.status !== 'pendente' || !t.due_date) return false;
+              // Hoje e futuro: mostra pendente e em_andamento (concluída não, pois backend já criou próxima)
+              if (t.status === 'concluida' || !t.due_date) return false;
               if (selectedCalDay < t.due_date) return false;
               // Checa padrão de recorrência
               if (t.recorrencia === 'diaria') return true;
