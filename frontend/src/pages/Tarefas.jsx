@@ -611,22 +611,16 @@ export default function Tarefas({ userId, profile }) {
             const isPast = selDate < todayDate && !isToday;
             const dayTasksRaw = calList.filter(t => {
               const rec = t.recorrencia && t.recorrencia !== 'nenhuma';
-              // Tarefas normais: só mostra pendentes no dia exato
+              // Normais: só pendentes no dia exato
               if (!rec) return t.status === 'pendente' && t.due_date === selectedCalDay;
-              // Instância real para o dia exato (qualquer status): sempre mostra
+              // Instância real no dia exato: sempre mostra
               if (t.due_date === selectedCalDay) return true;
-              // Dias passados (antes de hoje) sem instância real: não mostra
+              // Dias passados sem instância real: não mostra virtual
               if (selectedCalDay < todayYMD) return false;
-              // Dias FUTUROS: projeta como lembrete apenas se a instância pendente
-              // é "recente" (dentro de 1 ciclo de hoje) e o padrão bate no dia
+              // Hoje e futuro: só tarefas pendentes, a partir da data de início
               if (t.status !== 'pendente' || !t.due_date) return false;
-              const daysOld = Math.round((new Date(todayYMD) - new Date(t.due_date)) / 86400000);
-              const maxCycle = t.recorrencia === 'diaria' ? 1
-                : t.recorrencia === 'semanal' ? 7
-                : t.recorrencia === 'quinzenal' ? 14
-                : t.recorrencia === 'mensal' ? 31 : 0;
-              if (daysOld > maxCycle) return false; // muito atrasada, não projeta no futuro
-              // Checa padrão do dia
+              if (selectedCalDay < t.due_date) return false;
+              // Checa padrão de recorrência
               if (t.recorrencia === 'diaria') return true;
               const [dy,dm,dd] = t.due_date.split('-').map(Number);
               const [sy2,sm2,sd2] = selectedCalDay.split('-').map(Number);
@@ -657,9 +651,6 @@ export default function Tarefas({ userId, profile }) {
             }
             for (const t of recMap.values()) dayTasks.push(t);
 
-            // DEBUG temporário
-            const recInList = calList.filter(t => t.recorrencia && t.recorrencia !== 'nenhuma');
-
             const label = isToday
               ? `Hoje · ${sd} ${MONTHS_PT[sm-1]}.`
               : isTomorrow
@@ -679,14 +670,6 @@ export default function Tarefas({ userId, profile }) {
                   ? renderTask({ ...t, due_date: selectedCalDay }, false, true)
                   : renderTask(t, true)}
               />
-              {/* DEBUG — remover após diagnóstico */}
-              <div style={{ fontSize:11, background:'#1a1a1a', border:'1px solid #333', borderRadius:8, padding:10, marginTop:8, color:'#aaa', whiteSpace:'pre-wrap', wordBreak:'break-all' }}>
-                <b style={{color:'#fff'}}>DEBUG</b>{'\n'}
-                today={todayYMD} | sel={selectedCalDay}{'\n'}
-                calList total={calList.length} | recorrentes={recInList.length}{'\n'}
-                {recInList.map(t => `  [${t.recorrencia}] "${t.title}" due=${t.due_date} status=${t.status}`).join('\n')}
-                {'\n'}dayTasksRaw={dayTasksRaw.length} | dayTasks={dayTasks.length}
-              </div>
             );
           })()}
         </div>
