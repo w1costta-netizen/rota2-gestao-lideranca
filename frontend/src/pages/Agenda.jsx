@@ -652,11 +652,31 @@ export default function Agenda({ userId, profile }) {
             </label>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 200, overflowY: 'auto',
               border: '1px solid var(--border)', borderRadius: 8, padding: '8px 4px' }}>
-              {profiles.length === 0 && (
+              {profiles.length === 0 && !profile?.full_name && (
                 <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '12px 0' }}>
                   Nenhum usuário cadastrado.
                 </p>
               )}
+              {/* Inclui o usuário master logado se não estiver na lista da loja */}
+              {!profiles.find(p => p.id === userId) && profile?.full_name && (() => {
+                const selected = form.target_value.split(',').includes(userId);
+                return (
+                  <label key={userId} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 6,
+                    cursor: 'pointer', background: selected ? 'rgba(232,98,42,.08)' : 'transparent',
+                  }}>
+                    <input type="checkbox" checked={selected} onChange={() => {
+                      const ids = form.target_value.split(',').filter(Boolean);
+                      const next = selected ? ids.filter(x => x !== userId) : [...ids, userId];
+                      setForm(f => ({ ...f, target_value: next.join(',') }));
+                    }} style={{ accentColor: 'var(--primary)', width: 15, height: 15, flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{profile.full_name} ⭐</div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Minha agenda</div>
+                    </div>
+                  </label>
+                );
+              })()}
               {profiles.map(p => {
                 const selected = form.target_value.split(',').includes(p.id);
                 return (
