@@ -535,9 +535,13 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
   const remove = async (id, e) => {
     e.stopPropagation();
     if (!window.confirm('Remover este relatório?')) return;
-    await api.delete(`/relatorios/${id}?requester_id=${userId}`).catch(() => toast('Erro ao remover', 'error'));
-    setList(l => l.filter(r => r.id !== id));
-    toast('Relatório removido');
+    try {
+      await api.delete(`/relatorios/${id}?requester_id=${userId}`);
+      setList(l => l.filter(r => r.id !== id));
+      toast('Relatório removido');
+    } catch {
+      toast('Erro ao remover', 'error');
+    }
   };
 
   // Setores únicos presentes nos tours
