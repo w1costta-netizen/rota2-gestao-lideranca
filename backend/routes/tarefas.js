@@ -208,6 +208,31 @@ router.post('/:id/comentarios', async (req, res) => {
   res.json(data);
 });
 
+// PUT /api/tarefas/comentarios/:cid — editar comentário (só o autor)
+router.put('/comentarios/:cid', async (req, res) => {
+  const { requester_id, text } = req.body;
+  if (!text?.trim()) return res.status(400).json({ error: 'text obrigatório' });
+  const { data: c } = await supabase.from('tarefa_comentarios').select('user_id').eq('id', req.params.cid).single();
+  if (!c) return res.status(404).json({ error: 'Comentário não encontrado' });
+  if (c.user_id !== requester_id) return res.status(403).json({ error: 'Só o autor pode editar' });
+  const { data, error } = await supabase.from('tarefa_comentarios')
+    .update({ text: text.trim() }).eq('id', req.params.cid)
+    .select('*, author:user_id(full_name)').single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// DELETE /api/tarefas/comentarios/:cid — apagar comentário (só o autor)
+router.delete('/comentarios/:cid', async (req, res) => {
+  const { requester_id } = req.query;
+  const { data: c } = await supabase.from('tarefa_comentarios').select('user_id').eq('id', req.params.cid).single();
+  if (!c) return res.status(404).json({ error: 'Comentário não encontrado' });
+  if (c.user_id !== requester_id) return res.status(403).json({ error: 'Só o autor pode apagar' });
+  const { error } = await supabase.from('tarefa_comentarios').delete().eq('id', req.params.cid);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 // DELETE /api/tarefas/:id
 router.delete('/:id', async (req, res) => {
   const { requester_id } = req.query;

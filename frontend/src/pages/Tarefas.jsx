@@ -74,12 +74,14 @@ function TagChip({ tag, onRemove, small }) {
 
 function CommentSection({ taskId, userId }) {
   const toast = useToast();
-  const [comments, setComments] = useState([]);
-  const [loading, setLoading]   = useState(false);
-  const [loaded, setLoaded]     = useState(false);
-  const [open, setOpen]         = useState(false);
-  const [text, setText]         = useState('');
-  const [sending, setSending]   = useState(false);
+  const [comments, setComments]   = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [loaded, setLoaded]       = useState(false);
+  const [open, setOpen]           = useState(false);
+  const [text, setText]           = useState('');
+  const [sending, setSending]     = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editText, setEditText]   = useState('');
 
   const load = useCallback(async () => {
     if (loaded) return;
@@ -105,6 +107,27 @@ function CommentSection({ taskId, userId }) {
     finally { setSending(false); }
   };
 
+  const startEdit = (c) => { setEditingId(c.id); setEditText(c.text); };
+
+  const saveEdit = async (id) => {
+    if (!editText.trim()) return;
+    try {
+      const r = await api.put(`/tarefas/comentarios/${id}`, { requester_id: userId, text: editText.trim() });
+      setComments(cs => cs.map(c => c.id === id ? r.data : c));
+      setEditingId(null);
+      toast('Atualização editada');
+    } catch { toast('Erro ao editar', 'error'); }
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm('Apagar esta atualização?')) return;
+    try {
+      await api.delete(`/tarefas/comentarios/${id}?requester_id=${userId}`);
+      setComments(cs => cs.filter(c => c.id !== id));
+      toast('Atualização apagada');
+    } catch { toast('Erro ao apagar', 'error'); }
+  };
+
   return (
     <div style={{ marginTop:10, borderTop:'1px solid var(--border)', paddingTop:8 }}>
       <button onClick={toggle} style={{ background:'none', border:'none', cursor:'pointer',
@@ -122,13 +145,45 @@ function CommentSection({ taskId, userId }) {
           <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:8 }}>
             {comments.map(c => (
               <div key={c.id} style={{ background:'var(--bg)', borderRadius:8, padding:'8px 10px', border:'1px solid var(--border)' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:2 }}>
                   <span style={{ fontSize:11, fontWeight:700, color:'var(--primary)' }}>{c.author?.full_name || 'Usuário'}</span>
-                  <span style={{ fontSize:10, color:'var(--text-muted)' }}>
-                    {c.created_at ? new Date(c.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''}
-                  </span>
+                  <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                    <span style={{ fontSize:10, color:'var(--text-muted)' }}>
+                      {c.created_at ? new Date(c.created_at).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : ''}
+                    </span>
+                    {c.user_id === userId && editingId !== c.id && (
+                      <>
+                        <button onClick={() => startEdit(c)} title="Editar"
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:0, lineHeight:1 }}>
+                          <Pencil size={11}/>
+                        </button>
+                        <button onClick={() => remove(c.id)} title="Apagar"
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#ef4444', padding:0, lineHeight:1 }}>
+                          <Trash2 size={11}/>
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div style={{ fontSize:12, color:'var(--text)', lineHeight:1.4 }}>{c.text}</div>
+                {editingId === c.id ? (
+                  <div style={{ display:'flex', gap:6, marginTop:4 }}>
+                    <textarea value={editText} onChange={e => setEditText(e.target.value)}
+                      rows={2} autoFocus
+                      style={{ flex:1, padding:'6px 8px', borderRadius:6, border:'1px solid var(--primary)',
+                        background:'var(--bg)', color:'var(--text)', fontSize:12,
+                        resize:'none', fontFamily:'inherit', lineHeight:'1.4' }}/>
+                    <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                      <button onClick={() => saveEdit(c.id)}
+                        style={{ background:'var(--primary)', border:'none', borderRadius:6, padding:'5px 8px',
+                          cursor:'pointer', color:'#fff', fontSize:11, fontWeight:700 }}>✓</button>
+                      <button onClick={() => setEditingId(null)}
+                        style={{ background:'none', border:'1px solid var(--border)', borderRadius:6, padding:'5px 8px',
+                          cursor:'pointer', color:'var(--text-muted)', fontSize:11 }}>✕</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize:12, color:'var(--text)', lineHeight:1.4, whiteSpace:'pre-wrap' }}>{c.text}</div>
+                )}
               </div>
             ))}
           </div>
