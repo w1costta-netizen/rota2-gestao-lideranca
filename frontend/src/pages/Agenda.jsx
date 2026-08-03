@@ -376,6 +376,10 @@ export default function Agenda({ userId, profile }) {
             }}
           >
             <option value="all">👥 Todos os itens</option>
+            {/* Usuário logado sempre aparece primeiro, mesmo sendo master de outra empresa */}
+            {!profiles.find(p => p.id === userId) && profile?.full_name && (
+              <option value={userId}>👤 Minha agenda ({profile.full_name.split(' ')[0]})</option>
+            )}
             {profiles.map(p => (
               <option key={p.id} value={p.id}>
                 {p.id === userId ? `👤 Minha agenda (${p.full_name.split(' ')[0]})` : p.full_name}
