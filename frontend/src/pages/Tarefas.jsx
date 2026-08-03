@@ -656,6 +656,10 @@ export default function Tarefas({ userId, profile }) {
               }
             }
             for (const t of recMap.values()) dayTasks.push(t);
+
+            // DEBUG temporário
+            const recInList = calList.filter(t => t.recorrencia && t.recorrencia !== 'nenhuma');
+
             const label = isToday
               ? `Hoje · ${sd} ${MONTHS_PT[sm-1]}.`
               : isTomorrow
@@ -675,6 +679,14 @@ export default function Tarefas({ userId, profile }) {
                   ? renderTask({ ...t, due_date: selectedCalDay }, false, true)
                   : renderTask(t, true)}
               />
+              {/* DEBUG — remover após diagnóstico */}
+              <div style={{ fontSize:11, background:'#1a1a1a', border:'1px solid #333', borderRadius:8, padding:10, marginTop:8, color:'#aaa', whiteSpace:'pre-wrap', wordBreak:'break-all' }}>
+                <b style={{color:'#fff'}}>DEBUG</b>{'\n'}
+                today={todayYMD} | sel={selectedCalDay}{'\n'}
+                calList total={calList.length} | recorrentes={recInList.length}{'\n'}
+                {recInList.map(t => `  [${t.recorrencia}] "${t.title}" due=${t.due_date} status=${t.status}`).join('\n')}
+                {'\n'}dayTasksRaw={dayTasksRaw.length} | dayTasks={dayTasks.length}
+              </div>
             );
           })()}
         </div>
