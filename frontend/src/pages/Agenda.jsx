@@ -21,7 +21,7 @@ export default function Agenda({ userId, profile }) {
   const toast = useToast();
   // canManage: pode criar/editar/deletar itens de agenda
   // seeAll: vê todos os itens da empresa (só admin/master — master já vira admin via effectiveProfile)
-  const canManage = ['admin', 'supervisor', 'lider'].includes(profile?.access_level);
+  const canManage = ['admin', 'supervisor', 'lider', 'master'].includes(profile?.access_level);
   const seeAll    = profile?.access_level === 'admin';
   const isAdmin   = canManage;
   const [week, setWeek]         = useState(getWeekStart());
