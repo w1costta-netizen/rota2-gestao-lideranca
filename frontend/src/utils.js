@@ -34,20 +34,27 @@ export function unformatPhone(value) {
   return digits;
 }
 
+// Retorna a data atual no fuso de Brasília como string YYYY-MM-DD
+function todayBrasilia() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
 export function getWeekStart(date = new Date()) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0); // zera horário para evitar drift de fuso (UTC-3)
-  const day = d.getDay(); // 0=dom, 6=sab
+  // Obtém a data no fuso de Brasília independente do fuso do dispositivo
+  const ymd = date === undefined || date instanceof Date && !isNaN(date)
+    ? new Date(date).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+    : new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+  const [y, m, d] = ymd.split('-').map(Number);
+  const day = new Date(y, m - 1, d).getDay(); // 0=dom … 6=sab
   let diff;
   if (day === 6) diff = 2;      // sábado → próxima segunda
   else if (day === 0) diff = 1; // domingo → próxima segunda
   else diff = 1 - day;          // seg–sex → segunda desta semana
-  d.setDate(d.getDate() + diff);
-  // Usa data local (não UTC) para evitar bug de fuso horário
-  const y  = d.getFullYear();
-  const m  = String(d.getMonth() + 1).padStart(2, '0');
-  const dd = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
+  const monday = new Date(y, m - 1, d + diff);
+  const my = monday.getFullYear();
+  const mm = String(monday.getMonth() + 1).padStart(2, '0');
+  const md = String(monday.getDate()).padStart(2, '0');
+  return `${my}-${mm}-${md}`;
 }
 
 export function addDays(dateStr, days) {
