@@ -133,11 +133,14 @@ function CommentSection({ taskId, userId }) {
             ))}
           </div>
           <div style={{ display:'flex', gap:6 }}>
-            <input value={text} onChange={e => setText(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && send()}
+            <textarea value={text} onChange={e => setText(e.target.value)}
               placeholder="Adicionar atualização..."
+              rows={1}
               style={{ flex:1, padding:'7px 10px', borderRadius:8, border:'1px solid var(--border)',
-                background:'var(--bg)', color:'var(--text)', fontSize:12 }}/>
+                background:'var(--bg)', color:'var(--text)', fontSize:12,
+                resize:'none', overflowY:'hidden', lineHeight:'1.4',
+                fontFamily:'inherit' }}
+              onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}/>
             <button onClick={send} disabled={sending || !text.trim()} style={{
               background:'var(--primary)', border:'none', borderRadius:8, padding:'7px 10px',
               cursor:'pointer', color:'#fff', display:'flex', alignItems:'center',
