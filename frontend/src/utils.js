@@ -36,14 +36,18 @@ export function unformatPhone(value) {
 
 export function getWeekStart(date = new Date()) {
   const d = new Date(date);
+  d.setHours(0, 0, 0, 0); // zera horário para evitar drift de fuso (UTC-3)
   const day = d.getDay(); // 0=dom, 6=sab
-  // No fds já mostra a próxima semana (planejamento)
   let diff;
   if (day === 6) diff = 2;      // sábado → próxima segunda
   else if (day === 0) diff = 1; // domingo → próxima segunda
   else diff = 1 - day;          // seg–sex → segunda desta semana
   d.setDate(d.getDate() + diff);
-  return d.toISOString().split('T')[0];
+  // Usa data local (não UTC) para evitar bug de fuso horário
+  const y  = d.getFullYear();
+  const m  = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 export function addDays(dateStr, days) {
