@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, FileDown, Send, CalendarDays } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, FileDown, Send, CalendarDays, Printer } from 'lucide-react';
 import { agendaAPI, leadersAPI, pdfAPI } from '../api';
 import api from '../api';
 import { useToast } from '../components/Toast';
@@ -242,6 +242,78 @@ export default function Agenda({ userId, profile }) {
   const byDay = {};
   DAYS.forEach(d => { byDay[d] = items.filter(i => i.day_of_week === d); });
 
+  const printWeekPDF = () => {
+    const [wy, wm, wd] = week.split('-').map(Number);
+    const weekLabel = formatDate(week);
+    const companyName = profile?.company || '';
+
+    const dayRows = DAYS.map((day, idx) => {
+      const date = new Date(Date.UTC(wy, wm - 1, wd + idx));
+      const dd = String(date.getUTCDate()).padStart(2, '0');
+      const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const dayItems = byDay[day] || [];
+      const itemsHtml = dayItems.length === 0
+        ? '<tr><td colspan="3" style="color:#999;font-style:italic;padding:6px 8px;">Nenhum item</td></tr>'
+        : dayItems.map(i => {
+            const tl = i.target_type === 'geral' ? 'Geral'
+              : i.target_type === 'setor' ? `Setor: ${i.target_value}`
+              : i.target_value ? i.target_value.split(',').map(id => {
+                  const p = profiles.find(x => x.id === id);
+                  return p ? p.full_name.split(' ')[0] : '';
+                }).filter(Boolean).join(', ') : 'Individual';
+            return `<tr>
+              <td style="padding:6px 8px;width:70px;font-weight:600;color:#333;">${i.time || '—'}</td>
+              <td style="padding:6px 8px;">
+                <div style="font-weight:600;font-size:13px;">${i.title}</div>
+                ${i.description ? `<div style="font-size:11px;color:#666;margin-top:2px;">${i.description}</div>` : ''}
+              </td>
+              <td style="padding:6px 8px;font-size:11px;color:#555;white-space:nowrap;">${tl}</td>
+            </tr>`;
+          }).join('');
+
+      return `
+        <div style="margin-bottom:14px;break-inside:avoid;">
+          <div style="background:#e8621a;color:#fff;padding:6px 12px;font-weight:700;font-size:13px;border-radius:4px 4px 0 0;">
+            ${DAY_LABELS[day]} &nbsp;·&nbsp; ${dd}/${mm}
+          </div>
+          <table style="width:100%;border-collapse:collapse;border:1px solid #ddd;border-top:none;border-radius:0 0 4px 4px;">
+            ${itemsHtml}
+          </table>
+        </div>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Agenda ${weekLabel} — ${companyName}</title>
+  <style>
+    @page { size: A4 portrait; margin: 15mm 12mm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #222; }
+    h1 { font-size: 18px; font-weight: 800; margin-bottom: 2px; }
+    .subtitle { font-size: 12px; color: #666; margin-bottom: 16px; }
+    table tr:nth-child(even) { background: #f9f9f9; }
+    table tr td { border-bottom: 1px solid #eee; vertical-align: top; }
+    @media print {
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Agenda Semanal — ${companyName}</h1>
+  <div class="subtitle">${weekLabel}</div>
+  ${dayRows}
+  <div style="margin-top:20px;font-size:10px;color:#aaa;text-align:right;">Gerado em ${new Date().toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})}</div>
+  <script>window.onload = () => { window.print(); }<\/script>
+</body>
+</html>`;
+
+    const win = window.open('', '_blank');
+    win.document.write(html);
+    win.document.close();
+  };
+
   const targetLabel = (item) => {
     if (item.target_type === 'geral') return { label: 'Geral', cls: 'badge-green' };
     if (item.target_type === 'setor') return { label: `Setor: ${item.target_value}`, cls: 'badge-amber' };
@@ -264,6 +336,9 @@ export default function Agenda({ userId, profile }) {
           <button className="btn btn-ghost btn-sm" onClick={prevWeek}><ChevronLeft size={15} /></button>
           <span style={{ fontWeight: 600, fontSize: 13 }}>{formatDate(week)}</span>
           <button className="btn btn-ghost btn-sm" onClick={nextWeek}><ChevronRight size={15} /></button>
+          <button className="btn btn-ghost btn-sm" onClick={printWeekPDF} title="Imprimir / Baixar PDF da semana">
+            <Printer size={15} />{!isMobile && ' PDF'}
+          </button>
           {isAdmin && <>
             <button className="btn btn-ghost btn-sm" onClick={openSendAllModal} title="Enviar para líderes"><Send size={15} /> Enviar</button>
             <button className="btn btn-primary btn-sm" onClick={() => openNew()}><Plus size={15} /> Novo item</button>
