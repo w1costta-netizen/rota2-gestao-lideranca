@@ -8,8 +8,15 @@ const { sendPushToTargets } = require('../lib/push');
 router.get('/', async (req, res) => {
   const { week_start, user_id, sector, company } = req.query;
   let query = supabase.from('agenda_items').select('*').order('day_of_week').order('time');
-  if (week_start) query = query.eq('week_start', week_start);
-  if (company)    query = query.eq('company', company);
+  if (week_start) {
+    // Busca por intervalo da semana (segunda a domingo) para tolerar
+    // itens salvos com week_start ligeiramente diferente por bug de fuso horário
+    const [wy, wm, wd] = week_start.split('-').map(Number);
+    const endDate = new Date(Date.UTC(wy, wm - 1, wd + 7));
+    const week_end = endDate.toISOString().split('T')[0];
+    query = query.gte('week_start', week_start).lt('week_start', week_end);
+  }
+  if (company) query = query.eq('company', company);
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
