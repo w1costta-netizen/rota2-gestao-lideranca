@@ -17,7 +17,7 @@ function timeAgo(dateStr) {
 
 export default function Comunicados({ userId, profile }) {
   const toast = useToast();
-  const isAdmin = ['admin', 'supervisor'].includes(profile?.access_level);
+  const isAdmin = ['admin', 'supervisor', 'master', 'lider', 'colaborador'].includes(profile?.access_level);
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(false);

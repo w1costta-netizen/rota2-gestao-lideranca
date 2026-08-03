@@ -18,7 +18,7 @@ function getCat(key) { return CATEGORIES.find(c => c.key === key) || CATEGORIES[
 
 export default function Mural({ userId, profile }) {
   const toast = useToast();
-  const isAdmin = ['admin', 'supervisor'].includes(profile?.access_level);
+  const isAdmin = ['admin', 'supervisor', 'master', 'lider', 'colaborador'].includes(profile?.access_level);
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(false);
