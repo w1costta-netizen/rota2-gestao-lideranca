@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
 
   let query = supabase
     .from('relatorios_fotograficos')
-    .select('*, creator:created_by(full_name), fotos:relatorio_fotos(id, photo_url, order_index)')
+    .select('*, creator:created_by(full_name), fotos:relatorio_fotos(id, photo_url, order_index, evidencia_url, evidencia_comentario)')
     .eq('company', me.company)
     .order('created_at', { ascending: false });
 
