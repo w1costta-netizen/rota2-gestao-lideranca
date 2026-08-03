@@ -615,8 +615,8 @@ export default function Tarefas({ userId, profile }) {
               if (!rec) return t.status === 'pendente' && t.due_date === selectedCalDay;
               // Instância real para o dia exato (qualquer status): sempre mostra
               if (t.due_date === selectedCalDay) return true;
-              // Dias passados sem instância real: não mostra
-              if (selectedCalDay <= todayYMD) return false;
+              // Dias passados (antes de hoje) sem instância real: não mostra
+              if (selectedCalDay < todayYMD) return false;
               // Dias FUTUROS: projeta como lembrete apenas se a instância pendente
               // é "recente" (dentro de 1 ciclo de hoje) e o padrão bate no dia
               if (t.status !== 'pendente' || !t.due_date) return false;
