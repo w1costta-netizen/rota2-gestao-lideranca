@@ -35,14 +35,14 @@ router.post('/importar', upload.single('file'), async (req, res) => {
       cd_produto:             r['CD_PRODUTO'] != null ? String(r['CD_PRODUTO']).padStart(6, '0') : null,
       ean:                    r['EAN']        != null ? String(r['EAN']) : null,
       descricao_produto:      r['DESCRICAO_PRODUTO']             || null,
-      motivo_suspencao:       r['MOTIVO_SUSPENCAO']              ?? 0,
+      motivo_suspencao:       Math.round(r['MOTIVO_SUSPENCAO']   ?? 0),
       produto_status:         r['PRODUTO_STATUS']                || null,
       descricao_setor:        r['DESCRICAO_SETOR']               || null,
       descricao_departamento: r['DESCRICAO_DEPARTAMENTO']        || null,
       descricao_secao:        r['DESCRICAO_SECAO']               || null,
       descricao_linha:        r['DESCRICAO_LINHA']               || null,
       data_ultima_nf:         r['DATA_ULTIMA_NF'] instanceof Date ? r['DATA_ULTIMA_NF'].toISOString() : null,
-      estoque_qty:            r['sum_ESTOQUE_ON_HAND_LOJA_QTD']  ?? 0,
+      estoque_qty:            Math.round(r['sum_ESTOQUE_ON_HAND_LOJA_QTD'] ?? 0),
       importado_at,
     }));
 
