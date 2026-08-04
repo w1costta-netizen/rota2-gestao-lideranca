@@ -68,6 +68,23 @@ router.post('/importar', upload.single('file'), async (req, res) => {
   }
 });
 
+// GET /api/conferencia/ultima-importacao?requester_id=
+router.get('/ultima-importacao', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const me = await getProfile(requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const { data } = await supabase.from('produtos_conferencia')
+    .select('importado_at')
+    .eq('company', me.company)
+    .order('importado_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  res.json({ importado_at: data?.importado_at || null });
+});
+
 // GET /api/conferencia/filtros?requester_id=&setor=&departamento=&secao=
 // Retorna valores únicos para os seletores em cascata
 router.get('/filtros', async (req, res) => {

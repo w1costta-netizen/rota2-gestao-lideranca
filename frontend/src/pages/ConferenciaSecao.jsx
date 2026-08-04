@@ -13,6 +13,13 @@ function ListaSessoes({ userId, profile, onNova, onAbrir }) {
   const toast = useToast();
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [ultimaImportacao, setUltimaImportacao] = useState(null);
+
+  const carregarUltimaImportacao = useCallback(() => {
+    api.get(`/conferencia/ultima-importacao?requester_id=${userId}`)
+      .then(r => setUltimaImportacao(r.data.importado_at))
+      .catch(() => {});
+  }, [userId]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -22,7 +29,7 @@ function ListaSessoes({ userId, profile, onNova, onAbrir }) {
       .finally(() => setLoading(false));
   }, [userId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); carregarUltimaImportacao(); }, [load, carregarUltimaImportacao]);
 
   const remover = async (id, e) => {
     e.stopPropagation();
@@ -36,6 +43,11 @@ function ListaSessoes({ userId, profile, onNova, onAbrir }) {
 
   const canImport = ['admin', 'master'].includes(profile?.access_level);
 
+  const fmtData = (iso) => {
+    if (!iso) return null;
+    return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+
   return (
     <div>
       <div className="page-header">
@@ -44,11 +56,27 @@ function ListaSessoes({ userId, profile, onNova, onAbrir }) {
           <div className="page-subtitle">{list.length} conferência{list.length !== 1 ? 's' : ''}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          {canImport && <ImportarBtn userId={userId} onDone={() => toast('Base atualizada!')} />}
+          {canImport && (
+            <ImportarBtn userId={userId} onDone={() => { toast('Base atualizada!'); carregarUltimaImportacao(); }} />
+          )}
           <button className="btn btn-primary" onClick={onNova}>
             <Plus size={15} /> Nova
           </button>
         </div>
+      </div>
+
+      {/* Aviso de última importação */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        background: ultimaImportacao ? '#10b98115' : '#f59e0b15',
+        border: `1px solid ${ultimaImportacao ? '#10b98140' : '#f59e0b40'}`,
+        borderRadius: 10, padding: '10px 14px', marginBottom: 16, fontSize: 13,
+      }}>
+        <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, background: ultimaImportacao ? '#10b981' : '#f59e0b' }} />
+        {ultimaImportacao
+          ? <span><strong>Base de produtos atualizada</strong> — última importação em {fmtData(ultimaImportacao)}</span>
+          : <span style={{ color: '#f59e0b' }}><strong>Base não importada.</strong> Clique em "Importar base" para carregar os produtos.</span>
+        }
       </div>
 
       {loading && <div style={{ color: 'var(--text-muted)', padding: 32, textAlign: 'center' }}>Carregando...</div>}
