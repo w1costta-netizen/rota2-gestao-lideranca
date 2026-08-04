@@ -12,7 +12,6 @@ async function getProfile(id) {
 }
 
 // POST /api/conferencia/importar
-// Recebe arquivo xlsx e popula a tabela produtos_conferencia da empresa
 router.post('/importar', upload.single('file'), async (req, res) => {
   const { requester_id } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
@@ -28,33 +27,42 @@ router.post('/importar', upload.single('file'), async (req, res) => {
 
     if (!rows.length) return res.status(400).json({ error: 'Planilha vazia' });
 
-    // Apaga registros anteriores da empresa e reinsere
+    const importado_at = new Date().toISOString();
+    const mapped = rows.map(r => ({
+      company:                me.company,
+      nome_loja:              r['NOME_LOJA']                    || null,
+      uf:                     r['UF']                            || null,
+      cd_produto:             r['CD_PRODUTO'] != null ? String(r['CD_PRODUTO']).padStart(6, '0') : null,
+      ean:                    r['EAN']        != null ? String(r['EAN']) : null,
+      descricao_produto:      r['DESCRICAO_PRODUTO']             || null,
+      motivo_suspencao:       r['MOTIVO_SUSPENCAO']              ?? 0,
+      produto_status:         r['PRODUTO_STATUS']                || null,
+      descricao_setor:        r['DESCRICAO_SETOR']               || null,
+      descricao_departamento: r['DESCRICAO_DEPARTAMENTO']        || null,
+      descricao_secao:        r['DESCRICAO_SECAO']               || null,
+      descricao_linha:        r['DESCRICAO_LINHA']               || null,
+      data_ultima_nf:         r['DATA_ULTIMA_NF'] instanceof Date ? r['DATA_ULTIMA_NF'].toISOString() : null,
+      estoque_qty:            r['sum_ESTOQUE_ON_HAND_LOJA_QTD']  ?? 0,
+      importado_at,
+    }));
+
+    // Apaga registros anteriores
     await supabase.from('produtos_conferencia').delete().eq('company', me.company);
 
-    const BATCH = 500;
-    for (let i = 0; i < rows.length; i += BATCH) {
-      const chunk = rows.slice(i, i + BATCH).map(r => ({
-        company:              me.company,
-        nome_loja:            r['NOME_LOJA']               || null,
-        uf:                   r['UF']                       || null,
-        cd_produto:           r['CD_PRODUTO'] != null ? String(r['CD_PRODUTO']).padStart(6, '0') : null,
-        ean:                  r['EAN']        != null ? String(r['EAN']) : null,
-        descricao_produto:    r['DESCRICAO_PRODUTO']        || null,
-        motivo_suspencao:     r['MOTIVO_SUSPENCAO']         ?? 0,
-        produto_status:       r['PRODUTO_STATUS']           || null,
-        descricao_setor:      r['DESCRICAO_SETOR']          || null,
-        descricao_departamento: r['DESCRICAO_DEPARTAMENTO'] || null,
-        descricao_secao:      r['DESCRICAO_SECAO']          || null,
-        descricao_linha:      r['DESCRICAO_LINHA']          || null,
-        data_ultima_nf:       r['DATA_ULTIMA_NF'] instanceof Date ? r['DATA_ULTIMA_NF'].toISOString() : null,
-        estoque_qty:          r['sum_ESTOQUE_ON_HAND_LOJA_QTD'] ?? 0,
-        importado_at:         new Date().toISOString(),
-      }));
-      const { error } = await supabase.from('produtos_conferencia').insert(chunk);
-      if (error) return res.status(500).json({ error: error.message, batch: i });
+    // Insere em batches de 2000 linhas com até 4 em paralelo
+    const BATCH = 2000;
+    const batches = [];
+    for (let i = 0; i < mapped.length; i += BATCH) batches.push(mapped.slice(i, i + BATCH));
+
+    const PARALLEL = 4;
+    for (let i = 0; i < batches.length; i += PARALLEL) {
+      const grupo = batches.slice(i, i + PARALLEL);
+      const resultados = await Promise.all(grupo.map(chunk => supabase.from('produtos_conferencia').insert(chunk)));
+      const falhou = resultados.find(r => r.error);
+      if (falhou) return res.status(500).json({ error: falhou.error.message });
     }
 
-    res.json({ ok: true, total: rows.length });
+    res.json({ ok: true, total: mapped.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

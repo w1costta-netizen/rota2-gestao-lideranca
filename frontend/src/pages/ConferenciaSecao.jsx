@@ -119,7 +119,7 @@ function ImportarBtn({ userId, onDone }) {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('requester_id', userId);
-      await api.post('/conferencia/importar', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 120000 });
+      await api.post('/conferencia/importar', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 });
       onDone();
     } catch (err) {
       toast(err.response?.data?.error || 'Erro ao importar', 'error');
@@ -132,9 +132,15 @@ function ImportarBtn({ userId, onDone }) {
   return (
     <>
       <input ref={ref} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleFile} />
-      <button className="btn btn-ghost" onClick={() => ref.current.click()} disabled={loading}>
-        <Upload size={15} /> {loading ? 'Importando...' : 'Importar base'}
+      <button className="btn btn-ghost" onClick={() => !loading && ref.current.click()} disabled={loading}
+        title={loading ? 'Aguarde, importando produtos...' : 'Atualizar base de produtos'}>
+        <Upload size={15} /> {loading ? 'Importando... aguarde' : 'Importar base'}
       </button>
+      {loading && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', marginTop: 4 }}>
+          Processando ~34.000 produtos. Pode levar 1–2 min.
+        </div>
+      )}
     </>
   );
 }
