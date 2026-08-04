@@ -12,6 +12,7 @@
     "axios": "^1.6.8",
     "html2canvas": "^1.4.1",
     "html2pdf.js": "^0.14.0",
+    "html5-qrcode": "^2.3.8",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "konva": "^10.3.0",

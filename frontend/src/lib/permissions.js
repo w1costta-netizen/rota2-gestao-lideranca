@@ -15,13 +15,14 @@ export const MODULES = [
   { key: 'estoque',             label: 'Estoque',                icon: '📦', desc: 'Visualizar e gerenciar estoque' },
   { key: 'importador_estoque',  label: 'Importador de Estoque',  icon: '📥', desc: 'Importar planilhas de estoque' },
   { key: 'organograma',         label: 'Organograma',            icon: '🌿', desc: 'Hierarquia de equipes e líderes' },
+  { key: 'conferencia_secao',   label: 'Conferência de Seção',   icon: '🔍', desc: 'Conferência e checklist de seções da loja' },
 ];
 
 export const DEFAULT_PERMISSIONS = {
-  master:       ['lojas', 'dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma'],
-  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma'],
-  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma'],
-  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma'],
+  master:       ['lojas', 'dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao'],
+  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao'],
+  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao'],
+  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'escala', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao'],
   colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas'],
 };
 

@@ -25,6 +25,7 @@ const Tarefas                = lazy(() => import('./pages/Tarefas'));
 const Mural                  = lazy(() => import('./pages/Mural'));
 const Campanhas              = lazy(() => import('./pages/Campanhas'));
 const RelatoriosFotograficos = lazy(() => import('./pages/RelatoriosFotograficos'));
+const ConferenciaSecao       = lazy(() => import('./pages/ConferenciaSecao'));
 const GestaoVendas           = lazy(() => import('./pages/GestaoVendas'));
 const PainelVendas           = lazy(() => import('./pages/PainelVendas'));
 const MasterDashboard        = lazy(() => import('./pages/MasterDashboard'));
@@ -209,7 +210,8 @@ function AppContent() {
     tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={effectiveProfile} />                  : <AccessDenied />,
     mural:        () => has('mural')      ? <Mural userId={userId} profile={effectiveProfile} />                    : <AccessDenied />,
     campanhas:    () => has('campanhas')  ? <Campanhas userId={userId} profile={effectiveProfile} />                : <AccessDenied />,
-    relatorios:   () => has('relatorios')     ? <RelatoriosFotograficos userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
+    relatorios:        () => has('relatorios')        ? <RelatoriosFotograficos userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
+    conferencia_secao: () => has('conferencia_secao') ? <ConferenciaSecao userId={userId} profile={effectiveProfile} />      : <AccessDenied />,
     vendas_gestao:() => has('vendas_gestao') ? <GestaoVendas userId={userId} profile={effectiveProfile} />           : <AccessDenied />,
     vendas_painel:() => has('vendas_painel') ? <PainelVendas userId={userId} profile={effectiveProfile} />           : <AccessDenied />,
     usersadmin:   () => has('usuarios')      ? <UsersAdmin userId={userId} profile={effectiveProfile} />             : <AccessDenied />,

@@ -27,6 +27,7 @@ app.use('/api/organograma',  require('./routes/organograma'));
 app.use('/api/reminders',    require('./routes/reminders'));
 app.use('/api/estoque',      require('./routes/estoque'));
 app.use('/api/reacoes',      require('./routes/reacoes'));
+app.use('/api/conferencia',  require('./routes/conferencia'));
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

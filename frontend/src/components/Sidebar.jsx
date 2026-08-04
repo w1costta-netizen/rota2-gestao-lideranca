@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 
@@ -63,10 +63,11 @@ const NAV_GROUPS = [
     label: 'Operações',
     icon:  Briefcase,
     items: [
-      { id: 'nscale',    label: 'Escala',    icon: CalendarRange, perm: 'escala' },
-      { id: 'cashier',   label: 'Caixas',    icon: ShoppingCart,  perm: 'caixas' },
-      { id: 'relatorios',label: 'Tour 4x4',  icon: Camera,        perm: 'relatorios' },
-      { id: 'campanhas', label: 'Flyers',    icon: Tag,           perm: 'campanhas' },
+      { id: 'nscale',            label: 'Escala',               icon: CalendarRange, perm: 'escala' },
+      { id: 'cashier',           label: 'Caixas',               icon: ShoppingCart,  perm: 'caixas' },
+      { id: 'relatorios',        label: 'Tour 4x4',             icon: Camera,        perm: 'relatorios' },
+      { id: 'campanhas',         label: 'Flyers',               icon: Tag,           perm: 'campanhas' },
+      { id: 'conferencia_secao', label: 'Conferência de Seção', icon: ClipboardCheck, perm: 'conferencia_secao' },
     ],
   },
   {
