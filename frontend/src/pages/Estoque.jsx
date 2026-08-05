@@ -83,8 +83,6 @@ function TabAcervo({ d }) {
   const SUB_TABS = [
     { id: 'divisao', label: 'Por Divisão' },
     { id: 'depto',   label: 'Por Departamento' },
-    { id: 'zero5s',  label: 'Zero c/ venda 5s' },
-    { id: 'zeromes', label: 'Zero c/ venda mês' },
   ];
 
   function handlePDF() {
@@ -130,38 +128,6 @@ function TabAcervo({ d }) {
           ],
           rows: d.depto_ativos || [],
         },
-        {
-          titulo: 'Zero c/ venda nas 5 semanas',
-          colunas: [
-            { header: 'Cód.',           dataKey: 'CD_PRODUTO' },
-            { header: 'Produto',        dataKey: 'DESCRICAO_PRODUTO' },
-            { header: 'Seção',          dataKey: 'DESCRICAO_SECAO' },
-            { header: 'Depto',          dataKey: 'DESCRICAO_DEPARTAMENTO' },
-            { header: 'Estoque loja',   dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
-            { header: 'CD (cx)',         dataKey: 'estoque_cd_cxs' },
-            { header: 'Separ. CD',      dataKey: 'estoque_separado_cd' },
-            { header: 'Trânsito Loja',  dataKey: 'estoque_transito_loja' },
-            { header: 'Venda 5s',       dataKey: 'total_5s' },
-            { header: 'Venda mês',      dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
-          ],
-          rows: d.zero_venda_5s_top || [],
-        },
-        {
-          titulo: 'Zero c/ venda no mês atual',
-          colunas: [
-            { header: 'Cód.',           dataKey: 'CD_PRODUTO' },
-            { header: 'Produto',        dataKey: 'DESCRICAO_PRODUTO' },
-            { header: 'Seção',          dataKey: 'DESCRICAO_SECAO' },
-            { header: 'Depto',          dataKey: 'DESCRICAO_DEPARTAMENTO' },
-            { header: 'Estoque loja',   dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
-            { header: 'CD (cx)',         dataKey: 'estoque_cd_cxs' },
-            { header: 'Separ. CD',      dataKey: 'estoque_separado_cd' },
-            { header: 'Trânsito Loja',  dataKey: 'estoque_transito_loja' },
-            { header: 'Venda mês',      dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
-            { header: 'Venda 5s',       dataKey: 'total_5s' },
-          ],
-          rows: d.zero_venda_mes_top || [],
-        },
       ],
     });
   }
@@ -184,26 +150,6 @@ function TabAcervo({ d }) {
           rows: (d.depto_ativos || []).map(r => [
             r.DESCRICAO_DEPARTAMENTO, r.DESCRICAO_SETOR, r.itens,
             r.zero_estoque, r.zero_venda_5s, r.zero_venda_mes,
-          ]),
-        },
-        {
-          nome: 'Zero venda 5s',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Estoque loja', 'CD (cx)', 'Separ. CD', 'Trânsito Loja', 'Venda 5s', 'Venda mês', 'Mês anterior'],
-          rows: (d.zero_venda_5s_top || []).map(r => [
-            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
-            r.DESCRICAO_DEPARTAMENTO, r.sum_ESTOQUE_ON_HAND_LOJA_QTD,
-            r.estoque_cd_cxs || 0, r.estoque_separado_cd || 0, r.estoque_transito_loja || 0,
-            r.total_5s, r.sum_QTD_VENDAS_MES_ATUAL, r.sum_QTD_VENDAS_MES_ANTERIOR,
-          ]),
-        },
-        {
-          nome: 'Zero venda mês',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Estoque loja', 'CD (cx)', 'Separ. CD', 'Trânsito Loja', 'Venda mês', 'Venda 5s', 'Mês anterior'],
-          rows: (d.zero_venda_mes_top || []).map(r => [
-            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
-            r.DESCRICAO_DEPARTAMENTO, r.sum_ESTOQUE_ON_HAND_LOJA_QTD,
-            r.estoque_cd_cxs || 0, r.estoque_separado_cd || 0, r.estoque_transito_loja || 0,
-            r.sum_QTD_VENDAS_MES_ATUAL, r.total_5s, r.sum_QTD_VENDAS_MES_ANTERIOR,
           ]),
         },
       ],
@@ -333,87 +279,108 @@ function TabAcervo({ d }) {
         </div>
       )}
 
+    </>
+  );
+}
+
+function TabRuptura({ d }) {
+  const [visao, setVisao] = useState('ruptura');
+
+  const SUB_TABS = [
+    { id: 'ruptura', label: 'Ruptura' },
+    { id: 'zero5s',  label: 'Zero c/ venda 5s' },
+    { id: 'zeromes', label: 'Zero c/ venda mês' },
+  ];
+
+  const COLS_RUPTURA = [
+    { key: 'CD_PRODUTO',               label: 'Cód.' },
+    { key: 'DESCRICAO_PRODUTO',         label: 'Produto', maxW: 220, wrap: true },
+    { key: 'DESCRICAO_SECAO',           label: 'Seção' },
+    { key: 'DESCRICAO_DEPARTAMENTO',    label: 'Depto' },
+    { key: 'sum_QTD_VENDAS_MES_ATUAL',  label: 'Venda mês (un)', right: true, fmt: v => n0(v) },
+    { key: 'venda_mes_vlr',             label: 'Venda mês R$', right: true, fmt: v => brl(v), cor: () => '#ef4444' },
+    { key: 'estoque_cd_cxs',            label: 'CD (cx)', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
+    { key: 'estoque_separado_cd',       label: 'Separ. CD', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_separado_cd > 0 ? '#10b981' : '#6b7280' },
+    { key: 'estoque_transito_loja',     label: 'Trânsito Loja', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_transito_loja > 0 ? '#0ea5e9' : '#6b7280' },
+  ];
+
+  const COLS_ZERO = [
+    { key: 'CD_PRODUTO',                   label: 'Cód.' },
+    { key: 'DESCRICAO_PRODUTO',             label: 'Produto', maxW: 220, wrap: true },
+    { key: 'DESCRICAO_SECAO',               label: 'Seção' },
+    { key: 'DESCRICAO_DEPARTAMENTO',        label: 'Depto' },
+    { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD',  label: 'Estoque', right: true, fmt: v => n1(v), cor: () => '#6b7280' },
+    { key: 'estoque_cd_cxs',                label: 'CD (cx)', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
+    { key: 'estoque_separado_cd',           label: 'Separ. CD', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_separado_cd > 0 ? '#10b981' : '#6b7280' },
+    { key: 'estoque_transito_loja',         label: 'Trânsito Loja', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_transito_loja > 0 ? '#0ea5e9' : '#6b7280' },
+    { key: 'total_5s',                      label: 'Venda 5s', right: true, fmt: v => n0(v), cor: () => '#f59e0b' },
+    { key: 'sum_QTD_VENDAS_MES_ATUAL',      label: 'Venda mês', right: true, fmt: v => n0(v), cor: () => '#ef4444' },
+    { key: 'sum_QTD_VENDAS_MES_ANTERIOR',   label: 'Mês ant.', right: true, fmt: v => n0(v) },
+  ];
+
+  return (
+    <>
+      {/* KPIs */}
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
+        <KpiCard label="Total em ruptura"    value={n0(d.totais.ruptura_count)}          cor="#ef4444" sub="estoque zero com venda no mês" />
+        <KpiCard label="Venda perdida/mês"   value={n0(d.totais.ruptura_venda_mes)}       cor="#ef4444" sub="unidades no mês atual" />
+        <KpiCard label="Zero c/ venda 5s"   value={n0(d.totais.ativos_zero_venda_5s)}   cor="#f59e0b" sub="vendeu nas 5 semanas" />
+        <KpiCard label="Zero c/ venda mês"  value={n0(d.totais.ativos_zero_venda_mes)}  cor="#f97316" sub="vendeu no mês atual" />
+        {d.totais.ruptura_com_cd_count > 0 && (
+          <KpiCard label="Com estoque no CD" value={n0(d.totais.ruptura_com_cd_count)} cor="#10b981" sub="reposição disponível no CD" />
+        )}
+      </div>
+
+      {/* Sub-tabs */}
+      <div style={{ display: 'flex', gap: 2, borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+        {SUB_TABS.map(s => (
+          <button key={s.id} onClick={() => setVisao(s.id)}
+            style={{ background: 'none', border: 'none',
+              borderBottom: visao === s.id ? '2px solid #ef4444' : '2px solid transparent',
+              color: visao === s.id ? '#ef4444' : 'var(--text-muted)',
+              fontWeight: visao === s.id ? 700 : 400, fontSize: 12,
+              padding: '7px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Ruptura clássica */}
+      {visao === 'ruptura' && (
+        <>
+          <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10 }}>Por seção</h4>
+          <SecaoTable rows={d.secao_ruptura} colunas={[
+            { key: 'DESCRICAO_SECAO',        label: 'Seção', maxW: 180, wrap: true },
+            { key: 'DESCRICAO_DEPARTAMENTO', label: 'Departamento' },
+            { key: 'itens',                  label: 'Itens', right: true },
+            { key: 'venda_mes',              label: 'Venda mês', right: true, fmt: v => n0(v) },
+          ]} />
+          <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', margin: '20px 0 10px' }}>
+            Top itens — estoque zero com venda no mês
+          </h4>
+          <SecaoTable rows={d.ruptura_top} colunas={COLS_RUPTURA} />
+        </>
+      )}
+
       {/* Zero c/ venda 5 semanas */}
       {visao === 'zero5s' && (
         <>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
             Itens ativos com <strong>estoque zero</strong> que tiveram venda nas últimas 5 semanas — risco real de ruptura.
           </p>
-          <SecaoTable rows={d.zero_venda_5s_top || []} colunas={[
-            { key: 'CD_PRODUTO',                    label: 'Cód.' },
-            { key: 'DESCRICAO_PRODUTO',              label: 'Produto', maxW: 220, wrap: true },
-            { key: 'DESCRICAO_SECAO',                label: 'Seção' },
-            { key: 'DESCRICAO_DEPARTAMENTO',         label: 'Depto' },
-            { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD',  label: 'Estoque', right: true, fmt: v => n1(v), cor: () => '#6b7280' },
-            { key: 'estoque_cd_cxs',                 label: 'CD (cx)', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
-            { key: 'estoque_separado_cd',            label: 'Separ. CD', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_separado_cd > 0 ? '#10b981' : '#6b7280' },
-            { key: 'estoque_transito_loja',          label: 'Trânsito Loja', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_transito_loja > 0 ? '#0ea5e9' : '#6b7280' },
-            { key: 'total_5s',                       label: 'Venda 5s', right: true, fmt: v => n0(v), cor: () => '#f59e0b' },
-            { key: 'sum_QTD_VENDAS_MES_ATUAL',       label: 'Venda mês', right: true, fmt: v => n0(v) },
-            { key: 'sum_QTD_VENDAS_MES_ANTERIOR',    label: 'Mês ant.', right: true, fmt: v => n0(v) },
-          ]} />
+          <SecaoTable rows={d.zero_venda_5s_top || []} colunas={COLS_ZERO} />
         </>
       )}
 
-      {/* Zero c/ venda último mês */}
+      {/* Zero c/ venda mês */}
       {visao === 'zeromes' && (
         <>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
             Itens ativos com <strong>estoque zero</strong> que tiveram venda no último mês — prioridade máxima de reposição.
           </p>
-          <SecaoTable rows={d.zero_venda_mes_top || []} colunas={[
-            { key: 'CD_PRODUTO',                    label: 'Cód.' },
-            { key: 'DESCRICAO_PRODUTO',              label: 'Produto', maxW: 220, wrap: true },
-            { key: 'DESCRICAO_SECAO',                label: 'Seção' },
-            { key: 'DESCRICAO_DEPARTAMENTO',         label: 'Depto' },
-            { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD',  label: 'Estoque', right: true, fmt: v => n1(v), cor: () => '#6b7280' },
-            { key: 'estoque_cd_cxs',                 label: 'CD (cx)', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
-            { key: 'estoque_separado_cd',            label: 'Separ. CD', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_separado_cd > 0 ? '#10b981' : '#6b7280' },
-            { key: 'estoque_transito_loja',          label: 'Trânsito Loja', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_transito_loja > 0 ? '#0ea5e9' : '#6b7280' },
-            { key: 'sum_QTD_VENDAS_MES_ATUAL',       label: 'Venda mês', right: true, fmt: v => n0(v), cor: () => '#ef4444' },
-            { key: 'total_5s',                       label: 'Venda 5s', right: true, fmt: v => n0(v) },
-            { key: 'sum_QTD_VENDAS_MES_ANTERIOR',    label: 'Mês ant.', right: true, fmt: v => n0(v) },
-          ]} />
+          <SecaoTable rows={d.zero_venda_mes_top || []} colunas={COLS_ZERO} />
         </>
       )}
-    </>
-  );
-}
-
-function TabRuptura({ d }) {
-  return (
-    <>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <KpiCard label="Total em ruptura" value={n0(d.totais.ruptura_count)} cor="#ef4444" sub="itens ativos sem estoque com venda" />
-        <KpiCard label="Venda perdida/mês" value={n0(d.totais.ruptura_venda_mes)} cor="#ef4444" sub="unidades no mês atual" />
-        {d.totais.ruptura_com_cd_count > 0 && (
-          <KpiCard label="Com estoque no CD" value={n0(d.totais.ruptura_com_cd_count)} cor="#10b981" sub="reposição disponível no CD" />
-        )}
-      </div>
-      <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10 }}>Por seção</h4>
-      <SecaoTable rows={d.secao_ruptura} colunas={[
-        { key: 'DESCRICAO_SECAO', label: 'Seção', maxW: 180, wrap: true },
-        { key: 'DESCRICAO_DEPARTAMENTO', label: 'Departamento' },
-        { key: 'itens', label: 'Itens', right: true },
-        { key: 'venda_mes', label: 'Venda mês', right: true, fmt: v => n0(v) },
-      ]} />
-      <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', margin: '20px 0 10px' }}>Top itens</h4>
-      <SecaoTable rows={d.ruptura_top} colunas={[
-        { key: 'CD_PRODUTO', label: 'Cód.' },
-        { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 220, wrap: true },
-        { key: 'DESCRICAO_SECAO', label: 'Seção' },
-        { key: 'sum_QTD_VENDAS_MES_ATUAL', label: 'Venda mês (un)', right: true, fmt: v => n0(v) },
-        { key: 'venda_mes_vlr', label: 'Venda mês R$', right: true, fmt: v => brl(v), cor: () => '#ef4444' },
-        { key: 'estoque_cd_cxs', label: 'CD (cx)', right: true,
-          fmt: v => v > 0 ? n0(v) : '—',
-          cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
-        { key: 'estoque_separado_cd', label: 'Separ. CD', right: true,
-          fmt: v => v > 0 ? n0(v) : '—',
-          cor: r => r.estoque_separado_cd > 0 ? '#10b981' : '#6b7280' },
-        { key: 'estoque_transito_loja', label: 'Trânsito Loja', right: true,
-          fmt: v => v > 0 ? n0(v) : '—',
-          cor: r => r.estoque_transito_loja > 0 ? '#0ea5e9' : '#6b7280' },
-      ]} />
     </>
   );
 }
