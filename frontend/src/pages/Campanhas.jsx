@@ -18,7 +18,35 @@ function fmt(d) {
   return `${day}/${m}/${y}`;
 }
 
-// Lê um arquivo Excel e retorna array de { descricao, preco, categoria }
+// Extrai preço De/Por e dinâmica de uma string como "De: R$18,98 | Por: R$15,18 (Economize R$3,80)"
+function parsePrecoDinamica(valor) {
+  const s = String(valor || '').trim();
+  if (!s) return { preco: '', dinamica_comercial: '' };
+
+  // Formato "De: R$X | Por: R$Y (...)"
+  const mDe  = s.match(/De:\s*R?\$?([\d.,]+)/i);
+  const mPor  = s.match(/Por:\s*R?\$?([\d.,]+)/i);
+  // Formato "R$X" único
+  const mUnico = s.match(/^R?\$?([\d.,]+)/i);
+  // Dinâmica: texto entre parênteses ou texto puro sem preço
+  const mDin  = s.match(/\(([^)]+)\)/);
+  const temPreco = mDe || mPor || mUnico;
+
+  const de  = mDe  ? mDe[1]  : '';
+  const por = mPor ? mPor[1] : (mUnico && !mDe ? mUnico[1] : '');
+
+  let preco = '';
+  if (de && por) preco = `De: R$${de} | Por: R$${por}`;
+  else if (por)  preco = `R$${por}`;
+  else if (de)   preco = `R$${de}`;
+
+  // Dinâmica: conteúdo entre parênteses, ou string inteira se não tiver preço
+  const dinamica = mDin ? mDin[1].trim() : (!temPreco ? s : '');
+
+  return { preco, dinamica_comercial: dinamica };
+}
+
+// Lê um arquivo Excel e retorna array de { descricao, preco, categoria, dinamica_comercial }
 function parseExcel(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -26,64 +54,88 @@ function parseExcel(file) {
       try {
         const wb = XLSX.read(e.target.result, { type: 'array' });
         const sheet = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        // Lê como array de arrays para detectar linhas de categoria
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+        if (!rows.length) return reject(new Error('Planilha vazia.'));
 
-        // Normaliza nomes de colunas (case-insensitive, sem acento)
-        const norm = (s) => String(s).toLowerCase()
-          .normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+        const norm = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
 
-        const COL_DESC  = ['descricao', 'descricao', 'produto', 'item', 'nome', 'description'];
-        const COL_PRECO = ['preco', 'preco', 'valor', 'price', 'rs'];
-        const COL_CAT   = ['categoria', 'category', 'setor', 'departamento'];
+        // Detecta formato: 2 colunas "Descrição do Item" + "Preço / Dinâmica"
+        const header = rows[0].map(c => norm(c));
+        const isFormatoIA = header.some(h => h.includes('descri')) && header.some(h => h.includes('preco') || h.includes('dinamica') || h.includes('prec'));
 
-        const findCol = (headers, candidates) =>
-          headers.find(h => candidates.includes(norm(h)));
+        const items = [];
+        let categoriaAtual = '';
+        let ordem = 0;
 
-        const headers = rows.length ? Object.keys(rows[0]) : [];
-        const colDesc  = findCol(headers, COL_DESC);
-        const colPreco = findCol(headers, COL_PRECO);
-        const colCat   = findCol(headers, COL_CAT);
-
-        if (!colDesc) {
-          return reject(new Error('Coluna "Descrição" não encontrada. Use o template padrão.'));
+        if (isFormatoIA) {
+          // Formato gerado pela IA ou Claude chat: linha com 1 célula = categoria, 2 células = item
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const col0 = String(row[0] || '').trim();
+            const col1 = String(row[1] || '').trim();
+            if (!col0) continue;
+            if (!col1) {
+              // Linha de categoria
+              categoriaAtual = col0;
+            } else {
+              const { preco, dinamica_comercial } = parsePrecoDinamica(col1);
+              items.push({ descricao: col0, preco, dinamica_comercial, categoria: categoriaAtual, ordem: ordem++, selected: true });
+            }
+          }
+        } else {
+          // Formato antigo: colunas nomeadas Descrição / Preço / Categoria
+          const COL_DESC  = ['descricao', 'produto', 'item', 'nome', 'description'];
+          const COL_PRECO = ['preco', 'valor', 'price', 'rs', 'preco/dinamica'];
+          const COL_CAT   = ['categoria', 'category', 'setor', 'departamento'];
+          const findCol = (h, cands) => h.find(x => cands.some(c => x.includes(c)));
+          const colDesc  = findCol(header, COL_DESC);
+          const colPreco = findCol(header, COL_PRECO);
+          const colCat   = findCol(header, COL_CAT);
+          if (colDesc === undefined) return reject(new Error('Coluna "Descrição" não encontrada.'));
+          const iDesc  = header.indexOf(colDesc);
+          const iPreco = colPreco !== undefined ? header.indexOf(colPreco) : -1;
+          const iCat   = colCat   !== undefined ? header.indexOf(colCat)   : -1;
+          for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const desc = String(row[iDesc] || '').trim();
+            if (!desc) continue;
+            const precoRaw = iPreco >= 0 ? String(row[iPreco] || '').trim() : '';
+            const { preco, dinamica_comercial } = parsePrecoDinamica(precoRaw);
+            items.push({ descricao: desc, preco, dinamica_comercial, categoria: iCat >= 0 ? String(row[iCat] || '').trim() : '', ordem: ordem++, selected: true });
+          }
         }
 
-        const items = rows
-          .map((row, i) => ({
-            descricao: String(row[colDesc] || '').trim(),
-            preco:     colPreco ? String(row[colPreco] || '').trim() : '',
-            categoria: colCat   ? String(row[colCat]   || '').trim() : '',
-            ordem:     i,
-            selected:  true,
-          }))
-          .filter(r => r.descricao.length > 0);
-
-        if (items.length === 0) return reject(new Error('Nenhum item encontrado na planilha.'));
+        if (!items.length) return reject(new Error('Nenhum item encontrado na planilha.'));
         resolve(items);
-      } catch (err) {
-        reject(err);
-      }
+      } catch (err) { reject(err); }
     };
     reader.onerror = reject;
     reader.readAsArrayBuffer(file);
   });
 }
 
-// Gera e faz download de um template Excel
+// Gera e faz download de um template Excel no formato IA
 function downloadTemplate() {
   const wb = XLSX.utils.book_new();
   const data = [
-    ['Descrição', 'Preço', 'Categoria'],
-    ['Arroz Tio João 5kg', 'R$ 18,90', 'Mercearia'],
-    ['Feijão Camil Carioca 1kg', 'R$ 7,99', 'Mercearia'],
-    ['Frango Resfriado Kg', 'R$ 9,98 · Leve 2 Pague 1', 'Açougue'],
+    ['Descrição do Item', 'Preço / Dinâmica Comercial'],
+    ['Carnes e Frios'],
+    ['Picanha bovina Maturatta, Kg', 'De: R$123,98 | Por: R$102,98 (Economize R$21,00)'],
+    ['Linguiça de pernil suíno com bacon Bragança, Congelada, 1kg', 'De: R$33,98 | Por: R$29,98'],
+    ['Hortifruti'],
+    ['Uva vitória Reserva Gourmet, Bandeja, 400g', 'R$8,98'],
+    ['Bebidas Alcoólicas'],
+    ['Cerveja Heineken, Lata, 350ml, 12 unidades', 'De: R$61,48 | Por: R$55,33 (10% de desconto na 2ª unidade)'],
+    ['Todos os vinhos chilenos, portugueses, italianos e franceses', '40% de desconto na 2ª unidade'],
   ];
   const ws = XLSX.utils.aoa_to_sheet(data);
-  ws['!cols'] = [{ wch: 45 }, { wch: 28 }, { wch: 20 }];
+  ws['!cols'] = [{ wch: 55 }, { wch: 55 }];
   XLSX.utils.book_append_sheet(wb, ws, 'Flyer');
   XLSX.writeFile(wb, 'template_flyer.xlsx');
 }
 
+// Gera e faz download de um template Excel
 // ── Tela de detalhes / conferência ────────────────────────────────
 function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack }) {
   const toast = useToast();
@@ -191,7 +243,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
   const saveXlsxItems = async () => {
     const toSave = xlsxItems
       .filter(it => it.selected)
-      .map((it, i) => ({ descricao: it.descricao, preco: it.preco, categoria: it.categoria, ordem: itens.length + i }));
+      .map((it, i) => ({ descricao: it.descricao, preco: it.preco, categoria: it.categoria, dinamica_comercial: it.dinamica_comercial || null, ordem: itens.length + i }));
     if (!toSave.length) return toast('Selecione ao menos um item');
     setXlsxSaving(true);
     try {
