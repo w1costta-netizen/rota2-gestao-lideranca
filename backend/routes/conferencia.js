@@ -47,9 +47,12 @@ router.post('/importar', upload.single('file'), async (req, res) => {
     }));
 
     // Apaga registros anteriores
-    await supabase.from('produtos_conferencia').delete().eq('company', me.company);
+    await Promise.all([
+      supabase.from('produtos_conferencia').delete().eq('company', me.company),
+      supabase.from('conferencia_filtros').delete().eq('company', me.company),
+    ]);
 
-    // Insere em batches de 2000 linhas com até 4 em paralelo
+    // Insere produtos em batches de 2000 linhas com até 4 em paralelo
     const BATCH = 2000;
     const batches = [];
     for (let i = 0; i < mapped.length; i += BATCH) batches.push(mapped.slice(i, i + BATCH));
@@ -62,7 +65,27 @@ router.post('/importar', upload.single('file'), async (req, res) => {
       if (falhou) return res.status(500).json({ error: falhou.error.message });
     }
 
-    res.json({ ok: true, total: mapped.length });
+    // Salva combinações únicas na tabela de filtros (resolve limite de 1000 rows do Supabase)
+    const combos = new Map();
+    for (const r of mapped) {
+      const key = [r.descricao_setor, r.descricao_departamento, r.descricao_secao, r.descricao_linha].join('|||');
+      if (!combos.has(key)) {
+        combos.set(key, {
+          company:       me.company,
+          setor:         r.descricao_setor,
+          departamento:  r.descricao_departamento,
+          secao:         r.descricao_secao,
+          linha:         r.descricao_linha,
+        });
+      }
+    }
+    const filtrosRows = [...combos.values()];
+    for (let i = 0; i < filtrosRows.length; i += 500) {
+      const { error } = await supabase.from('conferencia_filtros').insert(filtrosRows.slice(i, i + 500));
+      if (error) console.error('Erro ao salvar filtros:', error.message);
+    }
+
+    res.json({ ok: true, total: mapped.length, filtros: filtrosRows.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -86,27 +109,29 @@ router.get('/ultima-importacao', async (req, res) => {
 });
 
 // GET /api/conferencia/filtros?requester_id=&setor=&departamento=&secao=
-// Retorna valores únicos para os seletores em cascata
 router.get('/filtros', async (req, res) => {
   const { requester_id, setor, departamento, secao } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
-  let q = supabase.from('produtos_conferencia').select('descricao_setor, descricao_departamento, descricao_secao, descricao_linha').eq('company', me.company).limit(100000);
-  if (setor)        q = q.eq('descricao_setor', setor);
-  if (departamento) q = q.eq('descricao_departamento', departamento);
-  if (secao)        q = q.eq('descricao_secao', secao);
+  // Usa tabela de filtros pré-computada (evita limite de 1000 rows do Supabase)
+  let q = supabase.from('conferencia_filtros')
+    .select('setor, departamento, secao, linha')
+    .eq('company', me.company);
+  if (setor)        q = q.eq('setor', setor);
+  if (departamento) q = q.eq('departamento', departamento);
+  if (secao)        q = q.eq('secao', secao);
 
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
 
-  const unique = (key) => [...new Set(data.map(r => r[key]).filter(Boolean))].sort();
+  const unique = (key) => [...new Set((data || []).map(r => r[key]).filter(Boolean))].sort();
   res.json({
-    setores:        unique('descricao_setor'),
-    departamentos:  unique('descricao_departamento'),
-    secoes:         unique('descricao_secao'),
-    linhas:         unique('descricao_linha'),
+    setores:       unique('setor'),
+    departamentos: unique('departamento'),
+    secoes:        unique('secao'),
+    linhas:        unique('linha'),
   });
 });
 
