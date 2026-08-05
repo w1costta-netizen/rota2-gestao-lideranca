@@ -160,9 +160,10 @@ Instruções:
       }
     }
 
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-5',
-      max_tokens: 4096,
+    const hasPdf = req.files.some(f => f.mimetype === 'application/pdf');
+    const createParams = {
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 8192,
       tools: [{
         name: 'registrar_itens_flyer',
         description: 'Registra os itens extraídos do encarte promocional',
@@ -190,15 +191,25 @@ Instruções:
       }],
       tool_choice: { type: 'tool', name: 'registrar_itens_flyer' },
       messages: [{ role: 'user', content }],
-    });
+    };
+    if (hasPdf) createParams.betas = ['pdfs-2024-09-25'];
 
+    console.log('[IA] Enviando para Anthropic — arquivos:', req.files.map(f => `${f.originalname} (${f.mimetype}, ${f.size}b)`));
+    const response = await anthropic.messages.create(createParams);
+
+    console.log('[IA] stop_reason:', response.stop_reason, '| blocks:', response.content.map(b => b.type));
     const toolUse = response.content.find(b => b.type === 'tool_use');
-    if (!toolUse) return res.status(500).json({ error: 'IA não retornou itens estruturados' });
+    if (!toolUse) {
+      const text = response.content.find(b => b.type === 'text');
+      console.error('[IA] Sem tool_use. Texto:', text?.text?.slice(0, 300));
+      return res.status(500).json({ error: 'IA não retornou itens estruturados. ' + (text?.text || '') });
+    }
 
+    console.log('[IA] Itens extraídos:', toolUse.input.itens?.length ?? 0);
     res.json({ itens: toolUse.input.itens || [] });
   } catch (e) {
-    console.error('Erro extração IA:', e.message);
-    res.status(500).json({ error: e.message });
+    console.error('Erro extração IA:', e.status, e.message, e.error);
+    res.status(500).json({ error: e.message || 'Erro interno' });
   }
 });
 
