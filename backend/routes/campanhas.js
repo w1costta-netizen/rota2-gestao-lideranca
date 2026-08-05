@@ -128,32 +128,28 @@ router.post('/:id/extrair-itens', upload.array('arquivos', 10), async (req, res)
   if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY não configurada' });
 
   try {
-    const pdfParse = require('pdf-parse');
-    const INSTRUCAO = `Você é especialista em leitura de encartes e flyers promocionais de supermercado/clube de compras.
-Extraia TODOS os itens promocionais sem pular nenhum, mesmo pequenos ou nos cantos.
+    const INSTRUCAO = `Você é especialista em leitura de encartes e flyers promocionais de supermercado/clube de compras (Sam's Club, Atacadão, Assaí etc).
 
-Regras:
-- Descrição COMPLETA: produto + marca + variante + peso/volume, exatamente como está.
-- Diferencie preço "De" (riscado) do "Por" (final). Se houver só um, coloque em preco_por.
-- Capture dinâmica comercial COMPLETA: "leve X pague Y", "% desconto na 2ª unidade", "limitado a N por sócio", condição de cartão etc.
-- confianca "baixa" quando texto/número estiver borrado, cortado ou ambíguo.
-- Agrupe por categoria/seção quando identificável.`;
+Extraia TODOS os itens promocionais visíveis nas imagens, sem pular nenhum.
+
+PADRÃO DE PREÇO DESSES ENCARTES:
+- Preço "De" = valor original maior (mostrado acima ou riscado)
+- Preço "Por" = valor final com desconto (mostrado em destaque ou após "Cada sai por:")
+- Dinâmica comercial = texto como "40% de desconto na 2ª unidade", "Leve 3 pague 2", "Limitado a X unidades por sócio", condição de cartão etc.
+
+REGRAS:
+- Descrição COMPLETA: nome do produto + marca + variante + peso/volume, exatamente como aparece.
+- Se aparecer "Cada sai por: R$ X,XX" — esse é o preco_por.
+- Se aparecer um preço maior acima — esse é o preco_de.
+- Se tiver só um preço, coloque em preco_por.
+- confianca "baixa" apenas quando o número estiver cortado ou ilegível.
+- Leia TODAS as páginas/imagens enviadas e extraia todos os produtos de cada uma.`;
 
     const content = [{ type: 'text', text: INSTRUCAO }];
 
     for (const file of req.files) {
-      if (file.mimetype === 'application/pdf') {
-        // Extrai texto do PDF sem precisar de beta da Anthropic
-        const parsed = await pdfParse(file.buffer);
-        const texto = parsed.text?.trim();
-        if (!texto) return res.status(400).json({ error: 'PDF sem texto legível. Tente enviar como imagem.' });
-        console.log('[IA] PDF parseado — chars:', texto.length);
-        console.log('[IA] AMOSTRA do texto extraído:\n', texto.slice(0, 600));
-        content.push({ type: 'text', text: `\n--- CONTEÚDO DO ENCARTE (${file.originalname}) ---\n${texto}\n---` });
-      } else {
-        const imgType = file.mimetype.startsWith('image/') ? file.mimetype : 'image/jpeg';
-        content.push({ type: 'image', source: { type: 'base64', media_type: imgType, data: file.buffer.toString('base64') } });
-      }
+      const imgType = file.mimetype.startsWith('image/') ? file.mimetype : 'image/jpeg';
+      content.push({ type: 'image', source: { type: 'base64', media_type: imgType, data: file.buffer.toString('base64') } });
     }
 
     console.log('[IA] Enviando para Anthropic — arquivos:', req.files.map(f => `${f.originalname} (${f.mimetype}, ${f.size}b)`));

@@ -210,6 +210,25 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
     e.target.value = '';
   };
 
+  const pdfParaImagens = async (file) => {
+    const pdfjsLib = await import('pdfjs-dist');
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const blobs = [];
+    for (let p = 1; p <= pdf.numPages; p++) {
+      const page = await pdf.getPage(p);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9));
+      blobs.push(new File([blob], `${file.name}_p${p}.jpg`, { type: 'image/jpeg' }));
+    }
+    return blobs;
+  };
+
   const processarFlyer = async () => {
     if (!iaFiles.length) return toast('Selecione ao menos um arquivo');
     setIaLoading(true);
@@ -217,14 +236,21 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
     try {
       const fd = new FormData();
       fd.append('requester_id', userId);
-      iaFiles.forEach(f => fd.append('arquivos', f));
+      for (const f of iaFiles) {
+        if (f.type === 'application/pdf') {
+          const imgs = await pdfParaImagens(f);
+          imgs.forEach(img => fd.append('arquivos', img));
+        } else {
+          fd.append('arquivos', f);
+        }
+      }
       const base = import.meta.env.VITE_API_URL || '/api';
       const res = await fetch(`${base}/campanhas/${campanha.id}/extrair-itens`, {
         method: 'POST', body: fd,
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Erro ao processar');
-      const itensArr = Array.isArray(json.itens) ? json.itens : Array.isArray(json) ? json : [];
+      const itensArr = Array.isArray(json.itens) ? json.itens : [];
       setIaItens(itensArr.map((it, i) => ({
         ...it,
         selected: true,
