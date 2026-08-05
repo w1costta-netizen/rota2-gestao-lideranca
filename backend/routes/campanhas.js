@@ -1,6 +1,11 @@
-const express = require('express');
-const router  = express.Router();
-const supabase = require('../supabase');
+const express   = require('express');
+const router    = express.Router();
+const multer    = require('multer');
+const Anthropic = require('@anthropic-ai/sdk');
+const supabase  = require('../supabase');
+
+const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -101,12 +106,97 @@ router.post('/:id/itens', async (req, res) => {
     descricao: item.descricao,
     preco: item.preco || '',
     categoria: item.categoria || '',
+    dinamica_comercial: item.dinamica_comercial || null,
     ordem: item.ordem ?? i,
   }));
 
   const { data, error } = await supabase.from('campanha_itens').insert(rows).select();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+});
+
+// POST /api/campanhas/:id/extrair-itens — extrai itens do flyer via IA
+router.post('/:id/extrair-itens', upload.array('arquivos', 10), async (req, res) => {
+  const { requester_id } = req.body;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const me = await getProfile(requester_id);
+  if (!isManager(me)) return res.status(403).json({ error: 'Acesso negado' });
+  if (!req.files?.length) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
+  if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY não configurada' });
+
+  try {
+    // Monta conteúdo com todos os arquivos
+    const content = [];
+    content.push({
+      type: 'text',
+      text: `Você é um especialista em leitura de encartes e flyers promocionais de supermercado/clube de compras.
+Analise o(s) flyer(s) enviados e extraia TODOS os itens promocionais, sem pular nenhum, mesmo os pequenos ou nos cantos da página.
+
+Instruções:
+- Extraia a descrição COMPLETA igual ao impresso: produto + marca + variante + peso/volume. Não abrevia.
+- Diferencie preço "De" (riscado/tachado) do preço "Por" (final em destaque). Se houver só um preço, coloque em preco_por e deixe preco_de vazio.
+- Capture a dinâmica comercial COMPLETA: "leve X pague Y", "% desconto na 2ª unidade", "limitado a N por sócio", "nos cartões X", "unidade sai por R$", etc. É informação tão importante quanto o preço.
+- Marque confianca: "baixa" quando o texto ou número estiver borrado, cortado ou ambíguo — não arrisque um valor errado.
+- Agrupe por categoria/seção do flyer quando identificável pelos títulos ou cores de fundo.
+- Se houver múltiplas páginas, leia todas e extraia todos os itens.`,
+    });
+
+    for (const file of req.files) {
+      const isPdf = file.mimetype === 'application/pdf';
+      if (isPdf) {
+        content.push({
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: file.buffer.toString('base64') },
+        });
+      } else {
+        const imgType = file.mimetype.startsWith('image/') ? file.mimetype : 'image/jpeg';
+        content.push({
+          type: 'image',
+          source: { type: 'base64', media_type: imgType, data: file.buffer.toString('base64') },
+        });
+      }
+    }
+
+    const response = await anthropic.messages.create({
+      model: 'claude-opus-4-5',
+      max_tokens: 4096,
+      tools: [{
+        name: 'registrar_itens_flyer',
+        description: 'Registra os itens extraídos do encarte promocional',
+        input_schema: {
+          type: 'object',
+          properties: {
+            itens: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  descricao:          { type: 'string', description: 'Nome do produto, marca, variante e peso/volume, igual ao impresso' },
+                  preco_de:           { type: 'string', description: 'Preço De (riscado), se houver, formato 0,00' },
+                  preco_por:          { type: 'string', description: 'Preço final Por ou preço único, formato 0,00' },
+                  dinamica_comercial: { type: 'string', description: 'Texto completo da promoção: desconto, leve-pague, limite, condição de cartão etc.' },
+                  categoria:          { type: 'string', description: 'Categoria/seção do flyer' },
+                  confianca:          { type: 'string', enum: ['alta', 'media', 'baixa'], description: 'Confiança na leitura' },
+                },
+                required: ['descricao', 'preco_por', 'confianca'],
+              },
+            },
+          },
+          required: ['itens'],
+        },
+      }],
+      tool_choice: { type: 'tool', name: 'registrar_itens_flyer' },
+      messages: [{ role: 'user', content }],
+    });
+
+    const toolUse = response.content.find(b => b.type === 'tool_use');
+    if (!toolUse) return res.status(500).json({ error: 'IA não retornou itens estruturados' });
+
+    res.json({ itens: toolUse.input.itens || [] });
+  } catch (e) {
+    console.error('Erro extração IA:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // PUT /api/campanhas/itens/:itemId

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Pencil, Trash2, Camera, CheckCircle, Circle, FileText, ChevronRight, X, ArrowLeft, Upload, Loader, Download, FileSpreadsheet } from 'lucide-react';
+import { Plus, Pencil, Trash2, Camera, CheckCircle, Circle, FileText, ChevronRight, X, ArrowLeft, Upload, Loader, Download, FileSpreadsheet, Sparkles, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api from '../api';
 import Modal from '../components/Modal';
@@ -106,6 +106,14 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
   const [xlsxLoading, setXlsxLoading] = useState(false);
   const [xlsxSaving, setXlsxSaving]   = useState(false);
 
+  // IA flyer extraction
+  const iaRef                           = useRef();
+  const [iaModal, setIaModal]           = useState(false);
+  const [iaFiles, setIaFiles]           = useState([]);
+  const [iaLoading, setIaLoading]       = useState(false);
+  const [iaItens, setIaItens]           = useState(null); // null = ainda não extraiu
+  const [iaSaving, setIaSaving]         = useState(false);
+
   // Flyer PDF (upload simples)
   const [flyerUploading, setFlyerUploading] = useState(false);
 
@@ -193,6 +201,63 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       load();
     } catch { toast('Erro ao salvar itens'); }
     finally { setXlsxSaving(false); }
+  };
+
+  // ── Extração IA
+  const handleIaFiles = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length) { setIaFiles(files); setIaItens(null); }
+    e.target.value = '';
+  };
+
+  const processarFlyer = async () => {
+    if (!iaFiles.length) return toast('Selecione ao menos um arquivo');
+    setIaLoading(true);
+    setIaItens(null);
+    try {
+      const fd = new FormData();
+      fd.append('requester_id', userId);
+      iaFiles.forEach(f => fd.append('arquivos', f));
+      const base = import.meta.env.VITE_API_URL || '/api';
+      const res = await fetch(`${base}/campanhas/${campanha.id}/extrair-itens`, {
+        method: 'POST', body: fd,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Erro ao processar');
+      setIaItens((json.itens || []).map((it, i) => ({
+        ...it,
+        selected: true,
+        preco: it.preco_de ? `De: R$${it.preco_de} | Por: R$${it.preco_por}` : (it.preco_por ? `R$${it.preco_por}` : ''),
+        ordem: i,
+      })));
+    } catch (err) {
+      toast('Erro: ' + err.message);
+    } finally {
+      setIaLoading(false);
+    }
+  };
+
+  const salvarIaItens = async () => {
+    const toSave = (iaItens || [])
+      .filter(it => it.selected)
+      .map((it, i) => ({
+        descricao: it.descricao,
+        preco: it.preco,
+        categoria: it.categoria || '',
+        dinamica_comercial: it.dinamica_comercial || '',
+        ordem: itens.length + i,
+      }));
+    if (!toSave.length) return toast('Selecione ao menos um item');
+    setIaSaving(true);
+    try {
+      await api.post(`/campanhas/${campanha.id}/itens`, { requester_id: userId, itens: toSave });
+      toast(`✅ ${toSave.length} itens adicionados!`);
+      setIaModal(false);
+      setIaFiles([]);
+      setIaItens(null);
+      load();
+    } catch { toast('Erro ao salvar itens'); }
+    finally { setIaSaving(false); }
   };
 
   // ── Upload do PDF do flyer (só armazena, não faz parsing)
@@ -387,6 +452,15 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
                   : <><Upload size={14} /> {campanha.flyer_pdf_url ? 'Atualizar Flyer' : 'Anexar Flyer PDF'}</>}
               </button>
 
+              {/* Ler Flyer com IA */}
+              <input ref={iaRef} type="file" accept="image/*,application/pdf"
+                multiple style={{ display: 'none' }} onChange={handleIaFiles} />
+              <button className="btn btn-primary" style={{ background: '#6366f1' }}
+                onClick={() => { setIaModal(true); setIaItens(null); setIaFiles([]); }}
+                title="Extrair itens do flyer automaticamente com IA">
+                <Sparkles size={14} /> Ler com IA
+              </button>
+
               {/* Template + Importar Excel */}
               <input ref={xlsxRef} type="file" accept=".xlsx,.xls,.csv"
                 style={{ display: 'none' }} onChange={handleExcelUpload} />
@@ -454,11 +528,16 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
                     : <Circle size={22} style={{ color: '#f59e0b', flexShrink: 0 }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{item.descricao}</div>
-                  <div style={{ display: 'flex', gap: 10, fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                  <div style={{ display: 'flex', gap: 10, fontSize: 12, color: 'var(--text-muted)', marginTop: 2, flexWrap: 'wrap' }}>
                     {item.preco && <span style={{ color: '#E8681A', fontWeight: 700 }}>{item.preco}</span>}
                     {item.categoria && <span>{item.categoria}</span>}
                     {ok && <span style={{ color: '#10b981' }}>✓ {ev.user?.full_name} · {new Date(ev.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>}
                   </div>
+                  {item.dinamica_comercial && (
+                    <div style={{ fontSize: 11, color: '#6366f1', marginTop: 3, fontStyle: 'italic' }}>
+                      🏷️ {item.dinamica_comercial}
+                    </div>
+                  )}
                   {ok && ev.foto_url && (
                     <img src={ev.foto_url} alt="evidência"
                       style={{ marginTop: 8, height: 80, borderRadius: 8, objectFit: 'cover', cursor: 'pointer' }}
@@ -586,6 +665,134 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
           <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setItemModal(false)}>Cancelar</button>
           <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={saveItem}>Salvar</button>
         </div>
+      </Modal>
+
+      {/* Modal IA */}
+      <Modal open={iaModal} onClose={() => { setIaModal(false); setIaItens(null); setIaFiles([]); }}
+        title={iaItens ? `✨ Itens extraídos (${(iaItens).filter(i => i.selected).length}/${iaItens.length} selecionados)` : '📸 Ler Flyer com IA'}>
+
+        {/* Etapa 1: upload */}
+        {!iaItens && (
+          <>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14 }}>
+              Envie uma ou mais fotos/PDF do encarte. A IA vai ler e extrair todos os itens automaticamente.<br />
+              <strong style={{ color: 'var(--text)' }}>Pode demorar até 1 minuto</strong> dependendo do tamanho do flyer.
+            </div>
+
+            <div style={{
+              border: '2px dashed var(--border)', borderRadius: 12, padding: '24px 16px',
+              textAlign: 'center', marginBottom: 14, cursor: 'pointer',
+              background: iaFiles.length ? '#6366f110' : 'transparent',
+            }} onClick={() => iaRef.current?.click()}>
+              {iaFiles.length ? (
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: '#6366f1', marginBottom: 6 }}>
+                    {iaFiles.length} arquivo{iaFiles.length > 1 ? 's' : ''} selecionado{iaFiles.length > 1 ? 's' : ''}
+                  </div>
+                  {iaFiles.map((f, i) => (
+                    <div key={i} style={{ fontSize: 12, color: 'var(--text-muted)' }}>{f.name}</div>
+                  ))}
+                  <div style={{ fontSize: 12, color: '#6366f1', marginTop: 8 }}>Clique para trocar</div>
+                </div>
+              ) : (
+                <>
+                  <Sparkles size={32} style={{ color: '#6366f1', marginBottom: 8, opacity: 0.7 }} />
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>Selecionar foto(s) ou PDF</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    No celular pode usar a câmera · Suporta múltiplos arquivos
+                  </div>
+                </>
+              )}
+            </div>
+
+            {iaLoading && (
+              <div style={{ textAlign: 'center', padding: '16px 0', color: '#6366f1' }}>
+                <Loader size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
+                <div style={{ fontWeight: 600 }}>Lendo o encarte com IA...</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Isso pode levar até 1 minuto</div>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
+                onClick={() => { setIaModal(false); setIaFiles([]); }}>Cancelar</button>
+              <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', background: '#6366f1' }}
+                onClick={processarFlyer} disabled={!iaFiles.length || iaLoading}>
+                {iaLoading ? <><Loader size={14} style={{ animation: 'spin 1s linear infinite' }} /> Processando...</>
+                  : <><Sparkles size={14} /> Processar</>}
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* Etapa 2: revisão */}
+        {iaItens && (
+          <>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+              Revise os itens extraídos. Itens com fundo amarelo precisam de atenção. Edite antes de confirmar.
+            </div>
+            <div style={{ maxHeight: 400, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+              {iaItens.map((it, idx) => (
+                <div key={idx} style={{
+                  padding: '10px 12px', borderRadius: 10,
+                  border: `1px solid ${it.confianca === 'baixa' ? '#f59e0b80' : it.selected ? '#6366f140' : 'var(--border)'}`,
+                  background: it.confianca === 'baixa' ? '#f59e0b10' : it.selected ? '#6366f108' : 'var(--bg)',
+                  cursor: 'pointer', opacity: it.selected ? 1 : 0.5,
+                }} onClick={() => setIaItens(l => l.map((x, i) => i === idx ? { ...x, selected: !x.selected } : x))}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <input type="checkbox" checked={it.selected} readOnly
+                      style={{ accentColor: '#6366f1', width: 15, height: 15, flexShrink: 0, marginTop: 3 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {it.confianca === 'baixa' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#f59e0b', marginBottom: 4, fontWeight: 600 }}>
+                          <AlertTriangle size={11} /> Confira este item — leitura incerta
+                        </div>
+                      )}
+                      <input className="input" style={{ padding: '4px 8px', fontSize: 13, marginBottom: 6 }}
+                        value={it.descricao}
+                        onClick={e => e.stopPropagation()}
+                        onChange={e => setIaItens(l => l.map((x, i) => i === idx ? { ...x, descricao: e.target.value } : x))} />
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                        <input className="input" style={{ padding: '4px 8px', fontSize: 12 }}
+                          value={it.preco} placeholder="Preço"
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => setIaItens(l => l.map((x, i) => i === idx ? { ...x, preco: e.target.value } : x))} />
+                        <input className="input" style={{ padding: '4px 8px', fontSize: 12 }}
+                          value={it.categoria || ''} placeholder="Categoria"
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => setIaItens(l => l.map((x, i) => i === idx ? { ...x, categoria: e.target.value } : x))} />
+                      </div>
+                      {it.dinamica_comercial && (
+                        <input className="input" style={{ padding: '4px 8px', fontSize: 11, marginTop: 6, color: '#6366f1' }}
+                          value={it.dinamica_comercial}
+                          onClick={e => e.stopPropagation()}
+                          onChange={e => setIaItens(l => l.map((x, i) => i === idx ? { ...x, dinamica_comercial: e.target.value } : x))} />
+                      )}
+                    </div>
+                    <button className="btn-icon" style={{ color: '#ef4444', flexShrink: 0 }}
+                      onClick={e => { e.stopPropagation(); setIaItens(l => l.filter((_, i) => i !== idx)); }}>
+                      <X size={13} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 10 }}>
+              <button style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                onClick={() => setIaItens(l => l.map(x => ({ ...x, selected: true })))}>Selecionar todos</button>
+              <button style={{ color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer' }}
+                onClick={() => setIaItens(null)}>← Voltar</button>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
+                onClick={() => { setIaModal(false); setIaItens(null); setIaFiles([]); }}>Cancelar</button>
+              <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', background: '#6366f1' }}
+                onClick={salvarIaItens} disabled={iaSaving}>
+                {iaSaving ? 'Salvando...' : `Confirmar ${(iaItens).filter(i => i.selected).length} itens`}
+              </button>
+            </div>
+          </>
+        )}
       </Modal>
 
       {/* Modal lote */}
