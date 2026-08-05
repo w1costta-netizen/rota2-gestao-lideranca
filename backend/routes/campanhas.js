@@ -192,9 +192,11 @@ Instruções:
       tool_choice: { type: 'tool', name: 'registrar_itens_flyer' },
       messages: [{ role: 'user', content }],
     };
+    if (hasPdf) createParams.betas = ['pdfs-2024-09-25'];
     console.log('[IA] Enviando para Anthropic — arquivos:', req.files.map(f => `${f.originalname} (${f.mimetype}, ${f.size}b)`));
-    const extraOpts = hasPdf ? { headers: { 'anthropic-beta': 'pdfs-2024-09-25' } } : {};
-    const response = await anthropic.messages.create(createParams, extraOpts);
+    const response = hasPdf
+      ? await anthropic.beta.messages.create(createParams)
+      : await anthropic.messages.create(createParams);
 
     console.log('[IA] stop_reason:', response.stop_reason, '| blocks:', response.content.map(b => b.type));
     const toolUse = response.content.find(b => b.type === 'tool_use');
