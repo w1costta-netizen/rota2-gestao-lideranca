@@ -387,9 +387,13 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
                   : <><Upload size={14} /> {campanha.flyer_pdf_url ? 'Atualizar Flyer' : 'Anexar Flyer PDF'}</>}
               </button>
 
-              {/* Importar Excel */}
+              {/* Template + Importar Excel */}
               <input ref={xlsxRef} type="file" accept=".xlsx,.xls,.csv"
                 style={{ display: 'none' }} onChange={handleExcelUpload} />
+              <button className="btn btn-ghost" onClick={downloadTemplate}
+                title="Baixar modelo de planilha Excel para preencher e importar">
+                <Download size={14} /> Template Excel
+              </button>
               <button className="btn btn-primary" style={{ background: '#10b981' }}
                 onClick={() => xlsxRef.current?.click()} disabled={xlsxLoading}
                 title="Importar produtos a partir de planilha Excel">
@@ -656,14 +660,9 @@ export default function Campanhas({ userId, profile }) {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {isAdmin && (
-            <>
-              <button className="btn btn-ghost" onClick={downloadTemplate} title="Baixar modelo de planilha Excel">
-                <Download size={14} /> Template Excel
-              </button>
-              <button className="btn btn-primary" onClick={() => setModal(true)}>
-                <Plus size={15} /> Nova campanha
-              </button>
-            </>
+            <button className="btn btn-primary" onClick={() => setModal(true)}>
+              <Plus size={15} /> Nova campanha
+            </button>
           )}
         </div>
       </div>
