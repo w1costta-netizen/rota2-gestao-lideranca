@@ -191,18 +191,23 @@ function NovaSessao({ userId, onCriar, onVoltar }) {
   useEffect(() => { loadFiltros(); }, [loadFiltros]);
 
   const change = async (field, value) => {
-    let next = { ...sel, [field]: value };
+    // Monta o próximo estado limpando campos abaixo do alterado
+    let next;
     if (field === 'setor')        next = { setor: value, departamento: '', secao: '', linha: '' };
-    if (field === 'departamento') next = { ...next, departamento: value, secao: '', linha: '' };
-    if (field === 'secao')        next = { ...next, secao: value, linha: '' };
-    if (field === 'linha')        next = { ...next, linha: value };
+    else if (field === 'departamento') next = { setor: sel.setor, departamento: value, secao: '', linha: '' };
+    else if (field === 'secao')        next = { setor: sel.setor, departamento: sel.departamento, secao: value, linha: '' };
+    else                               next = { ...sel, linha: value };
     setSel(next);
+
+    // Busca opções filtradas pelo nível selecionado
     const params = { requester_id: userId };
     if (next.setor)        params.setor        = next.setor;
     if (next.departamento) params.departamento = next.departamento;
     if (next.secao)        params.secao        = next.secao;
-    const r = await api.get(`/conferencia/filtros?${new URLSearchParams(params).toString()}`);
-    setOpts(o => ({ ...o, ...r.data }));
+    try {
+      const r = await api.get(`/conferencia/filtros?${new URLSearchParams(params).toString()}`);
+      setOpts(o => ({ ...o, ...r.data }));
+    } catch { toast('Erro ao carregar opções', 'error'); }
   };
 
   const criar = async () => {

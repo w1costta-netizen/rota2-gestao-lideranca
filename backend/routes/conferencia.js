@@ -93,7 +93,7 @@ router.get('/filtros', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
-  let q = supabase.from('produtos_conferencia').select('descricao_setor, descricao_departamento, descricao_secao, descricao_linha').eq('company', me.company);
+  let q = supabase.from('produtos_conferencia').select('descricao_setor, descricao_departamento, descricao_secao, descricao_linha').eq('company', me.company).limit(100000);
   if (setor)        q = q.eq('descricao_setor', setor);
   if (departamento) q = q.eq('descricao_departamento', departamento);
   if (secao)        q = q.eq('descricao_secao', secao);
@@ -145,7 +145,8 @@ router.get('/linha', async (req, res) => {
 
   let q = supabase.from('produtos_conferencia')
     .select('cd_produto, ean, descricao_produto, produto_status, motivo_suspencao, data_ultima_nf, estoque_qty')
-    .eq('company', me.company);
+    .eq('company', me.company)
+    .limit(10000);
 
   if (setor)        q = q.eq('descricao_setor', setor);
   if (departamento) q = q.eq('descricao_departamento', departamento);
