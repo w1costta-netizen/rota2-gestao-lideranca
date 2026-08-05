@@ -128,40 +128,36 @@ router.post('/:id/extrair-itens', upload.array('arquivos', 10), async (req, res)
   if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY não configurada' });
 
   try {
-    // Monta conteúdo com todos os arquivos
-    const content = [];
-    content.push({
-      type: 'text',
-      text: `Você é um especialista em leitura de encartes e flyers promocionais de supermercado/clube de compras.
-Analise o(s) flyer(s) enviados e extraia TODOS os itens promocionais, sem pular nenhum, mesmo os pequenos ou nos cantos da página.
+    const pdfParse = require('pdf-parse');
+    const INSTRUCAO = `Você é especialista em leitura de encartes e flyers promocionais de supermercado/clube de compras.
+Extraia TODOS os itens promocionais sem pular nenhum, mesmo pequenos ou nos cantos.
 
-Instruções:
-- Extraia a descrição COMPLETA igual ao impresso: produto + marca + variante + peso/volume. Não abrevia.
-- Diferencie preço "De" (riscado/tachado) do preço "Por" (final em destaque). Se houver só um preço, coloque em preco_por e deixe preco_de vazio.
-- Capture a dinâmica comercial COMPLETA: "leve X pague Y", "% desconto na 2ª unidade", "limitado a N por sócio", "nos cartões X", "unidade sai por R$", etc. É informação tão importante quanto o preço.
-- Marque confianca: "baixa" quando o texto ou número estiver borrado, cortado ou ambíguo — não arrisque um valor errado.
-- Agrupe por categoria/seção do flyer quando identificável pelos títulos ou cores de fundo.
-- Se houver múltiplas páginas, leia todas e extraia todos os itens.`,
-    });
+Regras:
+- Descrição COMPLETA: produto + marca + variante + peso/volume, exatamente como está.
+- Diferencie preço "De" (riscado) do "Por" (final). Se houver só um, coloque em preco_por.
+- Capture dinâmica comercial COMPLETA: "leve X pague Y", "% desconto na 2ª unidade", "limitado a N por sócio", condição de cartão etc.
+- confianca "baixa" quando texto/número estiver borrado, cortado ou ambíguo.
+- Agrupe por categoria/seção quando identificável.`;
+
+    const content = [{ type: 'text', text: INSTRUCAO }];
 
     for (const file of req.files) {
-      const isPdf = file.mimetype === 'application/pdf';
-      if (isPdf) {
-        content.push({
-          type: 'document',
-          source: { type: 'base64', media_type: 'application/pdf', data: file.buffer.toString('base64') },
-        });
+      if (file.mimetype === 'application/pdf') {
+        // Extrai texto do PDF sem precisar de beta da Anthropic
+        const parsed = await pdfParse(file.buffer);
+        const texto = parsed.text?.trim();
+        if (!texto) return res.status(400).json({ error: 'PDF sem texto legível. Tente enviar como imagem.' });
+        console.log('[IA] PDF parseado — chars:', texto.length);
+        content.push({ type: 'text', text: `\n--- CONTEÚDO DO ENCARTE (${file.originalname}) ---\n${texto}\n---` });
       } else {
         const imgType = file.mimetype.startsWith('image/') ? file.mimetype : 'image/jpeg';
-        content.push({
-          type: 'image',
-          source: { type: 'base64', media_type: imgType, data: file.buffer.toString('base64') },
-        });
+        content.push({ type: 'image', source: { type: 'base64', media_type: imgType, data: file.buffer.toString('base64') } });
       }
     }
 
-    const hasPdf = req.files.some(f => f.mimetype === 'application/pdf');
-    const createParams = {
+    console.log('[IA] Enviando para Anthropic — arquivos:', req.files.map(f => `${f.originalname} (${f.mimetype}, ${f.size}b)`));
+
+    const response = await anthropic.messages.create({
       model: 'claude-3-5-sonnet-20241022',
       max_tokens: 8192,
       tools: [{
@@ -175,12 +171,12 @@ Instruções:
               items: {
                 type: 'object',
                 properties: {
-                  descricao:          { type: 'string', description: 'Nome do produto, marca, variante e peso/volume, igual ao impresso' },
-                  preco_de:           { type: 'string', description: 'Preço De (riscado), se houver, formato 0,00' },
-                  preco_por:          { type: 'string', description: 'Preço final Por ou preço único, formato 0,00' },
-                  dinamica_comercial: { type: 'string', description: 'Texto completo da promoção: desconto, leve-pague, limite, condição de cartão etc.' },
-                  categoria:          { type: 'string', description: 'Categoria/seção do flyer' },
-                  confianca:          { type: 'string', enum: ['alta', 'media', 'baixa'], description: 'Confiança na leitura' },
+                  descricao:          { type: 'string' },
+                  preco_de:           { type: 'string' },
+                  preco_por:          { type: 'string' },
+                  dinamica_comercial: { type: 'string' },
+                  categoria:          { type: 'string' },
+                  confianca:          { type: 'string', enum: ['alta', 'media', 'baixa'] },
                 },
                 required: ['descricao', 'preco_por', 'confianca'],
               },
@@ -191,19 +187,14 @@ Instruções:
       }],
       tool_choice: { type: 'tool', name: 'registrar_itens_flyer' },
       messages: [{ role: 'user', content }],
-    };
-    if (hasPdf) createParams.betas = ['pdfs-2024-09-25'];
-    console.log('[IA] Enviando para Anthropic — arquivos:', req.files.map(f => `${f.originalname} (${f.mimetype}, ${f.size}b)`));
-    const response = hasPdf
-      ? await anthropic.beta.messages.create(createParams)
-      : await anthropic.messages.create(createParams);
+    });
 
-    console.log('[IA] stop_reason:', response.stop_reason, '| blocks:', response.content.map(b => b.type));
+    console.log('[IA] stop_reason:', response.stop_reason);
     const toolUse = response.content.find(b => b.type === 'tool_use');
     if (!toolUse) {
       const text = response.content.find(b => b.type === 'text');
-      console.error('[IA] Sem tool_use. Texto:', text?.text?.slice(0, 300));
-      return res.status(500).json({ error: 'IA não retornou itens estruturados. ' + (text?.text || '') });
+      console.error('[IA] Sem tool_use:', text?.text?.slice(0, 300));
+      return res.status(500).json({ error: 'IA não retornou itens. ' + (text?.text || '') });
     }
 
     console.log('[IA] Itens extraídos:', toolUse.input.itens?.length ?? 0);
