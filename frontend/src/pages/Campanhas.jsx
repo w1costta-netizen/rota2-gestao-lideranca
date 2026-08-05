@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Plus, Pencil, Trash2, Camera, CheckCircle, Circle, FileText, ChevronRight, X, ArrowLeft, Upload, Loader, Download, FileSpreadsheet, Sparkles, AlertTriangle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api from '../api';
@@ -212,18 +213,19 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
 
   const pdfParaImagens = async (file) => {
     const pdfjsLib = await import('pdfjs-dist');
-    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const blobs = [];
-    for (let p = 1; p <= pdf.numPages; p++) {
+    const totalPages = Math.min(pdf.numPages, 12);
+    for (let p = 1; p <= totalPages; p++) {
       const page = await pdf.getPage(p);
-      const viewport = page.getViewport({ scale: 2 });
+      const viewport = page.getViewport({ scale: 1.5 });
       const canvas = document.createElement('canvas');
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-      const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.9));
+      const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
       blobs.push(new File([blob], `${file.name}_p${p}.jpg`, { type: 'image/jpeg' }));
     }
     return blobs;
