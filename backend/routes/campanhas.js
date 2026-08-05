@@ -161,7 +161,7 @@ Instruções:
     }
 
     const response = await anthropic.messages.create({
-      model: 'claude-opus-4-5',
+      model: 'claude-sonnet-5',
       max_tokens: 4096,
       tools: [{
         name: 'registrar_itens_flyer',
