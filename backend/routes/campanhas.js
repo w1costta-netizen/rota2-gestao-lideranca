@@ -142,6 +142,8 @@ REGRAS:
 - Se aparecer "Cada sai por: R$ X,XX" — esse é o preco_por.
 - Se aparecer um preço maior acima — esse é o preco_de.
 - Se tiver só um preço, coloque em preco_por.
+- IMPORTANTE: retorne os valores de preço APENAS com números e vírgula, SEM "R$". Exemplo correto: "18,98". Exemplo errado: "R$ 18,98".
+- Se não conseguir ler um preço com clareza, deixe o campo VAZIO (string vazia ""), nunca use "UNKNOWN" ou similar.
 - confianca "baixa" apenas quando o número estiver cortado ou ilegível.
 - Leia TODAS as páginas/imagens enviadas e extraia todos os produtos de cada uma.`;
 

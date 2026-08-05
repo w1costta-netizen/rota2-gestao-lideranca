@@ -252,13 +252,23 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Erro ao processar');
+      const limparPreco = v => {
+        if (!v || /unknown|indefinido/i.test(v)) return '';
+        return v.replace(/R\$\s*/gi, '').trim();
+      };
       const itensArr = Array.isArray(json.itens) ? json.itens : [];
-      setIaItens(itensArr.map((it, i) => ({
-        ...it,
-        selected: true,
-        preco: it.preco_de ? `De: R$${it.preco_de} | Por: R$${it.preco_por}` : (it.preco_por ? `R$${it.preco_por}` : ''),
-        ordem: i,
-      })));
+      setIaItens(itensArr.map((it, i) => {
+        const de = limparPreco(it.preco_de);
+        const por = limparPreco(it.preco_por);
+        return {
+          ...it,
+          preco_de: de,
+          preco_por: por,
+          selected: true,
+          preco: de ? `De: R$${de} | Por: R$${por}` : (por ? `R$${por}` : ''),
+          ordem: i,
+        };
+      }));
     } catch (err) {
       toast('Erro: ' + err.message);
     } finally {
