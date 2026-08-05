@@ -224,7 +224,8 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Erro ao processar');
-      setIaItens((json.itens || []).map((it, i) => ({
+      const itensArr = Array.isArray(json.itens) ? json.itens : Array.isArray(json) ? json : [];
+      setIaItens(itensArr.map((it, i) => ({
         ...it,
         selected: true,
         preco: it.preco_de ? `De: R$${it.preco_de} | Por: R$${it.preco_por}` : (it.preco_por ? `R$${it.preco_por}` : ''),

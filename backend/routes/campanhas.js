@@ -197,8 +197,9 @@ Regras:
       return res.status(500).json({ error: 'IA não retornou itens. ' + (text?.text || '') });
     }
 
-    console.log('[IA] Itens extraídos:', toolUse.input.itens?.length ?? 0);
-    res.json({ itens: toolUse.input.itens || [] });
+    const itens = Array.isArray(toolUse.input.itens) ? toolUse.input.itens : Array.isArray(toolUse.input) ? toolUse.input : [];
+    console.log('[IA] Itens extraídos:', itens.length);
+    res.json({ itens });
   } catch (e) {
     console.error('Erro extração IA:', e.status, e.message, e.error);
     res.status(500).json({ error: e.message || 'Erro interno' });
