@@ -55,15 +55,26 @@ function resizeImage(file, maxWidth = 1600, quality = 0.8) {
   });
 }
 
-// Converte URL de imagem → base64 (via fetch, sem problemas de CORS com Supabase)
-async function imageUrlToBase64(url) {
+// Converte URL → base64 redimensionado para PDF (máx 600x450px, qualidade 0.75)
+async function imageUrlToBase64ForPDF(url, maxW = 600, maxH = 450) {
   const resp = await fetch(url);
   const blob = await resp.blob();
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload  = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
+    const img = new window.Image();
+    const objUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(objUrl);
+      const ratio = img.height / img.width;
+      let w = Math.min(img.width, maxW);
+      let h = w * ratio;
+      if (h > maxH) { h = maxH; w = maxH / ratio; }
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.round(w); canvas.height = Math.round(h);
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.75));
+    };
+    img.onerror = reject;
+    img.src = objUrl;
   });
 }
 
@@ -195,7 +206,7 @@ async function gerarPDF(rel, fotos, creatorName) {
     // Imagem
     let imgData;
     try {
-      imgData = await imageUrlToBase64(foto.photo_url);
+      imgData = await imageUrlToBase64ForPDF(foto.photo_url);
     } catch { /* sem imagem */ }
 
     if (imgData) {
