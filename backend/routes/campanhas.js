@@ -148,6 +148,7 @@ Regras:
         const texto = parsed.text?.trim();
         if (!texto) return res.status(400).json({ error: 'PDF sem texto legível. Tente enviar como imagem.' });
         console.log('[IA] PDF parseado — chars:', texto.length);
+        console.log('[IA] AMOSTRA do texto extraído:\n', texto.slice(0, 600));
         content.push({ type: 'text', text: `\n--- CONTEÚDO DO ENCARTE (${file.originalname}) ---\n${texto}\n---` });
       } else {
         const imgType = file.mimetype.startsWith('image/') ? file.mimetype : 'image/jpeg';
