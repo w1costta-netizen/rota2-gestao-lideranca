@@ -11,7 +11,7 @@ async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
   return data;
 }
-const isManager = p => p && ['admin','supervisor'].includes(p.access_level);
+const isManager = p => p && ['admin','supervisor','master'].includes(p.access_level);
 
 // ── CAMPANHAS ─────────────────────────────────────────────────────
 
@@ -38,13 +38,16 @@ router.get('/', async (req, res) => {
 
 // POST /api/campanhas
 router.post('/', async (req, res) => {
-  const { requester_id, titulo, tipo, validade_ini, validade_fim } = req.body;
+  const { requester_id, titulo, tipo, validade_ini, validade_fim, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!isManager(me)) return res.status(403).json({ error: 'Acesso negado' });
 
+  const company = me.access_level === 'master' ? bodyCompany : me.company;
+  if (!company) return res.status(400).json({ error: 'company obrigatório para master' });
+
   const { data, error } = await supabase.from('campanhas').insert({
-    company: me.company, titulo, tipo: tipo || 'fds',
+    company, titulo, tipo: tipo || 'fds',
     validade_ini, validade_fim, created_by: requester_id,
   }).select().single();
   if (error) return res.status(500).json({ error: error.message });

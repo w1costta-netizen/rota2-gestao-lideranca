@@ -838,7 +838,7 @@ export default function Campanhas({ userId, profile }) {
     if (!form.titulo || !form.validade_ini || !form.validade_fim) return toast('Preencha todos os campos');
     setSaving(true);
     try {
-      const r = await api.post('/campanhas', { requester_id: userId, ...form });
+      const r = await api.post('/campanhas', { requester_id: userId, company: profile?.company, ...form });
       toast('Campanha criada!');
       setModal(false);
       setForm({ titulo: '', tipo: 'fds', validade_ini: '', validade_fim: '' });
