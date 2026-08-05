@@ -826,7 +826,7 @@ export default function Campanhas({ userId, profile }) {
 
   const load = () => {
     setLoading(true);
-    api.get(`/campanhas?requester_id=${userId}`)
+    api.get(`/campanhas?requester_id=${userId}${profile?.company ? `&company=${encodeURIComponent(profile.company)}` : ''}`)
       .then(r => setList(r.data))
       .catch(() => toast('Erro ao carregar campanhas'))
       .finally(() => setLoading(false));
