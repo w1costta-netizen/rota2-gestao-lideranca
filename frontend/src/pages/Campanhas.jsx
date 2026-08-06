@@ -141,6 +141,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
   const toast = useToast();
   const isAdmin = ['admin', 'supervisor'].includes(profile?.access_level);
   const fileRef    = useRef();
+  const galeriaRef = useRef();
   const xlsxRef    = useRef();
   const flyerRef   = useRef();
 
@@ -702,7 +703,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {!cheio && (
                     <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }}
-                      onClick={() => { setFotoModal(item); setFotoPreview(null); setObs(''); fileRef.current?.click(); }}>
+                      onClick={() => { setFotoModal(item); setFotoPreview(null); setObs(''); }}>
                       <Camera size={13} /> {ok ? `+Foto (${evs.length}/5)` : 'Foto'}
                     </button>
                   )}
@@ -720,7 +721,10 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
         })}
       </div>
 
+      {/* Dois inputs: câmera (capture) e galeria (sem capture) */}
       <input ref={fileRef} type="file" accept="image/*" capture="environment"
+        style={{ display: 'none' }} onChange={handleFotoSelecionada} />
+      <input ref={galeriaRef} type="file" accept="image/*"
         style={{ display: 'none' }} onChange={handleFotoSelecionada} />
 
       {/* Modal foto */}
@@ -729,14 +733,18 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
           {!fotoPreview ? (
             <>
               <div style={{ marginBottom: 16, fontSize: 13, color: 'var(--text-muted)' }}>
-                Tire ou selecione uma foto mostrando o item e a etiqueta de preço.
+                Tire uma foto ou escolha da galeria mostrando o item e a etiqueta de preço.
               </div>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={fecharFotoModal}>Cancelar</button>
-                <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '12px' }}
                   onClick={() => fileRef.current?.click()}>
-                  <Camera size={14} /> Tirar/Selecionar foto
+                  <Camera size={16} /> Tirar foto com a câmera
                 </button>
+                <button className="btn btn-ghost" style={{ justifyContent: 'center', padding: '12px' }}
+                  onClick={() => galeriaRef.current?.click()}>
+                  <Upload size={16} /> Escolher da galeria
+                </button>
+                <button className="btn btn-ghost" style={{ justifyContent: 'center' }} onClick={fecharFotoModal}>Cancelar</button>
               </div>
             </>
           ) : (
@@ -750,7 +758,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
-                  onClick={() => fileRef.current?.click()} disabled={uploading}>
+                  onClick={() => galeriaRef.current?.click()} disabled={uploading}>
                   <Camera size={14} /> Trocar foto
                 </button>
                 <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}
