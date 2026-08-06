@@ -234,8 +234,9 @@ router.post('/evidencias', async (req, res) => {
   const { requester_id, item_id, campanha_id, foto_url, obs } = req.body;
   if (!requester_id || !item_id || !foto_url) return res.status(400).json({ error: 'Campos obrigatórios faltando' });
 
-  // Remove evidência anterior do mesmo item (substitui)
-  await supabase.from('campanha_evidencias').delete().eq('item_id', item_id).eq('user_id', requester_id);
+  // Limita a 5 fotos por item
+  const { count } = await supabase.from('campanha_evidencias').select('id', { count: 'exact', head: true }).eq('item_id', item_id);
+  if (count >= 5) return res.status(400).json({ error: 'Limite de 5 fotos por item atingido' });
 
   const { data, error } = await supabase.from('campanha_evidencias').insert({
     item_id, campanha_id, user_id: requester_id, foto_url, obs: obs || '',

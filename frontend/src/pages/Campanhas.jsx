@@ -646,44 +646,57 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       {/* Lista de itens */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {itens.map(item => {
-          const ev = item.campanha_evidencias?.[0];
-          const ok = !!ev;
+          const evs = item.campanha_evidencias || [];
+          const ok  = evs.length > 0;
+          const cheio = evs.length >= 5;
           return (
             <div key={item.id} style={{
               background: 'var(--surface)', borderRadius: 12, padding: '14px 16px',
               border: `1px solid ${ok ? '#10b98140' : 'var(--border)'}`,
               borderLeft: `4px solid ${ok ? '#10b981' : '#f59e0b'}`,
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                {ok ? <CheckCircle size={22} style={{ color: '#10b981', flexShrink: 0 }} />
-                    : <Circle size={22} style={{ color: '#f59e0b', flexShrink: 0 }} />}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                {ok ? <CheckCircle size={22} style={{ color: '#10b981', flexShrink: 0, marginTop: 2 }} />
+                    : <Circle size={22} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 2 }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{item.descricao}</div>
                   <div style={{ display: 'flex', gap: 10, fontSize: 12, color: 'var(--text-muted)', marginTop: 2, flexWrap: 'wrap' }}>
                     {item.preco && <span style={{ color: '#E8681A', fontWeight: 700 }}>{item.preco}</span>}
                     {item.categoria && <span>{item.categoria}</span>}
-                    {ok && <span style={{ color: '#10b981' }}>✓ {ev.user?.full_name} · {new Date(ev.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>}
+                    {ok && <span style={{ color: '#10b981' }}>✓ {evs.length} foto{evs.length > 1 ? 's' : ''}</span>}
                   </div>
                   {item.dinamica_comercial && (
                     <div style={{ fontSize: 11, color: '#6366f1', marginTop: 3, fontStyle: 'italic' }}>
                       🏷️ {item.dinamica_comercial}
                     </div>
                   )}
-                  {ok && ev.foto_url && (
-                    <img src={ev.foto_url} alt="evidência"
-                      style={{ marginTop: 8, height: 80, borderRadius: 8, objectFit: 'cover', cursor: 'pointer' }}
-                      onClick={() => window.open(ev.foto_url, '_blank')} />
+                  {/* Miniaturas de todas as fotos */}
+                  {evs.length > 0 && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+                      {evs.map(ev => (
+                        <div key={ev.id} style={{ position: 'relative' }}>
+                          <img src={ev.foto_url} alt="evidência"
+                            style={{ height: 72, width: 72, borderRadius: 8, objectFit: 'cover', cursor: 'pointer', border: '1px solid var(--border)' }}
+                            onClick={() => window.open(ev.foto_url, '_blank')} />
+                          <button onClick={() => removeEvidencia(ev.id)}
+                            title="Remover foto"
+                            style={{ position: 'absolute', top: -6, right: -6, background: '#ef4444', border: 'none', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+                            <X size={10} color="#fff" />
+                          </button>
+                          {ev.obs && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ev.obs}>"{ev.obs}"</div>}
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  {ok && ev.obs && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, fontStyle: 'italic' }}>"{ev.obs}"</div>}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  {ok
-                    ? <button className="btn-icon" style={{ color: '#ef4444' }} onClick={() => removeEvidencia(ev.id)} title="Remover evidência"><X size={14} /></button>
-                    : <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }}
-                        onClick={() => { setFotoModal(item); setFotoPreview(null); setObs(''); fileRef.current?.click(); }}>
-                        <Camera size={13} /> Foto
-                      </button>
-                  }
+                  {!cheio && (
+                    <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }}
+                      onClick={() => { setFotoModal(item); setFotoPreview(null); setObs(''); fileRef.current?.click(); }}>
+                      <Camera size={13} /> {ok ? `+Foto (${evs.length}/5)` : 'Foto'}
+                    </button>
+                  )}
+                  {cheio && <span style={{ fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center' }}>5/5 fotos</span>}
                   {isAdmin && (
                     <>
                       <button className="btn-icon" onClick={() => openEditItem(item)}><Pencil size={13} /></button>
