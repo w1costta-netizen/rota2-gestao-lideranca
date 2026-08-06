@@ -502,8 +502,8 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
 
       let y = 65;
       for (const item of its) {
-        const ev = item.campanha_evidencias?.[0];
-        const validado = !!ev;
+        const evs = item.campanha_evidencias || [];
+        const validado = evs.length > 0;
         if (y > 260) { doc.addPage(); y = 15; }
 
         doc.setFillColor(validado ? 232 : 245, validado ? 248 : 245, validado ? 232 : 245);
@@ -519,27 +519,37 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
           doc.setFont('helvetica', 'bold'); doc.setTextColor(232, 104, 26);
           doc.text(item.preco, W - 16, y + 2, { align: 'right' });
         }
-        if (ev) {
+        if (validado) {
           doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(100, 100, 100);
-          doc.text(`Por: ${ev.user?.full_name || '—'} | ${new Date(ev.created_at).toLocaleString('pt-BR')}`, 26, y + 8);
+          const nomes = [...new Set(evs.map(e => e.user?.full_name).filter(Boolean))].join(', ');
+          doc.text(`Por: ${nomes || '—'} | ${evs.length} foto${evs.length > 1 ? 's' : ''}`, 26, y + 8);
         }
         y += 18;
 
-        if (ev?.foto_url) {
-          try {
-            if (y > 230) { doc.addPage(); y = 15; }
-            const img = await new Promise((res, rej) => {
-              const i = new Image(); i.crossOrigin = 'anonymous';
-              i.onload = () => res(i); i.onerror = rej; i.src = ev.foto_url;
-            });
-            const imgW = 60, imgH = 45;
-            doc.addImage(img, 'JPEG', 14, y, imgW, imgH);
-            if (ev.obs) {
-              doc.setFontSize(9); doc.setFont('helvetica', 'italic'); doc.setTextColor(80, 80, 80);
-              doc.text(`Obs: ${ev.obs}`, 80, y + 10);
+        // Fotos lado a lado (máx 3 por linha)
+        if (evs.length > 0) {
+          const imgW = 55, imgH = 42, gap = 6, perLinha = 3;
+          for (let f = 0; f < evs.length; f++) {
+            const ev = evs[f];
+            if (!ev.foto_url) continue;
+            const col = f % perLinha;
+            if (col === 0) {
+              if (y > 220) { doc.addPage(); y = 15; }
             }
-            y += imgH + 8;
-          } catch { y += 4; }
+            try {
+              const img = await new Promise((res, rej) => {
+                const i = new Image(); i.crossOrigin = 'anonymous';
+                i.onload = () => res(i); i.onerror = rej; i.src = ev.foto_url;
+              });
+              const x = 14 + col * (imgW + gap);
+              doc.addImage(img, 'JPEG', x, y, imgW, imgH);
+              if (ev.obs) {
+                doc.setFontSize(7); doc.setFont('helvetica', 'italic'); doc.setTextColor(80, 80, 80);
+                doc.text(ev.obs.slice(0, 22), x, y + imgH + 4);
+              }
+            } catch { /* imagem falhou, ignora */ }
+            if (col === perLinha - 1 || f === evs.length - 1) y += imgH + 12;
+          }
         }
       }
 
