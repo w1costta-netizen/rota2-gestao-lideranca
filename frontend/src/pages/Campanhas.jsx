@@ -394,15 +394,37 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
     } catch { toast('Erro ao adicionar itens'); }
   };
 
+  // Comprime imagem antes do upload para evitar erro de memória em celulares
+  const comprimirImagem = (file, maxW = 1280, maxH = 1280, quality = 0.82) =>
+    new Promise((resolve, reject) => {
+      const img = new window.Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        let { width: w, height: h } = img;
+        if (w > maxW || h > maxH) {
+          const ratio = Math.min(maxW / w, maxH / h);
+          w = Math.round(w * ratio);
+          h = Math.round(h * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Falha ao comprimir imagem')), 'image/jpeg', quality);
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Falha ao carregar imagem')); };
+      img.src = url;
+    });
+
   // ── Upload de foto evidência
   const handleFoto = async (e) => {
     const file = e.target.files?.[0];
     if (!file || !fotoModal) return;
     setUploading(true);
     try {
-      const ext  = file.name.split('.').pop();
-      const path = `${campanha.id}/${fotoModal.id}_${Date.now()}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('evidencias').upload(path, file, { upsert: true });
+      const blob = await comprimirImagem(file);
+      const path = `${campanha.id}/${fotoModal.id}_${Date.now()}.jpg`;
+      const { error: upErr } = await supabase.storage.from('evidencias').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
       if (upErr) throw upErr;
       const { data: urlData } = supabase.storage.from('evidencias').getPublicUrl(path);
       await api.post('/campanhas/evidencias', {
@@ -417,7 +439,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       setObs('');
       load();
     } catch (err) { toast('Erro ao enviar foto: ' + err.message); }
-    finally { setUploading(false); }
+    finally { setUploading(false); e.target.value = ''; }
   };
 
   const removeEvidencia = async (evId) => {
