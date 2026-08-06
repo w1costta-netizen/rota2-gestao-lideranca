@@ -173,6 +173,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
   // Foto evidência
   const [fotoModal, setFotoModal]     = useState(null);
   const [obs, setObs]                 = useState('');
+  const [fotoPreview, setFotoPreview] = useState(null); // { file, url }
   const [uploading, setUploading]     = useState(false);
   const [gerandoPDF, setGerandoPDF]   = useState(false);
 
@@ -416,13 +417,21 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       img.src = url;
     });
 
-  // ── Upload de foto evidência
-  const handleFoto = async (e) => {
+  // Passo 1: usuário escolhe a foto → mostra preview no modal
+  const handleFotoSelecionada = (e) => {
     const file = e.target.files?.[0];
-    if (!file || !fotoModal) return;
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    setFotoPreview({ file, url });
+    e.target.value = '';
+  };
+
+  // Passo 2: usuário clica Confirmar → comprime e envia
+  const confirmarFoto = async () => {
+    if (!fotoPreview?.file || !fotoModal) return;
     setUploading(true);
     try {
-      const blob = await comprimirImagem(file);
+      const blob = await comprimirImagem(fotoPreview.file);
       const path = `${campanha.id}/${fotoModal.id}_${Date.now()}.jpg`;
       const { error: upErr } = await supabase.storage.from('evidencias').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
       if (upErr) throw upErr;
@@ -435,11 +444,20 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
         obs,
       });
       toast('✅ Item validado!');
+      URL.revokeObjectURL(fotoPreview.url);
       setFotoModal(null);
+      setFotoPreview(null);
       setObs('');
       load();
     } catch (err) { toast('Erro ao enviar foto: ' + err.message); }
-    finally { setUploading(false); e.target.value = ''; }
+    finally { setUploading(false); }
+  };
+
+  const fecharFotoModal = () => {
+    if (fotoPreview) URL.revokeObjectURL(fotoPreview.url);
+    setFotoModal(null);
+    setFotoPreview(null);
+    setObs('');
   };
 
   const removeEvidencia = async (evId) => {
@@ -662,7 +680,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
                   {ok
                     ? <button className="btn-icon" style={{ color: '#ef4444' }} onClick={() => removeEvidencia(ev.id)} title="Remover evidência"><X size={14} /></button>
                     : <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }}
-                        onClick={() => { setFotoModal(item); setObs(''); fileRef.current?.click(); }}>
+                        onClick={() => { setFotoModal(item); setFotoPreview(null); setObs(''); fileRef.current?.click(); }}>
                         <Camera size={13} /> Foto
                       </button>
                   }
@@ -680,26 +698,45 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       </div>
 
       <input ref={fileRef} type="file" accept="image/*" capture="environment"
-        style={{ display: 'none' }} onChange={handleFoto} />
+        style={{ display: 'none' }} onChange={handleFotoSelecionada} />
 
       {/* Modal foto */}
       {fotoModal && (
-        <Modal open title={`Foto: ${fotoModal.descricao}`} onClose={() => setFotoModal(null)}>
-          <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-muted)' }}>
-            Selecione ou tire uma foto mostrando o item e a etiqueta de preço.
-          </div>
-          <div className="form-group">
-            <label className="form-label">Observação (opcional)</label>
-            <input className="input" value={obs} onChange={e => setObs(e.target.value)}
-              placeholder="Ex: etiqueta dupla face, preço conferido" />
-          </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setFotoModal(null)}>Cancelar</button>
-            <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={uploading}
-              onClick={() => fileRef.current?.click()}>
-              <Camera size={14} /> {uploading ? 'Enviando...' : 'Tirar/Selecionar foto'}
-            </button>
-          </div>
+        <Modal open title={`📷 ${fotoModal.descricao}`} onClose={fecharFotoModal}>
+          {!fotoPreview ? (
+            <>
+              <div style={{ marginBottom: 16, fontSize: 13, color: 'var(--text-muted)' }}>
+                Tire ou selecione uma foto mostrando o item e a etiqueta de preço.
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={fecharFotoModal}>Cancelar</button>
+                <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}
+                  onClick={() => fileRef.current?.click()}>
+                  <Camera size={14} /> Tirar/Selecionar foto
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <img src={fotoPreview.url} alt="preview"
+                style={{ width: '100%', maxHeight: 260, objectFit: 'contain', borderRadius: 8, marginBottom: 12, background: '#111' }} />
+              <div className="form-group" style={{ marginBottom: 12 }}>
+                <label className="form-label">Observação (opcional)</label>
+                <input className="input" value={obs} onChange={e => setObs(e.target.value)}
+                  placeholder="Ex: etiqueta dupla face, preço conferido" autoFocus />
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }}
+                  onClick={() => fileRef.current?.click()} disabled={uploading}>
+                  <Camera size={14} /> Trocar foto
+                </button>
+                <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}
+                  onClick={confirmarFoto} disabled={uploading}>
+                  {uploading ? 'Enviando...' : '✅ Confirmar'}
+                </button>
+              </div>
+            </>
+          )}
         </Modal>
       )}
 
