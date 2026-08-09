@@ -2,6 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
 const supabase = require('../supabase');
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Hotmart envia o "hottok" no header x-hotmart-hottok para validar autenticidade
 function validarHottok(req) {
@@ -72,11 +74,84 @@ async function enviarEmailAcesso(email, nome, token) {
   const primeiroNome = nome.split(' ')[0] || 'Líder';
   const link = `https://rotalider.com.br/cadastro?token=${token}`;
 
-  // Envia e-mail via Supabase Auth (magic link personalizado)
-  // Por ora registramos apenas o log — o e-mail será implementado na próxima etapa
-  console.log(`[Hotmart] Link de acesso para ${email}: ${link}`);
+  console.log(`[Hotmart] Enviando e-mail de acesso para ${email}: ${link}`);
 
-  // TODO: integrar com provedor de e-mail (Resend, SendGrid, etc.)
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'Rota Líder <acesso@rotalider.com.br>',
+      to: email,
+      subject: 'Seu acesso ao Rota Líder está pronto!',
+      html: `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:40px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:600px;">
+        <!-- Header -->
+        <tr>
+          <td style="background:#2E1A47;padding:32px 40px;text-align:center;">
+            <div style="display:inline-block;width:48px;height:48px;background:#EE5A24;border-radius:50%;margin-bottom:12px;">
+              <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="24" cy="24" r="16" fill="none" stroke="white" stroke-width="1.5"/>
+                <polygon points="24,9 27,24 24,21 21,24" fill="white"/>
+                <polygon points="24,39 27,24 24,27 21,24" fill="rgba(255,255,255,0.4)"/>
+                <circle cx="24" cy="24" r="2.5" fill="white"/>
+              </svg>
+            </div>
+            <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:700;">Rota Líder</h1>
+            <p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:14px;">Gestão de Liderança</p>
+          </td>
+        </tr>
+        <!-- Body -->
+        <tr>
+          <td style="padding:40px;">
+            <h2 style="color:#2E1A47;font-size:20px;margin:0 0 16px;">Olá, ${primeiroNome}! 👋</h2>
+            <p style="color:#444;font-size:15px;line-height:1.6;margin:0 0 16px;">
+              Sua compra foi confirmada e seu acesso ao <strong>Rota Líder</strong> está pronto.<br>
+              Clique no botão abaixo para criar sua conta e configurar seu workspace.
+            </p>
+            <div style="text-align:center;margin:32px 0;">
+              <a href="${link}" style="display:inline-block;background:#EE5A24;color:#ffffff;font-size:16px;font-weight:700;padding:16px 40px;border-radius:8px;text-decoration:none;">
+                Criar minha conta agora
+              </a>
+            </div>
+            <p style="color:#888;font-size:13px;line-height:1.6;margin:0 0 8px;">
+              Ou copie e cole este link no seu navegador:
+            </p>
+            <p style="background:#f5f5f5;border-radius:6px;padding:12px;font-size:12px;color:#555;word-break:break-all;margin:0 0 24px;">
+              ${link}
+            </p>
+            <p style="color:#aaa;font-size:12px;margin:0;">
+              Este link é pessoal e intransferível. Use-o para criar sua conta de acesso ao sistema.
+            </p>
+          </td>
+        </tr>
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f9f9f9;padding:20px 40px;text-align:center;border-top:1px solid #eee;">
+            <p style="color:#bbb;font-size:12px;margin:0;">
+              Rota Líder · rotalider.com.br<br>
+              Dúvidas? Responda este e-mail.
+            </p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`,
+    });
+
+    if (error) {
+      console.error('[Resend] Erro ao enviar e-mail:', error);
+    } else {
+      console.log('[Resend] E-mail enviado com sucesso. ID:', data?.id);
+    }
+  } catch (err) {
+    console.error('[Resend] Exceção ao enviar e-mail:', err.message);
+  }
 }
 
 // POST /api/hotmart/ativar-conta
