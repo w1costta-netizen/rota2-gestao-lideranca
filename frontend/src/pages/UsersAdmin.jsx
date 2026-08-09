@@ -3,7 +3,7 @@ import { Users, Plus, Edit2, X, Save, Trash2, UserCheck, UserX, Settings, AlertT
 import api from '../api';
 import { MODULES, DEFAULT_PERMISSIONS } from '../lib/permissions';
 
-const APP_URL = 'https://rota2-gestao-lideranca.netlify.app';
+const APP_URL = 'https://rotalider.com.br';
 
 function maskPhone(value) {
   const digits = value.replace(/\D/g, '').slice(0, 11);
