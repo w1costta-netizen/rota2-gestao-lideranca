@@ -50,7 +50,7 @@ export default function AceiteTermos({ userId, onAceito }) {
         <p>Seus dados são tratados em conformidade com a <strong style={{ color: 'var(--text)' }}>LGPD (Lei nº 13.709/2018)</strong>.</p>
       </div>
 
-      <a href="/termos-de-uso.html" target="_blank" rel="noopener noreferrer"
+      <a href="/termos-de-uso-rotalider.html" target="_blank" rel="noopener noreferrer"
         style={{ display: 'block', textAlign: 'center', fontSize: 13, color: 'var(--primary)', marginBottom: 20, textDecoration: 'underline' }}>
         📄 Ler os Termos de Uso completos
       </a>
@@ -60,7 +60,7 @@ export default function AceiteTermos({ userId, onAceito }) {
           style={{ marginTop: 2, width: 18, height: 18, accentColor: 'var(--primary)', flexShrink: 0 }} />
         <span style={{ fontSize: 13, color: 'var(--text)', lineHeight: 1.5 }}>
           Li e aceito os{' '}
-          <a href="/termos-de-uso.html" target="_blank" rel="noopener noreferrer"
+          <a href="/termos-de-uso-rotalider.html" target="_blank" rel="noopener noreferrer"
             style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
             Termos de Uso
           </a>

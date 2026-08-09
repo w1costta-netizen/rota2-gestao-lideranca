@@ -99,7 +99,7 @@ export default function Login({ onGoRegister }) {
 
       <div className="auth-footer" style={{ fontSize:12, color:'var(--text-muted)', textAlign:'center' }}>
         Acesso apenas por convite do administrador.<br />
-        <a href="/termos-de-uso.html" target="_blank" rel="noopener noreferrer"
+        <a href="/termos-de-uso-rotalider.html" target="_blank" rel="noopener noreferrer"
           style={{ color:'var(--primary)', textDecoration:'underline', marginTop:6, display:'inline-block' }}>
           Termos de Uso
         </a>
