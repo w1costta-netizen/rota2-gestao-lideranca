@@ -260,7 +260,7 @@ async function gerarPDF(rel, fotos, creatorName) {
   pdf.setTextColor(160, 160, 160);
   pdf.setFontSize(7);
   pdf.setFont('helvetica', 'normal');
-  pdf.text('Gerado pelo Rota 2.0 — Gestão de Liderança', W / 2, H - 5, { align: 'center' });
+  pdf.text('Gerado pelo Rota Líder — Gestão de Liderança', W / 2, H - 5, { align: 'center' });
 
   return pdf;
 }
@@ -355,7 +355,7 @@ function PainelCompartilhar({ rel, fotos, creatorName, userId }) {
     const body = encodeURIComponent(
       `Olá,\n\nSegue o relatório fotográfico "${rel.title}".\n` +
       `Criado por: ${creatorName}\nData: ${formatDate(rel.created_at)}\n\n` +
-      `📄 Download do PDF:\n${pdfUrl}\n\nGerado via Rota 2.0 — Gestão de Liderança`
+      `📄 Download do PDF:\n${pdfUrl}\n\nGerado via Rota Líder — Gestão de Liderança`
     );
     window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
   };

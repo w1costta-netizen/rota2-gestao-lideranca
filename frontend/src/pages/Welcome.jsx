@@ -5,7 +5,7 @@ import { registerPush } from '../lib/push';
 const STEPS = [
   {
     icon: '🧭',
-    title: 'Bem-vindo ao Rota 2.0',
+    title: 'Bem-vindo ao Rota Líder',
     subtitle: 'Gestão de Liderança',
     body: 'Sua ferramenta exclusiva de comunicação e gestão. Tudo que você precisa para o dia a dia, direto no celular.',
     highlights: [

@@ -59,7 +59,7 @@ input, select, textarea {
 .sidebar {
   width: 240px;
   min-height: 100vh;
-  background: #111111;
+  background: #0F1014;
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
@@ -69,21 +69,36 @@ input, select, textarea {
 }
 
 .sidebar-logo {
-  padding: 24px 20px 20px;
+  padding: 20px 16px 16px;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-logo-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
 }
 
 .sidebar-logo h1 {
-  color: var(--primary);
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -.5px;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -.3px;
 }
 
 .sidebar-logo p {
   color: var(--text-muted);
-  font-size: 11px;
-  margin-top: 3px;
+  font-size: 10px;
+  margin-top: 2px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: .8px;
@@ -103,29 +118,30 @@ input, select, textarea {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 9px 12px;
   border-radius: 8px;
   color: var(--text-muted);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   transition: all .15s;
   cursor: pointer;
   background: none;
   width: 100%;
   text-align: left;
-  border: 1px solid transparent;
+  border: none;
+  border-left: 2px solid transparent;
 }
 
 .nav-item:hover {
-  background: rgba(232,98,42,.08);
-  color: var(--primary-light);
-  border-color: rgba(232,98,42,.15);
+  background: rgba(232,98,42,.07);
+  color: var(--text);
+  border-left-color: rgba(232,98,42,.3);
 }
 
 .nav-item.active {
-  background: rgba(232,98,42,.15);
+  background: rgba(232,98,42,.12);
   color: var(--primary);
-  border-color: rgba(232,98,42,.3);
+  border-left-color: var(--primary);
   font-weight: 600;
 }
 
@@ -162,9 +178,13 @@ input, select, textarea {
 /* ── Cards ───────────────────────────────────────────── */
 .card {
   background: var(--surface);
-  border-radius: var(--radius);
+  border-radius: 14px;
   border: 1px solid var(--border);
   padding: 24px;
+}
+
+.card-accent {
+  border-top: 2px solid var(--primary);
 }
 
 /* ── Buttons ─────────────────────────────────────────── */
@@ -173,25 +193,36 @@ input, select, textarea {
   align-items: center;
   gap: 6px;
   padding: 9px 18px;
-  border-radius: 8px;
+  border-radius: 10px;
   font-weight: 600;
   transition: all .15s;
   white-space: nowrap;
   font-size: 13.5px;
+  letter-spacing: .1px;
 }
 
 .btn-primary {
   background: var(--primary);
   color: white;
-  box-shadow: 0 0 16px rgba(232,98,42,.3);
+  box-shadow: 0 2px 12px rgba(232,98,42,.25);
 }
 .btn-primary:hover {
   background: var(--primary-hover);
-  box-shadow: 0 0 24px rgba(232,98,42,.45);
+  box-shadow: 0 4px 20px rgba(232,98,42,.4);
   transform: translateY(-1px);
 }
 
-.btn-accent { background: var(--primary); color: white; box-shadow: 0 0 16px rgba(232,98,42,.3); }
+.btn-secondary {
+  background: rgba(232,98,42,.1);
+  color: var(--primary);
+  border: 1px solid rgba(232,98,42,.2);
+}
+.btn-secondary:hover {
+  background: rgba(232,98,42,.18);
+  border-color: rgba(232,98,42,.35);
+}
+
+.btn-accent { background: var(--primary); color: white; box-shadow: 0 2px 12px rgba(232,98,42,.25); }
 .btn-accent:hover { background: var(--primary-hover); transform: translateY(-1px); }
 
 .btn-ghost {
@@ -205,8 +236,8 @@ input, select, textarea {
   border-color: #444;
 }
 
-.btn-danger { background: var(--danger); color: white; }
-.btn-danger:hover { background: #dc2626; }
+.btn-danger { background: var(--danger); color: white; border-radius: 10px; }
+.btn-danger:hover { background: #dc2626; transform: translateY(-1px); }
 
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 
@@ -240,7 +271,7 @@ input, select, textarea {
 .input {
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface-2);
   color: var(--text);
   transition: border-color .15s, box-shadow .15s;
@@ -248,14 +279,14 @@ input, select, textarea {
 }
 .input:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(232,98,42,.15);
+  box-shadow: 0 0 0 3px rgba(232,98,42,.12);
 }
 .input::placeholder { color: #555; }
 
 .select {
   padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--surface-2);
   color: var(--text);
   width: 100%;
@@ -339,8 +370,9 @@ tbody td { padding: 12px 14px; font-size: 13.5px; color: var(--text); }
 
 .modal {
   background: var(--surface);
-  border-radius: var(--radius);
+  border-radius: 16px;
   border: 1px solid var(--border);
+  border-top: 2px solid var(--primary);
   box-shadow: var(--shadow-lg);
   width: 100%;
   max-width: 520px;
@@ -406,17 +438,20 @@ tbody td { padding: 12px 14px; font-size: 13.5px; color: var(--text); }
 
 .stat-card {
   background: var(--surface);
-  border-radius: var(--radius);
+  border-radius: 14px;
   border: 1px solid var(--border);
+  border-top: 2px solid transparent;
   padding: 20px 24px;
   display: flex;
   align-items: center;
   gap: 16px;
-  transition: border-color .2s, box-shadow .2s;
+  transition: border-color .2s, box-shadow .2s, transform .15s;
 }
 .stat-card:hover {
-  border-color: rgba(232,98,42,.3);
-  box-shadow: var(--orange-glow);
+  border-top-color: var(--primary);
+  border-color: rgba(232,98,42,.2);
+  box-shadow: 0 4px 20px rgba(232,98,42,.12);
+  transform: translateY(-2px);
 }
 
 .stat-icon {

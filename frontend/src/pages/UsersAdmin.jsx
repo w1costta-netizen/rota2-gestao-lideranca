@@ -14,12 +14,12 @@ function maskPhone(value) {
 }
 
 function whatsappLink({ full_name, email, password }) {
-  const msg = `Olá ${full_name.split(' ')[0]}! 👋\n\nSeu acesso ao *Rota 2.0* foi criado.\n\n🔗 *Link:* ${APP_URL}\n📧 *E-mail:* ${email}\n🔑 *Senha:* ${password}\n\nAcesse e altere sua senha em *Meu Perfil*.`;
+  const msg = `Olá ${full_name.split(' ')[0]}! 👋\n\nSeu acesso ao *Rota Líder* foi criado.\n\n🔗 *Link:* ${APP_URL}\n📧 *E-mail:* ${email}\n🔑 *Senha:* ${password}\n\nAcesse e altere sua senha em *Meu Perfil*.`;
   return `https://wa.me/?text=${encodeURIComponent(msg)}`;
 }
 
 function whatsappReinviteLink({ full_name, email }) {
-  const msg = `Olá ${full_name.split(' ')[0]}! 👋\n\nLembrete do seu acesso ao *Rota 2.0*.\n\n🔗 *Link:* ${APP_URL}\n📧 *E-mail:* ${email}\n\nQualquer dúvida sobre a senha, fale comigo.`;
+  const msg = `Olá ${full_name.split(' ')[0]}! 👋\n\nLembrete do seu acesso ao *Rota Líder*.\n\n🔗 *Link:* ${APP_URL}\n📧 *E-mail:* ${email}\n\nQualquer dúvida sobre a senha, fale comigo.`;
   return `https://wa.me/?text=${encodeURIComponent(msg)}`;
 }
 

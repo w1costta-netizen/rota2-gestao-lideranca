@@ -154,7 +154,7 @@ export default function Agenda({ userId, profile }) {
       grouped[day].forEach(i => { const desc = i.description?.trim(); msg += `• ${i.time ? i.time + ' — ' : ''}${i.title}${desc ? '\n  _' + desc + '_' : ''}\n`; });
       msg += '\n';
     });
-    msg += '_Enviado via Rota 2.0_';
+    msg += '_Enviado via Rota Líder_';
     return msg;
   };
 
@@ -216,7 +216,7 @@ export default function Agenda({ userId, profile }) {
       });
       msg += '\n';
     });
-    msg += '_Enviado via Rota 2.0_';
+    msg += '_Enviado via Rota Líder_';
     return msg;
   };
 

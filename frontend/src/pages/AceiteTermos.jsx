@@ -23,7 +23,7 @@ export default function AceiteTermos({ userId, onAceito }) {
   return (
     <div className="auth-card" style={{ maxWidth: 480 }}>
       <div className="auth-header">
-        <div className="auth-logo">Rota 2.0</div>
+        <div className="auth-logo">Rota Líder</div>
         <div className="auth-subtitle">Gestão de Liderança</div>
       </div>
 
@@ -40,7 +40,7 @@ export default function AceiteTermos({ userId, onAceito }) {
         padding: '14px 16px', marginBottom: 20, maxHeight: 180, overflowY: 'auto', fontSize: 13,
         color: 'var(--text-muted)', lineHeight: 1.6,
       }}>
-        <p style={{ marginBottom: 8 }}>O <strong style={{ color: 'var(--text)' }}>Rota 2.0</strong> é uma plataforma de gestão de liderança e comunicação de equipes operada pelo <strong style={{ color: 'var(--text)' }}>Grupo F7</strong>.</p>
+        <p style={{ marginBottom: 8 }}>O <strong style={{ color: 'var(--text)' }}>Rota Líder</strong> é uma plataforma de gestão de liderança e comunicação de equipes operada pelo <strong style={{ color: 'var(--text)' }}>Grupo F7</strong>.</p>
         <p style={{ marginBottom: 8 }}>Ao utilizar esta plataforma você concorda em:</p>
         <ul style={{ paddingLeft: 18, marginBottom: 8 }}>
           <li style={{ marginBottom: 4 }}>Usar o sistema apenas para fins profissionais autorizados pela sua empresa;</li>
@@ -76,7 +76,7 @@ export default function AceiteTermos({ userId, onAceito }) {
             style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
             Política de Privacidade
           </a>
-          {' '}do Rota 2.0
+          {' '}do Rota Líder
         </span>
       </label>
 

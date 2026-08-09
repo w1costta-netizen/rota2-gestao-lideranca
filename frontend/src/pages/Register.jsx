@@ -107,7 +107,7 @@ export default function Register({ onGoLogin }) {
   return (
     <div className="auth-card">
       <div className="auth-header">
-        <div className="auth-logo">Rota 2.0</div>
+        <div className="auth-logo">Rota Líder</div>
         <div className="auth-subtitle">Gestão de Liderança</div>
       </div>
 

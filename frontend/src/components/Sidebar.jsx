@@ -175,10 +175,17 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
 
   return (
     <aside ref={sidebarRef} className="sidebar" style={mobileStyle}>
-      <div className="sidebar-logo" style={collapsed ? { padding:'16px 8px', textAlign:'center' } : undefined}>
-        {!collapsed && <h1>Rota 2.0</h1>}
-        {!collapsed && <p>Gestão de Liderança</p>}
-        {collapsed && <h1 style={{ fontSize:12, margin:0 }}>R2</h1>}
+      <div className="sidebar-logo" style={collapsed ? { padding:'16px 8px', justifyContent:'center', flexDirection:'column', gap:4 } : undefined}>
+        <div className="sidebar-logo-icon" style={collapsed ? { width:26, height:26 } : undefined}>
+          🏁
+        </div>
+        {!collapsed && (
+          <div>
+            <h1>Rota Líder</h1>
+            <p>Gestão de Liderança</p>
+          </div>
+        )}
+        {collapsed && <span style={{ fontSize:9, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'.5px' }}>RL</span>}
       </div>
 
       <nav className="sidebar-nav">
