@@ -103,6 +103,11 @@ export default function Login({ onGoRegister }) {
           style={{ color:'var(--primary)', textDecoration:'underline', marginTop:6, display:'inline-block' }}>
           Termos de Uso
         </a>
+        {' · '}
+        <a href="/politica-de-privacidade-rotalider.html" target="_blank" rel="noopener noreferrer"
+          style={{ color:'var(--primary)', textDecoration:'underline', display:'inline-block' }}>
+          Política de Privacidade
+        </a>
       </div>
     </div>
   );

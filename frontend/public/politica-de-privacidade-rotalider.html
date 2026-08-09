@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Política de Privacidade · Rota Líder</title>
+<style>
+  :root {
+    --bg:#0F1116;--card:#171A22;--line:#262B38;--orange:#E8681A;
+    --text:#F3F4F7;--text-dim:#9AA0B4;--text-faint:#676E82;--radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;}
+  .header{background:var(--card);border-bottom:1px solid var(--line);padding:18px 24px;position:sticky;top:0;z-index:10;}
+  .logo{font-size:18px;font-weight:900;color:var(--orange);}
+  .logo span{color:var(--text);}
+  .header-sub{font-size:11px;color:var(--text-faint);margin-top:2px;}
+  .container{max-width:720px;margin:0 auto;padding:40px 24px 80px;}
+  .doc-title{font-size:28px;font-weight:900;letter-spacing:-.02em;margin-bottom:6px;}
+  .doc-meta{font-size:12px;color:var(--text-faint);margin-bottom:32px;padding-bottom:24px;border-bottom:1px solid var(--line);}
+  .doc-meta span{color:var(--orange);font-weight:700;}
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin-bottom:36px;}
+  .toc-title{font-size:11px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;}
+  .toc a{display:block;font-size:13px;color:var(--text-dim);text-decoration:none;padding:5px 0;border-bottom:1px solid rgba(38,43,56,.5);}
+  .toc a:last-child{border-bottom:none;}
+  .toc a:hover{color:var(--orange);}
+  .toc-num{color:var(--orange);font-weight:700;margin-right:8px;}
+  .section{margin-bottom:36px;}
+  .section-title{font-size:16px;font-weight:800;padding:10px 0;border-bottom:2px solid var(--orange);margin-bottom:16px;display:flex;align-items:center;gap:10px;}
+  .section-num{background:var(--orange);color:#1a0e06;font-size:11px;font-weight:900;padding:2px 7px;border-radius:6px;}
+  p{font-size:14px;line-height:1.75;color:var(--text-dim);margin-bottom:12px;}
+  ul,ol{padding-left:20px;margin-bottom:12px;}
+  li{font-size:14px;line-height:1.75;color:var(--text-dim);margin-bottom:6px;}
+  strong{color:var(--text);font-weight:700;}
+  .highlight-box{background:rgba(232,104,26,.08);border:1px solid rgba(232,104,26,.25);border-radius:10px;padding:14px 16px;margin:16px 0;font-size:13px;color:var(--text-dim);line-height:1.6;}
+  .highlight-box strong{color:var(--orange);}
+  .green-box{background:rgba(52,211,153,.07);border:1px solid rgba(52,211,153,.2);border-radius:10px;padding:14px 16px;margin:16px 0;font-size:13px;color:#9AA0B4;line-height:1.6;}
+  .green-box strong{color:#34D399;}
+  .direitos-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0;}
+  .direito-card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;}
+  .direito-icon{font-size:18px;margin-bottom:4px;}
+  .direito-title{font-size:12px;font-weight:700;color:var(--text);margin-bottom:3px;}
+  .direito-desc{font-size:11px;color:var(--text-faint);line-height:1.5;}
+  .tabela{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px;}
+  .tabela th{text-align:left;color:var(--text-faint);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);font-size:11px;text-transform:uppercase;letter-spacing:.05em;}
+  .tabela td{padding:9px 10px;border-bottom:1px solid rgba(38,43,56,.5);color:var(--text-dim);vertical-align:top;line-height:1.5;}
+  .tabela tr:last-child td{border-bottom:none;}
+  .badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;}
+  .badge-leg{background:rgba(96,165,250,.15);color:#60A5FA;}
+  .badge-con{background:rgba(52,211,153,.15);color:#34D399;}
+  .badge-int{background:rgba(232,104,26,.15);color:#E8681A;}
+  .rodape-box{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px 24px;margin-top:40px;text-align:center;}
+  .rodape-box p{font-size:13px;margin-bottom:6px;}
+  @media(max-width:600px){.container{padding:24px 16px 60px;}.doc-title{font-size:22px;}.direitos-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">Rota <span>Líder</span></div>
+  <div class="header-sub">Gestão de Liderança · rotalider.com.br</div>
+</div>
+
+<div class="container">
+  <h1 class="doc-title">Política de Privacidade</h1>
+  <div class="doc-meta">Versão 1.0 · Vigência a partir de <span>01/08/2026</span> · Grupo F7 · Em conformidade com a LGPD (Lei nº 13.709/2018)</div>
+
+  <div class="green-box">
+    <strong>🔒 Resumo simples:</strong> Coletamos apenas os dados necessários para fazer o Rota Líder funcionar. Não vendemos seus dados para ninguém. Você pode solicitar a exclusão dos seus dados a qualquer momento pelo e-mail contato@rotalider.com.br.
+  </div>
+
+  <div class="toc">
+    <div class="toc-title">Índice</div>
+    <a href="#s1"><span class="toc-num">1.</span>Quem somos</a>
+    <a href="#s2"><span class="toc-num">2.</span>Quais dados coletamos</a>
+    <a href="#s3"><span class="toc-num">3.</span>Para que usamos seus dados</a>
+    <a href="#s4"><span class="toc-num">4.</span>Base legal do tratamento (LGPD)</a>
+    <a href="#s5"><span class="toc-num">5.</span>Com quem compartilhamos</a>
+    <a href="#s6"><span class="toc-num">6.</span>Cookies e tecnologias similares</a>
+    <a href="#s7"><span class="toc-num">7.</span>Por quanto tempo guardamos</a>
+    <a href="#s8"><span class="toc-num">8.</span>Seus direitos como titular</a>
+    <a href="#s9"><span class="toc-num">9.</span>Segurança dos dados</a>
+    <a href="#s10"><span class="toc-num">10.</span>Transferência internacional</a>
+    <a href="#s11"><span class="toc-num">11.</span>Menores de idade</a>
+    <a href="#s12"><span class="toc-num">12.</span>Alterações nesta Política</a>
+    <a href="#s13"><span class="toc-num">13.</span>Contato e DPO</a>
+  </div>
+
+  <!-- 1 -->
+  <div class="section" id="s1">
+    <div class="section-title"><span class="section-num">1</span>Quem somos</div>
+    <p>O <strong>Rota Líder</strong> é operado pelo <strong>Grupo F7</strong>, empresa brasileira responsável pelo tratamento dos dados pessoais dos Usuários da Plataforma, na condição de <strong>Controladora de Dados</strong>, conforme definido pela LGPD.</p>
+    <ul>
+      <li><strong>Empresa:</strong> Grupo F7</li>
+      <li><strong>Site:</strong> rotalider.com.br</li>
+      <li><strong>E-mail:</strong> contato@rotalider.com.br</li>
+      <li><strong>WhatsApp:</strong> (61) 9 8121-1788</li>
+    </ul>
+  </div>
+
+  <!-- 2 -->
+  <div class="section" id="s2">
+    <div class="section-title"><span class="section-num">2</span>Quais dados coletamos</div>
+    <p>Coletamos apenas os dados necessários para prestar o serviço. Veja o que e quando coletamos:</p>
+
+    <table class="tabela">
+      <tr><th>Dado</th><th>Quando</th><th>Por quê</th></tr>
+      <tr><td><strong>Nome completo</strong></td><td>Cadastro</td><td>Identificar o usuário na plataforma</td></tr>
+      <tr><td><strong>E-mail</strong></td><td>Cadastro</td><td>Login, comunicação e recuperação de senha</td></tr>
+      <tr><td><strong>Número de telefone</strong></td><td>Cadastro (opcional)</td><td>Suporte e notificações via WhatsApp</td></tr>
+      <tr><td><strong>Nome da empresa</strong></td><td>Cadastro</td><td>Criar o Workspace da organização</td></tr>
+      <tr><td><strong>Dados de pagamento</strong></td><td>Assinatura</td><td>Processados pelo gateway de pagamento (não armazenamos cartão)</td></tr>
+      <tr><td><strong>Conteúdo gerado</strong></td><td>Uso</td><td>Tarefas, relatórios, fotos e comunicações inseridas pelo usuário</td></tr>
+      <tr><td><strong>Dados de uso</strong></td><td>Uso</td><td>Páginas acessadas, cliques e tempo de sessão (para melhorar o app)</td></tr>
+      <tr><td><strong>Endereço IP e dispositivo</strong></td><td>Acesso</td><td>Segurança e prevenção a fraudes</td></tr>
+      <tr><td><strong>Data de aceite dos Termos</strong></td><td>Cadastro</td><td>Comprovação legal de consentimento</td></tr>
+    </table>
+
+    <div class="highlight-box"><strong>Não coletamos:</strong> dados sensíveis como origem racial, saúde, biometria, opiniões políticas ou religião.</div>
+  </div>
+
+  <!-- 3 -->
+  <div class="section" id="s3">
+    <div class="section-title"><span class="section-num">3</span>Para que usamos seus dados</div>
+    <p>Seus dados são utilizados exclusivamente para:</p>
+    <ul>
+      <li>Criar e gerenciar sua conta e Workspace</li>
+      <li>Prestar os serviços contratados e suas funcionalidades</li>
+      <li>Processar pagamentos e gerenciar assinaturas</li>
+      <li>Enviar comunicações sobre o serviço (atualizações, manutenções, cobranças)</li>
+      <li>Oferecer suporte técnico</li>
+      <li>Melhorar a plataforma com base no comportamento de uso (dados anonimizados)</li>
+      <li>Cumprir obrigações legais e regulatórias</li>
+      <li>Prevenir fraudes e garantir a segurança da plataforma</li>
+    </ul>
+    <p><strong>Não utilizamos seus dados</strong> para fins publicitários de terceiros, venda de informações ou qualquer finalidade não listada acima.</p>
+  </div>
+
+  <!-- 4 -->
+  <div class="section" id="s4">
+    <div class="section-title"><span class="section-num">4</span>Base legal do tratamento (LGPD)</div>
+    <p>Todo tratamento de dados realizado pelo Grupo F7 possui uma base legal prevista na LGPD:</p>
+
+    <table class="tabela">
+      <tr><th>Situação</th><th>Base Legal</th></tr>
+      <tr>
+        <td>Criação de conta e uso do serviço</td>
+        <td><span class="badge badge-con">Execução de contrato</span><br><small>Art. 7º, V da LGPD</small></td>
+      </tr>
+      <tr>
+        <td>Aceite dos Termos de Uso e desta Política</td>
+        <td><span class="badge badge-con">Consentimento</span><br><small>Art. 7º, I da LGPD</small></td>
+      </tr>
+      <tr>
+        <td>Emissão de nota fiscal e obrigações tributárias</td>
+        <td><span class="badge badge-leg">Obrigação legal</span><br><small>Art. 7º, II da LGPD</small></td>
+      </tr>
+      <tr>
+        <td>Segurança, prevenção a fraudes e logs de acesso</td>
+        <td><span class="badge badge-int">Interesse legítimo</span><br><small>Art. 7º, IX da LGPD</small></td>
+      </tr>
+      <tr>
+        <td>Melhoria do produto com dados anonimizados</td>
+        <td><span class="badge badge-int">Interesse legítimo</span><br><small>Art. 7º, IX da LGPD</small></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- 5 -->
+  <div class="section" id="s5">
+    <div class="section-title"><span class="section-num">5</span>Com quem compartilhamos</div>
+    <p>Compartilhamos dados apenas com os parceiros necessários para operar a plataforma, todos com políticas de privacidade próprias e em conformidade com a LGPD:</p>
+
+    <table class="tabela">
+      <tr><th>Parceiro</th><th>Finalidade</th></tr>
+      <tr><td><strong>Supabase</strong></td><td>Banco de dados e autenticação (infraestrutura da plataforma)</td></tr>
+      <tr><td><strong>Netlify / Render</strong></td><td>Hospedagem do frontend e backend</td></tr>
+      <tr><td><strong>Gateway de pagamento</strong><br><small>(Hotmart, Kiwify ou similar)</small></td><td>Processamento de cobranças e assinaturas</td></tr>
+    </table>
+
+    <p><strong>Nunca vendemos, alugamos ou cedemos</strong> dados pessoais a terceiros para fins comerciais ou publicitários.</p>
+    <p>Podemos divulgar dados quando exigido por lei, ordem judicial ou autoridade competente.</p>
+  </div>
+
+  <!-- 6 -->
+  <div class="section" id="s6">
+    <div class="section-title"><span class="section-num">6</span>Cookies e tecnologias similares</div>
+    <p>O Rota Líder utiliza cookies e tecnologias similares para:</p>
+    <ul>
+      <li><strong>Cookies essenciais:</strong> manter a sessão do usuário logado (sem eles o app não funciona)</li>
+      <li><strong>Cookies de desempenho:</strong> entender como as páginas são usadas para melhorar a experiência (dados anonimizados)</li>
+    </ul>
+    <p>Não utilizamos cookies de rastreamento publicitário de terceiros.</p>
+    <p>Você pode desabilitar cookies no seu navegador, mas isso pode afetar o funcionamento do app.</p>
+  </div>
+
+  <!-- 7 -->
+  <div class="section" id="s7">
+    <div class="section-title"><span class="section-num">7</span>Por quanto tempo guardamos</div>
+    <table class="tabela">
+      <tr><th>Tipo de dado</th><th>Prazo de retenção</th></tr>
+      <tr><td>Dados da conta ativa</td><td>Enquanto a assinatura estiver ativa</td></tr>
+      <tr><td>Dados após cancelamento</td><td>30 dias disponíveis para exportação, depois deletados</td></tr>
+      <tr><td>Registros financeiros e fiscais</td><td>5 anos (obrigação legal)</td></tr>
+      <tr><td>Logs de acesso e segurança</td><td>6 meses (conforme Marco Civil da Internet)</td></tr>
+      <tr><td>Registro de aceite dos Termos</td><td>5 anos (comprovação legal)</td></tr>
+    </table>
+  </div>
+
+  <!-- 8 -->
+  <div class="section" id="s8">
+    <div class="section-title"><span class="section-num">8</span>Seus direitos como titular</div>
+    <p>A LGPD garante a você os seguintes direitos, que podem ser exercidos pelo e-mail <strong>contato@rotalider.com.br</strong>:</p>
+    <div class="direitos-grid">
+      <div class="direito-card">
+        <div class="direito-icon">👁️</div>
+        <div class="direito-title">Acesso</div>
+        <div class="direito-desc">Saber quais dados temos sobre você</div>
+      </div>
+      <div class="direito-card">
+        <div class="direito-icon">✏️</div>
+        <div class="direito-title">Correção</div>
+        <div class="direito-desc">Corrigir dados incompletos ou desatualizados</div>
+      </div>
+      <div class="direito-card">
+        <div class="direito-icon">🗑️</div>
+        <div class="direito-title">Exclusão</div>
+        <div class="direito-desc">Solicitar a exclusão dos seus dados pessoais</div>
+      </div>
+      <div class="direito-card">
+        <div class="direito-icon">📦</div>
+        <div class="direito-title">Portabilidade</div>
+        <div class="direito-desc">Receber seus dados em formato legível</div>
+      </div>
+      <div class="direito-card">
+        <div class="direito-icon">🚫</div>
+        <div class="direito-title">Oposição</div>
+        <div class="direito-desc">Opor-se a tratamentos desnecessários</div>
+      </div>
+      <div class="direito-card">
+        <div class="direito-icon">↩️</div>
+        <div class="direito-title">Revogação</div>
+        <div class="direito-desc">Retirar seu consentimento a qualquer momento</div>
+      </div>
+    </div>
+    <p>Respondemos todas as solicitações em até <strong>15 dias úteis</strong>, conforme determina a LGPD.</p>
+    <div class="highlight-box"><strong>Atenção:</strong> a exclusão de dados pode implicar o encerramento da sua conta, pois alguns dados são indispensáveis para a prestação do serviço.</div>
+  </div>
+
+  <!-- 9 -->
+  <div class="section" id="s9">
+    <div class="section-title"><span class="section-num">9</span>Segurança dos dados</div>
+    <p>Adotamos medidas técnicas e organizacionais para proteger seus dados, incluindo:</p>
+    <ul>
+      <li>Comunicação criptografada via HTTPS/TLS em todas as conexões</li>
+      <li>Autenticação segura gerenciada pelo Supabase</li>
+      <li>Acesso aos dados restrito a pessoas autorizadas com necessidade operacional</li>
+      <li>Backups regulares da base de dados</li>
+      <li>Monitoramento de acessos suspeitos</li>
+    </ul>
+    <p>Em caso de incidente de segurança que possa causar risco ao Usuário, notificaremos a Autoridade Nacional de Proteção de Dados (ANPD) e os Usuários afetados nos prazos previstos em lei.</p>
+  </div>
+
+  <!-- 10 -->
+  <div class="section" id="s10">
+    <div class="section-title"><span class="section-num">10</span>Transferência internacional de dados</div>
+    <p>Nossos parceiros de infraestrutura (Supabase, Netlify, Render) podem armazenar dados em servidores fora do Brasil. Essas transferências ocorrem com garantias adequadas de proteção, em conformidade com o Art. 33 da LGPD, sendo os parceiros selecionados com base em suas certificações e políticas de segurança reconhecidas internacionalmente.</p>
+  </div>
+
+  <!-- 11 -->
+  <div class="section" id="s11">
+    <div class="section-title"><span class="section-num">11</span>Menores de idade</div>
+    <p>O Rota Líder é destinado a uso profissional e empresarial, <strong>não sendo direcionado a menores de 18 anos</strong>. Não coletamos intencionalmente dados de menores. Caso identificado um cadastro de menor, os dados serão imediatamente excluídos.</p>
+  </div>
+
+  <!-- 12 -->
+  <div class="section" id="s12">
+    <div class="section-title"><span class="section-num">12</span>Alterações nesta Política</div>
+    <p>O Grupo F7 pode atualizar esta Política a qualquer momento. Alterações relevantes serão comunicadas com pelo menos <strong>15 dias de antecedência</strong> por e-mail ou notificação dentro da Plataforma.</p>
+    <p>O uso continuado após a vigência das novas condições implica aceitação automática. A versão sempre atualizada está disponível em <strong>rotalider.com.br/privacidade</strong>.</p>
+  </div>
+
+  <!-- 13 -->
+  <div class="section" id="s13">
+    <div class="section-title"><span class="section-num">13</span>Contato e DPO</div>
+    <p>Para exercer seus direitos, tirar dúvidas ou fazer reclamações sobre o tratamento dos seus dados, entre em contato com nosso Encarregado de Proteção de Dados (DPO):</p>
+    <ul>
+      <li><strong>Empresa:</strong> Grupo F7</li>
+      <li><strong>E-mail:</strong> contato@rotalider.com.br</li>
+      <li><strong>WhatsApp:</strong> (61) 9 8121-1788</li>
+      <li><strong>Site:</strong> rotalider.com.br</li>
+    </ul>
+    <p>Você também pode registrar reclamações junto à <strong>Autoridade Nacional de Proteção de Dados (ANPD)</strong> em <a href="https://www.gov.br/anpd" style="color:var(--orange);">gov.br/anpd</a>.</p>
+  </div>
+
+  <div class="rodape-box">
+    <p>Esta Política de Privacidade é parte integrante dos <a href="termos-de-uso-rotalider.html" style="color:var(--orange);font-weight:700;">Termos de Uso</a> do Rota Líder.</p>
+    <p style="font-size:11px;color:var(--text-faint);margin-top:6px;">Versão 1.0 · Última atualização: 01/08/2026 · Grupo F7 · rotalider.com.br</p>
+  </div>
+
+</div>
+</body>
+</html>

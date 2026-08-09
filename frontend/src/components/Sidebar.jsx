@@ -219,6 +219,11 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
             style={{ fontSize:10, color:'rgba(255,255,255,.3)', textDecoration:'underline' }}>
             Termos de Uso
           </a>
+          {' · '}
+          <a href="/politica-de-privacidade-rotalider.html" target="_blank" rel="noopener noreferrer"
+            style={{ fontSize:10, color:'rgba(255,255,255,.3)', textDecoration:'underline' }}>
+            Privacidade
+          </a>
         </div>
       )}
     </aside>

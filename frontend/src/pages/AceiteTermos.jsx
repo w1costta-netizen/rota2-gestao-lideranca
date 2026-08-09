@@ -9,11 +9,12 @@ export default function AceiteTermos({ userId, onAceito }) {
   const [erro, setErro] = useState('');
 
   const confirmar = async () => {
-    if (!aceito) return setErro('Você precisa aceitar os Termos de Uso para continuar.');
+    if (!aceito) return setErro('Você precisa aceitar os Termos de Uso e a Política de Privacidade para continuar.');
     setLoading(true);
+    const agora = new Date().toISOString();
     const { error } = await supabase
       .from('profiles')
-      .update({ aceite_termos_em: new Date().toISOString(), versao_termos: VERSAO_TERMOS })
+      .update({ aceite_termos_em: agora, versao_termos: VERSAO_TERMOS, aceite_privacidade_em: agora })
       .eq('id', userId);
     if (error) { setErro('Erro ao registrar aceite. Tente novamente.'); setLoading(false); return; }
     onAceito();
@@ -50,10 +51,16 @@ export default function AceiteTermos({ userId, onAceito }) {
         <p>Seus dados são tratados em conformidade com a <strong style={{ color: 'var(--text)' }}>LGPD (Lei nº 13.709/2018)</strong>.</p>
       </div>
 
-      <a href="/termos-de-uso-rotalider.html" target="_blank" rel="noopener noreferrer"
-        style={{ display: 'block', textAlign: 'center', fontSize: 13, color: 'var(--primary)', marginBottom: 20, textDecoration: 'underline' }}>
-        📄 Ler os Termos de Uso completos
-      </a>
+      <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginBottom: 20 }}>
+        <a href="/termos-de-uso-rotalider.html" target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 13, color: 'var(--primary)', textDecoration: 'underline' }}>
+          📄 Termos de Uso
+        </a>
+        <a href="/politica-de-privacidade-rotalider.html" target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 13, color: 'var(--primary)', textDecoration: 'underline' }}>
+          🔒 Política de Privacidade
+        </a>
+      </div>
 
       <label style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer', marginBottom: 20 }}>
         <input type="checkbox" checked={aceito} onChange={e => { setAceito(e.target.checked); setErro(''); }}
@@ -63,6 +70,11 @@ export default function AceiteTermos({ userId, onAceito }) {
           <a href="/termos-de-uso-rotalider.html" target="_blank" rel="noopener noreferrer"
             style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
             Termos de Uso
+          </a>
+          {' '}e a{' '}
+          <a href="/politica-de-privacidade-rotalider.html" target="_blank" rel="noopener noreferrer"
+            style={{ color: 'var(--primary)', textDecoration: 'underline' }}>
+            Política de Privacidade
           </a>
           {' '}do Rota 2.0
         </span>
