@@ -49,6 +49,25 @@
   --brand-glow: 0 0 24px rgba(238,90,36,.2);
 }
 
+/* ── Tema escuro ─────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:            #0F0D14;
+  --bg-dark:       #1A1525;
+  --surface:       #1A1525;
+  --surface-2:     #221C30;
+  --border:        #2E2545;
+  --border-strong: #3D3260;
+  --text:          #F0EDF5;
+  --text-on-dark:  #F0EDF5;
+  --text-muted:    #9B92AE;
+  --shadow:        0 2px 8px rgba(0,0,0,.4);
+  --shadow-lg:     0 8px 32px rgba(0,0,0,.6);
+  --badge-orange-bg: rgba(238,90,36,.15);
+  --badge-orange-fg: #F4956A;
+  --badge-purple-bg: rgba(46,26,71,.6);
+  --badge-purple-fg: #C4B5D8;
+}
+
 body {
   font-family: 'Inter', system-ui, sans-serif;
   background: var(--bg);

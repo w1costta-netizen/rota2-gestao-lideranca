@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
+import { useTheme } from '../contexts/ThemeContext';
 
 // Itens avulsos (sem grupo)
 const NAV_SOLO = [
@@ -89,6 +90,7 @@ const SOLO_AFTER  = [];
 
 export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, isMobile }) {
   const { profile, signOut } = useAuth();
+  const { theme, toggle } = useTheme();
   const collapsed = !isMobile && width !== undefined && width < 100;
 
   // Abre automaticamente o grupo que contém a página ativa
@@ -216,7 +218,15 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
             <div className="user-role">{profile?.sector || profile?.company || ''}</div>
           </div>
         )}
-        <button className="btn-icon" onClick={signOut} title="Sair" style={{ color:'rgba(255,255,255,.5)', flexShrink:0 }}>
+        <button
+          className="btn-icon"
+          onClick={toggle}
+          title={theme === 'dark' ? 'Modo claro' : 'Modo escuro'}
+          style={{ color:'rgba(240,237,245,.5)', flexShrink:0 }}
+        >
+          {theme === 'dark' ? <Sun size={16}/> : <Moon size={16}/>}
+        </button>
+        <button className="btn-icon" onClick={signOut} title="Sair" style={{ color:'rgba(240,237,245,.5)', flexShrink:0 }}>
           <LogOut size={16}/>
         </button>
       </div>
