@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 import { useTheme } from '../contexts/ThemeContext';
+import Avatar from './Avatar';
 
 // Itens avulsos (sem grupo)
 const NAV_SOLO = [
@@ -179,7 +180,7 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
     <aside ref={sidebarRef} className="sidebar" style={mobileStyle}>
       <div className="sidebar-logo" style={collapsed ? { padding:'16px 8px', justifyContent:'center', flexDirection:'column', gap:4 } : undefined}>
         <div className="sidebar-logo-icon" style={collapsed ? { width:26, height:26 } : undefined}>
-          🏁
+          <Navigation size={collapsed ? 14 : 16} color="white" />
         </div>
         {!collapsed && (
           <div>
@@ -202,16 +203,14 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
       </nav>
 
       <div className="user-menu" style={collapsed ? { flexDirection:'column', gap:6, padding:'12px 8px', alignItems:'center' } : undefined}>
-        <div
-          className="user-avatar"
-          style={{ cursor:'pointer', overflow:'hidden', padding: avatarUrl ? 0 : undefined, flexShrink:0 }}
+        <Avatar
+          name={profile?.full_name}
+          src={avatarUrl}
+          size={32}
+          style={{ cursor:'pointer', border:'2px solid rgba(238,90,36,.35)' }}
           onClick={() => setPage('profile')}
           title={collapsed ? (profile?.full_name || 'Ver perfil') : 'Ver perfil'}
-        >
-          {avatarUrl
-            ? <img src={avatarUrl} alt="avatar" style={{ width:'100%', height:'100%', objectFit:'cover', borderRadius:'50%' }}/>
-            : initials}
-        </div>
+        />
         {!collapsed && (
           <div className="user-info">
             <div className="user-name">{profile?.full_name || 'Usuário'}</div>
