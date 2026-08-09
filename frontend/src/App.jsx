@@ -159,13 +159,17 @@ function AppContent() {
     </div>
   );
 
-  if (!session) return (
-    <div className="auth-page">
-      {authPage === 'login'
-        ? <Login onGoRegister={() => setAuthPage('register')} />
-        : <Register onGoLogin={() => setAuthPage('login')} />}
-    </div>
-  );
+  if (!session) {
+    // Se há token na URL, mostrar cadastro direto
+    const hasToken = new URLSearchParams(window.location.search).get('token');
+    return (
+      <div className="auth-page">
+        {(authPage === 'register' || hasToken)
+          ? <Register onGoLogin={() => { window.history.replaceState({}, '', '/'); setAuthPage('login'); }} />
+          : <Login onGoRegister={() => setAuthPage('register')} />}
+      </div>
+    );
+  }
 
   const isMaster = profile?.access_level === 'master';
 

@@ -79,4 +79,66 @@ async function enviarEmailAcesso(email, nome, token) {
   // TODO: integrar com provedor de e-mail (Resend, SendGrid, etc.)
 }
 
+// POST /api/hotmart/ativar-conta
+// Chamado pelo frontend após criar usuário no Supabase Auth
+router.post('/ativar-conta', async (req, res) => {
+  const { token, user_id, full_name, email, company } = req.body;
+
+  if (!token || !user_id || !email || !company) {
+    return res.status(400).json({ error: 'Dados incompletos.' });
+  }
+
+  // 1. Validar token
+  const { data: signup, error: tokenErr } = await supabase
+    .from('pending_signups')
+    .select('id, email, used')
+    .eq('token', token)
+    .single();
+
+  if (tokenErr || !signup) return res.status(400).json({ error: 'Token inválido.' });
+  if (signup.used)         return res.status(400).json({ error: 'Token já utilizado.' });
+  if (signup.email !== email) return res.status(400).json({ error: 'E-mail não corresponde.' });
+
+  // 2. Criar tenant
+  const { data: tenant, error: tenantErr } = await supabase
+    .from('tenants')
+    .insert({ name: company, owner_id: user_id, hotmart_email: email, status: 'active' })
+    .select()
+    .single();
+
+  if (tenantErr) {
+    console.error('[Hotmart] Erro ao criar tenant:', tenantErr);
+    return res.status(500).json({ error: 'Erro ao criar workspace.' });
+  }
+
+  // 3. Criar perfil admin
+  const { error: profileErr } = await supabase
+    .from('profiles')
+    .upsert({
+      id:           user_id,
+      full_name,
+      email,
+      company,
+      tenant_id:    tenant.id,
+      access_level: 'admin',
+      aceite_termos_em: new Date().toISOString(),
+      aceite_privacidade_em: new Date().toISOString(),
+      versao_termos: '1.0',
+    });
+
+  if (profileErr) {
+    console.error('[Hotmart] Erro ao criar perfil:', profileErr);
+    return res.status(500).json({ error: 'Erro ao criar perfil.' });
+  }
+
+  // 4. Marcar token como usado
+  await supabase
+    .from('pending_signups')
+    .update({ used: true })
+    .eq('token', token);
+
+  console.log(`[Hotmart] Conta ativada: ${email} → tenant ${tenant.id}`);
+  res.json({ ok: true, tenant_id: tenant.id });
+});
+
 module.exports = router;
