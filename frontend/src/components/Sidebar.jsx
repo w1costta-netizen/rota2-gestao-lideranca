@@ -213,6 +213,14 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
           <LogOut size={16}/>
         </button>
       </div>
+      {!collapsed && (
+        <div style={{ padding:'8px 16px 12px', textAlign:'center' }}>
+          <a href="/termos-de-uso.html" target="_blank" rel="noopener noreferrer"
+            style={{ fontSize:10, color:'rgba(255,255,255,.3)', textDecoration:'underline' }}>
+            Termos de Uso
+          </a>
+        </div>
+      )}
     </aside>
   );
 }

@@ -8,6 +8,7 @@ import Sidebar from './components/Sidebar';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Welcome from './pages/Welcome';
+import AceiteTermos from './pages/AceiteTermos';
 
 // Lazy-load de todas as páginas — reduz o bundle inicial em ~70%
 const lazy = (fn) => React.lazy(fn);
@@ -177,6 +178,15 @@ function AppContent() {
     ? { ...profile, company: viewingStore, access_level: 'admin' }
     : profile;
   const userSector = effectiveProfile?.sector || '';
+
+  // Termos de uso: exige aceite se ainda não aceitou
+  if (profile && !profile.aceite_termos_em) {
+    return (
+      <div className="auth-page">
+        <AceiteTermos userId={userId} onAceito={() => window.location.reload()} />
+      </div>
+    );
+  }
 
   // Mostra boas-vindas na primeira vez (checa localStorage como fallback)
   const welcomeDone = localStorage.getItem(`welcome_done_${userId}`);
