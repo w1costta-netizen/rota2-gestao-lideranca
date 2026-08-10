@@ -241,6 +241,7 @@ export default function PainelVendas({ profile }) {
   const [dados, setDados] = useState([]);
   const [loading, setLoading] = useState(false);
   const company = profile?.company;
+  const tenantId = profile?.tenant_id;
 
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -254,7 +255,7 @@ export default function PainelVendas({ profile }) {
     if (!periodo) { setDados([]); return; }
     setLoading(true);
     const tabela = periodo === 'atual' ? 'vendas_atual' : 'vendas_historico';
-    let q = supabase.from(tabela).select('*').eq('company', company);
+    let q = supabase.from(tabela).select('*').eq('tenant_id', tenantId);
     if (periodo !== 'atual') q = q.eq('periodo', periodo);
     const { data } = await q;
     setDados(data || []);
