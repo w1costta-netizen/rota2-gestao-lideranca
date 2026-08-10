@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, CheckCircle, Circle, Clock, ClipboardList, Messag
 import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
+import Avatar from '../components/Avatar';
 
 const EMPTY = { title: '', description: '', assigned_to: '', due_date: '', due_time: '', priority: 'normal', recorrencia: 'nenhuma', tags: [], lembrete_minutos: null };
 
@@ -433,17 +434,20 @@ export default function Tarefas({ userId, profile }) {
                 {t.tags.map(tag => <TagChip key={tag} tag={tag} small/>)}
               </div>
             )}
-            <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:12, color:'var(--text-muted)' }}>
-              <span>👤 {t.assigned?.full_name || '—'}</span>
-              {t.due_date && (
-                <span style={{ color: overdue && !asRecurring ? '#ef4444' : 'var(--text-muted)', fontWeight: overdue && !asRecurring ? 700 : 400 }}>
-                  📅 {formatDate(t.due_date)}{t.due_time ? ` às ${t.due_time}` : ''}{overdue && !asRecurring ? ' · vencida' : ''}
-                </span>
-              )}
-              {!t.due_date && t.due_time && (
-                <span>🕐 {t.due_time}</span>
-              )}
-              <span>Por {t.creator?.full_name || '—'}</span>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:12, color:'var(--text-muted)', alignItems:'center' }}>
+                {t.due_date && (
+                  <span style={{ color: overdue && !asRecurring ? '#ef4444' : 'var(--text-muted)', fontWeight: overdue && !asRecurring ? 700 : 400 }}>
+                    📅 {formatDate(t.due_date)}{t.due_time ? ` às ${t.due_time}` : ''}{overdue && !asRecurring ? ' · vencida' : ''}
+                  </span>
+                )}
+                {!t.due_date && t.due_time && <span>🕐 {t.due_time}</span>}
+                <span>Por {t.creator?.full_name || '—'}</span>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ fontSize:11, color:'var(--text-muted)' }}>{t.assigned?.full_name || '—'}</span>
+                <Avatar name={t.assigned?.full_name} avatarUrl={t.assigned?.avatar_url} size={28}/>
+              </div>
             </div>
             <CommentSection taskId={t.id} userId={userId}/>
           </div>

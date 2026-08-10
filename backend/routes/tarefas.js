@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
 
   let query = supabase
     .from('tarefas')
-    .select('*, assigned:assigned_to(id,full_name,sector), creator:created_by(full_name)')
+    .select('*, assigned:assigned_to(id,full_name,sector,avatar_url), creator:created_by(full_name,avatar_url)')
     .eq('company', targetCompany)
     .order('created_at', { ascending: false });
 
@@ -167,7 +167,7 @@ router.put('/:id', async (req, res) => {
   }
 
   const { data, error } = await supabase.from('tarefas').update(updates).eq('id', req.params.id)
-    .select('*, assigned:assigned_to(id,full_name,sector), creator:created_by(full_name)').single();
+    .select('*, assigned:assigned_to(id,full_name,sector,avatar_url), creator:created_by(full_name,avatar_url)').single();
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });

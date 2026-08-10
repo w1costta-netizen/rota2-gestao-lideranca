@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, Edit2, X, Save, Trash2, UserCheck, UserX, Settings, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import { MODULES, DEFAULT_PERMISSIONS } from '../lib/permissions';
+import Avatar from '../components/Avatar';
 
 const APP_URL = 'https://rotalider.com.br';
 
@@ -505,7 +506,12 @@ export default function UsersAdmin({ userId, profile }) {
               <tbody>
                 {users.map(u => (
                   <tr key={u.id} style={{ opacity: u.active ? 1 : .45 }}>
-                    <td style={{ fontWeight:600 }}>{u.full_name}</td>
+                    <td style={{ fontWeight:600 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                        <Avatar name={u.full_name} avatarUrl={u.avatar_url} size={36}/>
+                        {u.full_name}
+                      </div>
+                    </td>
                     <td style={{ color:'var(--text-muted)', fontSize:12 }}>{u.email}</td>
                     <td style={{ fontSize:12 }}>{u.role || '—'}</td>
                     <td style={{ fontSize:12 }}>{u.sector || '—'}</td>

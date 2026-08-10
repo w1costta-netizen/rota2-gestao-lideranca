@@ -24,7 +24,7 @@ router.get('/users', async (req, res) => {
 
   let query = supabase
     .from('profiles')
-    .select('id, full_name, email, role, sector, access_level, permissions, phone, active, first_access, created_at')
+    .select('id, full_name, email, role, sector, access_level, permissions, phone, active, first_access, created_at, avatar_url')
     .neq('id', requester_id)
     .order('full_name');
 

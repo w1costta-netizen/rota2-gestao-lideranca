@@ -1,42 +1,36 @@
 import React from 'react';
 
-export default function Avatar({ name, size = 32, src, className, style }) {
-  const initials = name
-    ? name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase()
-    : '?';
-
-  const fontSize = Math.round(size * 0.38);
-
+export default function Avatar({ name, avatarUrl, size = 28, style = {} }) {
+  const initial = (name || '?').trim()[0].toUpperCase();
   const base = {
     width: size,
     height: size,
     borderRadius: '50%',
+    border: '2px solid white',
+    flexShrink: 0,
+    overflow: 'hidden',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    flexShrink: 0,
-    userSelect: 'none',
-    overflow: 'hidden',
+    fontSize: Math.max(10, Math.round(size * 0.38)),
     fontWeight: 700,
-    fontSize,
+    background: '#E8681A',
+    color: '#fff',
     ...style,
   };
 
-  if (src) {
+  if (avatarUrl) {
     return (
-      <div style={base} className={className}>
-        <img src={src} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      <div style={base}>
+        <img
+          src={avatarUrl}
+          alt={name}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={e => { e.currentTarget.style.display = 'none'; }}
+        />
       </div>
     );
   }
 
-  return (
-    <div
-      style={{ ...base, background: '#E3DAEF', color: '#2E1A47' }}
-      className={className}
-      title={name}
-    >
-      {initials}
-    </div>
-  );
+  return <div style={base}>{initial}</div>;
 }
