@@ -672,8 +672,8 @@ export default function Tarefas({ userId, profile }) {
 
             const dayTasksRaw = calList.filter(t => {
               const rec = t.recorrencia && t.recorrencia !== 'nenhuma';
-              // Normais: só pendentes no dia exato
-              if (!rec) return t.status === 'pendente' && t.due_date === selectedCalDay;
+              // Normais: pendentes, em andamento e concluídas no dia exato
+              if (!rec) return t.due_date === selectedCalDay;
               // Instância real no dia exato: sempre mostra
               if (t.due_date === selectedCalDay) return true;
               // Dias passados sem instância real: não mostra virtual
