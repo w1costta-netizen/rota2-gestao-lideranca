@@ -72,9 +72,13 @@ export default function Mural({ userId, profile }) {
   };
 
   const remove = async (id) => {
-    await api.delete(`/mural/${id}?requester_id=${userId}`).catch(() => toast('Erro'));
-    setList(l => l.filter(m => m.id !== id));
-    toast('Card removido');
+    try {
+      await api.delete(`/mural/${id}?requester_id=${userId}`);
+      setList(l => l.filter(m => m.id !== id));
+      toast('Card removido');
+    } catch (e) {
+      toast('Erro ao remover card: ' + (e?.response?.data?.error || e.message || 'tente novamente'));
+    }
   };
 
   const toggleReacao = async (itemId, emoji) => {
