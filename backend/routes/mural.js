@@ -6,7 +6,7 @@ async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
   return data;
 }
-const isManager = p => p && ['admin','supervisor'].includes(p.access_level);
+const isManager = p => p && ['admin','supervisor','master'].includes(p.access_level);
 
 // GET /api/mural?requester_id=&company=
 router.get('/', async (req, res) => {
