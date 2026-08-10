@@ -469,23 +469,29 @@ export default function Agenda({ userId, profile }) {
             ) : (
               byDay[day].map(item => {
                 const { label, cls } = targetLabel(item);
+                const barColor = item.target_type === 'geral' ? '#10b981' : item.target_type === 'setor' ? '#f59e0b' : '#6366f1';
                 return (
-                  <div className="agenda-item" key={item.id}>
-                    <div className={`agenda-item-bar ${item.target_type}`} />
+                  <div className="agenda-item" key={item.id} style={{ borderLeft: `3px solid ${barColor}` }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 }}>
-                        <div className="agenda-item-title">{item.title}</div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {item.time && (
+                            <div style={{ fontSize: 11, fontWeight: 700, color: barColor, marginBottom: 3 }}>
+                              {item.time}
+                            </div>
+                          )}
+                          <div className="agenda-item-title">{item.title}</div>
+                          {item.target_type !== 'geral' && (
+                            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{label}</div>
+                          )}
+                          {item.description && <div className="agenda-item-desc" style={{ marginTop: 3 }}>{item.description}</div>}
+                        </div>
                         {canManage && (
-                          <div className="agenda-item-actions">
+                          <div className="agenda-item-actions" style={{ flexShrink: 0 }}>
                             <button className="btn-icon" style={{ padding: 4 }} onClick={() => openEdit(item)}><Pencil size={12} /></button>
                             <button className="btn-icon danger" style={{ padding: 4 }} onClick={() => remove(item.id)}><Trash2 size={12} /></button>
                           </div>
                         )}
-                      </div>
-                      {item.description && <div className="agenda-item-desc">{item.description}</div>}
-                      <div style={{ display: 'flex', gap: 6, marginTop: 5, alignItems: 'center' }}>
-                        {item.time && <span className="agenda-item-time">⏰ {item.time}</span>}
-                        <span className={`badge ${cls}`}>{label}</span>
                       </div>
                     </div>
                   </div>
