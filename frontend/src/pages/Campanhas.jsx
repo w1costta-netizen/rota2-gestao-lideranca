@@ -9,8 +9,8 @@ import { supabase } from '../lib/supabase';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
-const TIPO_LABEL = { feira: '🛒 Feira', fds: '🏷️ Final de Semana' };
-const TIPO_COLOR = { feira: '#6366f1', fds: '#E8681A' };
+const TIPO_LABEL = { feira: '🛒 Feira', fds: '🏷️ Final de Semana', catalogo: '📋 Catálogo' };
+const TIPO_COLOR = { feira: '#6366f1', fds: '#E8681A', catalogo: '#0ea5e9' };
 
 function fmt(d) {
   if (!d) return '';
@@ -1144,8 +1144,8 @@ export default function Campanhas({ userId, profile }) {
         </div>
         <div className="form-group">
           <label className="form-label">Tipo</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {[['feira', '🛒 Feira (Ter/Qua)'], ['fds', '🏷️ Final de Semana (Qui–Seg)']].map(([k, l]) => (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+            {[['feira', '🛒 Feira (Ter/Qua)'], ['fds', '🏷️ Final de Semana (Qui–Seg)'], ['catalogo', '📋 Catálogo (Quinzenal)']].map(([k, l]) => (
               <button key={k} onClick={() => setForm(f => ({ ...f, tipo: k }))} style={{
                 padding: '10px', borderRadius: 8, cursor: 'pointer', fontWeight: 600, fontSize: 13,
                 border: `2px solid ${form.tipo === k ? TIPO_COLOR[k] : 'var(--border)'}`,
