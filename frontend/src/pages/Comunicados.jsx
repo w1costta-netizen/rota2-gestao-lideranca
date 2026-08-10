@@ -21,6 +21,8 @@ export default function Comunicados({ userId, profile }) {
   const canManage = ['admin', 'supervisor', 'master'].includes(profile?.access_level);
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState({});
+  const LIMIT = 150;
   const [modal, setModal]     = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm]       = useState(EMPTY);
@@ -164,7 +166,28 @@ export default function Comunicados({ userId, profile }) {
                   <span style={{ fontSize:11, color:'var(--text-muted)' }}>{timeAgo(c.created_at)}</span>
                 </div>
                 <div style={{ fontWeight:700, fontSize:15, marginBottom:6 }}>{c.title}</div>
-                <div style={{ fontSize:13, color:'var(--text-muted)', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{c.body}</div>
+                {(() => {
+                  const isLong = (c.body || '').length > LIMIT;
+                  const isOpen = expanded[c.id];
+                  return (
+                    <>
+                      <div style={{
+                        fontSize:13, color:'var(--text-muted)', lineHeight:1.6, whiteSpace:'pre-wrap',
+                        display: !isLong || isOpen ? 'block' : '-webkit-box',
+                        WebkitLineClamp: !isLong || isOpen ? 'unset' : 3,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: !isLong || isOpen ? 'visible' : 'hidden',
+                      }}>{c.body}</div>
+                      {isLong && (
+                        <button onClick={() => setExpanded(e => ({ ...e, [c.id]: !e[c.id] }))}
+                          style={{ marginTop:4, background:'none', border:'none', cursor:'pointer',
+                            color:'#E8681A', fontSize:12, fontWeight:600, padding:0 }}>
+                          {isOpen ? 'Ver menos ↑' : 'Ver mais ↓'}
+                        </button>
+                      )}
+                    </>
+                  );
+                })()}
                 <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:8 }}>
                   Publicado por {c.profiles?.full_name || 'Gestor'}
                 </div>
