@@ -22,7 +22,23 @@ export default function Comunicados({ userId, profile }) {
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});
+  const [leituras, setLeituras] = useState({});   // { [id]: { leram, nao_leram } }
+  const [leiturasOpen, setLeiturasOpen] = useState({});
+  const [leiturasLoading, setLeiturasLoading] = useState({});
   const LIMIT = 150;
+
+  const toggleLeituras = async (id) => {
+    const isOpen = leiturasOpen[id];
+    setLeiturasOpen(s => ({ ...s, [id]: !isOpen }));
+    if (!isOpen && !leituras[id]) {
+      setLeiturasLoading(s => ({ ...s, [id]: true }));
+      try {
+        const r = await api.get(`/comunicados/${id}/leituras?requester_id=${userId}`);
+        setLeituras(s => ({ ...s, [id]: r.data }));
+      } catch { /* silencioso */ }
+      finally { setLeiturasLoading(s => ({ ...s, [id]: false })); }
+    }
+  };
   const [modal, setModal]     = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm]       = useState(EMPTY);
@@ -199,6 +215,99 @@ export default function Comunicados({ userId, profile }) {
                   onToggle={toggleReacao}
                   stopPropagation
                 />
+
+                {/* Painel de leituras — só admin/supervisor */}
+                {canManage && (
+                  <div onClick={e => e.stopPropagation()} style={{ marginTop:10 }}>
+                    <button
+                      onClick={() => toggleLeituras(c.id)}
+                      style={{ background:'none', border:'none', cursor:'pointer',
+                        color:'var(--text-muted)', fontSize:12, fontWeight:600,
+                        padding:0, display:'flex', alignItems:'center', gap:4 }}>
+                      {leiturasOpen[c.id] ? '▲' : '▼'} Visualizações
+                    </button>
+
+                    {leiturasOpen[c.id] && (
+                      <div style={{ marginTop:10, borderTop:'1px solid var(--border)', paddingTop:10 }}>
+                        {leiturasLoading[c.id] ? (
+                          <span style={{ fontSize:12, color:'var(--text-muted)' }}>Carregando...</span>
+                        ) : (() => {
+                          const d = leituras[c.id];
+                          if (!d) return null;
+                          return (
+                            <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                              {/* Leram */}
+                              <div>
+                                <div style={{ fontSize:11, fontWeight:700, color:'#10b981', marginBottom:6 }}>
+                                  ✓ Leram ({d.leram.length})
+                                </div>
+                                {d.leram.length === 0
+                                  ? <span style={{ fontSize:12, color:'var(--text-muted)' }}>Ninguém ainda</span>
+                                  : <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                                      {d.leram.map(u => (
+                                        <div key={u.id} style={{ display:'flex', alignItems:'center', gap:6 }}
+                                          title={`${u.full_name}${u.read_at ? ' · ' + new Date(u.read_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : ''}`}>
+                                          <div style={{
+                                            width:28, height:28, borderRadius:'50%',
+                                            border:'2px solid #10b981',
+                                            overflow:'hidden', flexShrink:0,
+                                            background:'#E8681A', display:'flex',
+                                            alignItems:'center', justifyContent:'center',
+                                            fontSize:11, fontWeight:700, color:'#fff',
+                                          }}>
+                                            {u.avatar_url
+                                              ? <img src={u.avatar_url} alt={u.full_name} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                                              : (u.full_name||'?')[0].toUpperCase()}
+                                          </div>
+                                          <span style={{ fontSize:11, color:'var(--text-muted)', maxWidth:80,
+                                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                            {u.full_name.split(' ')[0]}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                }
+                              </div>
+
+                              {/* Não leram */}
+                              {d.nao_leram.length > 0 && (
+                                <div>
+                                  <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', marginBottom:6 }}>
+                                    ○ Não leram ({d.nao_leram.length})
+                                  </div>
+                                  <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                                    {d.nao_leram.map(u => (
+                                      <div key={u.id} style={{ display:'flex', alignItems:'center', gap:6 }}
+                                        title={u.full_name}>
+                                        <div style={{
+                                          width:28, height:28, borderRadius:'50%',
+                                          border:'2px solid var(--border)',
+                                          overflow:'hidden', flexShrink:0,
+                                          background:'var(--surface-2)', display:'flex',
+                                          alignItems:'center', justifyContent:'center',
+                                          fontSize:11, fontWeight:700, color:'var(--text-muted)',
+                                          opacity: 0.6,
+                                        }}>
+                                          {u.avatar_url
+                                            ? <img src={u.avatar_url} alt={u.full_name} style={{ width:'100%', height:'100%', objectFit:'cover', opacity:0.5 }}/>
+                                            : (u.full_name||'?')[0].toUpperCase()}
+                                        </div>
+                                        <span style={{ fontSize:11, color:'var(--text-muted)', opacity:0.6,
+                                          maxWidth:80, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                          {u.full_name.split(' ')[0]}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               {canManage && (
                 <div style={{ display:'flex', gap:6, flexShrink:0 }} onClick={e => e.stopPropagation()}>

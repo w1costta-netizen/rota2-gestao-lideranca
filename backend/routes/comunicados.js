@@ -118,4 +118,42 @@ router.post('/:id/lido', async (req, res) => {
   res.json({ ok: true });
 });
 
+// GET /api/comunicados/:id/leituras — quem leu e quem não leu (admin/supervisor)
+router.get('/:id/leituras', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const me = await getProfile(requester_id);
+  if (!me || !['admin', 'supervisor', 'master'].includes(me.access_level))
+    return res.status(403).json({ error: 'Acesso negado' });
+
+  // Busca comunicado para pegar a empresa
+  const { data: comunicado } = await supabase
+    .from('comunicados').select('company').eq('id', req.params.id).single();
+  if (!comunicado) return res.status(404).json({ error: 'Comunicado não encontrado' });
+
+  const targetCompany = me.access_level === 'master' ? comunicado.company : me.company;
+
+  // Todos os usuários ativos da empresa
+  const { data: todos } = await supabase
+    .from('profiles')
+    .select('id, full_name, avatar_url, role')
+    .eq('company', targetCompany)
+    .eq('active', true)
+    .order('full_name');
+
+  // Quem leu + quando
+  const { data: lidos } = await supabase
+    .from('comunicados_lidos')
+    .select('user_id, read_at')
+    .eq('comunicado_id', req.params.id);
+
+  const lidosMap = {};
+  (lidos || []).forEach(l => { lidosMap[l.user_id] = l.read_at; });
+
+  const leram   = (todos || []).filter(u => lidosMap[u.id]).map(u => ({ ...u, read_at: lidosMap[u.id] }));
+  const naoLeram = (todos || []).filter(u => !lidosMap[u.id]);
+
+  res.json({ leram, nao_leram: naoLeram });
+});
+
 module.exports = router;
