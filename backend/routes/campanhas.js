@@ -164,9 +164,11 @@ REGRAS:
 
     console.log('[IA] Enviando para Anthropic — arquivos:', req.files.map(f => `${f.originalname} (${f.mimetype}, ${f.size}b)`));
 
+    const hasPdf = req.files.some(f => f.mimetype === 'application/pdf');
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-5',
       max_tokens: 8192,
+      ...(hasPdf ? { betas: ['pdfs-2024-09-25'] } : {}),
       tools: [{
         name: 'registrar_itens_flyer',
         description: 'Registra os itens extraídos do encarte promocional',
