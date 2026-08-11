@@ -165,10 +165,15 @@ REGRAS:
     console.log('[IA] Enviando para Anthropic — arquivos:', req.files.map(f => `${f.originalname} (${f.mimetype}, ${f.size}b)`));
 
     const hasPdf = req.files.some(f => f.mimetype === 'application/pdf');
-    const response = await anthropic.messages.create({
+
+    const TIMEOUT_MS = 55000; // 55s — antes do Render cortar em 60s
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Tempo limite atingido. O PDF é muito grande — tente dividir em partes menores ou enviar como imagens.')), TIMEOUT_MS)
+    );
+
+    const apiCall = anthropic.messages.create({
       model: 'claude-sonnet-5',
       max_tokens: 8192,
-      ...(hasPdf ? { betas: ['pdfs-2024-09-25'] } : {}),
       tools: [{
         name: 'registrar_itens_flyer',
         description: 'Registra os itens extraídos do encarte promocional',
@@ -196,7 +201,9 @@ REGRAS:
       }],
       tool_choice: { type: 'tool', name: 'registrar_itens_flyer' },
       messages: [{ role: 'user', content }],
-    });
+    }, hasPdf ? { headers: { 'anthropic-beta': 'pdfs-2024-09-25' } } : undefined);
+
+    const response = await Promise.race([apiCall, timeoutPromise]);
 
     console.log('[IA] stop_reason:', response.stop_reason);
     const toolUse = response.content.find(b => b.type === 'tool_use');
