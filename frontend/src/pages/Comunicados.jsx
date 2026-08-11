@@ -103,6 +103,9 @@ export default function Comunicados({ userId, profile }) {
   };
 
   const toggleReacao = async (itemId, emoji) => {
+    // Reagir implica ter lido — marca como lido automaticamente
+    const comunicado = list.find(c => c.id === itemId);
+    if (comunicado && !comunicado.lido) marcarLido(itemId);
     try {
       const { data } = await api.post('/reacoes/toggle', { tipo: 'comunicado', item_id: itemId, user_id: userId, emoji });
       setReacoes(prev => {
