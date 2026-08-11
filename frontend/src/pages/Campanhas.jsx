@@ -139,7 +139,7 @@ function downloadTemplate() {
 // ── Tela de detalhes / conferência ────────────────────────────────
 function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack }) {
   const toast = useToast();
-  const isAdmin = ['admin', 'supervisor'].includes(profile?.access_level);
+  const isAdmin = ['admin', 'supervisor', 'master'].includes(profile?.access_level);
   const fileRef    = useRef();
   const galeriaRef = useRef();
   const xlsxRef    = useRef();
@@ -997,7 +997,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
 // ── Tela principal (lista de campanhas) ───────────────────────────
 export default function Campanhas({ userId, profile }) {
   const toast = useToast();
-  const isAdmin = ['admin', 'supervisor'].includes(profile?.access_level);
+  const isAdmin = ['admin', 'supervisor', 'master'].includes(profile?.access_level);
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [modal, setModal]     = useState(false);
