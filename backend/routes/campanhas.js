@@ -150,8 +150,16 @@ REGRAS:
     const content = [{ type: 'text', text: INSTRUCAO }];
 
     for (const file of req.files) {
-      const imgType = file.mimetype.startsWith('image/') ? file.mimetype : 'image/jpeg';
-      content.push({ type: 'image', source: { type: 'base64', media_type: imgType, data: file.buffer.toString('base64') } });
+      if (file.mimetype === 'application/pdf') {
+        // PDFs precisam de content block tipo 'document'
+        content.push({
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: file.buffer.toString('base64') },
+        });
+      } else {
+        const imgType = file.mimetype.startsWith('image/') ? file.mimetype : 'image/jpeg';
+        content.push({ type: 'image', source: { type: 'base64', media_type: imgType, data: file.buffer.toString('base64') } });
+      }
     }
 
     console.log('[IA] Enviando para Anthropic — arquivos:', req.files.map(f => `${f.originalname} (${f.mimetype}, ${f.size}b)`));
