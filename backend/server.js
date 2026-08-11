@@ -29,6 +29,7 @@ app.use('/api/estoque',      require('./routes/estoque'));
 app.use('/api/reacoes',      require('./routes/reacoes'));
 app.use('/api/conferencia',  require('./routes/conferencia'));
 app.use('/api/hotmart',      require('./routes/hotmart'));
+app.use('/api/pdca',         require('./routes/pdca'));
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

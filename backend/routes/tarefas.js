@@ -115,7 +115,7 @@ router.put('/:id', async (req, res) => {
 
   const { data: task } = await supabase
     .from('tarefas')
-    .select('created_by, assigned_to, title, due_date, due_time, recorrencia, tags, company, description, priority, lembrete_minutos')
+    .select('created_by, assigned_to, title, due_date, due_time, recorrencia, tags, company, description, priority, lembrete_minutos, pdca_context')
     .eq('id', req.params.id).single();
 
   const isOwner = task?.created_by === requester_id && task?.assigned_to === requester_id;
@@ -133,6 +133,14 @@ router.put('/:id', async (req, res) => {
   }
   if (isManager(me) && assigned_to) updates.assigned_to = assigned_to;
   if (status) updates.status = status;
+
+  // Sync ação PDCA quando tarefa é marcada como concluída/pendente
+  if (status !== undefined && task?.pdca_context?.acao_id) {
+    supabase.from('acoes_pdca').update({
+      concluida: status === 'concluida',
+      concluida_em: status === 'concluida' ? new Date().toISOString() : null,
+    }).eq('id', task.pdca_context.acao_id).then(() => {}).catch(() => {});
+  }
 
   // Notifica criador quando concluída
   if (status === 'concluida' && task?.created_by && task.created_by !== requester_id) {

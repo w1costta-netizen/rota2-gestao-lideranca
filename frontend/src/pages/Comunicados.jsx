@@ -219,9 +219,8 @@ export default function Comunicados({ userId, profile }) {
                   stopPropagation
                 />
 
-                {/* Painel de leituras — só admin/supervisor */}
-                {canManage && (
-                  <div onClick={e => e.stopPropagation()} style={{ marginTop:10 }}>
+                {/* Painel de leituras — visível para todos */}
+                <div onClick={e => e.stopPropagation()} style={{ marginTop:10 }}>
                     <button
                       onClick={() => toggleLeituras(c.id)}
                       style={{ background:'none', border:'none', cursor:'pointer',
@@ -310,7 +309,6 @@ export default function Comunicados({ userId, profile }) {
                       </div>
                     )}
                   </div>
-                )}
               </div>
               {canManage && (
                 <div style={{ display:'flex', gap:6, flexShrink:0 }} onClick={e => e.stopPropagation()}>

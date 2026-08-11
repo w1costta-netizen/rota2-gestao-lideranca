@@ -35,6 +35,7 @@ const StoreSetup             = lazy(() => import('./pages/StoreSetup'));
 const Estoque                = lazy(() => import('./pages/Estoque'));
 const ImportadorEstoque      = lazy(() => import('./pages/ImportadorEstoque'));
 const Organograma            = lazy(() => import('./pages/Organograma'));
+const PlanoAcao              = lazy(() => import('./pages/PlanoAcao'));
 
 function AccessDenied() {
   return (
@@ -222,7 +223,7 @@ function AppContent() {
     cashier:      () => has('caixas')     ? <CashierAnalysis userId={userId} profile={effectiveProfile} />        : <AccessDenied />,
     profile:      () => <Profile />,
     comunicados:  () => <Comunicados userId={userId} profile={effectiveProfile} />,
-    tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={effectiveProfile} />                  : <AccessDenied />,
+    tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
     mural:        () => has('mural')      ? <Mural userId={userId} profile={effectiveProfile} />                    : <AccessDenied />,
     campanhas:    () => has('campanhas')  ? <Campanhas userId={userId} profile={effectiveProfile} />                : <AccessDenied />,
     relatorios:        () => has('relatorios')        ? <RelatoriosFotograficos userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
@@ -234,6 +235,7 @@ function AppContent() {
     estoque:          () => has('estoque')          ? <Estoque profile={effectiveProfile} />           : <AccessDenied />,
     importador_estoque: () => has('importador_estoque') ? <ImportadorEstoque profile={effectiveProfile} /> : <AccessDenied />,
     organograma:        () => has('organograma')        ? <Organograma userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
+    pdca:               () => has('pdca')               ? <PlanoAcao userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
   };
 
   const PageComponent = pages[page] || pages.dashboard;

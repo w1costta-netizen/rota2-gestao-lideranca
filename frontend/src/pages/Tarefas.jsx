@@ -211,7 +211,7 @@ function CommentSection({ taskId, userId }) {
 }
 
 // ─── Página principal ─────────────────────────────────
-export default function Tarefas({ userId, profile }) {
+export default function Tarefas({ userId, profile, setPage }) {
   const toast   = useToast();
   const isAdmin = ['admin','supervisor','master'].includes(profile?.access_level);
   const [list, setList]         = useState([]);
@@ -423,13 +423,38 @@ export default function Tarefas({ userId, profile }) {
                   <RefreshCw size={9}/> {RECORRENCIA_LABEL[t.recorrencia]}
                 </span>
               )}
+              {t.pdca_context && (
+                <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
+                  background:'#E8681A22', color:'#E8681A' }}>
+                  🎯 Plano de ação
+                </span>
+              )}
             </div>
             {t.description && (
               <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:6, lineHeight:1.4 }}>
                 {t.description}
               </div>
             )}
-            {(t.tags||[]).length > 0 && (
+            {t.pdca_context && (
+              <div style={{ background:'#E8681A0D', border:'1px solid #E8681A33', borderRadius:8,
+                padding:'8px 12px', marginBottom:8, fontSize:12 }}>
+                <div style={{ fontWeight:700, color:'#E8681A', marginBottom:4 }}>📋 {t.pdca_context.plano_titulo}</div>
+                {t.pdca_context.quadrante_label && (
+                  <div style={{ color:'var(--text-muted)', marginBottom:2 }}>Etapa: {t.pdca_context.quadrante_label}</div>
+                )}
+                {t.pdca_context.meta && (
+                  <div style={{ color:'var(--text-muted)', marginBottom:4 }}>Meta: {t.pdca_context.meta}</div>
+                )}
+                {setPage && (
+                  <button onClick={(e) => { e.stopPropagation(); localStorage.setItem('pdca_open_plan', t.pdca_context.plano_id); setPage('pdca'); }}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'#E8681A', fontWeight:700,
+                      fontSize:11, padding:0, textDecoration:'underline' }}>
+                    Ver plano completo →
+                  </button>
+                )}
+              </div>
+            )}
+            {(t.tags||[]).filter(tag => tag !== 'plano_acao').length > 0 && (
               <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:6 }}>
                 {t.tags.map(tag => <TagChip key={tag} tag={tag} small/>)}
               </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 import { useTheme } from '../contexts/ThemeContext';
@@ -38,8 +38,9 @@ const NAV_GROUPS = [
     label: 'Gestão do Tempo e Produtividade',
     icon:  Clock,
     items: [
-      { id: 'tarefas', label: 'Tarefas', icon: CheckSquare,  perm: 'tarefas' },
-      { id: 'agenda',  label: 'Agenda',  icon: CalendarDays, perm: 'agenda' },
+      { id: 'tarefas', label: 'Tarefas',       icon: CheckSquare,  perm: 'tarefas' },
+      { id: 'agenda',  label: 'Agenda',        icon: CalendarDays, perm: 'agenda' },
+      { id: 'pdca',    label: 'Plano de Ação', icon: Target,       perm: 'pdca' },
     ],
   },
   {
