@@ -3,6 +3,8 @@ import { Shield, Search, CheckCircle2, XCircle, RefreshCw, Plus, X, Store } from
 import api from '../api';
 import { useToast } from '../components/Toast';
 import Avatar from '../components/Avatar';
+import ExportMenu from '../components/ExportMenu';
+import { gerarPDF, gerarExcel } from '../lib/exportUtils';
 
 const ACAO_LABEL = {
   criar_usuario: 'Criou usuário',
@@ -24,9 +26,22 @@ export default function LogsAuditoria({ userId, profile }) {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [acao, setAcao] = useState('');
+  const [userIdFiltro, setUserIdFiltro] = useState('');
+  const [dataIni, setDataIni] = useState('');
+  const [dataFim, setDataFim] = useState('');
+  const [empresaSel, setEmpresaSel] = useState(''); // só para master
+  const [lojas, setLojas] = useState([]);           // só para master
   const [empresasExtras, setEmpresasExtras] = useState([]);
   const [novaEmpresa, setNovaEmpresa] = useState('');
   const [salvandoEmpresa, setSalvandoEmpresa] = useState(false);
+
+  // Master: carrega a lista de lojas para o dropdown de empresa
+  useEffect(() => {
+    if (!isMaster) return;
+    api.get(`/stores?requester_id=${userId}`)
+      .then(r => setLojas(r.data || []))
+      .catch(() => {});
+  }, [isMaster, userId]);
 
   const loadEmpresasExtras = useCallback(() => {
     if (isMaster) return;
@@ -65,19 +80,26 @@ export default function LogsAuditoria({ userId, profile }) {
   const load = useCallback(() => {
     setLoading(true);
     const params = new URLSearchParams({ requester_id: userId });
-    if (profile?.company && !isMaster) params.set('company', profile.company);
-    if (q)      params.set('q', q);
-    if (status) params.set('status', status);
-    if (acao)   params.set('acao', acao);
+    if (isMaster) { if (empresaSel) params.set('company', empresaSel); }
+    else if (profile?.company) params.set('company', profile.company);
+    if (q)          params.set('q', q);
+    if (status)     params.set('status', status);
+    if (acao)       params.set('acao', acao);
+    if (userIdFiltro) params.set('user_id', userIdFiltro);
+    if (dataIni)     params.set('data_ini', dataIni);
+    if (dataFim)     params.set('data_fim', dataFim);
     api.get(`/logs?${params.toString()}`)
       .then(r => setList(r.data || []))
       .catch(() => toast('Erro ao carregar logs', 'error'))
       .finally(() => setLoading(false));
-  }, [userId, profile?.company, isMaster, q, status, acao]);
+  }, [userId, profile?.company, isMaster, q, status, acao, userIdFiltro, dataIni, dataFim, empresaSel]);
 
   useEffect(() => { load(); }, [load]);
 
   const acoesDisponiveis = [...new Set(list.map(l => l.acao))];
+  const usuariosDisponiveis = [...new Map(
+    list.filter(l => l.usuario).map(l => [l.user_id, l.usuario.full_name])
+  ).entries()].sort((a, b) => a[1].localeCompare(b[1]));
 
   return (
     <div>
@@ -88,9 +110,54 @@ export default function LogsAuditoria({ userId, profile }) {
             {isMaster ? 'Ações administrativas em todas as empresas' : 'Ações administrativas da sua empresa'}
           </div>
         </div>
-        <button className="btn btn-ghost" onClick={load}>
-          <RefreshCw size={14}/> Atualizar
-        </button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button className="btn btn-ghost" onClick={load}>
+            <RefreshCw size={14}/> Atualizar
+          </button>
+          <ExportMenu
+            disabled={list.length === 0}
+            onPDF={() => gerarPDF({
+              titulo: 'Logs de Auditoria',
+              subtitulo: isMaster ? 'Todas as empresas' : (profile?.company || ''),
+              secoes: [{
+                colunas: [
+                  { header: 'Data',    dataKey: 'data' },
+                  { header: 'Status',  dataKey: 'status' },
+                  { header: 'Ação',    dataKey: 'acao' },
+                  { header: 'Tabela',  dataKey: 'tabela' },
+                  { header: 'Usuário', dataKey: 'usuario' },
+                  { header: 'Empresa', dataKey: 'empresa' },
+                  { header: 'Detalhe', dataKey: 'detalhe' },
+                ],
+                rows: list.map(l => ({
+                  data: formatData(l.created_at),
+                  status: l.status === 'falha' ? 'Falha' : 'Sucesso',
+                  acao: ACAO_LABEL[l.acao] || l.acao,
+                  tabela: l.tabela || '',
+                  usuario: l.usuario?.full_name || 'Sistema',
+                  empresa: l.company || '',
+                  detalhe: l.erro_mensagem || '',
+                })),
+              }],
+            })}
+            onExcel={() => gerarExcel({
+              nomeArquivo: 'logs_auditoria',
+              abas: [{
+                nome: 'Logs',
+                colunas: ['Data', 'Status', 'Ação', 'Tabela', 'Usuário', 'Empresa', 'Detalhe'],
+                rows: list.map(l => [
+                  formatData(l.created_at),
+                  l.status === 'falha' ? 'Falha' : 'Sucesso',
+                  ACAO_LABEL[l.acao] || l.acao,
+                  l.tabela || '',
+                  l.usuario?.full_name || 'Sistema',
+                  l.company || '',
+                  l.erro_mensagem || '',
+                ]),
+              }],
+            })}
+          />
+        </div>
       </div>
 
       {/* Gestão de lojas extras — só para contas admin (master já vê tudo) */}
@@ -147,6 +214,23 @@ export default function LogsAuditoria({ userId, profile }) {
           <option value="">Todas as ações</option>
           {acoesDisponiveis.map(a => <option key={a} value={a}>{ACAO_LABEL[a] || a}</option>)}
         </select>
+        <select className="select" style={{ maxWidth:200 }} value={userIdFiltro} onChange={e => setUserIdFiltro(e.target.value)}>
+          <option value="">Todos os usuários</option>
+          {usuariosDisponiveis.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
+        </select>
+        {isMaster && (
+          <select className="select" style={{ maxWidth:220 }} value={empresaSel} onChange={e => setEmpresaSel(e.target.value)}>
+            <option value="">Todas as empresas</option>
+            {lojas.map(l => <option key={l.id} value={l.name}>{l.name}</option>)}
+          </select>
+        )}
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <input type="date" className="input" style={{ maxWidth:150 }} value={dataIni}
+            onChange={e => setDataIni(e.target.value)} title="Data inicial"/>
+          <span style={{ color:'var(--text-muted)', fontSize:12 }}>até</span>
+          <input type="date" className="input" style={{ maxWidth:150 }} value={dataFim}
+            onChange={e => setDataFim(e.target.value)} title="Data final"/>
+        </div>
       </div>
 
       {loading && <div style={{ textAlign:'center', padding:32, color:'var(--text-muted)' }}>Carregando...</div>}

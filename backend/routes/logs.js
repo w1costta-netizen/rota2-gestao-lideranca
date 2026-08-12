@@ -7,9 +7,9 @@ async function getProfile(id) {
   return data;
 }
 
-// GET /api/logs?requester_id=&company=&acao=&tabela=&status=&q=
+// GET /api/logs?requester_id=&company=&acao=&tabela=&status=&q=&user_id=&data_ini=&data_fim=
 router.get('/', async (req, res) => {
-  const { requester_id, company: queryCompany, acao, tabela, status, q } = req.query;
+  const { requester_id, company: queryCompany, acao, tabela, status, q, user_id, data_ini, data_fim } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me || !['admin', 'master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
@@ -35,9 +35,12 @@ router.get('/', async (req, res) => {
     query = query.in('company', empresasPermitidas);
   }
 
-  if (acao)   query = query.eq('acao', acao);
-  if (tabela) query = query.eq('tabela', tabela);
-  if (status) query = query.eq('status', status);
+  if (acao)    query = query.eq('acao', acao);
+  if (tabela)  query = query.eq('tabela', tabela);
+  if (status)  query = query.eq('status', status);
+  if (user_id) query = query.eq('user_id', user_id);
+  if (data_ini) query = query.gte('created_at', `${data_ini}T00:00:00`);
+  if (data_fim) query = query.lte('created_at', `${data_fim}T23:59:59`);
   if (q) query = query.or(`acao.ilike.%${q}%,tabela.ilike.%${q}%,erro_mensagem.ilike.%${q}%`);
 
   const { data, error } = await query;
