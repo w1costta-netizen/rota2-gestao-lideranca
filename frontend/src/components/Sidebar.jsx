@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 import { useTheme } from '../contexts/ThemeContext';
@@ -81,6 +81,7 @@ const NAV_GROUPS = [
       { id: 'usersadmin',  label: 'Usuários',    icon: ShieldCheck, perm: 'usuarios' },
       { id: 'profile',     label: 'Meu Perfil',  icon: UserCircle,  perm: null },
       { id: 'organograma', label: 'Organograma', icon: GitBranch,   perm: 'organograma' },
+      { id: 'logs',        label: 'Logs de Auditoria', icon: Shield, perm: 'logs' },
     ],
   },
 ];

@@ -30,6 +30,7 @@ app.use('/api/reacoes',      require('./routes/reacoes'));
 app.use('/api/conferencia',  require('./routes/conferencia'));
 app.use('/api/hotmart',      require('./routes/hotmart'));
 app.use('/api/pdca',         require('./routes/pdca'));
+app.use('/api/logs',         require('./routes/logs'));
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 
@@ -52,6 +53,21 @@ app.post('/api/alerts/cron', async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── Captura de erros não tratados — registra no log de auditoria como falha ──
+// Safety net: só pega exceções que escaparam do try/catch de cada rota.
+app.use((err, req, res, next) => {
+  const { logError } = require('./lib/auditLog');
+  logError({
+    user_id: req.body?.requester_id || req.query?.requester_id || null,
+    company: req.body?.company || req.query?.company || null,
+    acao: 'erro_nao_tratado',
+    rota: req.originalUrl,
+    erro_mensagem: err?.message || String(err),
+  });
+  console.error('[erro não tratado]', req.originalUrl, err);
+  if (!res.headersSent) res.status(500).json({ error: 'Erro interno do servidor' });
 });
 
 const PORT = process.env.PORT || 3001;

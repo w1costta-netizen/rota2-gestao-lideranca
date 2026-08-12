@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 // Verifica se o solicitante é admin da empresa
 async function requireAdmin(req, res, next) {
@@ -45,13 +46,18 @@ router.post('/users', async (req, res) => {
 
   if (!full_name || !email || !password) return res.status(400).json({ error: 'full_name, email e password são obrigatórios' });
 
+  const targetCompany = reqCompany !== undefined ? (reqCompany || null) : me.company;
+
   // Cria o usuário no Supabase Auth
   const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
     email,
     password,
     email_confirm: true,
   });
-  if (authErr) return res.status(400).json({ error: authErr.message });
+  if (authErr) {
+    logError({ company: targetCompany, user_id: requester_id, acao: 'criar_usuario', tabela: 'profiles', rota: req.originalUrl, erro_mensagem: authErr.message });
+    return res.status(400).json({ error: authErr.message });
+  }
 
   const newUserId = authData.user.id;
 
@@ -60,7 +66,7 @@ router.post('/users', async (req, res) => {
     id: newUserId,
     full_name: full_name.trim(),
     email,
-    company: reqCompany !== undefined ? (reqCompany || null) : me.company,
+    company: targetCompany,
     role: role || '',
     sector: sector || '',
     access_level: access_level || 'lider',
@@ -70,7 +76,11 @@ router.post('/users', async (req, res) => {
     created_by: requester_id,
   }, { onConflict: 'id' }).select().single();
 
-  if (profErr) return res.status(500).json({ error: profErr.message });
+  if (profErr) {
+    logError({ company: targetCompany, user_id: requester_id, acao: 'criar_usuario', tabela: 'profiles', rota: req.originalUrl, erro_mensagem: profErr.message });
+    return res.status(500).json({ error: profErr.message });
+  }
+  logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_usuario', tabela: 'profiles', depois: { id: newUserId, full_name: profile.full_name, email, access_level: profile.access_level } });
   res.json(profile);
 });
 
@@ -84,13 +94,20 @@ router.put('/users/:id', async (req, res) => {
 
   const { full_name, role, sector, access_level, active, permissions, phone, email, password } = req.body;
 
+  const { data: antes } = await supabase.from('profiles')
+    .select('full_name, role, sector, access_level, active, permissions, phone, email')
+    .eq('id', req.params.id).single();
+
   // Atualiza e-mail e/ou senha no Supabase Auth se fornecido
   const authUpdates = {};
   if (email)    authUpdates.email    = email;
   if (password) authUpdates.password = password;
   if (Object.keys(authUpdates).length > 0) {
     const { error: authErr } = await supabase.auth.admin.updateUserById(req.params.id, authUpdates);
-    if (authErr) return res.status(500).json({ error: 'Erro ao atualizar auth: ' + authErr.message });
+    if (authErr) {
+      logError({ company: me.company, user_id: requester_id, acao: 'editar_usuario', tabela: 'profiles', rota: req.originalUrl, erro_mensagem: authErr.message });
+      return res.status(500).json({ error: 'Erro ao atualizar auth: ' + authErr.message });
+    }
     if (email) await supabase.from('profiles').update({ email }).eq('id', req.params.id);
   }
 
@@ -104,7 +121,11 @@ router.put('/users/:id', async (req, res) => {
   if (phone        !== undefined) updates.phone        = phone;
 
   const { data, error } = await supabase.from('profiles').update(updates).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'editar_usuario', tabela: 'profiles', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: requester_id, acao: 'editar_usuario', tabela: 'profiles', antes, depois: updates });
   res.json(data);
 });
 
@@ -113,11 +134,16 @@ router.delete('/users/:id', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
 
-  const { data: me } = await supabase.from('profiles').select('access_level').eq('id', requester_id).single();
+  const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
   if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
+  const { data: alvo } = await supabase.from('profiles').select('full_name, email').eq('id', req.params.id).single();
   const { error } = await supabase.from('profiles').update({ active: false }).eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'desativar_usuario', tabela: 'profiles', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: requester_id, acao: 'desativar_usuario', tabela: 'profiles', antes: alvo, depois: { active: false } });
   res.json({ ok: true });
 });
 
@@ -130,15 +156,19 @@ router.delete('/users/:id/permanent', async (req, res) => {
   if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
   // Garante que admin só exclui usuários da própria empresa
+  const { data: target } = await supabase.from('profiles').select('company, full_name, email').eq('id', req.params.id).single();
   if (me.access_level === 'admin') {
-    const { data: target } = await supabase.from('profiles').select('company').eq('id', req.params.id).single();
     if (!target || target.company !== me.company) return res.status(403).json({ error: 'Acesso negado' });
   }
 
   // Remove o perfil e o usuário do Auth
   await supabase.from('profiles').delete().eq('id', req.params.id);
   const { error } = await supabase.auth.admin.deleteUser(req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'excluir_usuario_permanente', tabela: 'profiles', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: requester_id, acao: 'excluir_usuario_permanente', tabela: 'profiles', antes: target });
   res.json({ ok: true });
 });
 

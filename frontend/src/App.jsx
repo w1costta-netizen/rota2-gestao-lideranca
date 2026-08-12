@@ -36,6 +36,7 @@ const Estoque                = lazy(() => import('./pages/Estoque'));
 const ImportadorEstoque      = lazy(() => import('./pages/ImportadorEstoque'));
 const Organograma            = lazy(() => import('./pages/Organograma'));
 const PlanoAcao              = lazy(() => import('./pages/PlanoAcao'));
+const LogsAuditoria          = lazy(() => import('./pages/LogsAuditoria'));
 
 function AccessDenied() {
   return (
@@ -242,6 +243,7 @@ function AppContent() {
     importador_estoque: () => has('importador_estoque') ? <ImportadorEstoque profile={effectiveProfile} /> : <AccessDenied />,
     organograma:        () => has('organograma')        ? <Organograma userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     pdca:               () => has('pdca')               ? <PlanoAcao userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
+    logs:               () => has('logs')               ? <LogsAuditoria userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
   };
 
   const PageComponent = pages[page] || pages.dashboard;
