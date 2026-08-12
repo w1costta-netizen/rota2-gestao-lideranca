@@ -187,7 +187,7 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
         {!collapsed && (
           <div>
             <h1>Rota Líder</h1>
-            <p>Gestão de Liderança</p>
+            <p>Gestão, Liderança e Produtividade</p>
           </div>
         )}
         {collapsed && <span style={{ fontSize:9, color:'var(--text-muted)', textTransform:'uppercase', letterSpacing:'.5px' }}>RL</span>}

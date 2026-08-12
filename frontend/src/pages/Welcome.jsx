@@ -6,7 +6,7 @@ const STEPS = [
   {
     icon: '🧭',
     title: 'Bem-vindo ao Rota Líder',
-    subtitle: 'Gestão de Liderança',
+    subtitle: 'Gestão, Liderança e Produtividade',
     body: 'Sua ferramenta exclusiva de comunicação e gestão. Tudo que você precisa para o dia a dia, direto no celular.',
     highlights: [
       { icon: '📅', text: 'Agenda semanal atualizada em tempo real' },

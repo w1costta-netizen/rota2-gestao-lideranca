@@ -97,7 +97,7 @@ export default function Register({ onGoLogin }) {
     <div className="auth-card">
       <div className="auth-header">
         <div className="auth-logo">Rota Líder</div>
-        <div className="auth-subtitle">Gestão de Liderança</div>
+        <div className="auth-subtitle">Gestão, Liderança e Produtividade</div>
       </div>
       <div style={{ textAlign:'center', padding:'24px 0' }}>
         <AlertCircle size={48} color="var(--primary)" style={{ marginBottom:16 }}/>

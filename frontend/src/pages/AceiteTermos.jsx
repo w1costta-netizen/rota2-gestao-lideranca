@@ -24,7 +24,7 @@ export default function AceiteTermos({ userId, onAceito }) {
     <div className="auth-card" style={{ maxWidth: 480 }}>
       <div className="auth-header">
         <div className="auth-logo">Rota Líder</div>
-        <div className="auth-subtitle">Gestão de Liderança</div>
+        <div className="auth-subtitle">Gestão, Liderança e Produtividade</div>
       </div>
 
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
