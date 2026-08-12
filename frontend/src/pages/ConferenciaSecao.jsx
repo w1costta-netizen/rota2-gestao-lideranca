@@ -15,19 +15,21 @@ function ListaSessoes({ userId, profile, onNova, onAbrir }) {
   const [loading, setLoading] = useState(true);
   const [ultimaImportacao, setUltimaImportacao] = useState(null);
 
+  const companyQS = profile?.company ? `&company=${encodeURIComponent(profile.company)}` : '';
+
   const carregarUltimaImportacao = useCallback(() => {
-    api.get(`/conferencia/ultima-importacao?requester_id=${userId}`)
+    api.get(`/conferencia/ultima-importacao?requester_id=${userId}${companyQS}`)
       .then(r => setUltimaImportacao(r.data.importado_at))
       .catch(() => {});
-  }, [userId]);
+  }, [userId, companyQS]);
 
   const load = useCallback(() => {
     setLoading(true);
-    api.get(`/conferencia/sessoes?requester_id=${userId}`)
+    api.get(`/conferencia/sessoes?requester_id=${userId}${companyQS}`)
       .then(r => setList(r.data))
       .catch(() => toast('Erro ao carregar conferências', 'error'))
       .finally(() => setLoading(false));
-  }, [userId]);
+  }, [userId, companyQS]);
 
   useEffect(() => { load(); carregarUltimaImportacao(); }, [load, carregarUltimaImportacao]);
 
@@ -57,7 +59,7 @@ function ListaSessoes({ userId, profile, onNova, onAbrir }) {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           {canImport && (
-            <ImportarBtn userId={userId} onDone={() => { toast('Base atualizada!'); carregarUltimaImportacao(); }} />
+            <ImportarBtn userId={userId} profile={profile} onDone={() => { toast('Base atualizada!'); carregarUltimaImportacao(); }} />
           )}
           <button className="btn btn-primary" onClick={onNova}>
             <Plus size={15} /> Nova
@@ -134,7 +136,7 @@ function ListaSessoes({ userId, profile, onNova, onAbrir }) {
 }
 
 // ── Botão de importar xlsx ──────────────────────────────────────────────────
-function ImportarBtn({ userId, onDone }) {
+function ImportarBtn({ userId, profile, onDone }) {
   const toast = useToast();
   const ref = useRef();
   const [loading, setLoading] = useState(false);
@@ -147,6 +149,7 @@ function ImportarBtn({ userId, onDone }) {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('requester_id', userId);
+      if (profile?.company) fd.append('company', profile.company);
       await api.post('/conferencia/importar', fd, { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 300000 });
       onDone();
     } catch (err) {
@@ -174,19 +177,21 @@ function ImportarBtn({ userId, onDone }) {
 }
 
 // ── Tela: nova conferência (seletores em cascata) ──────────────────────────
-function NovaSessao({ userId, onCriar, onVoltar }) {
+function NovaSessao({ userId, profile, onCriar, onVoltar }) {
   const toast = useToast();
   const [opts, setOpts] = useState({ setores: [], departamentos: [], secoes: [], linhas: [] });
   const [sel, setSel] = useState({ setor: '', departamento: '', secao: '', linha: '' });
   const [saving, setSaving] = useState(false);
 
   const loadFiltros = useCallback(async (params = {}) => {
-    const q = new URLSearchParams({ requester_id: userId, ...params }).toString();
+    const base = { requester_id: userId, ...params };
+    if (profile?.company) base.company = profile.company;
+    const q = new URLSearchParams(base).toString();
     try {
       const r = await api.get(`/conferencia/filtros?${q}`);
       setOpts(o => ({ ...o, ...r.data }));
     } catch { toast('Erro ao carregar filtros', 'error'); }
-  }, [userId]);
+  }, [userId, profile?.company]);
 
   useEffect(() => { loadFiltros(); }, [loadFiltros]);
 
@@ -201,6 +206,7 @@ function NovaSessao({ userId, onCriar, onVoltar }) {
 
     // Busca opções filtradas pelo nível selecionado
     const params = { requester_id: userId };
+    if (profile?.company)  params.company      = profile.company;
     if (next.setor)        params.setor        = next.setor;
     if (next.departamento) params.departamento = next.departamento;
     if (next.secao)        params.secao        = next.secao;
@@ -216,7 +222,7 @@ function NovaSessao({ userId, onCriar, onVoltar }) {
     }
     setSaving(true);
     try {
-      const r = await api.post('/conferencia/sessoes', { requester_id: userId, ...sel });
+      const r = await api.post('/conferencia/sessoes', { requester_id: userId, company: profile?.company, ...sel });
       onCriar(r.data);
     } catch { toast('Erro ao criar conferência', 'error'); }
     finally { setSaving(false); }
@@ -257,7 +263,7 @@ function NovaSessao({ userId, onCriar, onVoltar }) {
 }
 
 // ── Tela: coleta de itens ───────────────────────────────────────────────────
-function Coleta({ userId, sessao, onFinalizar, onVoltar }) {
+function Coleta({ userId, profile, sessao, onFinalizar, onVoltar }) {
   const toast = useToast();
   const [itens, setItens] = useState([]);
   const [input, setInput] = useState('');
@@ -285,7 +291,8 @@ function Coleta({ userId, sessao, onFinalizar, onVoltar }) {
     }
     setBuscando(true);
     try {
-      const r = await api.get(`/conferencia/buscar?requester_id=${userId}&q=${encodeURIComponent(cod)}`);
+      const companyQS = profile?.company ? `&company=${encodeURIComponent(profile.company)}` : '';
+      const r = await api.get(`/conferencia/buscar?requester_id=${userId}&q=${encodeURIComponent(cod)}${companyQS}`);
       const prod = r.data;
       const resp = await api.post(`/conferencia/sessoes/${sessao.id}/itens`, {
         cd_produto: prod.cd_produto,
@@ -302,7 +309,7 @@ function Coleta({ userId, sessao, onFinalizar, onVoltar }) {
       setInput('');
       inputRef.current?.focus();
     }
-  }, [itens, sessao.id, userId]);
+  }, [itens, sessao.id, userId, profile?.company]);
 
   const iniciarCamera = async () => {
     setScannerAtivo(true);
@@ -469,7 +476,7 @@ function Coleta({ userId, sessao, onFinalizar, onVoltar }) {
 }
 
 // ── Tela: relatório de não expostos ────────────────────────────────────────
-function Relatorio({ userId, sessao, itensColetados, onVoltar }) {
+function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
   const toast = useToast();
   const [todos, setTodos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -477,6 +484,7 @@ function Relatorio({ userId, sessao, itensColetados, onVoltar }) {
   useEffect(() => {
     const q = new URLSearchParams({
       requester_id: userId,
+      ...(profile?.company ? { company: profile.company } : {}),
       setor:        sessao.setor        || '',
       departamento: sessao.departamento || '',
       secao:        sessao.secao        || '',
@@ -486,7 +494,7 @@ function Relatorio({ userId, sessao, itensColetados, onVoltar }) {
       .then(r => setTodos(r.data))
       .catch(() => toast('Erro ao carregar produtos da linha', 'error'))
       .finally(() => setLoading(false));
-  }, [sessao, userId]);
+  }, [sessao, userId, profile?.company]);
 
   const coletadosCDs = new Set(itensColetados.map(i => i.cd_produto));
   const coletadosEANs = new Set(itensColetados.map(i => i.ean).filter(Boolean));
@@ -645,6 +653,7 @@ export default function ConferenciaSecao({ userId, profile }) {
   if (tela === 'nova') return (
     <NovaSessao
       userId={userId}
+      profile={profile}
       onCriar={(s) => { setSessaoAtual(s); setTela('coleta'); }}
       onVoltar={() => setTela('lista')}
     />
@@ -653,6 +662,7 @@ export default function ConferenciaSecao({ userId, profile }) {
   if (tela === 'coleta' && sessaoAtual) return (
     <Coleta
       userId={userId}
+      profile={profile}
       sessao={sessaoAtual}
       onFinalizar={abrirRelatorio}
       onVoltar={() => setTela('lista')}
@@ -662,6 +672,7 @@ export default function ConferenciaSecao({ userId, profile }) {
   if (tela === 'relatorio' && sessaoAtual) return (
     <Relatorio
       userId={userId}
+      profile={profile}
       sessao={sessaoAtual}
       itensColetados={itensFinalizados}
       onVoltar={() => setTela('lista')}
@@ -671,6 +682,7 @@ export default function ConferenciaSecao({ userId, profile }) {
   if (tela === 'relatorio_view' && sessaoAtual) return (
     <RelatorioView
       userId={userId}
+      profile={profile}
       sessao={sessaoAtual}
       onVoltar={() => setTela('lista')}
     />
@@ -687,7 +699,7 @@ export default function ConferenciaSecao({ userId, profile }) {
 }
 
 // ── Tela: visualizar relatório de sessão já finalizada ─────────────────────
-function RelatorioView({ userId, sessao, onVoltar }) {
+function RelatorioView({ userId, profile, sessao, onVoltar }) {
   const toast = useToast();
   const [itens, setItens] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -701,5 +713,5 @@ function RelatorioView({ userId, sessao, onVoltar }) {
 
   if (loading) return <div style={{ padding: 32, textAlign: 'center', color: 'var(--text-muted)' }}>Carregando...</div>;
 
-  return <Relatorio userId={userId} sessao={sessao} itensColetados={itens} onVoltar={onVoltar} />;
+  return <Relatorio userId={userId} profile={profile} sessao={sessao} itensColetados={itens} onVoltar={onVoltar} />;
 }

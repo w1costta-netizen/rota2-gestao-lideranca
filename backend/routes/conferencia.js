@@ -13,12 +13,16 @@ async function getProfile(id) {
 
 // POST /api/conferencia/importar
 router.post('/importar', upload.single('file'), async (req, res) => {
-  const { requester_id } = req.body;
+  const { requester_id, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
   if (!['admin', 'master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
   if (!req.file) return res.status(400).json({ error: 'Arquivo não enviado' });
+
+  // Master pode importar para a loja que está visualizando; admin sempre usa a própria empresa
+  const targetCompany = me.access_level === 'master' ? (bodyCompany || me.company) : me.company;
+  if (!targetCompany) return res.status(400).json({ error: 'Empresa não identificada para a importação' });
 
   try {
     const wb = XLSX.read(req.file.buffer, { type: 'buffer', cellDates: true });
@@ -29,7 +33,7 @@ router.post('/importar', upload.single('file'), async (req, res) => {
 
     const importado_at = new Date().toISOString();
     const mapped = rows.map(r => ({
-      company:                me.company,
+      company:                targetCompany,
       nome_loja:              r['NOME_LOJA']                    || null,
       uf:                     r['UF']                            || null,
       cd_produto:             r['CD_PRODUTO'] != null ? String(r['CD_PRODUTO']).padStart(6, '0') : null,
@@ -48,8 +52,8 @@ router.post('/importar', upload.single('file'), async (req, res) => {
 
     // Apaga registros anteriores
     await Promise.all([
-      supabase.from('produtos_conferencia').delete().eq('company', me.company),
-      supabase.from('conferencia_filtros').delete().eq('company', me.company),
+      supabase.from('produtos_conferencia').delete().eq('company', targetCompany),
+      supabase.from('conferencia_filtros').delete().eq('company', targetCompany),
     ]);
 
     // Insere produtos em batches de 2000 linhas com até 4 em paralelo
@@ -71,7 +75,7 @@ router.post('/importar', upload.single('file'), async (req, res) => {
       const key = [r.descricao_setor, r.descricao_departamento, r.descricao_secao, r.descricao_linha].join('|||');
       if (!combos.has(key)) {
         combos.set(key, {
-          company:       me.company,
+          company:       targetCompany,
           setor:         r.descricao_setor,
           departamento:  r.descricao_departamento,
           secao:         r.descricao_secao,
@@ -91,16 +95,17 @@ router.post('/importar', upload.single('file'), async (req, res) => {
   }
 });
 
-// GET /api/conferencia/ultima-importacao?requester_id=
+// GET /api/conferencia/ultima-importacao?requester_id=&company=
 router.get('/ultima-importacao', async (req, res) => {
-  const { requester_id } = req.query;
+  const { requester_id, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const targetCompany = me.access_level === 'master' ? (queryCompany || me.company) : me.company;
 
   const { data } = await supabase.from('produtos_conferencia')
     .select('importado_at')
-    .eq('company', me.company)
+    .eq('company', targetCompany)
     .order('importado_at', { ascending: false })
     .limit(1)
     .single();
@@ -108,17 +113,18 @@ router.get('/ultima-importacao', async (req, res) => {
   res.json({ importado_at: data?.importado_at || null });
 });
 
-// GET /api/conferencia/filtros?requester_id=&setor=&departamento=&secao=
+// GET /api/conferencia/filtros?requester_id=&setor=&departamento=&secao=&company=
 router.get('/filtros', async (req, res) => {
-  const { requester_id, setor, departamento, secao } = req.query;
+  const { requester_id, setor, departamento, secao, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const targetCompany = me.access_level === 'master' ? (queryCompany || me.company) : me.company;
 
   // Usa tabela de filtros pré-computada (evita limite de 1000 rows do Supabase)
   let q = supabase.from('conferencia_filtros')
     .select('setor, departamento, secao, linha')
-    .eq('company', me.company);
+    .eq('company', targetCompany);
   if (setor)        q = q.eq('setor', setor);
   if (departamento) q = q.eq('departamento', departamento);
   if (secao)        q = q.eq('secao', secao);
@@ -135,18 +141,19 @@ router.get('/filtros', async (req, res) => {
   });
 });
 
-// GET /api/conferencia/buscar?requester_id=&q=&setor=&departamento=&secao=&linha=
+// GET /api/conferencia/buscar?requester_id=&q=&company=
 // Busca produto por CD (6 dígitos) ou EAN
 router.get('/buscar', async (req, res) => {
-  const { requester_id, q } = req.query;
+  const { requester_id, q, company: queryCompany } = req.query;
   if (!requester_id || !q) return res.status(400).json({ error: 'requester_id e q obrigatórios' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const targetCompany = me.access_level === 'master' ? (queryCompany || me.company) : me.company;
 
   const termo = String(q).trim();
   let query = supabase.from('produtos_conferencia')
     .select('cd_produto, ean, descricao_produto, produto_status, motivo_suspencao, descricao_setor, descricao_departamento, descricao_secao, descricao_linha, data_ultima_nf, estoque_qty')
-    .eq('company', me.company);
+    .eq('company', targetCompany);
 
   // CD_PRODUTO tem exatamente 6 dígitos, EAN tem mais
   if (/^\d{6}$/.test(termo)) {
@@ -160,17 +167,18 @@ router.get('/buscar', async (req, res) => {
   res.json(data);
 });
 
-// GET /api/conferencia/linha?requester_id=&setor=&departamento=&secao=&linha=
+// GET /api/conferencia/linha?requester_id=&setor=&departamento=&secao=&linha=&company=
 // Lista todos os produtos de uma linha (para gerar relatório de não expostos)
 router.get('/linha', async (req, res) => {
-  const { requester_id, setor, departamento, secao, linha } = req.query;
+  const { requester_id, setor, departamento, secao, linha, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const targetCompany = me.access_level === 'master' ? (queryCompany || me.company) : me.company;
 
   let q = supabase.from('produtos_conferencia')
     .select('cd_produto, ean, descricao_produto, produto_status, motivo_suspencao, data_ultima_nf, estoque_qty')
-    .eq('company', me.company)
+    .eq('company', targetCompany)
     .limit(10000);
 
   if (setor)        q = q.eq('descricao_setor', setor);
@@ -185,13 +193,14 @@ router.get('/linha', async (req, res) => {
 
 // POST /api/conferencia/sessoes — cria uma nova conferência
 router.post('/sessoes', async (req, res) => {
-  const { requester_id, setor, departamento, secao, linha } = req.body;
+  const { requester_id, setor, departamento, secao, linha, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const targetCompany = me.access_level === 'master' ? (bodyCompany || me.company) : me.company;
 
   const { data, error } = await supabase.from('conferencias_secao').insert({
-    company:      me.company,
+    company:      targetCompany,
     created_by:   requester_id,
     setor, departamento, secao, linha,
     status:       'em_andamento',
@@ -201,16 +210,17 @@ router.post('/sessoes', async (req, res) => {
   res.json(data);
 });
 
-// GET /api/conferencia/sessoes?requester_id=
+// GET /api/conferencia/sessoes?requester_id=&company=
 router.get('/sessoes', async (req, res) => {
-  const { requester_id } = req.query;
+  const { requester_id, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const targetCompany = me.access_level === 'master' ? (queryCompany || me.company) : me.company;
 
   const { data, error } = await supabase.from('conferencias_secao')
     .select('*, creator:created_by(full_name)')
-    .eq('company', me.company)
+    .eq('company', targetCompany)
     .order('created_at', { ascending: false })
     .limit(50);
 
