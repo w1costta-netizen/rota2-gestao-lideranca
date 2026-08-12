@@ -207,7 +207,7 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
       <div className="user-menu" style={collapsed ? { flexDirection:'column', gap:6, padding:'12px 8px', alignItems:'center' } : undefined}>
         <Avatar
           name={profile?.full_name}
-          src={avatarUrl}
+          avatarUrl={avatarUrl}
           size={32}
           style={{ cursor:'pointer', border:'2px solid rgba(238,90,36,.35)' }}
           onClick={() => setPage('profile')}
