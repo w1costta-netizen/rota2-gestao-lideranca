@@ -16,7 +16,7 @@ router.get('/', async (req, res) => {
 
   let query = supabase
     .from('audit_logs')
-    .select('*, usuario:user_id(full_name, email)')
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(500);
 
@@ -42,7 +42,18 @@ router.get('/', async (req, res) => {
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data || []);
+
+  // Busca os nomes/e-mails dos usuários separadamente (profiles, não auth.users —
+  // full_name e email vivem em profiles, não dá pra fazer embed direto de auth.users)
+  const userIds = [...new Set((data || []).map(l => l.user_id).filter(Boolean))];
+  let perfis = {};
+  if (userIds.length > 0) {
+    const { data: profs } = await supabase.from('profiles').select('id, full_name, email').in('id', userIds);
+    perfis = Object.fromEntries((profs || []).map(p => [p.id, p]));
+  }
+
+  const result = (data || []).map(l => ({ ...l, usuario: perfis[l.user_id] || null }));
+  res.json(result);
 });
 
 // ── Empresas extras liberadas para a própria conta (admin_companies) ──────
