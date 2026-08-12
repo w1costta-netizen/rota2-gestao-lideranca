@@ -220,7 +220,6 @@ export default function Tarefas({ userId, profile, setPage }) {
   const [modal, setModal]       = useState(false);
   const [editing, setEditing]   = useState(null);
   const [form, setForm]         = useState(EMPTY);
-  const [multiLideres, setMultiLideres] = useState(false);
   const [lideresSel, setLideresSel]     = useState([]);
   const [saving, setSaving]     = useState(false);
   const [filter, setFilter]     = useState('hoje');
@@ -254,7 +253,7 @@ export default function Tarefas({ userId, profile, setPage }) {
     }
   }, [userId, isAdmin, company]);
 
-  const openNew  = () => { setEditing(null); setForm({ ...EMPTY, assigned_to: userId }); setMultiLideres(false); setLideresSel([]); setModal(true); };
+  const openNew  = () => { setEditing(null); setForm({ ...EMPTY, assigned_to: userId }); setLideresSel([userId]); setModal(true); };
   const openEdit = (t) => {
     setEditing(t.id);
     setForm({
@@ -263,32 +262,30 @@ export default function Tarefas({ userId, profile, setPage }) {
       priority: t.priority, recorrencia: t.recorrencia || 'nenhuma',
       tags: t.tags || [], lembrete_minutos: t.lembrete_minutos ?? null,
     });
-    setMultiLideres(false);
     setLideresSel([]);
     setModal(true);
   };
 
-  const lideres = profiles.filter(p => p.access_level === 'lider');
   const toggleLider = (id) => setLideresSel(l => l.includes(id) ? l.filter(x => x !== id) : [...l, id]);
 
   const canEdit = (t) => isAdmin || (t.created_by === userId && t.assigned_to === userId);
 
   const save = async () => {
     if (!form.title.trim()) return toast('Preencha o título');
-    if (!editing && isAdmin && multiLideres && lideresSel.length === 0) return toast('Selecione ao menos um líder');
-    if (isAdmin && !multiLideres && !form.assigned_to) return toast('Selecione o responsável');
+    if (!editing && isAdmin && lideresSel.length === 0) return toast('Selecione ao menos um responsável');
+    if (editing && isAdmin && !form.assigned_to) return toast('Selecione o responsável');
     setSaving(true);
     try {
       if (editing) {
         const updated = await api.put(`/tarefas/${editing}`, { requester_id: userId, ...form });
         setList(l => l.map(t => t.id === editing ? updated.data : t));
         toast('Tarefa atualizada!');
-      } else if (multiLideres) {
+      } else if (isAdmin) {
         const criadas = await Promise.all(lideresSel.map(id =>
           api.post('/tarefas', { requester_id: userId, ...form, assigned_to: id, company: company || undefined })
         ));
         setList(l => [...criadas.map(r => r.data), ...l]);
-        toast(`Tarefa criada para ${criadas.length} líder${criadas.length > 1 ? 'es' : ''}!`);
+        toast(criadas.length > 1 ? `Tarefa criada para ${criadas.length} pessoas!` : 'Tarefa criada!');
       } else {
         const created = await api.post('/tarefas', { requester_id: userId, ...form, company: company || undefined });
         setList(l => [created.data, ...l]);
@@ -803,40 +800,36 @@ export default function Tarefas({ userId, profile, setPage }) {
 
         {isAdmin ? (
           <div className="form-group">
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <label className="form-label" style={{ margin:0 }}>
-                {multiLideres ? 'Líderes *' : 'Responsável *'}
-              </label>
-              {!editing && lideres.length > 0 && (
-                <button type="button" onClick={() => { setMultiLideres(m => !m); setLideresSel([]); }}
-                  style={{ background:'none', border:'none', cursor:'pointer', fontSize:12, fontWeight:600,
-                    color:'var(--primary)', padding:0 }}>
-                  {multiLideres ? '← Escolher 1 responsável' : '+ Selecionar vários líderes'}
-                </button>
-              )}
-            </div>
+            <label className="form-label">Responsável *</label>
 
-            {multiLideres ? (
-              <div style={{ display:'flex', flexDirection:'column', gap:6, marginTop:8,
+            {editing ? (
+              // Edição de tarefa existente: sempre um único responsável
+              <select className="select" value={form.assigned_to} onChange={e => setForm(f=>({...f,assigned_to:e.target.value}))}>
+                <option value="">Selecionar...</option>
+                {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}{p.sector ? ` (${p.sector})` : ''}</option>)}
+              </select>
+            ) : (
+              // Nova tarefa: marque quantas pessoas quiser (líderes ou não)
+              <div style={{ display:'flex', flexDirection:'column', gap:6,
                 maxHeight:220, overflowY:'auto', border:'1px solid var(--border)', borderRadius:8, padding:8 }}>
-                {lideres.map(p => (
+                {profiles.length === 0 && (
+                  <div style={{ fontSize:12, color:'var(--text-muted)', padding:8, textAlign:'center' }}>
+                    Nenhum usuário cadastrado.
+                  </div>
+                )}
+                {profiles.map(p => (
                   <label key={p.id} style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer',
                     padding:'6px 8px', borderRadius:6, background: lideresSel.includes(p.id) ? 'rgba(232,104,26,0.08)' : 'transparent' }}>
                     <input type="checkbox" checked={lideresSel.includes(p.id)} onChange={() => toggleLider(p.id)}/>
                     <span style={{ fontSize:13 }}>{p.full_name}{p.sector ? ` (${p.sector})` : ''}</span>
                   </label>
                 ))}
-                {lideresSel.length > 0 && (
+                {lideresSel.length > 1 && (
                   <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:2 }}>
-                    {lideresSel.length} líder{lideresSel.length > 1 ? 'es' : ''} selecionado{lideresSel.length > 1 ? 's' : ''} — será criada 1 tarefa para cada
+                    {lideresSel.length} pessoas selecionadas — será criada 1 tarefa para cada
                   </div>
                 )}
               </div>
-            ) : (
-              <select className="select" value={form.assigned_to} onChange={e => setForm(f=>({...f,assigned_to:e.target.value}))}>
-                <option value="">Selecionar...</option>
-                {profiles.map(p => <option key={p.id} value={p.id}>{p.full_name}{p.sector ? ` (${p.sector})` : ''}</option>)}
-              </select>
             )}
           </div>
         ) : (
