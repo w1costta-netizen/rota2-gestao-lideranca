@@ -304,7 +304,7 @@ function TeamModal({ userId, userSector, onClose }) {
 }
 
 /* ── Página principal ── */
-const ELEVATED_LEVELS = ['admin', 'supervisor'];
+const ELEVATED_LEVELS = ['admin', 'supervisor', 'master'];
 
 export default function NativeSchedule({ userId, profile }) {
   const toast = useToast();
