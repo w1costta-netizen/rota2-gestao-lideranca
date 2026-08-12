@@ -7,6 +7,18 @@ import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { formatDate } from '../utils';
 
+// Uma tarefa só "cobra" como pendente depois que o dia e horário do prazo passarem
+function isOverdue(due_date, due_time, status) {
+  if (!due_date || status === 'concluida') return false;
+  const now = new Date();
+  const [y, mo, d] = due_date.split('-').map(Number);
+  if (due_time) {
+    const [h, min] = due_time.split(':').map(Number);
+    return now > new Date(y, mo - 1, d, h, min, 0);
+  }
+  return now > new Date(y, mo - 1, d, 23, 59, 59);
+}
+
 // Para o Dashboard, sempre usa a semana real do dia atual (não avança no fds)
 function getCurrentWeekStart() {
   const d = new Date();
@@ -67,8 +79,8 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   const dayNames = ['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
   const todayKey = dayNames[todayIdx];
 
-  // Tarefas
-  const tarefasPendentes  = tarefas.filter(t => t.status === 'pendente');
+  // Tarefas — "pendente" só conta depois que o prazo (dia + horário) passar
+  const tarefasPendentes  = tarefas.filter(t => t.status === 'pendente' && isOverdue(t.due_date, t.due_time, t.status));
   const tarefasEmAndamento = tarefas.filter(t => t.status === 'em_andamento');
   const tarefasAtrasadas  = tarefas.filter(t => {
     if (!t.due_date || t.status === 'concluida') return false;

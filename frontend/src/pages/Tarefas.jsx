@@ -327,7 +327,7 @@ export default function Tarefas({ userId, profile, setPage }) {
   const todayYMDList = toYMD(new Date());
   let filtered = list.filter(t => {
     if (filter === 'hoje')        return t.due_date === todayYMDList;
-    if (filter === 'pendente')    return t.status === 'pendente';
+    if (filter === 'pendente')    return isOverdue(t.due_date, t.due_time, t.status);
     if (filter === 'em_andamento') return t.status === 'em_andamento';
     if (filter === 'concluida')   return t.status === 'concluida';
     return true;
@@ -344,7 +344,7 @@ export default function Tarefas({ userId, profile, setPage }) {
 
   const counts = {
     hoje: list.filter(t => t.due_date === todayYMDList).length,
-    pendente: list.filter(t => t.status === 'pendente').length,
+    pendente: list.filter(t => isOverdue(t.due_date, t.due_time, t.status)).length,
     em_andamento: list.filter(t => t.status === 'em_andamento').length,
     concluida: list.filter(t => t.status === 'concluida').length,
   };
