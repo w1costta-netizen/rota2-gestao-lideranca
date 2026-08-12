@@ -38,10 +38,19 @@ function decodeCaption(raw) {
 }
 
 function resizeImage(file, maxWidth = 1600, quality = 0.8) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type?.startsWith('image/')) {
+      reject(new Error('Arquivo inválido — selecione uma foto.'));
+      return;
+    }
     const img = new window.Image();
     const url = URL.createObjectURL(file);
+    const timeout = setTimeout(() => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Tempo esgotado ao processar a foto. Tente novamente.'));
+    }, 20000);
     img.onload = () => {
+      clearTimeout(timeout);
       URL.revokeObjectURL(url);
       const ratio = img.height / img.width;
       const w = Math.min(img.width, maxWidth);
@@ -49,7 +58,12 @@ function resizeImage(file, maxWidth = 1600, quality = 0.8) {
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      canvas.toBlob(blob => resolve(blob), 'image/jpeg', quality);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Falha ao processar a imagem.')), 'image/jpeg', quality);
+    };
+    img.onerror = () => {
+      clearTimeout(timeout);
+      URL.revokeObjectURL(url);
+      reject(new Error('Não foi possível abrir esta foto. Tente tirar novamente.'));
     };
     img.src = url;
   });
@@ -772,6 +786,7 @@ function ModalEvidencia({ foto, userId, onSave, onClose }) {
 
   const handleFile = (e) => {
     const file = e.target.files[0];
+    e.target.value = ''; // permite re-selecionar a mesma foto após um erro
     if (!file) return;
     setImgFile(file);
     setPreview(URL.createObjectURL(file));
@@ -1151,8 +1166,10 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
         </div>
       )}
 
-      <input ref={fileRef} type="file" accept="image/*" multiple capture="environment"
-        style={{ display:'none' }} onChange={e => handleFilesSelected(Array.from(e.target.files))}/>
+      {/* Sem "capture" — combinado com multiple é inconsistente no Android e corrompe fotos.
+          Sem capture, o próprio SO já oferece Câmera ou Galeria (com multi-seleção) no seletor. */}
+      <input ref={fileRef} type="file" accept="image/*" multiple
+        style={{ display:'none' }} onChange={e => { handleFilesSelected(Array.from(e.target.files)); e.target.value = ''; }}/>
 
       {/* Botão finalizar (só se rascunho) */}
       {rel.status !== 'finalizado' && fotos.length > 0 && (
