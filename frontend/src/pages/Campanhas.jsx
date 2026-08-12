@@ -1015,6 +1015,27 @@ export default function Campanhas({ userId, profile }) {
 
   useEffect(() => { load(); }, [userId]);
 
+  // Restaura o flyer que estava aberto — em alguns celulares, abrir a câmera
+  // faz o navegador recarregar a página e o estado da tela se perde.
+  useEffect(() => {
+    if (detalhe || list.length === 0) return;
+    const savedId = sessionStorage.getItem('campanha_aberta');
+    if (!savedId) return;
+    const found = list.find(c => c.id === savedId);
+    if (found) setDetalhe(found);
+  }, [list]);
+
+  const abrirDetalhe = (c) => {
+    sessionStorage.setItem('campanha_aberta', c.id);
+    setDetalhe(c);
+  };
+
+  const fecharDetalhe = () => {
+    sessionStorage.removeItem('campanha_aberta');
+    setDetalhe(null);
+    load();
+  };
+
   const save = async () => {
     if (!form.titulo || !form.validade_ini || !form.validade_fim) return toast('Preencha todos os campos');
     setSaving(true);
@@ -1023,7 +1044,7 @@ export default function Campanhas({ userId, profile }) {
       toast('Campanha criada!');
       setModal(false);
       setForm({ titulo: '', tipo: 'fds', validade_ini: '', validade_fim: '' });
-      setDetalhe(r.data);
+      abrirDetalhe(r.data);
       load();
     } catch { toast('Erro ao salvar'); }
     finally { setSaving(false); }
@@ -1036,7 +1057,7 @@ export default function Campanhas({ userId, profile }) {
   };
 
   if (detalhe) {
-    return <CampanhaDetalhe campanha={detalhe} userId={userId} profile={profile} onBack={() => { setDetalhe(null); load(); }} />;
+    return <CampanhaDetalhe campanha={detalhe} userId={userId} profile={profile} onBack={fecharDetalhe} />;
   }
 
   return (
@@ -1068,8 +1089,15 @@ export default function Campanhas({ userId, profile }) {
         {list.map(c => {
           const total    = c.campanha_itens?.length || 0;
           const itensIds = c.campanha_itens?.map(i => i.id) || [];
-          const feitos   = c.campanha_evidencias?.filter(e => itensIds.includes(e.item_id)).length || 0;
-          const pct      = total ? Math.round((feitos / total) * 100) : 0;
+          // Conta ITENS únicos com pelo menos 1 foto — não a quantidade de fotos
+          // (um item pode ter até 5 fotos, mas conta como 1 item sinalizado)
+          const itensComFoto = new Set(
+            (c.campanha_evidencias || [])
+              .filter(e => itensIds.includes(e.item_id))
+              .map(e => e.item_id)
+          );
+          const feitos   = itensComFoto.size;
+          const pct      = total ? Math.min(100, Math.round((feitos / total) * 100)) : 0;
           const ok       = total > 0 && feitos === total;
 
           return (
@@ -1077,7 +1105,7 @@ export default function Campanhas({ userId, profile }) {
               background: 'var(--surface)', borderRadius: 14, padding: '18px 20px',
               border: `1px solid ${ok ? '#10b98140' : 'var(--border)'}`,
               cursor: 'pointer',
-            }} onClick={() => setDetalhe(c)}>
+            }} onClick={() => abrirDetalhe(c)}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
