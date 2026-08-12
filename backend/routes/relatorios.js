@@ -73,7 +73,7 @@ router.put('/:id', async (req, res) => {
   const { data: rel } = await supabase.from('relatorios_fotograficos').select('created_by').eq('id', req.params.id).single();
   if (!rel) return res.status(404).json({ error: 'Não encontrado' });
   const isOwner = rel.created_by === requester_id;
-  if (!isOwner && !['admin', 'supervisor'].includes(me.access_level))
+  if (!isOwner && !['admin', 'supervisor', 'master'].includes(me.access_level))
     return res.status(403).json({ error: 'Acesso negado' });
 
   const updates = { updated_at: new Date().toISOString() };

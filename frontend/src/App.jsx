@@ -65,7 +65,13 @@ function useIsMobile() {
 function AppContent() {
   const { session, profile } = useAuth();
   const toast = useToast();
-  const [page, setPage] = useState('dashboard');
+  // Restaura a última página visitada — evita voltar pro dashboard quando o
+  // Android descarrega o app ao abrir a câmera/galeria para tirar foto
+  const [page, setPageState] = useState(() => sessionStorage.getItem('current_page') || 'dashboard');
+  const setPage = useCallback((p) => {
+    sessionStorage.setItem('current_page', p);
+    setPageState(p);
+  }, []);
   const [authPage, setAuthPage] = useState('login');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [viewingStore, setViewingStore] = useState(() =>
