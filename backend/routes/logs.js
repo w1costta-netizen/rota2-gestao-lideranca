@@ -45,4 +45,63 @@ router.get('/', async (req, res) => {
   res.json(data || []);
 });
 
+// ── Empresas extras liberadas para a própria conta (admin_companies) ──────
+// Uma conta admin normalmente só vê a própria loja. Isso permite que uma
+// mesma conta (ex.: usada para gerenciar/testar várias lojas) enxergue
+// os logs de outras lojas também, sem precisar virar master.
+
+// GET /api/logs/empresas-extras?requester_id=
+router.get('/empresas-extras', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const me = await getProfile(requester_id);
+  if (!me || !['admin', 'master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
+
+  const { data, error } = await supabase
+    .from('admin_companies')
+    .select('id, company, created_at')
+    .eq('user_id', requester_id)
+    .order('created_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+// POST /api/logs/empresas-extras — adiciona uma loja extra à própria conta
+router.post('/empresas-extras', async (req, res) => {
+  const { requester_id, company } = req.body;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  if (!company?.trim()) return res.status(400).json({ error: 'Nome da loja obrigatório' });
+  const me = await getProfile(requester_id);
+  if (!me || !['admin', 'master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
+
+  const { data, error } = await supabase
+    .from('admin_companies')
+    .insert({ user_id: requester_id, company: company.trim() })
+    .select().single();
+
+  if (error) {
+    if (error.code === '23505') return res.status(409).json({ error: 'Essa loja já está na sua lista' });
+    return res.status(500).json({ error: error.message });
+  }
+  res.json(data);
+});
+
+// DELETE /api/logs/empresas-extras/:id — remove uma loja extra da própria conta
+router.delete('/empresas-extras/:id', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const me = await getProfile(requester_id);
+  if (!me || !['admin', 'master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
+
+  // Só pode remover empresas da própria lista
+  const { error } = await supabase.from('admin_companies')
+    .delete()
+    .eq('id', req.params.id)
+    .eq('user_id', requester_id);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 module.exports = router;

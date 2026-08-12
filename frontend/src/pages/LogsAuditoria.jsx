@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Shield, Search, CheckCircle2, XCircle, RefreshCw } from 'lucide-react';
+import { Shield, Search, CheckCircle2, XCircle, RefreshCw, Plus, X, Store } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
 import Avatar from '../components/Avatar';
@@ -24,6 +24,43 @@ export default function LogsAuditoria({ userId, profile }) {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [acao, setAcao] = useState('');
+  const [empresasExtras, setEmpresasExtras] = useState([]);
+  const [novaEmpresa, setNovaEmpresa] = useState('');
+  const [salvandoEmpresa, setSalvandoEmpresa] = useState(false);
+
+  const loadEmpresasExtras = useCallback(() => {
+    if (isMaster) return;
+    api.get(`/logs/empresas-extras?requester_id=${userId}`)
+      .then(r => setEmpresasExtras(r.data || []))
+      .catch(() => {});
+  }, [userId, isMaster]);
+
+  useEffect(() => { loadEmpresasExtras(); }, [loadEmpresasExtras]);
+
+  const adicionarEmpresa = async () => {
+    if (!novaEmpresa.trim()) return;
+    setSalvandoEmpresa(true);
+    try {
+      await api.post('/logs/empresas-extras', { requester_id: userId, company: novaEmpresa.trim() });
+      setNovaEmpresa('');
+      loadEmpresasExtras();
+      load();
+      toast('Loja adicionada!');
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Erro ao adicionar loja', 'error');
+    } finally {
+      setSalvandoEmpresa(false);
+    }
+  };
+
+  const removerEmpresa = async (id) => {
+    try {
+      await api.delete(`/logs/empresas-extras/${id}?requester_id=${userId}`);
+      setEmpresasExtras(l => l.filter(e => e.id !== id));
+      load();
+      toast('Loja removida');
+    } catch { toast('Erro ao remover', 'error'); }
+  };
 
   const load = useCallback(() => {
     setLoading(true);
@@ -55,6 +92,44 @@ export default function LogsAuditoria({ userId, profile }) {
           <RefreshCw size={14}/> Atualizar
         </button>
       </div>
+
+      {/* Gestão de lojas extras — só para contas admin (master já vê tudo) */}
+      {!isMaster && (
+        <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:10,
+          padding:'12px 14px', marginBottom:16 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
+            <Store size={15} style={{ color:'var(--primary)' }}/>
+            <span style={{ fontWeight:700, fontSize:13 }}>Minhas lojas</span>
+            <span style={{ fontSize:11, color:'var(--text-muted)' }}>
+              — além da sua loja principal ({profile?.company || '—'}), você pode liberar outras lojas para aparecerem aqui
+            </span>
+          </div>
+
+          {empresasExtras.length > 0 && (
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:10 }}>
+              {empresasExtras.map(e => (
+                <span key={e.id} style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight:600,
+                  padding:'4px 10px', borderRadius:20, background:'#6366f120', color:'#6366f1' }}>
+                  {e.company}
+                  <button onClick={() => removerEmpresa(e.id)}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'#6366f1', padding:0, display:'flex' }}>
+                    <X size={12}/>
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display:'flex', gap:8 }}>
+            <input className="input" style={{ flex:1 }} placeholder="Nome exato da loja (campo 'company')"
+              value={novaEmpresa} onChange={e => setNovaEmpresa(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') adicionarEmpresa(); }}/>
+            <button className="btn btn-primary" onClick={adicionarEmpresa} disabled={salvandoEmpresa || !novaEmpresa.trim()}>
+              <Plus size={14}/> Adicionar
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Filtros */}
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
@@ -97,7 +172,7 @@ export default function LogsAuditoria({ userId, profile }) {
                 <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:2 }}>
                   <span style={{ fontWeight:700, fontSize:13 }}>{ACAO_LABEL[log.acao] || log.acao}</span>
                   {log.tabela && <span style={{ fontSize:11, color:'var(--text-muted)' }}>· {log.tabela}</span>}
-                  {isMaster && log.company && (
+                  {(isMaster || empresasExtras.length > 0) && log.company && (
                     <span style={{ fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:5,
                       background:'#6366f120', color:'#6366f1' }}>{log.company}</span>
                   )}
