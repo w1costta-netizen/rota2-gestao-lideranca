@@ -47,6 +47,9 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   const profile  = propProfile || authProfile;
   const userId   = session?.user?.id;
   const isAdmin  = ['admin','supervisor','master'].includes(profile?.access_level);
+  // Igual à regra da própria tela de Agenda: só admin/master veem tudo,
+  // os demais (inclusive supervisor) só o que é destinado a eles.
+  const seeAllAgenda = ['admin','master'].includes(profile?.access_level);
   const company  = profile?.company || '';
   const week     = getCurrentWeekStart();
 
@@ -64,7 +67,7 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       api.get(`/tarefas?requester_id=${userId}${cq}`).catch(() => ({ data: [] })),
       api.get(`/comunicados?requester_id=${userId}${cq}`).catch(() => ({ data: [] })),
       api.get(`/campanhas?requester_id=${userId}${cq}`).catch(() => ({ data: [] })),
-      api.get(`/agenda?week_start=${week}${company ? `&company=${encodeURIComponent(company)}` : ''}`).catch(() => ({ data: [] })),
+      api.get(`/agenda?week_start=${week}${company ? `&company=${encodeURIComponent(company)}` : ''}${seeAllAgenda ? '' : `&user_id=${userId}&sector=${encodeURIComponent(profile?.sector || '')}`}`).catch(() => ({ data: [] })),
       isAdmin && company ? api.get(`/admin/users?requester_id=${userId}${cq}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
     ]).then(([t, c, camp, ag, users]) => {
       setTarefas(t.data || []);
