@@ -9,7 +9,7 @@ import { registerPush } from '../lib/push';
 
 const DAYS = ['segunda','terca','quarta','quinta','sexta','sabado','domingo'];
 const DAY_LABELS = { segunda:'Segunda', terca:'Terça', quarta:'Quarta', quinta:'Quinta', sexta:'Sexta', sabado:'Sábado', domingo:'Domingo' };
-const EMPTY_ITEM = { title: '', description: '', target_type: 'geral', target_value: '', day_of_week: 'segunda', time: '', lembrete_minutos: null };
+const EMPTY_ITEM = { title: '', description: '', target_type: '', target_value: '', day_of_week: 'segunda', time: '', lembrete_minutos: null };
 
 const WA_ICON = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -108,6 +108,7 @@ export default function Agenda({ userId, profile }) {
 
   const save = async () => {
     if (!form.title || !form.day_of_week) { toast('Título e dia são obrigatórios', 'error'); return; }
+    if (!form.target_type) { toast('Selecione o destino do item', 'error'); return; }
     if (form.target_type === 'setor' && !form.target_value) { toast('Selecione o setor', 'error'); return; }
     if (form.target_type === 'lider' && !form.target_value.split(',').filter(Boolean).length) { toast('Selecione ao menos um líder', 'error'); return; }
     setSaving(true);
@@ -632,6 +633,7 @@ export default function Agenda({ userId, profile }) {
         <div className="form-group">
           <label className="form-label">Destino *</label>
           <select className="select" value={form.target_type} onChange={e => setForm(f => ({ ...f, target_type: e.target.value, target_value: '' }))}>
+            <option value="">Selecionar destino...</option>
             <option value="geral">Geral (todos os líderes)</option>
             <option value="setor">Por setor</option>
             <option value="lider">Líder específico</option>
