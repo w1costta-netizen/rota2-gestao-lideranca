@@ -131,9 +131,11 @@ export default function Agenda({ userId, profile }) {
 
   const remove = async (id) => {
     if (!confirm('Remover este item?')) return;
-    await agendaAPI.remove(id);
-    toast('Item removido');
-    load();
+    try {
+      await agendaAPI.remove(id, userId);
+      toast('Item removido');
+      load();
+    } catch (e) { toast(e?.response?.data?.error || 'Erro ao remover', 'error'); }
   };
 
   const openSend = (leader) => { setSendLeader(leader); setSendModal(true); };

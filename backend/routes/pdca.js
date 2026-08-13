@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -79,7 +80,11 @@ router.post('/', async (req, res) => {
     status: 'andamento',
   }).select('*, criador:criado_por(full_name, avatar_url)').single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: targetCompany, user_id: requester_id, acao: 'criar_plano_pdca', tabela: 'planos_acao', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_plano_pdca', tabela: 'planos_acao', depois: { id: data.id, titulo: data.titulo } });
   res.json({ ...data, total_acoes: 0, acoes_concluidas: 0, responsaveis: [] });
 });
 
@@ -98,7 +103,11 @@ router.put('/:id', async (req, res) => {
   if (status !== undefined)      updates.status      = status;
 
   const { data, error } = await supabase.from('planos_acao').update(updates).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'editar_plano_pdca', tabela: 'planos_acao', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: data.company, user_id: requester_id, acao: 'editar_plano_pdca', tabela: 'planos_acao', depois: updates });
   res.json(data);
 });
 
@@ -109,6 +118,8 @@ router.delete('/:id', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
 
+  const { data: plano } = await supabase.from('planos_acao').select('titulo, company').eq('id', req.params.id).single();
+
   // Remove tarefas vinculadas às ações do plano
   const { data: acoes } = await supabase.from('acoes_pdca').select('tarefa_id').eq('plano_id', req.params.id).not('tarefa_id', 'is', null);
   const tarefaIds = (acoes || []).map(a => a.tarefa_id).filter(Boolean);
@@ -118,7 +129,11 @@ router.delete('/:id', async (req, res) => {
 
   await supabase.from('acoes_pdca').delete().eq('plano_id', req.params.id);
   const { error } = await supabase.from('planos_acao').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: plano?.company, user_id: requester_id, acao: 'excluir_plano_pdca', tabela: 'planos_acao', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: plano?.company, user_id: requester_id, acao: 'excluir_plano_pdca', tabela: 'planos_acao', antes: { titulo: plano?.titulo } });
   res.json({ ok: true });
 });
 
@@ -278,10 +293,15 @@ router.delete('/acoes/:id', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
 
-  const { data: acao } = await supabase.from('acoes_pdca').select('tarefa_id').eq('id', req.params.id).single();
+  const { data: acao } = await supabase.from('acoes_pdca')
+    .select('tarefa_id, descricao, plano:plano_id(company)').eq('id', req.params.id).single();
 
   const { error } = await supabase.from('acoes_pdca').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: acao?.plano?.company, user_id: requester_id, acao: 'excluir_acao_pdca', tabela: 'acoes_pdca', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: acao?.plano?.company, user_id: requester_id, acao: 'excluir_acao_pdca', tabela: 'acoes_pdca', antes: { descricao: acao?.descricao } });
 
   if (acao?.tarefa_id) {
     await supabase.from('tarefas').delete().eq('id', acao.tarefa_id);

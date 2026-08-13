@@ -3,6 +3,7 @@ const router    = express.Router();
 const multer    = require('multer');
 const Anthropic = require('@anthropic-ai/sdk');
 const supabase  = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -50,7 +51,11 @@ router.post('/', async (req, res) => {
     company, titulo, tipo: tipo || 'fds',
     validade_ini, validade_fim, created_by: requester_id,
   }).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company, user_id: requester_id, acao: 'criar_campanha', tabela: 'campanhas', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company, user_id: requester_id, acao: 'criar_campanha', tabela: 'campanhas', depois: { id: data.id, titulo: data.titulo, tipo: data.tipo } });
   res.json(data);
 });
 
@@ -69,7 +74,11 @@ router.put('/:id', async (req, res) => {
   if (flyer_pdf_url !== undefined)   updates.flyer_pdf_url = flyer_pdf_url;
 
   const { data, error } = await supabase.from('campanhas').update(updates).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'editar_campanha', tabela: 'campanhas', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: requester_id, acao: 'editar_campanha', tabela: 'campanhas', depois: updates });
   res.json(data);
 });
 
@@ -78,7 +87,13 @@ router.delete('/:id', async (req, res) => {
   const { requester_id } = req.query;
   const me = await getProfile(requester_id);
   if (!isManager(me)) return res.status(403).json({ error: 'Acesso negado' });
-  await supabase.from('campanhas').update({ status: 'arquivada' }).eq('id', req.params.id);
+  const { data: camp } = await supabase.from('campanhas').select('titulo, company').eq('id', req.params.id).single();
+  const { error } = await supabase.from('campanhas').update({ status: 'arquivada' }).eq('id', req.params.id);
+  if (error) {
+    logError({ company: camp?.company, user_id: requester_id, acao: 'arquivar_campanha', tabela: 'campanhas', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: camp?.company, user_id: requester_id, acao: 'arquivar_campanha', tabela: 'campanhas', antes: { titulo: camp?.titulo } });
   res.json({ ok: true });
 });
 

@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { sendPushToUsers } = require('../lib/push');
+const { logAction, logError } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -93,7 +94,11 @@ router.post('/', async (req, res) => {
     lembrete_enviado: false,
   }).select('*, assigned:assigned_to(id,full_name,sector), creator:created_by(full_name)').single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: targetCompany, user_id: requester_id, acao: 'criar_tarefa', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_tarefa', tabela: 'tarefas', depois: { id: data.id, title: data.title, assigned_to: finalAssignee } });
 
   if (data.assigned_to && data.assigned_to !== requester_id) {
     sendPushToUsers([data.assigned_to], {
@@ -176,7 +181,11 @@ router.put('/:id', async (req, res) => {
 
   const { data, error } = await supabase.from('tarefas').update(updates).eq('id', req.params.id)
     .select('*, assigned:assigned_to(id,full_name,sector,avatar_url), creator:created_by(full_name,avatar_url)').single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: task?.company, user_id: requester_id, acao: 'editar_tarefa', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: task?.company, user_id: requester_id, acao: 'editar_tarefa', tabela: 'tarefas', antes: { title: task?.title }, depois: updates });
   res.json(data);
 });
 
@@ -247,11 +256,15 @@ router.delete('/:id', async (req, res) => {
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Acesso negado' });
-  const { data: task } = await supabase.from('tarefas').select('created_by, assigned_to').eq('id', req.params.id).single();
+  const { data: task } = await supabase.from('tarefas').select('created_by, assigned_to, title, company').eq('id', req.params.id).single();
   const isOwner = task?.created_by === requester_id && task?.assigned_to === requester_id;
   if (!isManager(me) && !isOwner) return res.status(403).json({ error: 'Acesso negado' });
   const { error } = await supabase.from('tarefas').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: task?.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: task?.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', antes: { title: task?.title } });
   res.json({ ok: true });
 });
 

@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -45,7 +46,11 @@ router.post('/', async (req, res) => {
     created_by: requester_id,
   }).select('*, creator:created_by(full_name)').single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: targetCompany, user_id: requester_id, acao: 'criar_mural', tabela: 'mural', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_mural', tabela: 'mural', depois: { id: data.id, title: data.title } });
   res.json(data);
 });
 
@@ -64,7 +69,11 @@ router.put('/:id', async (req, res) => {
 
   const { data, error } = await supabase.from('mural').update(updates).eq('id', req.params.id)
     .select('*, creator:created_by(full_name)').single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'editar_mural', tabela: 'mural', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: requester_id, acao: 'editar_mural', tabela: 'mural', depois: updates });
   res.json(data);
 });
 
@@ -74,8 +83,13 @@ router.delete('/:id', async (req, res) => {
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!isManager(me)) return res.status(403).json({ error: 'Acesso negado' });
+  const { data: item } = await supabase.from('mural').select('title').eq('id', req.params.id).single();
   const { error } = await supabase.from('mural').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'excluir_mural', tabela: 'mural', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: requester_id, acao: 'excluir_mural', tabela: 'mural', antes: { title: item?.title } });
   res.json({ ok: true });
 });
 

@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { sendPushToTargets } = require('../lib/push');
+const { logAction, logError } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -60,7 +61,11 @@ router.post('/', async (req, res) => {
     created_by: requester_id,
   }).select().single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: targetCompany, user_id: requester_id, acao: 'criar_comunicado', tabela: 'comunicados', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_comunicado', tabela: 'comunicados', depois: { id: data.id, title: data.title, priority: data.priority } });
 
   // Push notification para todos
   try {
@@ -91,7 +96,11 @@ router.put('/:id', async (req, res) => {
   if (priority) updates.priority = priority;
 
   const { data, error } = await supabase.from('comunicados').update(updates).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'editar_comunicado', tabela: 'comunicados', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: requester_id, acao: 'editar_comunicado', tabela: 'comunicados', depois: updates });
   res.json(data);
 });
 
@@ -103,8 +112,13 @@ router.delete('/:id', async (req, res) => {
   if (!me || !['admin', 'supervisor', 'master'].includes(me.access_level))
     return res.status(403).json({ error: 'Acesso negado' });
 
+  const { data: com } = await supabase.from('comunicados').select('title').eq('id', req.params.id).single();
   const { error } = await supabase.from('comunicados').update({ active: false }).eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'excluir_comunicado', tabela: 'comunicados', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: requester_id, acao: 'excluir_comunicado', tabela: 'comunicados', antes: { title: com?.title } });
   res.json({ ok: true });
 });
 

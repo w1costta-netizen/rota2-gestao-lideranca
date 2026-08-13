@@ -22,7 +22,7 @@ export const agendaAPI = {
   forLeader: (id, week_start) => api.get(`/agenda/leader/${id}`, { params: { week_start } }),
   create: (data) => api.post('/agenda', data),
   update: (id, data) => api.put(`/agenda/${id}`, data),
-  remove: (id) => api.delete(`/agenda/${id}`),
+  remove: (id, requesterId) => api.delete(`/agenda/${id}`, { params: { requester_id: requesterId } }),
 };
 
 export const pdfAPI = {
