@@ -32,6 +32,8 @@ const ACAO_LABEL = {
   criar_agenda: 'Criou item de agenda',
   editar_agenda: 'Editou item de agenda',
   excluir_agenda: 'Excluiu item de agenda',
+  adicionar_foto_flyer: 'Adicionou foto (Flyer)',
+  remover_foto_flyer: 'Removeu foto (Flyer)',
   erro_nao_tratado: 'Erro inesperado',
 };
 

@@ -266,6 +266,8 @@ router.post('/evidencias', async (req, res) => {
   const { requester_id, item_id, campanha_id, foto_url, obs } = req.body;
   if (!requester_id || !item_id || !foto_url) return res.status(400).json({ error: 'Campos obrigatórios faltando' });
 
+  const { data: camp } = await supabase.from('campanhas').select('titulo, company').eq('id', campanha_id).single();
+
   // Limita a 5 fotos por item
   const { count } = await supabase.from('campanha_evidencias').select('id', { count: 'exact', head: true }).eq('item_id', item_id);
   if (count >= 5) return res.status(400).json({ error: 'Limite de 5 fotos por item atingido' });
@@ -273,7 +275,11 @@ router.post('/evidencias', async (req, res) => {
   const { data, error } = await supabase.from('campanha_evidencias').insert({
     item_id, campanha_id, user_id: requester_id, foto_url, obs: obs || '',
   }).select('*, user:user_id(full_name)').single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: camp?.company, user_id: requester_id, acao: 'adicionar_foto_flyer', tabela: 'campanha_evidencias', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: camp?.company, user_id: requester_id, acao: 'adicionar_foto_flyer', tabela: 'campanha_evidencias', depois: { campanha_titulo: camp?.titulo, foto_url } });
   res.json(data);
 });
 
@@ -281,7 +287,16 @@ router.post('/evidencias', async (req, res) => {
 router.delete('/evidencias/:evId', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
-  await supabase.from('campanha_evidencias').delete().eq('id', req.params.evId);
+
+  const { data: ev } = await supabase.from('campanha_evidencias')
+    .select('foto_url, campanha:campanha_id(titulo, company)').eq('id', req.params.evId).single();
+
+  const { error } = await supabase.from('campanha_evidencias').delete().eq('id', req.params.evId);
+  if (error) {
+    logError({ company: ev?.campanha?.company, user_id: requester_id, acao: 'remover_foto_flyer', tabela: 'campanha_evidencias', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: ev?.campanha?.company, user_id: requester_id, acao: 'remover_foto_flyer', tabela: 'campanha_evidencias', antes: { campanha_titulo: ev?.campanha?.titulo, foto_url: ev?.foto_url } });
   res.json({ ok: true });
 });
 
