@@ -9,7 +9,7 @@ function urlBase64ToUint8Array(base64) {
 
 // Chamado manualmente (com gesto do usuário): pede permissão se necessário
 export async function registerPush(userId) {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') return;
   try {
     const reg = await navigator.serviceWorker.ready;
     const perm = await Notification.requestPermission();

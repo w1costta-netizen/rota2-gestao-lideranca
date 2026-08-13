@@ -57,7 +57,9 @@ export default function Agenda({ userId, profile }) {
   }, []);
 
   useEffect(() => {
-    if (userId && Notification.permission !== 'denied') registerPush(userId);
+    // Alguns navegadores embutidos (ex.: WebView do WhatsApp/Instagram) não
+    // implementam a API Notification — evita crash nesses ambientes.
+    if (userId && typeof Notification !== 'undefined' && Notification.permission !== 'denied') registerPush(userId);
   }, [userId]);
 
   const company = profile?.company || '';

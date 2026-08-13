@@ -81,7 +81,7 @@ export default function Welcome({ userId, onFinish }) {
   const activatePush = async () => {
     setPushLoading(true);
     await registerPush(userId).catch(() => {});
-    setPushDone(Notification.permission === 'granted');
+    setPushDone(typeof Notification !== 'undefined' && Notification.permission === 'granted');
     setPushLoading(false);
   };
 
