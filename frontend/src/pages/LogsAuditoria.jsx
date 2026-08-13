@@ -11,6 +11,8 @@ const ACAO_LABEL = {
   editar_usuario: 'Editou usuário',
   desativar_usuario: 'Desativou usuário',
   excluir_usuario_permanente: 'Excluiu usuário (permanente)',
+  adicionar_foto_tour: 'Adicionou foto (Tour 4x4)',
+  remover_foto_tour: 'Removeu foto (Tour 4x4)',
   erro_nao_tratado: 'Erro inesperado',
 };
 

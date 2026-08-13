@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -111,6 +112,8 @@ router.post('/:id/fotos', async (req, res) => {
   const { requester_id, photo_url, caption, order_index, annotations } = req.body;
   if (!requester_id || !photo_url) return res.status(400).json({ error: 'requester_id e photo_url obrigatórios' });
 
+  const { data: rel } = await supabase.from('relatorios_fotograficos').select('company, title').eq('id', req.params.id).single();
+
   const { data, error } = await supabase.from('relatorio_fotos').insert({
     relatorio_id: req.params.id,
     photo_url,
@@ -119,7 +122,11 @@ router.post('/:id/fotos', async (req, res) => {
     annotations: annotations || null,
   }).select().single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: rel?.company, user_id: requester_id, acao: 'adicionar_foto_tour', tabela: 'relatorio_fotos', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: rel?.company, user_id: requester_id, acao: 'adicionar_foto_tour', tabela: 'relatorio_fotos', depois: { relatorio_id: req.params.id, relatorio_titulo: rel?.title, photo_url } });
   res.json(data);
 });
 
@@ -142,8 +149,18 @@ router.put('/fotos/:fotoId', async (req, res) => {
 
 // DELETE /api/relatorios/fotos/:fotoId
 router.delete('/fotos/:fotoId', async (req, res) => {
+  const { requester_id } = req.query;
+
+  const { data: foto } = await supabase.from('relatorio_fotos')
+    .select('photo_url, relatorio_id, relatorio:relatorio_id(company, title)')
+    .eq('id', req.params.fotoId).single();
+
   const { error } = await supabase.from('relatorio_fotos').delete().eq('id', req.params.fotoId);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: foto?.relatorio?.company, user_id: requester_id, acao: 'remover_foto_tour', tabela: 'relatorio_fotos', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: foto?.relatorio?.company, user_id: requester_id, acao: 'remover_foto_tour', tabela: 'relatorio_fotos', antes: { relatorio_titulo: foto?.relatorio?.title, photo_url: foto?.photo_url } });
   res.json({ ok: true });
 });
 

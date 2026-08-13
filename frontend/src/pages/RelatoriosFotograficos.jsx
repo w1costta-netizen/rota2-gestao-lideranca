@@ -936,7 +936,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
 
   const removeFoto = async (fotoId) => {
     if (!window.confirm('Remover esta foto?')) return;
-    await api.delete(`/relatorios/fotos/${fotoId}`).catch(() => toast('Erro ao remover', 'error'));
+    await api.delete(`/relatorios/fotos/${fotoId}?requester_id=${userId}`).catch(() => toast('Erro ao remover', 'error'));
     setFotos(f => f.filter(x => x.id !== fotoId));
   };
 
