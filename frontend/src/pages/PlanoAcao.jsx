@@ -186,6 +186,7 @@ const EMPTY_PLANO  = { titulo: '', problema: '', meta: '', prazo_final: '' };
 const EMPTY_ACAO    = { descricao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
 const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
 const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
+const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsavel_id: '', prazo: '', criar_tarefa: true };
 
 const CLASSIFICACOES_C = [
   { key: 'com_resultado', label: 'Com resultado', cor: '#10b981', emoji: '✅', desc: 'melhorou — candidata a padronizar no A' },
@@ -351,17 +352,32 @@ export default function PlanoAcao({ userId, profile }) {
     return partes.join('\n');
   };
 
+  // No quadrante D, os campos do 5W2H (O quê/Onde/Como/Por quê/Quanto — o
+  // "por quem" e "quando" já são Responsável e Prazo) viram um texto único.
+  const composeDescricaoD = (f) => {
+    const partes = [];
+    if (f.oque?.trim())   partes.push(f.oque.trim());
+    if (f.onde?.trim())   partes.push(`Onde: ${f.onde.trim()}`);
+    if (f.como?.trim())   partes.push(`Como: ${f.como.trim()}`);
+    if (f.porque?.trim()) partes.push(`Por quê: ${f.porque.trim()}`);
+    if (f.quanto?.trim()) partes.push(`Quanto custa: ${f.quanto.trim()}`);
+    return partes.join('\n');
+  };
+
   const saveAcao = async () => {
     const quadranteAtual = editingAcao ? editingAcao.quadrante : addingTo;
     const isP = quadranteAtual === 'P';
     const isC = quadranteAtual === 'C';
+    const isD = quadranteAtual === 'D';
     const payload = isP
       ? { descricao: composeDescricaoP(formAcao) }
       : isC
       ? { descricao: composeDescricaoC(formAcao), responsavel_id: formAcao.responsavel_id, prazo: formAcao.prazo, criar_tarefa: formAcao.criar_tarefa }
+      : isD
+      ? { descricao: composeDescricaoD(formAcao), responsavel_id: formAcao.responsavel_id, prazo: formAcao.prazo, criar_tarefa: formAcao.criar_tarefa }
       : formAcao;
 
-    if (!payload.descricao?.trim()) return toast(isP ? 'Preencha ao menos o problema' : 'Descrição obrigatória');
+    if (!payload.descricao?.trim()) return toast(isP ? 'Preencha ao menos o problema' : isD ? 'Preencha ao menos "O quê será feito"' : 'Descrição obrigatória');
     setSavingAcao(true);
     try {
       if (editingAcao) {
@@ -375,7 +391,7 @@ export default function PlanoAcao({ userId, profile }) {
         setAcoes(as => [...as, data]);
       }
       setAddingTo(null);
-      setFormAcao(isP ? EMPTY_ACAO_P : isC ? EMPTY_ACAO_C : EMPTY_ACAO);
+      setFormAcao(isP ? EMPTY_ACAO_P : isC ? EMPTY_ACAO_C : isD ? EMPTY_ACAO_D : EMPTY_ACAO);
       // Atualiza stats do plano selecionado
       fetchAcoes(selectedPlan.id);
     } catch (e) { toast('Erro ao salvar ação: ' + (e?.response?.data?.error || e.message)); }
@@ -509,7 +525,7 @@ export default function PlanoAcao({ userId, profile }) {
                   </div>
                 </div>
                 {canManage && (
-                  <button onClick={() => { setAddingTo(q.key); setFormAcao(q.key === 'P' ? EMPTY_ACAO_P : q.key === 'C' ? EMPTY_ACAO_C : EMPTY_ACAO); }}
+                  <button onClick={() => { setAddingTo(q.key); setFormAcao(q.key === 'P' ? EMPTY_ACAO_P : q.key === 'C' ? EMPTY_ACAO_C : q.key === 'D' ? EMPTY_ACAO_D : EMPTY_ACAO); }}
                     style={{ background: q.color + '22', border: 'none', borderRadius: 8, color: q.color,
                       cursor: 'pointer', padding: '4px 10px', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Plus size={13}/> Ação
@@ -551,6 +567,15 @@ export default function PlanoAcao({ userId, profile }) {
                         setFormAcao({
                           ...EMPTY_ACAO_C,
                           descricao: acao.descricao,
+                          responsavel_id: acao.responsavel_id || '',
+                          prazo: acao.prazo || '',
+                          criar_tarefa: acao.criar_tarefa !== false,
+                        });
+                      } else if (acao.quadrante === 'D') {
+                        // Idem: texto composto (O quê/Onde/Como/...) recarrega em "oque".
+                        setFormAcao({
+                          ...EMPTY_ACAO_D,
+                          oque: acao.descricao,
                           responsavel_id: acao.responsavel_id || '',
                           prazo: acao.prazo || '',
                           criar_tarefa: acao.criar_tarefa !== false,
@@ -730,6 +755,7 @@ function PlanoForm({ form, setForm, saving, onSave }) {
 function AcaoForm(props) {
   if (props.quadrante === 'P') return <AcaoFormPlanejar {...props}/>;
   if (props.quadrante === 'C') return <AcaoFormChecar {...props}/>;
+  if (props.quadrante === 'D') return <AcaoFormFazer {...props}/>;
   return <AcaoFormPadrao {...props}/>;
 }
 
@@ -928,6 +954,59 @@ function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave }) {
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar verificação'}
+      </button>
+    </div>
+  );
+}
+
+// D — Fazer: 5W2H estruturado. "Por quem" e "Quando" já são os campos
+// Responsável e Prazo — aqui ficam O quê, Onde, Como, Por quê e Quanto custa.
+function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave }) {
+  const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
+  const podeToggleTarefa = !hasTask;
+  const q = QUADRANTES.find(x => x.key === 'D');
+  const dica = DICAS.D;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px',
+        borderRadius: 8, background: q.color + '14', border: `1px solid ${q.color}40` }}>
+        <Lightbulb size={14} style={{ color: q.color, flexShrink: 0, marginTop: 1 }}/>
+        <span style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.4 }}>{dica.dicaRapida}</span>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">O quê será feito *</label>
+        <textarea className="input" rows={3} value={form.oque} onChange={f('oque')}
+          placeholder={dica.exemplo} style={{ resize: 'vertical' }}/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Onde</label>
+        <input className="input" value={form.onde} onChange={f('onde')}
+          placeholder="Ex: Seção de bebidas, gôndola 4"/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Como</label>
+        <textarea className="input" rows={2} value={form.como} onChange={f('como')}
+          placeholder="Ex: Verificar estoque na retaguarda e repor manualmente" style={{ resize: 'vertical' }}/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Por quê</label>
+        <input className="input" value={form.porque} onChange={f('porque')}
+          placeholder="Ex: Reduzir a ruptura identificada no P"/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Quanto custa (opcional)</label>
+        <input className="input" value={form.quanto} onChange={f('quanto')}
+          placeholder="Ex: Sem custo — usa hora já alocada da equipe"/>
+      </div>
+
+      <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
+
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa}/>
+
+      <button className="btn-primary" onClick={onSave} disabled={saving}>
+        {saving ? 'Salvando...' : 'Salvar ação'}
       </button>
     </div>
   );
