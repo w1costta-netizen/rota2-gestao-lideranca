@@ -41,6 +41,7 @@ const DICAS = {
     intro: 'O D é onde o plano vira ação. Cada ação precisa ter um responsável claro, um prazo real e uma descrição que não deixe dúvida do que precisa ser feito.',
     dicaRapida: 'Descreva a ação como uma instrução clara: o quê fazer, e se possível como e onde.',
     exemplo: 'Ex: Repor a gôndola de bebidas a cada 2h durante o horário de pico',
+    hintDescricao: 'Use o 5W2H: o quê será feito, como e onde. Deixe claro o suficiente pra quem for executar não ter dúvida.',
     passos: [
       { titulo: '5W2H', texto: 'use pra montar cada ação: O quê será feito? Por quem? Onde? Quando? Por quê? Como? Quanto vai custar?' },
       { titulo: 'Delegue com clareza', texto: 'responsável único por ação. Tarefa com dois donos não tem dono.' },
@@ -84,6 +85,7 @@ const DICAS = {
     intro: 'O A é onde você decide o que fazer com o que aprendeu. Se funcionou, padronize para virar rotina. Se não funcionou, ajuste e rode o ciclo de novo.',
     dicaRapida: 'Se deu certo, descreva como isso vira rotina (POP, comunicado, treinamento).',
     exemplo: 'Ex: Criar POP de reposição de bebidas e treinar o time de repositores',
+    hintDescricao: 'O que ficou padronizado? Como o time vai ser comunicado/treinado pra manter a melhoria?',
     passos: [
       { titulo: 'Padronize o que funcionou', texto: 'crie um POP (Procedimento Operacional Padrão) para garantir que a melhoria se mantenha mesmo com troca de pessoas.' },
       { titulo: 'Comunique o time', texto: 'use os Comunicados do Rota Líder para informar a nova forma de trabalhar com confirmação de leitura.' },
@@ -183,7 +185,7 @@ function prazoInfo(prazo) {
 const EMPTY_PLANO  = { titulo: '', problema: '', meta: '', prazo_final: '' };
 const EMPTY_ACAO    = { descricao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
 const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
-const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '' };
+const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
 
 const CLASSIFICACOES_C = [
   { key: 'com_resultado', label: 'Com resultado', cor: '#10b981', emoji: '✅', desc: 'melhorou — candidata a padronizar no A' },
@@ -356,7 +358,7 @@ export default function PlanoAcao({ userId, profile }) {
     const payload = isP
       ? { descricao: composeDescricaoP(formAcao) }
       : isC
-      ? { descricao: composeDescricaoC(formAcao) }
+      ? { descricao: composeDescricaoC(formAcao), responsavel_id: formAcao.responsavel_id, prazo: formAcao.prazo, criar_tarefa: formAcao.criar_tarefa }
       : formAcao;
 
     if (!payload.descricao?.trim()) return toast(isP ? 'Preencha ao menos o problema' : 'Descrição obrigatória');
@@ -544,9 +546,15 @@ export default function PlanoAcao({ userId, profile }) {
                         // com certeza, então recarrega tudo no campo "Problema".
                         setFormAcao({ ...EMPTY_ACAO_P, problema: acao.descricao });
                       } else if (acao.quadrante === 'C') {
-                        // Mesmo caso do P: o texto salvo já vem composto (emoji +
-                        // descrição + resultado), então recarrega tudo em "descrição".
-                        setFormAcao({ ...EMPTY_ACAO_C, descricao: acao.descricao });
+                        // O texto salvo já vem composto (emoji + descrição + resultado),
+                        // então recarrega tudo em "descrição"; responsável/prazo voltam normal.
+                        setFormAcao({
+                          ...EMPTY_ACAO_C,
+                          descricao: acao.descricao,
+                          responsavel_id: acao.responsavel_id || '',
+                          prazo: acao.prazo || '',
+                          criar_tarefa: acao.criar_tarefa !== false,
+                        });
                       } else {
                         setFormAcao({
                           descricao: acao.descricao,
@@ -799,9 +807,15 @@ function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadr
       )}
       <div className="form-group">
         <label className="form-label">Descrição da ação *</label>
-        <textarea className="input" rows={2} value={form.descricao} onChange={f('descricao')}
+        {dica?.hintDescricao && (
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>{dica.hintDescricao}</div>
+        )}
+        <textarea className="input" rows={4} value={form.descricao} onChange={f('descricao')}
           placeholder={dica?.exemplo || 'O que precisa ser feito?'} style={{ resize: 'vertical' }}/>
       </div>
+
+      <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
+
       <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa}/>
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
@@ -852,8 +866,9 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa }) {
 
 // C — Checar: o que foi verificado, resultado observado (com dados) e
 // classificação (Com resultado / Sem resultado / Sem conclusão)
-function AcaoFormChecar({ form, setForm, saving, onSave }) {
+function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
+  const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === 'C');
   const dica = DICAS.C;
 
@@ -906,6 +921,10 @@ function AcaoFormChecar({ form, setForm, saving, onSave }) {
           ))}
         </div>
       </div>
+
+      <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
+
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa}/>
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar verificação'}
