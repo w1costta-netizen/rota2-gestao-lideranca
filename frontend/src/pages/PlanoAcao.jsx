@@ -183,6 +183,13 @@ function prazoInfo(prazo) {
 const EMPTY_PLANO  = { titulo: '', problema: '', meta: '', prazo_final: '' };
 const EMPTY_ACAO    = { descricao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
 const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
+const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
+
+const CLASSIFICACOES_C = [
+  { key: 'com_resultado', label: 'Com resultado',  cor: '#10b981', emoji: '✅' },
+  { key: 'sem_resultado', label: 'Sem resultado',  cor: '#f59e0b', emoji: '⚠️' },
+  { key: 'sem_conclusao', label: 'Sem conclusão',  cor: '#6b7280', emoji: '⏳' },
+];
 
 function ProgressBar({ value, color = '#E8681A' }) {
   return (
@@ -331,10 +338,26 @@ export default function PlanoAcao({ userId, profile }) {
     return partes.join('\n');
   };
 
+  // No quadrante C, a classificação + resultado observado entram junto na
+  // descrição (mesmo motivo: sem precisar mudar o banco).
+  const composeDescricaoC = (f) => {
+    const partes = [];
+    const cls = CLASSIFICACOES_C.find(c => c.key === f.classificacao);
+    if (cls) partes.push(`${cls.emoji} ${cls.label.toUpperCase()}`);
+    if (f.descricao?.trim()) partes.push(f.descricao.trim());
+    if (f.resultado?.trim()) partes.push(`Resultado observado: ${f.resultado.trim()}`);
+    return partes.join('\n');
+  };
+
   const saveAcao = async () => {
     const quadranteAtual = editingAcao ? editingAcao.quadrante : addingTo;
     const isP = quadranteAtual === 'P';
-    const payload = isP ? { descricao: composeDescricaoP(formAcao) } : formAcao;
+    const isC = quadranteAtual === 'C';
+    const payload = isP
+      ? { descricao: composeDescricaoP(formAcao) }
+      : isC
+      ? { descricao: composeDescricaoC(formAcao), responsavel_id: formAcao.responsavel_id, prazo: formAcao.prazo, criar_tarefa: formAcao.criar_tarefa }
+      : formAcao;
 
     if (!payload.descricao?.trim()) return toast(isP ? 'Preencha ao menos o problema' : 'Descrição obrigatória');
     setSavingAcao(true);
@@ -350,7 +373,7 @@ export default function PlanoAcao({ userId, profile }) {
         setAcoes(as => [...as, data]);
       }
       setAddingTo(null);
-      setFormAcao(isP ? EMPTY_ACAO_P : EMPTY_ACAO);
+      setFormAcao(isP ? EMPTY_ACAO_P : isC ? EMPTY_ACAO_C : EMPTY_ACAO);
       // Atualiza stats do plano selecionado
       fetchAcoes(selectedPlan.id);
     } catch (e) { toast('Erro ao salvar ação: ' + (e?.response?.data?.error || e.message)); }
@@ -484,7 +507,7 @@ export default function PlanoAcao({ userId, profile }) {
                   </div>
                 </div>
                 {canManage && (
-                  <button onClick={() => { setAddingTo(q.key); setFormAcao(q.key === 'P' ? EMPTY_ACAO_P : EMPTY_ACAO); }}
+                  <button onClick={() => { setAddingTo(q.key); setFormAcao(q.key === 'P' ? EMPTY_ACAO_P : q.key === 'C' ? EMPTY_ACAO_C : EMPTY_ACAO); }}
                     style={{ background: q.color + '22', border: 'none', borderRadius: 8, color: q.color,
                       cursor: 'pointer', padding: '4px 10px', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Plus size={13}/> Ação
@@ -520,6 +543,14 @@ export default function PlanoAcao({ userId, profile }) {
                         // O texto salvo é um bloco único; não dá pra separar de volta
                         // com certeza, então recarrega tudo no campo "Problema".
                         setFormAcao({ ...EMPTY_ACAO_P, problema: acao.descricao });
+                      } else if (acao.quadrante === 'C') {
+                        setFormAcao({
+                          ...EMPTY_ACAO_C,
+                          descricao: acao.descricao,
+                          responsavel_id: acao.responsavel_id || '',
+                          prazo: acao.prazo || '',
+                          criar_tarefa: acao.criar_tarefa !== false,
+                        });
                       } else {
                         setFormAcao({
                           descricao: acao.descricao,
@@ -694,6 +725,7 @@ function PlanoForm({ form, setForm, saving, onSave }) {
 
 function AcaoForm(props) {
   if (props.quadrante === 'P') return <AcaoFormPlanejar {...props}/>;
+  if (props.quadrante === 'C') return <AcaoFormChecar {...props}/>;
   return <AcaoFormPadrao {...props}/>;
 }
 
@@ -774,19 +806,31 @@ function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadr
         <textarea className="input" rows={2} value={form.descricao} onChange={f('descricao')}
           placeholder={dica?.exemplo || 'O que precisa ser feito?'} style={{ resize: 'vertical' }}/>
       </div>
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa}/>
+
+      <button className="btn-primary" onClick={onSave} disabled={saving}>
+        {saving ? 'Salvando...' : 'Salvar ação'}
+      </button>
+    </div>
+  );
+}
+
+// Bloco reutilizável: Responsável + Prazo + toggle "criar tarefa automaticamente"
+function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa }) {
+  return (
+    <>
       <div className="form-group">
         <label className="form-label">Responsável</label>
-        <select className="input" value={form.responsavel_id} onChange={f('responsavel_id')}>
+        <select className="input" value={form.responsavel_id} onChange={e => setForm(p => ({ ...p, responsavel_id: e.target.value }))}>
           <option value="">— sem responsável —</option>
           {membros.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
         </select>
       </div>
       <div className="form-group">
         <label className="form-label">Prazo</label>
-        <input className="input" type="date" value={form.prazo} onChange={f('prazo')}/>
+        <input className="input" type="date" value={form.prazo} onChange={e => setForm(p => ({ ...p, prazo: e.target.value }))}/>
       </div>
 
-      {/* Toggle criar tarefa */}
       {podeToggleTarefa ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: 'var(--surface-2, #262B38)', borderRadius: 10, padding: '10px 14px' }}>
@@ -806,9 +850,58 @@ function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadr
           ✓ Tarefa já criada para esta ação
         </div>
       )}
+    </>
+  );
+}
+
+// C — Checar: o que foi verificado, resultado observado (com dados) e
+// classificação (Com resultado / Sem resultado / Sem conclusão)
+function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave }) {
+  const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
+  const podeToggleTarefa = !hasTask;
+  const q = QUADRANTES.find(x => x.key === 'C');
+  const dica = DICAS.C;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px',
+        borderRadius: 8, background: q.color + '14', border: `1px solid ${q.color}40` }}>
+        <Lightbulb size={14} style={{ color: q.color, flexShrink: 0, marginTop: 1 }}/>
+        <span style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.4 }}>{dica.dicaRapida}</span>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">O que foi verificado *</label>
+        <textarea className="input" rows={2} value={form.descricao} onChange={f('descricao')}
+          placeholder={dica.exemplo} style={{ resize: 'vertical' }}/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Resultado observado (com dados)</label>
+        <textarea className="input" rows={2} value={form.resultado} onChange={f('resultado')}
+          placeholder="Ex: Ruptura caiu de 12% para 6% na seção de bebidas" style={{ resize: 'vertical' }}/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Classificação</label>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {CLASSIFICACOES_C.map(c => (
+            <button key={c.key} type="button"
+              onClick={() => setForm(p => ({ ...p, classificacao: p.classificacao === c.key ? '' : c.key }))}
+              style={{
+                padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                border: `2px solid ${form.classificacao === c.key ? c.cor : 'var(--border)'}`,
+                background: form.classificacao === c.key ? c.cor + '22' : 'transparent',
+                color: form.classificacao === c.key ? c.cor : 'var(--text-muted)',
+              }}>
+              {c.emoji} {c.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa}/>
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
-        {saving ? 'Salvando...' : 'Salvar ação'}
+        {saving ? 'Salvando...' : 'Salvar verificação'}
       </button>
     </div>
   );
