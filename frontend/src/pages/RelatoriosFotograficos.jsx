@@ -804,8 +804,12 @@ function ModalEvidencia({ foto, userId, onSave, onClose }) {
       if (imgFile) {
         const blob = await resizeImage(imgFile);
         const path = `relatorios/evidencias/${foto.id}_${Date.now()}.jpg`;
+        // ArrayBuffer em vez do Blob direto — evita "No content provided" em
+        // navegadores in-app (WhatsApp/Instagram WebView) que não serializam
+        // Blob corretamente no upload.
+        const arrayBuffer = await blob.arrayBuffer();
         const { error: upErr } = await supabase.storage.from('evidencias')
-          .upload(path, blob, { contentType:'image/jpeg', upsert:true });
+          .upload(path, arrayBuffer, { contentType:'image/jpeg', upsert:true });
         if (upErr) throw upErr;
         const { data: { publicUrl } } = supabase.storage.from('evidencias').getPublicUrl(path);
         evidUrl = publicUrl;
@@ -855,7 +859,9 @@ function ModalEvidencia({ foto, userId, onSave, onClose }) {
           <Camera size={16}/>
           {currentImg ? 'Trocar foto de evidência' : 'Adicionar foto de evidência (opcional)'}
         </button>
-        <input ref={fileRef} type="file" accept="image/*" capture="environment"
+        {/* Sem "capture" — deixa o próprio SO oferecer Câmera ou Galeria,
+            importante pra quem tem pouco espaço/memória e precisa reaproveitar uma foto já tirada. */}
+        <input ref={fileRef} type="file" accept="image/*"
           style={{ display:'none' }} onChange={handleFile}/>
 
         <div className="form-group">
