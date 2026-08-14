@@ -182,7 +182,7 @@ function prazoInfo(prazo) {
 
 const EMPTY_PLANO  = { titulo: '', problema: '', meta: '', prazo_final: '' };
 const EMPTY_ACAO    = { descricao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
-const EMPTY_ACAO_P  = { problema: '', causa_raiz: '', meta_smart: '' };
+const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
 
 function ProgressBar({ value, color = '#E8681A' }) {
   return (
@@ -322,8 +322,11 @@ export default function PlanoAcao({ userId, profile }) {
   // em "descricao" (não exige mudança no banco).
   const composeDescricaoP = (f) => {
     const partes = [];
-    if (f.problema?.trim())   partes.push(`Problema: ${f.problema.trim()}`);
-    if (f.causa_raiz?.trim()) partes.push(`Causa raiz: ${f.causa_raiz.trim()}`);
+    if (f.problema?.trim()) partes.push(`Problema: ${f.problema.trim()}`);
+    const porquesPreenchidos = (f.porques || []).map(p => p.trim()).filter(Boolean);
+    if (porquesPreenchidos.length) {
+      partes.push(`Causa raiz (5 Porquês):\n${porquesPreenchidos.map((p, i) => `${i + 1}) ${p}`).join('\n')}`);
+    }
     if (f.meta_smart?.trim()) partes.push(`Meta: ${f.meta_smart.trim()}`);
     return partes.join('\n');
   };
@@ -715,9 +718,27 @@ function AcaoFormPlanejar({ form, setForm, saving, onSave }) {
           placeholder='Ex: Ruptura em 12% nas últimas 4 semanas na seção de bebidas' style={{ resize: 'vertical' }}/>
       </div>
       <div className="form-group">
-        <label className="form-label">Causa raiz (use os 5 Porquês)</label>
-        <textarea className="input" rows={2} value={form.causa_raiz} onChange={f('causa_raiz')}
-          placeholder='Ex: Reposição atrasa porque o pedido é feito manualmente 1x por semana' style={{ resize: 'vertical' }}/>
+        <label className="form-label">Causa raiz — 5 Porquês</label>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+          Pergunte "por quê?" a cada resposta, até chegar na causa real.
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {form.porques.map((valor, i) => (
+            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ flexShrink: 0, width: 22, height: 22, borderRadius: '50%', background: q.color + '22',
+                color: q.color, fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {i + 1}
+              </span>
+              <input className="input" value={valor}
+                onChange={e => setForm(p => {
+                  const next = [...p.porques];
+                  next[i] = e.target.value;
+                  return { ...p, porques: next };
+                })}
+                placeholder={i === 0 ? 'Por que isso acontece?' : 'Por quê?'}/>
+            </div>
+          ))}
+        </div>
       </div>
       <div className="form-group">
         <label className="form-label">Meta SMART</label>
