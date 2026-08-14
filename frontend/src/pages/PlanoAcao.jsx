@@ -183,10 +183,10 @@ function prazoInfo(prazo) {
 }
 
 const EMPTY_PLANO  = { titulo: '', problema: '', meta: '', prazo_final: '' };
-const EMPTY_ACAO    = { descricao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
+const EMPTY_ACAO    = { descricao: '', responsaveis_ids: [], prazo: '', criar_tarefa: true };
 const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
-const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
-const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsavel_id: '', prazo: '', criar_tarefa: true };
+const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsaveis_ids: [], prazo: '', criar_tarefa: true };
+const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsaveis_ids: [], prazo: '', criar_tarefa: true };
 
 const CLASSIFICACOES_C = [
   { key: 'com_resultado', label: 'Com resultado', cor: '#10b981', emoji: '✅', desc: 'melhorou — candidata a padronizar no A' },
@@ -369,26 +369,40 @@ export default function PlanoAcao({ userId, profile }) {
     const isP = quadranteAtual === 'P';
     const isC = quadranteAtual === 'C';
     const isD = quadranteAtual === 'D';
-    const payload = isP
-      ? { descricao: composeDescricaoP(formAcao) }
-      : isC
-      ? { descricao: composeDescricaoC(formAcao), responsavel_id: formAcao.responsavel_id, prazo: formAcao.prazo, criar_tarefa: formAcao.criar_tarefa }
-      : isD
-      ? { descricao: composeDescricaoD(formAcao), responsavel_id: formAcao.responsavel_id, prazo: formAcao.prazo, criar_tarefa: formAcao.criar_tarefa }
-      : formAcao;
+    const usaResponsaveis = isC || isD || quadranteAtual === 'A'; // quadrantes com responsável delegável
 
-    if (!payload.descricao?.trim()) return toast(isP ? 'Preencha ao menos o problema' : isD ? 'Preencha ao menos "O quê será feito"' : 'Descrição obrigatória');
+    const descricaoFinal = isP ? composeDescricaoP(formAcao)
+      : isC ? composeDescricaoC(formAcao)
+      : isD ? composeDescricaoD(formAcao)
+      : formAcao.descricao;
+
+    if (!descricaoFinal?.trim()) return toast(isP ? 'Preencha ao menos o problema' : isD ? 'Preencha ao menos "O quê será feito"' : 'Descrição obrigatória');
     setSavingAcao(true);
     try {
       if (editingAcao) {
+        // Edição: sempre 1 ação só, no máximo o primeiro responsável marcado
+        const payload = {
+          descricao: descricaoFinal,
+          ...(usaResponsaveis ? {
+            responsavel_id: (formAcao.responsaveis_ids || [])[0] || null,
+            prazo: formAcao.prazo,
+            criar_tarefa: formAcao.criar_tarefa,
+          } : {}),
+        };
         const { data } = await api.put(`/pdca/acoes/${editingAcao.id}`, { requester_id: userId, ...payload });
         setAcoes(as => as.map(a => a.id === data.id ? data : a));
         setEditingAcao(null);
       } else {
-        const { data } = await api.post(`/pdca/${selectedPlan.id}/acoes`, {
-          requester_id: userId, quadrante: addingTo, ...payload,
-        });
-        setAcoes(as => [...as, data]);
+        // Criação: 1 líder selecionado = 1 ação; vários líderes = 1 ação (com tarefa) pra cada
+        const ids = usaResponsaveis && (formAcao.responsaveis_ids || []).length > 0
+          ? formAcao.responsaveis_ids
+          : [null];
+        const criadas = await Promise.all(ids.map(rid => api.post(`/pdca/${selectedPlan.id}/acoes`, {
+          requester_id: userId, quadrante: addingTo, descricao: descricaoFinal,
+          ...(usaResponsaveis ? { responsavel_id: rid, prazo: formAcao.prazo, criar_tarefa: formAcao.criar_tarefa } : {}),
+        })));
+        setAcoes(as => [...as, ...criadas.map(r => r.data)]);
+        if (criadas.length > 1) toast(`${criadas.length} ações criadas — uma para cada líder selecionado!`);
       }
       setAddingTo(null);
       setFormAcao(isP ? EMPTY_ACAO_P : isC ? EMPTY_ACAO_C : isD ? EMPTY_ACAO_D : EMPTY_ACAO);
@@ -567,7 +581,7 @@ export default function PlanoAcao({ userId, profile }) {
                         setFormAcao({
                           ...EMPTY_ACAO_C,
                           descricao: acao.descricao,
-                          responsavel_id: acao.responsavel_id || '',
+                          responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
                           criar_tarefa: acao.criar_tarefa !== false,
                         });
@@ -576,14 +590,14 @@ export default function PlanoAcao({ userId, profile }) {
                         setFormAcao({
                           ...EMPTY_ACAO_D,
                           oque: acao.descricao,
-                          responsavel_id: acao.responsavel_id || '',
+                          responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
                           criar_tarefa: acao.criar_tarefa !== false,
                         });
                       } else {
                         setFormAcao({
                           descricao: acao.descricao,
-                          responsavel_id: acao.responsavel_id || '',
+                          responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
                           criar_tarefa: acao.criar_tarefa !== false,
                         });
@@ -608,6 +622,7 @@ export default function PlanoAcao({ userId, profile }) {
             hasTask={!!editingAcao?.tarefa_id}
             onSave={saveAcao}
             quadrante={addingTo}
+            isNovo={!editingAcao}
           />
         </Modal>
 
@@ -816,7 +831,7 @@ function AcaoFormPlanejar({ form, setForm, saving, onSave }) {
 }
 
 // D / C / A — ação delegável de verdade: responsável, prazo, tarefa vinculada
-function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadrante }) {
+function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadrante, isNovo }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: typeof e === 'object' && e.target ? e.target.value : e }));
   const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === quadrante);
@@ -842,7 +857,7 @@ function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadr
 
       <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
 
-      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa}/>
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo}/>
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar ação'}
@@ -852,15 +867,51 @@ function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadr
 }
 
 // Bloco reutilizável: Responsável + Prazo + toggle "criar tarefa automaticamente"
-function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa }) {
+function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNovo }) {
+  const ids = form.responsaveis_ids || [];
+  const toggleResp = (id) => setForm(p => {
+    const atuais = p.responsaveis_ids || [];
+    return { ...p, responsaveis_ids: atuais.includes(id) ? atuais.filter(x => x !== id) : [...atuais, id] };
+  });
+
   return (
     <>
       <div className="form-group">
-        <label className="form-label">Responsável</label>
-        <select className="input" value={form.responsavel_id} onChange={e => setForm(p => ({ ...p, responsavel_id: e.target.value }))}>
-          <option value="">— sem responsável —</option>
-          {membros.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
-        </select>
+        <label className="form-label">
+          Responsável(is)
+          {isNovo && ids.length > 1 && (
+            <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
+              {ids.length} selecionados — cria 1 ação pra cada
+            </span>
+          )}
+        </label>
+        {isNovo ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto',
+            border: '1px solid var(--border)', borderRadius: 8, padding: '8px 4px' }}>
+            {membros.length === 0 && (
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>Nenhum membro cadastrado.</p>
+            )}
+            {membros.map(m => {
+              const selected = ids.includes(m.id);
+              return (
+                <label key={m.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6,
+                  cursor: 'pointer', background: selected ? 'rgba(232,98,42,.08)' : 'transparent',
+                }}>
+                  <input type="checkbox" checked={selected} onChange={() => toggleResp(m.id)}
+                    style={{ accentColor: '#E8681A', width: 15, height: 15, flexShrink: 0 }}/>
+                  <span style={{ fontSize: 13, color: 'var(--text)' }}>{m.full_name}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : (
+          // Editando: só faz sentido 1 responsável (a ação já existe)
+          <select className="input" value={ids[0] || ''} onChange={e => setForm(p => ({ ...p, responsaveis_ids: e.target.value ? [e.target.value] : [] }))}>
+            <option value="">— sem responsável —</option>
+            {membros.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+          </select>
+        )}
       </div>
       <div className="form-group">
         <label className="form-label">Prazo</label>
@@ -873,7 +924,7 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa }) {
           <div>
             <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Criar tarefa automaticamente</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
-              {form.responsavel_id && form.prazo ? 'Tarefa será criada ao salvar' : 'Preencha responsável e prazo para ativar'}
+              {ids.length > 0 && form.prazo ? 'Tarefa será criada ao salvar' : 'Selecione responsável(is) e prazo para ativar'}
             </div>
           </div>
           <button onClick={() => setForm(p => ({ ...p, criar_tarefa: !p.criar_tarefa }))}
@@ -892,7 +943,7 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa }) {
 
 // C — Checar: o que foi verificado, resultado observado (com dados) e
 // classificação (Com resultado / Sem resultado / Sem conclusão)
-function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave }) {
+function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave, isNovo }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
   const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === 'C');
@@ -950,7 +1001,7 @@ function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave }) {
 
       <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
 
-      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa}/>
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo}/>
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar verificação'}
@@ -961,7 +1012,7 @@ function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave }) {
 
 // D — Fazer: 5W2H estruturado. "Por quem" e "Quando" já são os campos
 // Responsável e Prazo — aqui ficam O quê, Onde, Como, Por quê e Quanto custa.
-function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave }) {
+function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave, isNovo }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
   const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === 'D');
@@ -1003,7 +1054,7 @@ function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave }) {
 
       <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
 
-      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa}/>
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo}/>
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar ação'}
