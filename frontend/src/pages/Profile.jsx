@@ -104,9 +104,14 @@ export default function Profile() {
       const ext = photoFile.name.split('.').pop();
       const path = `${session.user.id}/avatar.${ext}`;
 
+      // Em alguns navegadores in-app (WhatsApp/Instagram WebView) o upload
+      // direto do File/Blob falha com "No content provided" — o fetch interno
+      // desses WebViews não serializa o corpo corretamente. Convertendo pra
+      // ArrayBuffer antes de enviar contorna o problema em todos os ambientes.
+      const arrayBuffer = await photoFile.arrayBuffer();
       const { error: upErr } = await supabase.storage
         .from('avatars')
-        .upload(path, photoFile, { upsert: true, contentType: photoFile.type });
+        .upload(path, arrayBuffer, { upsert: true, contentType: photoFile.type });
 
       if (upErr) throw upErr;
 
