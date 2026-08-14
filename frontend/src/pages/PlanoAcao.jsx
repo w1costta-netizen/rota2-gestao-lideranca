@@ -181,7 +181,8 @@ function prazoInfo(prazo) {
 }
 
 const EMPTY_PLANO  = { titulo: '', problema: '', meta: '', prazo_final: '' };
-const EMPTY_ACAO   = { descricao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
+const EMPTY_ACAO    = { descricao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
+const EMPTY_ACAO_P  = { problema: '', causa_raiz: '', meta_smart: '' };
 
 function ProgressBar({ value, color = '#E8681A' }) {
   return (
@@ -316,22 +317,37 @@ export default function PlanoAcao({ userId, profile }) {
   };
 
   // ── Save ação ────────────────────────────────────────────
+  // No quadrante P a ação é uma ferramenta de planejamento (Problema/Causa raiz/
+  // Meta), não uma tarefa delegável — os 3 campos viram um único texto salvo
+  // em "descricao" (não exige mudança no banco).
+  const composeDescricaoP = (f) => {
+    const partes = [];
+    if (f.problema?.trim())   partes.push(`Problema: ${f.problema.trim()}`);
+    if (f.causa_raiz?.trim()) partes.push(`Causa raiz: ${f.causa_raiz.trim()}`);
+    if (f.meta_smart?.trim()) partes.push(`Meta: ${f.meta_smart.trim()}`);
+    return partes.join('\n');
+  };
+
   const saveAcao = async () => {
-    if (!formAcao.descricao.trim()) return toast('Descrição obrigatória');
+    const quadranteAtual = editingAcao ? editingAcao.quadrante : addingTo;
+    const isP = quadranteAtual === 'P';
+    const payload = isP ? { descricao: composeDescricaoP(formAcao) } : formAcao;
+
+    if (!payload.descricao?.trim()) return toast(isP ? 'Preencha ao menos o problema' : 'Descrição obrigatória');
     setSavingAcao(true);
     try {
       if (editingAcao) {
-        const { data } = await api.put(`/pdca/acoes/${editingAcao.id}`, { requester_id: userId, ...formAcao });
+        const { data } = await api.put(`/pdca/acoes/${editingAcao.id}`, { requester_id: userId, ...payload });
         setAcoes(as => as.map(a => a.id === data.id ? data : a));
         setEditingAcao(null);
       } else {
         const { data } = await api.post(`/pdca/${selectedPlan.id}/acoes`, {
-          requester_id: userId, quadrante: addingTo, ...formAcao,
+          requester_id: userId, quadrante: addingTo, ...payload,
         });
         setAcoes(as => [...as, data]);
       }
       setAddingTo(null);
-      setFormAcao(EMPTY_ACAO);
+      setFormAcao(isP ? EMPTY_ACAO_P : EMPTY_ACAO);
       // Atualiza stats do plano selecionado
       fetchAcoes(selectedPlan.id);
     } catch (e) { toast('Erro ao salvar ação: ' + (e?.response?.data?.error || e.message)); }
@@ -465,7 +481,7 @@ export default function PlanoAcao({ userId, profile }) {
                   </div>
                 </div>
                 {canManage && (
-                  <button onClick={() => { setAddingTo(q.key); setFormAcao(EMPTY_ACAO); }}
+                  <button onClick={() => { setAddingTo(q.key); setFormAcao(q.key === 'P' ? EMPTY_ACAO_P : EMPTY_ACAO); }}
                     style={{ background: q.color + '22', border: 'none', borderRadius: 8, color: q.color,
                       cursor: 'pointer', padding: '4px 10px', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Plus size={13}/> Ação
@@ -497,12 +513,18 @@ export default function PlanoAcao({ userId, profile }) {
                     onEdit={() => {
                       setEditingAcao(acao);
                       setAddingTo(acao.quadrante);
-                      setFormAcao({
-                        descricao: acao.descricao,
-                        responsavel_id: acao.responsavel_id || '',
-                        prazo: acao.prazo || '',
-                        criar_tarefa: acao.criar_tarefa !== false,
-                      });
+                      if (acao.quadrante === 'P') {
+                        // O texto salvo é um bloco único; não dá pra separar de volta
+                        // com certeza, então recarrega tudo no campo "Problema".
+                        setFormAcao({ ...EMPTY_ACAO_P, problema: acao.descricao });
+                      } else {
+                        setFormAcao({
+                          descricao: acao.descricao,
+                          responsavel_id: acao.responsavel_id || '',
+                          prazo: acao.prazo || '',
+                          criar_tarefa: acao.criar_tarefa !== false,
+                        });
+                      }
                     }}
                     onDelete={() => deleteAcao(acao)}
                   />
@@ -667,7 +689,51 @@ function PlanoForm({ form, setForm, saving, onSave }) {
   );
 }
 
-function AcaoForm({ form, setForm, membros, saving, hasTask, onSave, quadrante }) {
+function AcaoForm(props) {
+  if (props.quadrante === 'P') return <AcaoFormPlanejar {...props}/>;
+  return <AcaoFormPadrao {...props}/>;
+}
+
+// P — Planejar: ferramenta de análise (Problema / Causa raiz / Meta),
+// sem responsável/prazo/tarefa — planejamento não é uma tarefa delegável.
+function AcaoFormPlanejar({ form, setForm, saving, onSave }) {
+  const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
+  const q = QUADRANTES.find(x => x.key === 'P');
+  const dica = DICAS.P;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px',
+        borderRadius: 8, background: q.color + '14', border: `1px solid ${q.color}40` }}>
+        <Lightbulb size={14} style={{ color: q.color, flexShrink: 0, marginTop: 1 }}/>
+        <span style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.4 }}>{dica.dicaRapida}</span>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">Problema identificado (com dados) *</label>
+        <textarea className="input" rows={2} value={form.problema} onChange={f('problema')}
+          placeholder='Ex: Ruptura em 12% nas últimas 4 semanas na seção de bebidas' style={{ resize: 'vertical' }}/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Causa raiz (use os 5 Porquês)</label>
+        <textarea className="input" rows={2} value={form.causa_raiz} onChange={f('causa_raiz')}
+          placeholder='Ex: Reposição atrasa porque o pedido é feito manualmente 1x por semana' style={{ resize: 'vertical' }}/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Meta SMART</label>
+        <input className="input" value={form.meta_smart} onChange={f('meta_smart')}
+          placeholder='Ex: Reduzir ruptura de 12% para 5% em 30 dias'/>
+      </div>
+
+      <button className="btn-primary" onClick={onSave} disabled={saving}>
+        {saving ? 'Salvando...' : 'Salvar planejamento'}
+      </button>
+    </div>
+  );
+}
+
+// D / C / A — ação delegável de verdade: responsável, prazo, tarefa vinculada
+function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadrante }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: typeof e === 'object' && e.target ? e.target.value : e }));
   const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === quadrante);
