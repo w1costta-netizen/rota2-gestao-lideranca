@@ -186,9 +186,9 @@ const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart:
 const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
 
 const CLASSIFICACOES_C = [
-  { key: 'com_resultado', label: 'Com resultado',  cor: '#10b981', emoji: '✅' },
-  { key: 'sem_resultado', label: 'Sem resultado',  cor: '#f59e0b', emoji: '⚠️' },
-  { key: 'sem_conclusao', label: 'Sem conclusão',  cor: '#6b7280', emoji: '⏳' },
+  { key: 'com_resultado', label: 'Com resultado', cor: '#10b981', emoji: '✅', desc: 'melhorou — candidata a padronizar no A' },
+  { key: 'sem_resultado', label: 'Sem resultado', cor: '#f59e0b', emoji: '⚠️', desc: 'executada mas não melhorou — revisar causa raiz' },
+  { key: 'sem_conclusao', label: 'Sem conclusão', cor: '#6b7280', emoji: '⏳', desc: 'não foi executada até o prazo' },
 ];
 
 function ProgressBar({ value, color = '#E8681A' }) {
@@ -872,31 +872,47 @@ function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave }) {
 
       <div className="form-group">
         <label className="form-label">O que foi verificado *</label>
-        <textarea className="input" rows={2} value={form.descricao} onChange={f('descricao')}
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+          Qual ação (do D) você está avaliando? Quais ações funcionaram e quais não funcionaram?
+        </div>
+        <textarea className="input" rows={4} value={form.descricao} onChange={f('descricao')}
           placeholder={dica.exemplo} style={{ resize: 'vertical' }}/>
       </div>
+
       <div className="form-group">
         <label className="form-label">Resultado observado (com dados)</label>
-        <textarea className="input" rows={2} value={form.resultado} onChange={f('resultado')}
-          placeholder="Ex: Ruptura caiu de 12% para 6% na seção de bebidas" style={{ resize: 'vertical' }}/>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+          O indicador melhorou em relação à meta definida no P? Compare o antes x depois com números.
+        </div>
+        <textarea className="input" rows={4} value={form.resultado} onChange={f('resultado')}
+          placeholder="Ex: Ruptura caiu de 12% para 6% na seção de bebidas (meta era 5%)" style={{ resize: 'vertical' }}/>
       </div>
+
       <div className="form-group">
         <label className="form-label">Classificação</label>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+          O problema foi resolvido, apenas amenizado, ou nem chegou a ser concluído?
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {CLASSIFICACOES_C.map(c => (
             <button key={c.key} type="button"
               onClick={() => setForm(p => ({ ...p, classificacao: p.classificacao === c.key ? '' : c.key }))}
               style={{
-                padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10,
+                fontSize: 13, fontWeight: 700, cursor: 'pointer', textAlign: 'left',
                 border: `2px solid ${form.classificacao === c.key ? c.cor : 'var(--border)'}`,
-                background: form.classificacao === c.key ? c.cor + '22' : 'transparent',
-                color: form.classificacao === c.key ? c.cor : 'var(--text-muted)',
+                background: form.classificacao === c.key ? c.cor + '18' : 'transparent',
+                color: form.classificacao === c.key ? c.cor : 'var(--text)',
               }}>
-              {c.emoji} {c.label}
+              <span style={{ fontSize: 16 }}>{c.emoji}</span>
+              <span style={{ flex: 1 }}>{c.label}</span>
+              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>{c.desc}</span>
             </button>
           ))}
         </div>
       </div>
+
+      <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
 
       <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa}/>
 
