@@ -183,7 +183,7 @@ function prazoInfo(prazo) {
 const EMPTY_PLANO  = { titulo: '', problema: '', meta: '', prazo_final: '' };
 const EMPTY_ACAO    = { descricao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
 const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
-const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
+const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '' };
 
 const CLASSIFICACOES_C = [
   { key: 'com_resultado', label: 'Com resultado', cor: '#10b981', emoji: '✅', desc: 'melhorou — candidata a padronizar no A' },
@@ -356,7 +356,7 @@ export default function PlanoAcao({ userId, profile }) {
     const payload = isP
       ? { descricao: composeDescricaoP(formAcao) }
       : isC
-      ? { descricao: composeDescricaoC(formAcao), responsavel_id: formAcao.responsavel_id, prazo: formAcao.prazo, criar_tarefa: formAcao.criar_tarefa }
+      ? { descricao: composeDescricaoC(formAcao) }
       : formAcao;
 
     if (!payload.descricao?.trim()) return toast(isP ? 'Preencha ao menos o problema' : 'Descrição obrigatória');
@@ -544,13 +544,9 @@ export default function PlanoAcao({ userId, profile }) {
                         // com certeza, então recarrega tudo no campo "Problema".
                         setFormAcao({ ...EMPTY_ACAO_P, problema: acao.descricao });
                       } else if (acao.quadrante === 'C') {
-                        setFormAcao({
-                          ...EMPTY_ACAO_C,
-                          descricao: acao.descricao,
-                          responsavel_id: acao.responsavel_id || '',
-                          prazo: acao.prazo || '',
-                          criar_tarefa: acao.criar_tarefa !== false,
-                        });
+                        // Mesmo caso do P: o texto salvo já vem composto (emoji +
+                        // descrição + resultado), então recarrega tudo em "descrição".
+                        setFormAcao({ ...EMPTY_ACAO_C, descricao: acao.descricao });
                       } else {
                         setFormAcao({
                           descricao: acao.descricao,
@@ -856,9 +852,8 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa }) {
 
 // C — Checar: o que foi verificado, resultado observado (com dados) e
 // classificação (Com resultado / Sem resultado / Sem conclusão)
-function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave }) {
+function AcaoFormChecar({ form, setForm, saving, onSave }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
-  const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === 'C');
   const dica = DICAS.C;
 
@@ -911,10 +906,6 @@ function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave }) {
           ))}
         </div>
       </div>
-
-      <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
-
-      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa}/>
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar verificação'}
