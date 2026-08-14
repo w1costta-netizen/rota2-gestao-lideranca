@@ -187,6 +187,7 @@ const EMPTY_ACAO    = { descricao: '', responsaveis_ids: [], prazo: '', criar_ta
 const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
 const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsaveis_ids: [], prazo: '', criar_tarefa: true };
 const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsaveis_ids: [], prazo: '', criar_tarefa: true };
+const EMPTY_ACAO_A  = { padronizacao: '', comunicacao: '', treinamento: '', monitoramento: '', responsaveis_ids: [], prazo: '', criar_tarefa: true };
 
 const CLASSIFICACOES_C = [
   { key: 'com_resultado', label: 'Com resultado', cor: '#10b981', emoji: '✅', desc: 'melhorou — candidata a padronizar no A' },
@@ -364,19 +365,32 @@ export default function PlanoAcao({ userId, profile }) {
     return partes.join('\n');
   };
 
+  // No quadrante A, os campos (Padronização/Comunicação/Treinamento/Monitoramento)
+  // viram um texto único, mesma lógica dos outros quadrantes estruturados.
+  const composeDescricaoA = (f) => {
+    const partes = [];
+    if (f.padronizacao?.trim())  partes.push(f.padronizacao.trim());
+    if (f.comunicacao?.trim())   partes.push(`Comunicação: ${f.comunicacao.trim()}`);
+    if (f.treinamento?.trim())   partes.push(`Treinamento: ${f.treinamento.trim()}`);
+    if (f.monitoramento?.trim()) partes.push(`Monitoramento: ${f.monitoramento.trim()}`);
+    return partes.join('\n');
+  };
+
   const saveAcao = async () => {
     const quadranteAtual = editingAcao ? editingAcao.quadrante : addingTo;
     const isP = quadranteAtual === 'P';
     const isC = quadranteAtual === 'C';
     const isD = quadranteAtual === 'D';
-    const usaResponsaveis = isC || isD || quadranteAtual === 'A'; // quadrantes com responsável delegável
+    const isA = quadranteAtual === 'A';
+    const usaResponsaveis = isC || isD || isA; // quadrantes com responsável delegável
 
     const descricaoFinal = isP ? composeDescricaoP(formAcao)
       : isC ? composeDescricaoC(formAcao)
       : isD ? composeDescricaoD(formAcao)
+      : isA ? composeDescricaoA(formAcao)
       : formAcao.descricao;
 
-    if (!descricaoFinal?.trim()) return toast(isP ? 'Preencha ao menos o problema' : isD ? 'Preencha ao menos "O quê será feito"' : 'Descrição obrigatória');
+    if (!descricaoFinal?.trim()) return toast(isP ? 'Preencha ao menos o problema' : isD ? 'Preencha ao menos "O quê será feito"' : isA ? 'Preencha ao menos o que ficou padronizado' : 'Descrição obrigatória');
     setSavingAcao(true);
     try {
       if (editingAcao) {
@@ -405,7 +419,7 @@ export default function PlanoAcao({ userId, profile }) {
         if (criadas.length > 1) toast(`${criadas.length} ações criadas — uma para cada líder selecionado!`);
       }
       setAddingTo(null);
-      setFormAcao(isP ? EMPTY_ACAO_P : isC ? EMPTY_ACAO_C : isD ? EMPTY_ACAO_D : EMPTY_ACAO);
+      setFormAcao(isP ? EMPTY_ACAO_P : isC ? EMPTY_ACAO_C : isD ? EMPTY_ACAO_D : isA ? EMPTY_ACAO_A : EMPTY_ACAO);
       // Atualiza stats do plano selecionado
       fetchAcoes(selectedPlan.id);
     } catch (e) { toast('Erro ao salvar ação: ' + (e?.response?.data?.error || e.message)); }
@@ -539,7 +553,7 @@ export default function PlanoAcao({ userId, profile }) {
                   </div>
                 </div>
                 {canManage && (
-                  <button onClick={() => { setAddingTo(q.key); setFormAcao(q.key === 'P' ? EMPTY_ACAO_P : q.key === 'C' ? EMPTY_ACAO_C : q.key === 'D' ? EMPTY_ACAO_D : EMPTY_ACAO); }}
+                  <button onClick={() => { setAddingTo(q.key); setFormAcao(q.key === 'P' ? EMPTY_ACAO_P : q.key === 'C' ? EMPTY_ACAO_C : q.key === 'D' ? EMPTY_ACAO_D : q.key === 'A' ? EMPTY_ACAO_A : EMPTY_ACAO); }}
                     style={{ background: q.color + '22', border: 'none', borderRadius: 8, color: q.color,
                       cursor: 'pointer', padding: '4px 10px', fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
                     <Plus size={13}/> Ação
@@ -590,6 +604,14 @@ export default function PlanoAcao({ userId, profile }) {
                         setFormAcao({
                           ...EMPTY_ACAO_D,
                           oque: acao.descricao,
+                          responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
+                          prazo: acao.prazo || '',
+                          criar_tarefa: acao.criar_tarefa !== false,
+                        });
+                      } else if (acao.quadrante === 'A') {
+                        setFormAcao({
+                          ...EMPTY_ACAO_A,
+                          padronizacao: acao.descricao,
                           responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
                           criar_tarefa: acao.criar_tarefa !== false,
@@ -771,6 +793,7 @@ function AcaoForm(props) {
   if (props.quadrante === 'P') return <AcaoFormPlanejar {...props}/>;
   if (props.quadrante === 'C') return <AcaoFormChecar {...props}/>;
   if (props.quadrante === 'D') return <AcaoFormFazer {...props}/>;
+  if (props.quadrante === 'A') return <AcaoFormAgir {...props}/>;
   return <AcaoFormPadrao {...props}/>;
 }
 
@@ -1058,6 +1081,52 @@ function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave, isNovo
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar ação'}
+      </button>
+    </div>
+  );
+}
+
+function AcaoFormAgir({ form, setForm, membros, saving, hasTask, onSave, isNovo }) {
+  const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
+  const podeToggleTarefa = !hasTask;
+  const q = QUADRANTES.find(x => x.key === 'A');
+  const dica = DICAS.A;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px',
+        borderRadius: 8, background: q.color + '14', border: `1px solid ${q.color}40` }}>
+        <Lightbulb size={14} style={{ color: q.color, flexShrink: 0, marginTop: 1 }}/>
+        <span style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.4 }}>{dica.dicaRapida}</span>
+      </div>
+
+      <div className="form-group">
+        <label className="form-label">O que ficou padronizado (POP) *</label>
+        <textarea className="input" rows={3} value={form.padronizacao} onChange={f('padronizacao')}
+          placeholder={dica.exemplo} style={{ resize: 'vertical' }}/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Como o time será comunicado</label>
+        <textarea className="input" rows={2} value={form.comunicacao} onChange={f('comunicacao')}
+          placeholder="Ex: Enviar comunicado no mural e explicar na reunião semanal" style={{ resize: 'vertical' }}/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Como o time será treinado</label>
+        <textarea className="input" rows={2} value={form.treinamento} onChange={f('treinamento')}
+          placeholder="Ex: Treinamento prático com o time de repositores no início do turno" style={{ resize: 'vertical' }}/>
+      </div>
+      <div className="form-group">
+        <label className="form-label">Como você vai monitorar</label>
+        <input className="input" value={form.monitoramento} onChange={f('monitoramento')}
+          placeholder="Ex: Checar semanalmente se o POP está sendo seguido"/>
+      </div>
+
+      <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
+
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo}/>
+
+      <button className="btn-primary" onClick={onSave} disabled={saving}>
+        {saving ? 'Salvando...' : 'Salvar padronização'}
       </button>
     </div>
   );
