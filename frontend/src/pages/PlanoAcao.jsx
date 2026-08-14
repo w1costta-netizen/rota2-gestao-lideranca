@@ -17,6 +17,8 @@ const DICAS = {
   P: {
     titulo: 'Como planejar bem — P do PDCA',
     intro: 'O P é a etapa mais importante. Um bom planejamento evita retrabalho e garante que você ataque a causa real do problema, não apenas o sintoma.',
+    dicaRapida: 'Escreva a causa raiz do problema, não o sintoma — e já deixe uma meta com número e prazo.',
+    exemplo: 'Ex: Identificar a causa raiz da ruptura de bebidas usando os 5 Porquês',
     passos: [
       { titulo: 'Identificação', texto: 'descreva o problema com dados — não "tem muita ruptura" mas "ruptura em 12% nas últimas 4 semanas na seção de bebidas".' },
       { titulo: 'Observação', texto: 'vá ao local, observe o processo, colete dados no campo antes de concluir a causa.' },
@@ -37,6 +39,8 @@ const DICAS = {
   D: {
     titulo: 'Como executar bem — D do PDCA',
     intro: 'O D é onde o plano vira ação. Cada ação precisa ter um responsável claro, um prazo real e uma descrição que não deixe dúvida do que precisa ser feito.',
+    dicaRapida: 'Descreva a ação como uma instrução clara: o quê fazer, e se possível como e onde.',
+    exemplo: 'Ex: Repor a gôndola de bebidas a cada 2h durante o horário de pico',
     passos: [
       { titulo: '5W2H', texto: 'use pra montar cada ação: O quê será feito? Por quem? Onde? Quando? Por quê? Como? Quanto vai custar?' },
       { titulo: 'Delegue com clareza', texto: 'responsável único por ação. Tarefa com dois donos não tem dono.' },
@@ -57,6 +61,8 @@ const DICAS = {
   C: {
     titulo: 'Como verificar o resultado — C do PDCA',
     intro: 'O C é onde você compara o que planejou com o que aconteceu. Checar sem dados é achismo. Use números para avaliar cada ação.',
+    dicaRapida: 'Descreva o que vai ser medido/comparado para provar se a ação do D funcionou.',
+    exemplo: 'Ex: Comparar o índice de ruptura de bebidas antes e depois da reposição',
     passos: [
       { titulo: 'Ações COM resultado', texto: 'a ação foi executada e o indicador melhorou. Candidata a ser padronizada na etapa A.' },
       { titulo: 'Ações SEM resultado', texto: 'foi executada mas não gerou melhora. Revisar a causa raiz — talvez o problema seja outro.' },
@@ -76,6 +82,8 @@ const DICAS = {
   A: {
     titulo: 'Como padronizar e melhorar — A do PDCA',
     intro: 'O A é onde você decide o que fazer com o que aprendeu. Se funcionou, padronize para virar rotina. Se não funcionou, ajuste e rode o ciclo de novo.',
+    dicaRapida: 'Se deu certo, descreva como isso vira rotina (POP, comunicado, treinamento).',
+    exemplo: 'Ex: Criar POP de reposição de bebidas e treinar o time de repositores',
     passos: [
       { titulo: 'Padronize o que funcionou', texto: 'crie um POP (Procedimento Operacional Padrão) para garantir que a melhoria se mantenha mesmo com troca de pessoas.' },
       { titulo: 'Comunique o time', texto: 'use os Comunicados do Rota Líder para informar a nova forma de trabalhar com confirmação de leitura.' },
@@ -514,6 +522,7 @@ export default function PlanoAcao({ userId, profile }) {
             saving={savingAcao}
             hasTask={!!editingAcao?.tarefa_id}
             onSave={saveAcao}
+            quadrante={addingTo}
           />
         </Modal>
 
@@ -658,16 +667,25 @@ function PlanoForm({ form, setForm, saving, onSave }) {
   );
 }
 
-function AcaoForm({ form, setForm, membros, saving, hasTask, onSave }) {
+function AcaoForm({ form, setForm, membros, saving, hasTask, onSave, quadrante }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: typeof e === 'object' && e.target ? e.target.value : e }));
   const podeToggleTarefa = !hasTask;
+  const q = QUADRANTES.find(x => x.key === quadrante);
+  const dica = DICAS[quadrante];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {dica && (
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '10px 12px',
+          borderRadius: 8, background: (q?.color || '#E8681A') + '14', border: `1px solid ${(q?.color || '#E8681A')}40` }}>
+          <Lightbulb size={14} style={{ color: q?.color || '#E8681A', flexShrink: 0, marginTop: 1 }}/>
+          <span style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.4 }}>{dica.dicaRapida}</span>
+        </div>
+      )}
       <div className="form-group">
         <label className="form-label">Descrição da ação *</label>
         <textarea className="input" rows={2} value={form.descricao} onChange={f('descricao')}
-          placeholder="O que precisa ser feito?" style={{ resize: 'vertical' }}/>
+          placeholder={dica?.exemplo || 'O que precisa ser feito?'} style={{ resize: 'vertical' }}/>
       </div>
       <div className="form-group">
         <label className="form-label">Responsável</label>
