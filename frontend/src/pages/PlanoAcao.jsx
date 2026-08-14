@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { ArrowLeft, Plus, Trash2, Check, Circle, ChevronRight, Target, AlertCircle, Flag, Clock, User, ToggleLeft, ToggleRight, CheckCircle2, Pencil, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Check, Circle, ChevronRight, ChevronDown, ChevronUp, Target, AlertCircle, Flag, Clock, User, ToggleLeft, ToggleRight, CheckCircle2, Pencil, X, Lightbulb } from 'lucide-react';
 import api from '../api';
 import Avatar from '../components/Avatar';
 import Modal from '../components/Modal';
@@ -11,6 +11,166 @@ const QUADRANTES = [
   { key: 'C', label: 'Checar',   color: '#34D399' },
   { key: 'A', label: 'Agir',     color: '#A78BFA' },
 ];
+
+// ── Conteúdo educativo por quadrante ───────────────────────────
+const DICAS = {
+  P: {
+    titulo: 'Como planejar bem — P do PDCA',
+    intro: 'O P é a etapa mais importante. Um bom planejamento evita retrabalho e garante que você ataque a causa real do problema, não apenas o sintoma.',
+    passos: [
+      { titulo: 'Identificação', texto: 'descreva o problema com dados — não "tem muita ruptura" mas "ruptura em 12% nas últimas 4 semanas na seção de bebidas".' },
+      { titulo: 'Observação', texto: 'vá ao local, observe o processo, colete dados no campo antes de concluir a causa.' },
+      { titulo: 'Análise', texto: 'use os 5 Porquês para chegar à causa raiz. Pergunte "por quê?" pelo menos 5 vezes.' },
+      { titulo: 'Meta SMART', texto: 'defina uma meta Específica, Mensurável, Atingível, Relevante e com Prazo definido.' },
+    ],
+    perguntas: [
+      'Qual é exatamente o problema? Tenho dados para comprovar?',
+      'Qual é a causa raiz? (use os 5 Porquês)',
+      'Minha meta é SMART? Tem número e prazo definido?',
+    ],
+    ferramentas: [
+      { nome: '5 Porquês', desc: 'descubra a causa raiz perguntando "por quê?" 5 vezes' },
+      { nome: 'Pareto', desc: 'identifique os 20% de causas que geram 80% do problema' },
+      { nome: '5W2H', desc: 'O quê, Por quê, Onde, Quando, Quem, Como e Quanto custa' },
+    ],
+  },
+  D: {
+    titulo: 'Como executar bem — D do PDCA',
+    intro: 'O D é onde o plano vira ação. Cada ação precisa ter um responsável claro, um prazo real e uma descrição que não deixe dúvida do que precisa ser feito.',
+    passos: [
+      { titulo: '5W2H', texto: 'use pra montar cada ação: O quê será feito? Por quem? Onde? Quando? Por quê? Como? Quanto vai custar?' },
+      { titulo: 'Delegue com clareza', texto: 'responsável único por ação. Tarefa com dois donos não tem dono.' },
+      { titulo: 'Prazos realistas', texto: 'prazo impossível gera desmotivação. Prazo sem data não existe.' },
+      { titulo: 'Acompanhe diariamente', texto: 'use as tarefas vinculadas do Rota Líder para monitorar o andamento.' },
+    ],
+    perguntas: [
+      'Cada ação tem um responsável e um prazo definido?',
+      'A descrição da ação é clara o suficiente para quem vai executar?',
+      'Existe algum impedimento que pode travar a execução?',
+    ],
+    ferramentas: [
+      { nome: '5W2H', desc: 'estrutura cada ação com todas as informações necessárias' },
+      { nome: 'Cronograma', desc: 'organize as ações em sequência lógica de execução' },
+      { nome: 'Tarefas do Rota Líder', desc: 'use o toggle para criar tarefa automática para o responsável' },
+    ],
+  },
+  C: {
+    titulo: 'Como verificar o resultado — C do PDCA',
+    intro: 'O C é onde você compara o que planejou com o que aconteceu. Checar sem dados é achismo. Use números para avaliar cada ação.',
+    passos: [
+      { titulo: 'Ações COM resultado', texto: 'a ação foi executada e o indicador melhorou. Candidata a ser padronizada na etapa A.' },
+      { titulo: 'Ações SEM resultado', texto: 'foi executada mas não gerou melhora. Revisar a causa raiz — talvez o problema seja outro.' },
+      { titulo: 'Ações SEM conclusão', texto: 'não foi executada até o prazo. Entender o motivo e decidir se mantém, ajusta o prazo ou cancela.' },
+    ],
+    perguntas: [
+      'O indicador melhorou em relação à meta definida no P?',
+      'Quais ações funcionaram e quais não funcionaram?',
+      'O problema foi resolvido ou apenas amenizado?',
+    ],
+    ferramentas: [
+      { nome: 'Pareto', desc: 'veja quais ações tiveram maior impacto no resultado' },
+      { nome: 'Histograma', desc: 'analise a distribuição dos resultados ao longo do tempo' },
+      { nome: 'Gráfico sequencial', desc: 'compare resultado antes x depois das ações' },
+    ],
+  },
+  A: {
+    titulo: 'Como padronizar e melhorar — A do PDCA',
+    intro: 'O A é onde você decide o que fazer com o que aprendeu. Se funcionou, padronize para virar rotina. Se não funcionou, ajuste e rode o ciclo de novo.',
+    passos: [
+      { titulo: 'Padronize o que funcionou', texto: 'crie um POP (Procedimento Operacional Padrão) para garantir que a melhoria se mantenha mesmo com troca de pessoas.' },
+      { titulo: 'Comunique o time', texto: 'use os Comunicados do Rota Líder para informar a nova forma de trabalhar com confirmação de leitura.' },
+      { titulo: 'Eduque e treine', texto: 'use o módulo de Treinamentos do Rota Líder para capacitar o time na nova rotina.' },
+      { titulo: 'Monitore', texto: 'acompanhe o indicador nas próximas semanas para garantir que a melhoria se sustenta.' },
+    ],
+    naoFuncionou: 'Se não funcionou: volte ao P e reanalise a causa raiz. O PDCA não tem fim — é melhoria contínua.',
+    perguntas: [
+      'O que ficou padronizado para não regredir?',
+      'O time foi comunicado e treinado na nova forma?',
+      'Existe um próximo ciclo de melhoria a iniciar?',
+    ],
+    ferramentas: [
+      { nome: 'POP (Procedimento Operacional Padrão)', desc: 'documente o processo correto' },
+      { nome: 'Comunicados do Rota Líder', desc: 'comunique a mudança com confirmação de leitura' },
+      { nome: 'Treinamentos do Rota Líder', desc: 'capacite o time na nova rotina' },
+    ],
+  },
+};
+
+// ── Caixa de dica colapsável — aberta na 1ª vez, fechada depois (localStorage) ──
+function DicaBox({ quadrante, color }) {
+  const storageKey = `pdca_dica_vista_${quadrante}`;
+  const [open, setOpen] = useState(() => !localStorage.getItem(storageKey));
+  const dica = DICAS[quadrante];
+
+  useEffect(() => {
+    localStorage.setItem(storageKey, '1');
+  }, [storageKey]);
+
+  if (!dica) return null;
+
+  return (
+    <div style={{ margin: '0 12px 10px', borderRadius: 10,
+      background: color + '14', border: `1px solid ${color}40`, overflow: 'hidden' }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px',
+          background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
+        <Lightbulb size={14} style={{ color, flexShrink: 0 }}/>
+        <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color }}>{dica.titulo}</span>
+        {open ? <ChevronUp size={14} style={{ color, flexShrink: 0 }}/> : <ChevronDown size={14} style={{ color, flexShrink: 0 }}/>}
+      </button>
+
+      {open && (
+        <div style={{ padding: '0 12px 14px', fontSize: 12, color: 'var(--text)', lineHeight: 1.5 }}>
+          <p style={{ margin: '0 0 10px', color: 'var(--text-muted)' }}>{dica.intro}</p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+            {dica.passos.map((p, i) => (
+              <div key={i} style={{ display: 'flex', gap: 8 }}>
+                <span style={{ flexShrink: 0, fontWeight: 800, color }}>{i + 1}.</span>
+                <span><strong style={{ color: 'var(--text)' }}>{p.titulo}:</strong> {p.texto}</span>
+              </div>
+            ))}
+          </div>
+
+          {dica.naoFuncionou && (
+            <p style={{ margin: '0 0 10px', padding: '8px 10px', borderRadius: 8,
+              background: color + '20', color: 'var(--text)', fontSize: 11.5 }}>{dica.naoFuncionou}</p>
+          )}
+
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontWeight: 700, color, fontSize: 11, textTransform: 'uppercase', letterSpacing: .3, marginBottom: 4 }}>Perguntas guia</div>
+            <ul style={{ margin: 0, paddingLeft: 18, color: 'var(--text-muted)' }}>
+              {dica.perguntas.map((q, i) => <li key={i} style={{ marginBottom: 2 }}>{q}</li>)}
+            </ul>
+          </div>
+
+          <div>
+            <div style={{ fontWeight: 700, color, fontSize: 11, textTransform: 'uppercase', letterSpacing: .3, marginBottom: 4 }}>Ferramentas sugeridas</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {dica.ferramentas.map((f, i) => (
+                <div key={i} style={{ color: 'var(--text-muted)' }}>
+                  <strong style={{ color: 'var(--text)' }}>{f.nome}</strong> — {f.desc}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Calcula status de prazo de uma ação ──────────────────────────
+function prazoInfo(prazo) {
+  if (!prazo) return null;
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const [y, m, d] = prazo.split('-').map(Number);
+  const dataPrazo = new Date(y, m - 1, d);
+  const diffDias = Math.round((dataPrazo - hoje) / 86400000);
+  if (diffDias < 0) return { cor: '#ef4444', icone: '🔴', texto: `Atrasada ${Math.abs(diffDias)} dia${Math.abs(diffDias) > 1 ? 's' : ''}` };
+  if (diffDias <= 7) return { cor: '#f59e0b', icone: '⏰', texto: diffDias === 0 ? 'Vence hoje' : `Vence em ${diffDias} dia${diffDias > 1 ? 's' : ''}` };
+  return { cor: '#34D399', icone: null, texto: null };
+}
 
 const EMPTY_PLANO  = { titulo: '', problema: '', meta: '', prazo_final: '' };
 const EMPTY_ACAO   = { descricao: '', responsavel_id: '', prazo: '', criar_tarefa: true };
@@ -305,6 +465,9 @@ export default function PlanoAcao({ userId, profile }) {
                 )}
               </div>
 
+              {/* Dica educativa */}
+              <DicaBox quadrante={q.key} color={q.color}/>
+
               {/* Lista de ações */}
               <div style={{ padding: '0 12px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {loadingAcoes ? (
@@ -573,9 +736,14 @@ function AcaoCard({ acao, color, canManage, formatDate, onToggle, onEdit, onDele
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{acao.responsavel.full_name.split(' ')[0]}</span>
               </div>
             )}
-            {acao.prazo && (
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>📅 {formatDate(acao.prazo)}</span>
-            )}
+            {acao.prazo && (() => {
+              const info = !acao.concluida ? prazoInfo(acao.prazo) : null;
+              return (
+                <span style={{ fontSize: 11, color: info?.icone ? info.cor : 'var(--text-muted)', fontWeight: info?.icone ? 700 : 400 }}>
+                  {info?.icone ? `${info.icone} ${info.texto}` : `📅 ${formatDate(acao.prazo)}`}
+                </span>
+              );
+            })()}
             {acao.tarefa_id && (
               <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5,
                 background: '#E8681A22', color: '#E8681A' }}>🔗 Tarefa</span>
