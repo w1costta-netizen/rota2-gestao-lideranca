@@ -11,9 +11,13 @@ async function getProfile(id) {
 const canManage = p => p && ['admin', 'supervisor', 'lider', 'master'].includes(p.access_level);
 
 // GET /api/agenda?week_start=&user_id=&sector=&company=
-// Se user_id + sector fornecidos → filtra itens para aquele usuário
+// Sempre filtra pelo destinatário: cada pessoa só vê o que é destinado a ela
+// (geral / próprio setor / individual) OU o que ela mesma criou. Ninguém —
+// nem admin/master — vê automaticamente a agenda de outra pessoa.
 router.get('/', async (req, res) => {
   const { week_start, user_id, sector, company } = req.query;
+  if (!user_id) return res.json([]); // requester_id obrigatório para não vazar tudo
+
   let query = supabase.from('agenda_items').select('*').order('day_of_week').order('time');
   if (week_start) {
     // Busca por intervalo da semana (segunda a domingo) para tolerar
@@ -27,16 +31,14 @@ router.get('/', async (req, res) => {
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
-  if (user_id && data) {
-    const filtered = data.filter(item => {
-      if (item.target_type === 'geral') return true;
-      if (item.target_type === 'setor') return item.target_value === sector;
-      if (item.target_type === 'lider') return (item.target_value ? item.target_value.split(',') : []).includes(user_id);
-      return false;
-    });
-    return res.json(filtered);
-  }
-  res.json(data);
+  const filtered = (data || []).filter(item => {
+    if (item.created_by === user_id) return true;
+    if (item.target_type === 'geral') return true;
+    if (item.target_type === 'setor') return item.target_value === sector;
+    if (item.target_type === 'lider') return (item.target_value ? item.target_value.split(',') : []).includes(user_id);
+    return false;
+  });
+  res.json(filtered);
 });
 
 router.get('/leader/:id', async (req, res) => {
@@ -63,6 +65,9 @@ router.post('/', async (req, res) => {
   const { title, description, week_start, target_type, target_value, day_of_week, time, created_by, lembrete_minutos } = req.body;
   if (!title || !week_start || !target_type || !day_of_week)
     return res.status(400).json({ error: 'Campos obrigatórios: title, week_start, target_type, day_of_week' });
+  if (!created_by) return res.status(401).json({ error: 'created_by obrigatório' });
+  const meCreate = await getProfile(created_by);
+  if (!meCreate || !canManage(meCreate)) return res.status(403).json({ error: 'Acesso negado' });
 
   // Determina company: usa a passada no body, ou busca do criador
   let company = req.body.company || null;
@@ -72,7 +77,7 @@ router.post('/', async (req, res) => {
   }
 
   const { data, error } = await supabase.from('agenda_items')
-    .insert({ title, description: description || '', week_start, target_type, target_value: target_value || '', day_of_week, time: time || '', company, lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false })
+    .insert({ title, description: description || '', week_start, target_type, target_value: target_value || '', day_of_week, time: time || '', company, created_by: created_by || null, lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false })
     .select().single();
   if (error) {
     logError({ company, user_id: created_by, acao: 'criar_agenda', tabela: 'agenda_items', rota: req.originalUrl, erro_mensagem: error.message });
@@ -95,6 +100,9 @@ router.post('/', async (req, res) => {
 // PUT /api/agenda/:id — atualiza item e dispara push
 router.put('/:id', async (req, res) => {
   const { title, description, week_start, target_type, target_value, day_of_week, time, updated_by, lembrete_minutos } = req.body;
+  if (!updated_by) return res.status(401).json({ error: 'updated_by obrigatório' });
+  const meUpdate = await getProfile(updated_by);
+  if (!meUpdate || !canManage(meUpdate)) return res.status(403).json({ error: 'Acesso negado' });
 
   let company = null;
   if (updated_by) {

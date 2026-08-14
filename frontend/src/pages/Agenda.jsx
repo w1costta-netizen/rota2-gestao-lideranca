@@ -20,9 +20,9 @@ const WA_ICON = (
 export default function Agenda({ userId, profile }) {
   const toast = useToast();
   // canManage: pode criar/editar/deletar itens de agenda
-  // seeAll: vê todos os itens da empresa (só admin/master — master já vira admin via effectiveProfile)
+  // Visibilidade: cada pessoa só vê o que é destinado a ela (geral/setor/individual)
+  // ou o que ela mesma criou — ninguém vê a agenda de outra pessoa automaticamente.
   const canManage = ['admin', 'supervisor', 'lider', 'master'].includes(profile?.access_level);
-  const seeAll    = ['admin', 'master'].includes(profile?.access_level);
   const isAdmin   = canManage;
   const [week, setWeek]         = useState(getWeekStart());
   const [items, setItems]       = useState([]);
@@ -48,7 +48,6 @@ export default function Agenda({ userId, profile }) {
   const [selectedLeaders, setSelectedLeaders] = useState([]);
   const [sendQueue, setSendQueue] = useState([]); // modal sequencial
   const [sendQueueIdx, setSendQueueIdx] = useState(0);
-  const [viewUserId, setViewUserId] = useState('all'); // 'all' | userId
 
   useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 768);
@@ -65,16 +64,11 @@ export default function Agenda({ userId, profile }) {
   const company = profile?.company || '';
 
   const load = () => {
-    // Admin vê tudo; líderes/colaboradores veem apenas os seus
-    if (seeAll) {
-      agendaAPI.list(week, company).then(r => setItems(r.data));
-    } else {
-      api.get('/agenda', { params: { week_start: week, user_id: userId, sector: profile?.sector || '' } })
-        .then(r => setItems(r.data));
-    }
+    api.get('/agenda', { params: { week_start: week, user_id: userId, sector: profile?.sector || '' } })
+      .then(r => setItems(r.data));
   };
 
-  useEffect(() => { if (userId) load(); }, [week, company, userId, seeAll]);
+  useEffect(() => { if (userId) load(); }, [week, company, userId]);
   useEffect(() => {
     leadersAPI.list().then(r => {
       setLeaders(r.data);
@@ -245,33 +239,20 @@ export default function Agenda({ userId, profile }) {
     else { setSendQueue([]); toast(`WhatsApp enviado para ${sendQueue.length} pessoa${sendQueue.length > 1 ? 's' : ''}!`); }
   };
 
-  // Filtra itens pelo usuário selecionado no seletor
-  const displayItems = viewUserId === 'all' ? items : items.filter(item => {
-    const targetProfile = profiles.find(p => p.id === viewUserId);
-    if (item.target_type === 'geral') return true;
-    if (item.target_type === 'setor') return targetProfile?.sector === item.target_value;
-    if (item.target_type === 'lider') {
-      const ids = item.target_value ? item.target_value.split(',') : [];
-      return ids.includes(viewUserId);
-    }
-    return false;
-  });
-
   const byDay = {};
-  DAYS.forEach(d => { byDay[d] = displayItems.filter(i => i.day_of_week === d); });
+  DAYS.forEach(d => { byDay[d] = items.filter(i => i.day_of_week === d); });
 
   const printWeekPDF = () => {
     const [wy, wm, wd] = week.split('-').map(Number);
     const weekLabel = formatDate(week);
     const companyName = profile?.company || '';
-    const viewPerson = viewUserId === 'all' ? null : profiles.find(p => p.id === viewUserId);
-    const personLabel = viewPerson ? viewPerson.full_name : 'Todos';
+    const personLabel = profile?.full_name || 'Minha agenda';
 
     const dayRows = DAYS.map((day, idx) => {
       const date = new Date(Date.UTC(wy, wm - 1, wd + idx));
       const dd = String(date.getUTCDate()).padStart(2, '0');
       const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
-      const dayItems = displayItems.filter(i => i.day_of_week === day);
+      const dayItems = items.filter(i => i.day_of_week === day);
       const itemsHtml = dayItems.length === 0
         ? '<tr><td colspan="3" style="color:#999;font-style:italic;padding:6px 8px;">Nenhum item</td></tr>'
         : dayItems.map(i => {
@@ -322,7 +303,7 @@ export default function Agenda({ userId, profile }) {
 </head>
 <body>
   <h1>Agenda Semanal — ${companyName}</h1>
-  <div class="subtitle">${weekLabel}${viewPerson ? ` &nbsp;·&nbsp; ${personLabel}` : ''}</div>
+  <div class="subtitle">${weekLabel} &nbsp;·&nbsp; ${personLabel}</div>
   ${dayRows}
   <div style="margin-top:20px;font-size:10px;color:#aaa;text-align:right;">Gerado em ${new Date().toLocaleString('pt-BR',{timeZone:'America/Sao_Paulo'})}</div>
   <script>window.onload = () => { window.print(); }<\/script>
@@ -350,7 +331,7 @@ export default function Agenda({ userId, profile }) {
       <div className="page-header">
         <div>
           <div className="page-title">Agenda Semanal</div>
-          <div className="page-subtitle">{displayItems.length} itens esta semana</div>
+          <div className="page-subtitle">{items.length} itens esta semana</div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button className="btn btn-ghost btn-sm" onClick={prevWeek}><ChevronLeft size={15} /></button>
@@ -365,39 +346,6 @@ export default function Agenda({ userId, profile }) {
           </>}
         </div>
       </div>
-
-      {/* Seletor de pessoa — admin vê todos; outros só veem a si mesmos */}
-      {seeAll && profiles.length > 0 && (
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, flexWrap:'wrap' }}>
-          <span style={{ fontSize:13, color:'var(--text-muted)', fontWeight:600 }}>Visualizando:</span>
-          <select
-            value={viewUserId}
-            onChange={e => setViewUserId(e.target.value)}
-            style={{
-              padding:'7px 14px', borderRadius:10, border:'1px solid var(--border)',
-              background: viewUserId !== 'all' ? 'var(--primary)' : 'var(--surface)',
-              color: viewUserId !== 'all' ? '#fff' : 'var(--text)',
-              fontSize:13, fontWeight:600, cursor:'pointer', outline:'none',
-            }}
-          >
-            <option value="all">👥 Todos os itens</option>
-            {/* Usuário logado sempre aparece primeiro, mesmo sendo master de outra empresa */}
-            {!profiles.find(p => p.id === userId) && profile?.full_name && (
-              <option value={userId}>👤 Minha agenda ({profile.full_name.split(' ')[0]})</option>
-            )}
-            {profiles.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.id === userId ? `👤 Minha agenda (${p.full_name.split(' ')[0]})` : p.full_name}
-              </option>
-            ))}
-          </select>
-          {viewUserId !== 'all' && (
-            <button className="btn btn-ghost btn-sm" onClick={() => setViewUserId('all')} style={{ fontSize:12 }}>
-              ✕ Limpar filtro
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Botões por líder — só admin */}
       {isAdmin && (
@@ -415,13 +363,11 @@ export default function Agenda({ userId, profile }) {
         </div>
       )}
 
-      {/* Aviso para não-admins */}
-      {!seeAll && (
-        <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderRadius:8,
-          background:'rgba(232,98,42,.08)', border:'1px solid rgba(232,98,42,.2)', marginBottom:20, fontSize:13 }}>
-          📅 Você está vendo apenas os itens destinados a você ou ao seu setor.
-        </div>
-      )}
+      {/* Aviso de privacidade — vale pra todo mundo, sem exceção de cargo */}
+      <div style={{ display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderRadius:8,
+        background:'rgba(232,98,42,.08)', border:'1px solid rgba(232,98,42,.2)', marginBottom:20, fontSize:13 }}>
+        📅 Você está vendo apenas os itens destinados a você, ao seu setor, ou criados por você.
+      </div>
 
       {/* ── Seletor de dia (só mobile) ──────────────────── */}
       {isMobile && (
