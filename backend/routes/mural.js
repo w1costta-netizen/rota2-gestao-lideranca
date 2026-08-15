@@ -26,7 +26,19 @@ router.get('/', async (req, res) => {
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+
+  // Marca quais já foram visualizados por quem pediu a lista
+  let lidos = [];
+  if (data?.length) {
+    const { data: l } = await supabase
+      .from('mural_lidos')
+      .select('mural_id')
+      .eq('user_id', requester_id)
+      .in('mural_id', data.map(m => m.id));
+    lidos = (l || []).map(x => x.mural_id);
+  }
+
+  res.json((data || []).map(m => ({ ...m, lido: lidos.includes(m.id) })));
 });
 
 // POST /api/mural
@@ -91,6 +103,49 @@ router.delete('/:id', async (req, res) => {
   }
   logAction({ company: me.company, user_id: requester_id, acao: 'excluir_mural', tabela: 'mural', antes: { title: item?.title } });
   res.json({ ok: true });
+});
+
+// POST /api/mural/:id/lido — marca como visualizado
+router.post('/:id/lido', async (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
+  const { error } = await supabase.from('mural_lidos')
+    .upsert({ mural_id: req.params.id, user_id }, { onConflict: 'mural_id,user_id' });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// GET /api/mural/:id/leituras — quem visualizou e quem não (admin/supervisor/master)
+router.get('/:id/leituras', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const me = await getProfile(requester_id);
+  if (!me || !isManager(me)) return res.status(403).json({ error: 'Acesso negado' });
+
+  const { data: item } = await supabase.from('mural').select('company').eq('id', req.params.id).single();
+  if (!item) return res.status(404).json({ error: 'Card não encontrado' });
+
+  const targetCompany = me.access_level === 'master' ? item.company : me.company;
+
+  const { data: todos } = await supabase
+    .from('profiles')
+    .select('id, full_name, avatar_url, role')
+    .eq('company', targetCompany)
+    .eq('active', true)
+    .order('full_name');
+
+  const { data: lidos } = await supabase
+    .from('mural_lidos')
+    .select('user_id, read_at')
+    .eq('mural_id', req.params.id);
+
+  const lidosMap = {};
+  (lidos || []).forEach(l => { lidosMap[l.user_id] = l.read_at; });
+
+  const leram    = (todos || []).filter(u => lidosMap[u.id]).map(u => ({ ...u, read_at: lidosMap[u.id] }));
+  const nao_leram = (todos || []).filter(u => !lidosMap[u.id]);
+
+  res.json({ leram, nao_leram });
 });
 
 module.exports = router;

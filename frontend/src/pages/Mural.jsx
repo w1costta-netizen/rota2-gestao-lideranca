@@ -28,6 +28,9 @@ export default function Mural({ userId, profile }) {
   const [saving, setSaving]   = useState(false);
   const [filter, setFilter]   = useState('todas');
   const [reacoes, setReacoes] = useState({});
+  const [leituras, setLeituras]           = useState({});
+  const [leiturasOpen, setLeiturasOpen]   = useState({});
+  const [leiturasLoading, setLeiturasLoading] = useState({});
 
   const company = profile?.company || '';
 
@@ -81,7 +84,28 @@ export default function Mural({ userId, profile }) {
     }
   };
 
+  const marcarLido = async (id) => {
+    await api.post(`/mural/${id}/lido`, { user_id: userId }).catch(() => {});
+    setList(l => l.map(m => m.id === id ? { ...m, lido: true } : m));
+  };
+
+  const toggleLeituras = async (id) => {
+    const isOpen = leiturasOpen[id];
+    setLeiturasOpen(s => ({ ...s, [id]: !isOpen }));
+    if (!isOpen) {
+      setLeiturasLoading(s => ({ ...s, [id]: true }));
+      try {
+        const r = await api.get(`/mural/${id}/leituras?requester_id=${userId}`);
+        setLeituras(s => ({ ...s, [id]: r.data }));
+      } catch { /* silencioso */ }
+      finally { setLeiturasLoading(s => ({ ...s, [id]: false })); }
+    }
+  };
+
   const toggleReacao = async (itemId, emoji) => {
+    // Reagir implica ter visualizado — marca como lido automaticamente
+    const item = list.find(m => m.id === itemId);
+    if (item && !item.lido) marcarLido(itemId);
     try {
       const { data } = await api.post('/reacoes/toggle', { tipo: 'mural', item_id: itemId, user_id: userId, emoji });
       setReacoes(prev => {
@@ -153,7 +177,7 @@ export default function Mural({ userId, profile }) {
         {filtered.map(m => {
           const cat = getCat(m.category);
           return (
-            <div key={m.id} style={{
+            <div key={m.id} onClick={() => !m.lido && marcarLido(m.id)} style={{
               background:'var(--surface)', borderRadius:14, padding:'20px',
               border:`1px solid var(--border)`,
               borderTop:`4px solid ${cat.color}`,
@@ -167,7 +191,7 @@ export default function Mural({ userId, profile }) {
                   <div style={{ fontWeight:700, fontSize:15 }}>{m.title}</div>
                 </div>
                 {canManage && (
-                  <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+                  <div style={{ display:'flex', gap:4, flexShrink:0 }} onClick={e => e.stopPropagation()}>
                     <button className="btn-icon" onClick={() => openEdit(m)}><Pencil size={13}/></button>
                     <button className="btn-icon" onClick={() => remove(m.id)} style={{ color:'#ef4444' }}><Trash2 size={13}/></button>
                   </div>
@@ -185,7 +209,99 @@ export default function Mural({ userId, profile }) {
                 tipo="mural"
                 reacoes={reacoes[m.id]}
                 onToggle={toggleReacao}
+                stopPropagation
               />
+
+              {/* Painel de visualizações — só quem gerencia */}
+              {canManage && (
+                <div onClick={e => e.stopPropagation()}>
+                  <button
+                    onClick={() => toggleLeituras(m.id)}
+                    style={{ background:'none', border:'none', cursor:'pointer',
+                      color:'var(--text-muted)', fontSize:12, fontWeight:600,
+                      padding:0, display:'flex', alignItems:'center', gap:4 }}>
+                    {leiturasOpen[m.id] ? '▲' : '▼'} Visualizações
+                  </button>
+
+                  {leiturasOpen[m.id] && (
+                    <div style={{ marginTop:10, borderTop:'1px solid var(--border)', paddingTop:10 }}>
+                      {leiturasLoading[m.id] ? (
+                        <span style={{ fontSize:12, color:'var(--text-muted)' }}>Carregando...</span>
+                      ) : (() => {
+                        const d = leituras[m.id];
+                        if (!d) return null;
+                        return (
+                          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                            <div>
+                              <div style={{ fontSize:11, fontWeight:700, color:'#10b981', marginBottom:6 }}>
+                                ✓ Visualizaram ({d.leram.length})
+                              </div>
+                              {d.leram.length === 0
+                                ? <span style={{ fontSize:12, color:'var(--text-muted)' }}>Ninguém ainda</span>
+                                : <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                                    {d.leram.map(u => (
+                                      <div key={u.id} style={{ display:'flex', alignItems:'center', gap:6 }}
+                                        title={`${u.full_name}${u.read_at ? ' · ' + new Date(u.read_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : ''}`}>
+                                        <div style={{
+                                          width:28, height:28, borderRadius:'50%',
+                                          border:'2px solid #10b981',
+                                          overflow:'hidden', flexShrink:0,
+                                          background:'#E8681A', display:'flex',
+                                          alignItems:'center', justifyContent:'center',
+                                          fontSize:11, fontWeight:700, color:'#fff',
+                                        }}>
+                                          {u.avatar_url
+                                            ? <img src={u.avatar_url} alt={u.full_name} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                                            : (u.full_name||'?')[0].toUpperCase()}
+                                        </div>
+                                        <span style={{ fontSize:11, color:'var(--text-muted)', maxWidth:80,
+                                          overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                          {u.full_name.split(' ')[0]}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                              }
+                            </div>
+
+                            {d.nao_leram.length > 0 && (
+                              <div>
+                                <div style={{ fontSize:11, fontWeight:700, color:'var(--text-muted)', marginBottom:6 }}>
+                                  ○ Não visualizaram ({d.nao_leram.length})
+                                </div>
+                                <div style={{ display:'flex', flexWrap:'wrap', gap:8 }}>
+                                  {d.nao_leram.map(u => (
+                                    <div key={u.id} style={{ display:'flex', alignItems:'center', gap:6 }}
+                                      title={u.full_name}>
+                                      <div style={{
+                                        width:28, height:28, borderRadius:'50%',
+                                        border:'2px solid var(--border)',
+                                        overflow:'hidden', flexShrink:0,
+                                        background:'var(--surface-2)', display:'flex',
+                                        alignItems:'center', justifyContent:'center',
+                                        fontSize:11, fontWeight:700, color:'var(--text-muted)',
+                                        opacity: 0.6,
+                                      }}>
+                                        {u.avatar_url
+                                          ? <img src={u.avatar_url} alt={u.full_name} style={{ width:'100%', height:'100%', objectFit:'cover', opacity:0.5 }}/>
+                                          : (u.full_name||'?')[0].toUpperCase()}
+                                      </div>
+                                      <span style={{ fontSize:11, color:'var(--text-muted)', opacity:0.6,
+                                        maxWidth:80, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                        {u.full_name.split(' ')[0]}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
