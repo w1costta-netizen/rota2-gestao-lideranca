@@ -236,6 +236,10 @@ input, select, textarea {
   padding: 24px;
   box-shadow: var(--shadow);
   transition: var(--transition);
+  /* Sem isso, grid/flex mantêm o card no tamanho mínimo do conteúdo (texto
+     longo sem quebra) e ele extrapola a tela no mobile — mesmo os filhos
+     tendo ellipsis, o item do grid em si não encolhia. */
+  min-width: 0;
 }
 .card:hover { box-shadow: var(--shadow-md); }
 
