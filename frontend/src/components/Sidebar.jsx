@@ -41,7 +41,7 @@ const NAV_GROUPS = [
       { id: 'tarefas', label: 'Tarefas',       icon: CheckSquare,  perm: 'tarefas' },
       { id: 'agenda',  label: 'Agenda',        icon: CalendarDays, perm: 'agenda' },
       { id: 'pdca',    label: 'Plano de Ação', icon: Target,       perm: 'pdca' },
-      { id: 'produtividade', label: 'Produtividade', icon: GraduationCap, perm: 'produtividade' },
+      { id: 'produtividade', label: 'Treinamentos', icon: GraduationCap, perm: 'produtividade' },
     ],
   },
   {
