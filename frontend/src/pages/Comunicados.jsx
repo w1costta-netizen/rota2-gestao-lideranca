@@ -30,7 +30,9 @@ export default function Comunicados({ userId, profile }) {
   const toggleLeituras = async (id) => {
     const isOpen = leiturasOpen[id];
     setLeiturasOpen(s => ({ ...s, [id]: !isOpen }));
-    if (!isOpen && !leituras[id]) {
+    // Sempre busca de novo ao abrir — os dados ficavam em cache e não
+    // refletiam quem acabou de ler/reagir desde a última vez que foi aberto.
+    if (!isOpen) {
       setLeiturasLoading(s => ({ ...s, [id]: true }));
       try {
         const r = await api.get(`/comunicados/${id}/leituras?requester_id=${userId}`);
@@ -219,7 +221,8 @@ export default function Comunicados({ userId, profile }) {
                   stopPropagation
                 />
 
-                {/* Painel de leituras — visível para todos */}
+                {/* Painel de leituras — só quem gerencia (admin/supervisor/master), como o backend já exige */}
+                {canManage && (
                 <div onClick={e => e.stopPropagation()} style={{ marginTop:10 }}>
                     <button
                       onClick={() => toggleLeituras(c.id)}
@@ -309,6 +312,7 @@ export default function Comunicados({ userId, profile }) {
                       </div>
                     )}
                   </div>
+                )}
               </div>
               {canManage && (
                 <div style={{ display:'flex', gap:6, flexShrink:0 }} onClick={e => e.stopPropagation()}>
