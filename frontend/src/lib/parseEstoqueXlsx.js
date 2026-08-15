@@ -206,7 +206,10 @@ export async function parseEstoqueXlsx(file) {
   const com_estoque       = items.filter(r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD > 0);
   const ativos            = com_estoque.filter(r => r.STATUS_REAL === 'Ativo');
   const ativos_geral      = items.filter(r => r.STATUS_REAL === 'Ativo'); // todos ativos, com ou sem estoque
-  const ruptura           = items.filter(r => r.STATUS_REAL === 'Ativo' && r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0 && (r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0);
+  // Ruptura: TODOS os itens ativos com estoque zero (não só os que venderam no mês) —
+  // quem teve venda fica sinalizado nas colunas de venda mês/5s, pra dar visão completa pro time de RA repor.
+  const ativos_zer_lst    = items.filter(r => r.STATUS_REAL === 'Ativo' && r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0);
+  const ruptura           = ativos_zer_lst;
   const urgente           = ativos
     .filter(r => r.dias_cobertura != null && r.dias_cobertura < 30)
     .map(r => ({
@@ -215,13 +218,14 @@ export async function parseEstoqueXlsx(file) {
     }))
     .sort((a, b) => a.dias_cobertura - b.dias_cobertura);
   const urgente_15        = urgente.filter(r => r.dias_cobertura < 15);
-  const aging             = ativos.filter(r => (r.IDADE_ULTIMA_NF || 0) > 365);
+  // Aging: qualquer item ativo com mais de 365 dias sem NF, independente de ter estoque hoje —
+  // senão itens ativos zerados há mais de um ano ficavam de fora da lista.
+  const aging             = ativos_geral.filter(r => (r.IDADE_ULTIMA_NF || 0) > 365);
   const sem4s             = ativos.filter(r => r.total_5s === 0);
   const giro_lento        = ativos.filter(r => r.dias_cobertura != null && r.dias_cobertura >= 45).sort((a, b) => b.sum_VALOR_ESTOQUE_LOJA_A_CUSTO - a.sum_VALOR_ESTOQUE_LOJA_A_CUSTO);
   const estq_neg          = items.filter(r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD < 0);
   const suspensos_est     = com_estoque.filter(r => r.STATUS_REAL === 'Suspenso');
   const deletados_est     = com_estoque.filter(r => r.STATUS_REAL === 'Deletado');
-  const ativos_zer_lst    = items.filter(r => r.STATUS_REAL === 'Ativo' && r.sum_ESTOQUE_ON_HAND_LOJA_QTD === 0);
   const sem_mov           = ativos_zer_lst.filter(r => !(r.sum_QTD_VENDAS_MES_ATUAL > 0));
   const zero_venda_5s     = ativos_zer_lst.filter(r => r.total_5s > 0);
   const zero_venda_mes    = ativos_zer_lst.filter(r => (r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0);

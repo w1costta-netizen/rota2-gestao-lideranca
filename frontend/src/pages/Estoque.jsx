@@ -297,7 +297,9 @@ function TabRuptura({ d }) {
     { key: 'DESCRICAO_PRODUTO',         label: 'Produto', maxW: 220, wrap: true },
     { key: 'DESCRICAO_SECAO',           label: 'Seção' },
     { key: 'DESCRICAO_DEPARTAMENTO',    label: 'Depto' },
-    { key: 'sum_QTD_VENDAS_MES_ATUAL',  label: 'Venda mês (un)', right: true, fmt: v => n0(v) },
+    { key: 'sum_QTD_VENDAS_MES_ATUAL',  label: 'Sinal de venda', right: false,
+      fmt: (v, r) => (v || 0) > 0 ? '🔴 Vendeu no mês' : (r.total_5s || 0) > 0 ? '🟡 Vendeu nas 5 sem.' : '⚪ Sem venda',
+      cor: r => (r.sum_QTD_VENDAS_MES_ATUAL || 0) > 0 ? '#ef4444' : (r.total_5s || 0) > 0 ? '#f59e0b' : '#6b7280' },
     { key: 'venda_mes_vlr',             label: 'Venda mês R$', right: true, fmt: v => brl(v), cor: () => '#ef4444' },
     { key: 'estoque_cd_cxs',            label: 'CD (cx)', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_cd_cxs > 0 ? '#10b981' : '#6b7280' },
     { key: 'estoque_separado_cd',       label: 'Separ. CD', right: true, fmt: v => v > 0 ? n0(v) : '—', cor: r => r.estoque_separado_cd > 0 ? '#10b981' : '#6b7280' },
@@ -322,7 +324,7 @@ function TabRuptura({ d }) {
     <>
       {/* KPIs */}
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 16 }}>
-        <KpiCard label="Total em ruptura"    value={n0(d.totais.ruptura_count)}          cor="#ef4444" sub="estoque zero com venda no mês" />
+        <KpiCard label="Total em ruptura"    value={n0(d.totais.ruptura_count)}          cor="#ef4444" sub="todos os ativos com estoque zero" />
         <KpiCard label="Venda perdida/mês"   value={n0(d.totais.ruptura_venda_mes)}       cor="#ef4444" sub="unidades no mês atual" />
         <KpiCard label="Zero c/ venda 5s"   value={n0(d.totais.ativos_zero_venda_5s)}   cor="#f59e0b" sub="vendeu nas 5 semanas" />
         <KpiCard label="Zero c/ venda mês"  value={n0(d.totais.ativos_zero_venda_mes)}  cor="#f97316" sub="vendeu no mês atual" />
@@ -356,7 +358,7 @@ function TabRuptura({ d }) {
             { key: 'venda_mes',              label: 'Venda mês', right: true, fmt: v => n0(v) },
           ]} />
           <h4 style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-muted)', margin: '20px 0 10px' }}>
-            Top itens — estoque zero com venda no mês
+            Top itens — todos os ativos com estoque zero (sinal de venda indica prioridade)
           </h4>
           <SecaoTable rows={d.ruptura_top} colunas={COLS_RUPTURA} />
         </>
@@ -465,6 +467,7 @@ function TabSem4s({ d }) {
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
+        { key: 'IDADE_ULTIMA_NF', label: 'Última entrada', right: true, fmt: v => v != null ? `${n0(v)}d atrás` : '—', cor: () => '#8b5cf6' },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
     </>
