@@ -11,6 +11,14 @@ async function getProfile(id) {
   return data;
 }
 
+// Tenta várias grafias possíveis de uma coluna na planilha (o nome exato varia entre exportações)
+function pick(row, keys) {
+  for (const k of keys) {
+    if (row[k] != null && row[k] !== '') return row[k];
+  }
+  return null;
+}
+
 // POST /api/conferencia/importar
 router.post('/importar', upload.single('file'), async (req, res) => {
   const { requester_id, company: bodyCompany } = req.body;
@@ -45,6 +53,7 @@ router.post('/importar', upload.single('file'), async (req, res) => {
       descricao_departamento: r['DESCRICAO_DEPARTAMENTO']        || null,
       descricao_secao:        r['DESCRICAO_SECAO']               || null,
       descricao_linha:        r['DESCRICAO_LINHA']               || null,
+      descricao_sulinha:      pick(r, ['DESCRICAO_SULINHA', 'SULINHA', 'DESCRICAO_FINE_LINE', 'FINE_LINE']),
       data_ultima_nf:         r['DATA_ULTIMA_NF'] instanceof Date ? r['DATA_ULTIMA_NF'].toISOString() : null,
       estoque_qty:            Math.round(r['sum_ESTOQUE_ON_HAND_LOJA_QTD'] ?? 0),
       importado_at,
@@ -72,7 +81,7 @@ router.post('/importar', upload.single('file'), async (req, res) => {
     // Salva combinações únicas na tabela de filtros (resolve limite de 1000 rows do Supabase)
     const combos = new Map();
     for (const r of mapped) {
-      const key = [r.descricao_setor, r.descricao_departamento, r.descricao_secao, r.descricao_linha].join('|||');
+      const key = [r.descricao_setor, r.descricao_departamento, r.descricao_secao, r.descricao_linha, r.descricao_sulinha].join('|||');
       if (!combos.has(key)) {
         combos.set(key, {
           company:       targetCompany,
@@ -80,6 +89,7 @@ router.post('/importar', upload.single('file'), async (req, res) => {
           departamento:  r.descricao_departamento,
           secao:         r.descricao_secao,
           linha:         r.descricao_linha,
+          sulinha:       r.descricao_sulinha,
         });
       }
     }
@@ -115,7 +125,7 @@ router.get('/ultima-importacao', async (req, res) => {
 
 // GET /api/conferencia/filtros?requester_id=&setor=&departamento=&secao=&company=
 router.get('/filtros', async (req, res) => {
-  const { requester_id, setor, departamento, secao, company: queryCompany } = req.query;
+  const { requester_id, setor, departamento, secao, linha, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -123,11 +133,12 @@ router.get('/filtros', async (req, res) => {
 
   // Usa tabela de filtros pré-computada (evita limite de 1000 rows do Supabase)
   let q = supabase.from('conferencia_filtros')
-    .select('setor, departamento, secao, linha')
+    .select('setor, departamento, secao, linha, sulinha')
     .eq('company', targetCompany);
   if (setor)        q = q.eq('setor', setor);
   if (departamento) q = q.eq('departamento', departamento);
   if (secao)        q = q.eq('secao', secao);
+  if (linha)        q = q.eq('linha', linha);
 
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
@@ -138,6 +149,7 @@ router.get('/filtros', async (req, res) => {
     departamentos: unique('departamento'),
     secoes:        unique('secao'),
     linhas:        unique('linha'),
+    sulinhas:      unique('sulinha'),
   });
 });
 
@@ -170,7 +182,7 @@ router.get('/buscar', async (req, res) => {
 // GET /api/conferencia/linha?requester_id=&setor=&departamento=&secao=&linha=&company=
 // Lista todos os produtos de uma linha (para gerar relatório de não expostos)
 router.get('/linha', async (req, res) => {
-  const { requester_id, setor, departamento, secao, linha, company: queryCompany } = req.query;
+  const { requester_id, setor, departamento, secao, linha, sulinha, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -185,6 +197,7 @@ router.get('/linha', async (req, res) => {
   if (departamento) q = q.eq('descricao_departamento', departamento);
   if (secao)        q = q.eq('descricao_secao', secao);
   if (linha)        q = q.eq('descricao_linha', linha);
+  if (sulinha)      q = q.eq('descricao_sulinha', sulinha);
 
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
@@ -193,7 +206,7 @@ router.get('/linha', async (req, res) => {
 
 // POST /api/conferencia/sessoes — cria uma nova conferência
 router.post('/sessoes', async (req, res) => {
-  const { requester_id, setor, departamento, secao, linha, company: bodyCompany } = req.body;
+  const { requester_id, setor, departamento, secao, linha, sulinha, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -202,7 +215,7 @@ router.post('/sessoes', async (req, res) => {
   const { data, error } = await supabase.from('conferencias_secao').insert({
     company:      targetCompany,
     created_by:   requester_id,
-    setor, departamento, secao, linha,
+    setor, departamento, secao, linha, sulinha,
     status:       'em_andamento',
   }).select().single();
 
