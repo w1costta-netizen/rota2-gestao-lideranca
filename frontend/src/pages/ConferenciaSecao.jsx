@@ -592,6 +592,7 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{p.descricao_produto}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginTop: 4 }}>
                       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>CD: {p.cd_produto}</span>
+                      {p.ean && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>EAN: {p.ean}</span>}
                       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Estoque: <strong>{p.estoque_qty ?? '—'}</strong></span>
                       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Última NF: {p.data_ultima_nf ? new Date(p.data_ultima_nf).toLocaleDateString('pt-BR') : '—'}</span>
                       <span style={{
@@ -621,6 +622,7 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
                     <div style={{ fontWeight: 600, fontSize: 13 }}>{p.descricao_produto}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 16px', marginTop: 4 }}>
                       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>CD: {p.cd_produto}</span>
+                      {p.ean && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>EAN: {p.ean}</span>}
                       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Estoque: <strong>{p.estoque_qty ?? '—'}</strong></span>
                     </div>
                   </div>
