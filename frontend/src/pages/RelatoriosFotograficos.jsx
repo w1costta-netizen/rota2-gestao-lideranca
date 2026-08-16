@@ -37,7 +37,7 @@ function decodeCaption(raw) {
   try { return JSON.parse(raw || '{}'); } catch { return { texto: raw || '', prazo: '' }; }
 }
 
-function resizeImage(file, maxWidth = 1600, quality = 0.8) {
+function resizeImage(file, maxWidth = 1200, quality = 0.72) {
   return new Promise((resolve, reject) => {
     if (!file || !file.type?.startsWith('image/')) {
       reject(new Error('Arquivo inválido — selecione uma foto.'));

@@ -397,7 +397,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
   };
 
   // Comprime imagem antes do upload para evitar erro de memória em celulares
-  const comprimirImagem = (file, maxW = 1280, maxH = 1280, quality = 0.82) =>
+  const comprimirImagem = (file, maxW = 1000, maxH = 1000, quality = 0.75) =>
     new Promise((resolve, reject) => {
       const img = new window.Image();
       const url = URL.createObjectURL(file);

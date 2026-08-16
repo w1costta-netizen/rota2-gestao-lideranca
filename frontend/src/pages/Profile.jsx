@@ -14,6 +14,28 @@ const NIVEL_COLORS = { admin: '#6366f1', gestor: '#f59e0b', lider: '#10b981' };
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_MB = 3;
 
+// Avatar não precisa de mais que isso — reduz MUITO o egress do Storage,
+// já que a foto de perfil é a imagem mais carregada em todo o app (aparece
+// em cada card, comentário, sidebar etc).
+function resizeAvatar(file, maxSize = 480, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const ratio = Math.min(1, maxSize / Math.max(img.width, img.height));
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Falha ao processar a foto.')), 'image/jpeg', quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Não foi possível abrir esta foto.')); };
+    img.src = url;
+  });
+}
+
 export default function Profile() {
   const { profile, loadProfile, session } = useAuth();
   const toast = useToast();
@@ -101,17 +123,17 @@ export default function Profile() {
     if (!photoFile) return;
     setPhotoUploading(true);
     try {
-      const ext = photoFile.name.split('.').pop();
-      const path = `${session.user.id}/avatar.${ext}`;
+      const path = `${session.user.id}/avatar.jpg`;
+      const resized = await resizeAvatar(photoFile);
 
       // Em alguns navegadores in-app (WhatsApp/Instagram WebView) o upload
       // direto do File/Blob falha com "No content provided" — o fetch interno
       // desses WebViews não serializa o corpo corretamente. Convertendo pra
       // ArrayBuffer antes de enviar contorna o problema em todos os ambientes.
-      const arrayBuffer = await photoFile.arrayBuffer();
+      const arrayBuffer = await resized.arrayBuffer();
       const { error: upErr } = await supabase.storage
         .from('avatars')
-        .upload(path, arrayBuffer, { upsert: true, contentType: photoFile.type });
+        .upload(path, arrayBuffer, { upsert: true, contentType: 'image/jpeg' });
 
       if (upErr) throw upErr;
 
