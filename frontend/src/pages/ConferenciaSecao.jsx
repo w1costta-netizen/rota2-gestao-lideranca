@@ -8,6 +8,10 @@ import autoTable from 'jspdf-autotable';
 
 const MOTIVO_LABEL = { 0: '—', 1: 'Ruptura', 2: 'Sazonal', 3: 'Substituído', 4: 'Descontinuado' };
 
+// Linha e Fine Line agora são multi-seleção (array) — formata pra exibição em texto
+const fmtList = v => Array.isArray(v) ? v.filter(Boolean).join(', ') : (v || '');
+const csvList = v => Array.isArray(v) ? v.filter(Boolean).join(',') : (v || '');
+
 // ── Tela: lista de sessões ──────────────────────────────────────────────────
 function ListaSessoes({ userId, profile, onNova, onAbrir }) {
   const toast = useToast();
@@ -107,9 +111,9 @@ function ListaSessoes({ userId, profile, onNova, onAbrir }) {
                 : <Clock size={20} color="var(--primary)" />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{s.sulinha || s.linha || s.secao || 'Conferência'}</div>
+              <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2 }}>{fmtList(s.sulinha) || fmtList(s.linha) || s.secao || 'Conferência'}</div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                {[s.setor, s.departamento, s.secao, s.linha].filter(Boolean).join(' › ')}
+                {[s.setor, s.departamento, s.secao, fmtList(s.linha)].filter(Boolean).join(' › ')}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
                 {s.creator?.full_name} · {new Date(s.created_at).toLocaleDateString('pt-BR')}
@@ -180,7 +184,7 @@ function ImportarBtn({ userId, profile, onDone }) {
 function NovaSessao({ userId, profile, onCriar, onVoltar }) {
   const toast = useToast();
   const [opts, setOpts] = useState({ setores: [], departamentos: [], secoes: [], linhas: [], sulinhas: [] });
-  const [sel, setSel] = useState({ setor: '', departamento: '', secao: '', linha: '', sulinha: '' });
+  const [sel, setSel] = useState({ setor: '', departamento: '', secao: '', linha: [], sulinha: [] });
   const [saving, setSaving] = useState(false);
 
   const loadFiltros = useCallback(async (params = {}) => {
@@ -195,32 +199,48 @@ function NovaSessao({ userId, profile, onCriar, onVoltar }) {
 
   useEffect(() => { loadFiltros(); }, [loadFiltros]);
 
-  const change = async (field, value) => {
-    // Monta o próximo estado limpando campos abaixo do alterado
-    let next;
-    if (field === 'setor')             next = { setor: value, departamento: '', secao: '', linha: '', sulinha: '' };
-    else if (field === 'departamento') next = { setor: sel.setor, departamento: value, secao: '', linha: '', sulinha: '' };
-    else if (field === 'secao')        next = { setor: sel.setor, departamento: sel.departamento, secao: value, linha: '', sulinha: '' };
-    else if (field === 'linha')        next = { ...sel, linha: value, sulinha: '' };
-    else                                next = { ...sel, sulinha: value };
-    setSel(next);
-
-    // Busca opções filtradas pelo nível selecionado
+  const refetchOpts = async (next) => {
     const params = { requester_id: userId };
     if (profile?.company)  params.company      = profile.company;
     if (next.setor)        params.setor        = next.setor;
     if (next.departamento) params.departamento = next.departamento;
     if (next.secao)        params.secao        = next.secao;
-    if (next.linha)        params.linha        = next.linha;
+    if (next.linha?.length) params.linha       = next.linha.join(',');
     try {
       const r = await api.get(`/conferencia/filtros?${new URLSearchParams(params).toString()}`);
       setOpts(o => ({ ...o, ...r.data }));
     } catch { toast('Erro ao carregar opções', 'error'); }
   };
 
+  // Setor/Departamento/Seção continuam de escolha única — cada troca reseta os níveis abaixo
+  const change = async (field, value) => {
+    let next;
+    if (field === 'setor')             next = { setor: value, departamento: '', secao: '', linha: [], sulinha: [] };
+    else if (field === 'departamento') next = { setor: sel.setor, departamento: value, secao: '', linha: [], sulinha: [] };
+    else                                next = { setor: sel.setor, departamento: sel.departamento, secao: value, linha: [], sulinha: [] };
+    setSel(next);
+    await refetchOpts(next);
+  };
+
+  // Linha e Fine Line são multi-seleção — dá pra conferir várias linhas/fine lines na mesma sessão
+  const toggleLinha = async (value) => {
+    const atuais = sel.linha;
+    const novasLinhas = atuais.includes(value) ? atuais.filter(v => v !== value) : [...atuais, value];
+    const next = { ...sel, linha: novasLinhas, sulinha: [] };
+    setSel(next);
+    await refetchOpts(next);
+  };
+
+  const toggleSulinha = (value) => {
+    setSel(s => {
+      const atuais = s.sulinha;
+      return { ...s, sulinha: atuais.includes(value) ? atuais.filter(v => v !== value) : [...atuais, value] };
+    });
+  };
+
   const criar = async () => {
-    if (!sel.setor || !sel.departamento || !sel.secao || !sel.linha || !sel.sulinha) {
-      return toast('Selecione todos os 5 níveis');
+    if (!sel.setor || !sel.departamento || !sel.secao || !sel.linha.length || !sel.sulinha.length) {
+      return toast('Selecione todos os níveis (pelo menos 1 linha e 1 fine line)');
     }
     setSaving(true);
     try {
@@ -240,6 +260,43 @@ function NovaSessao({ userId, profile, onCriar, onVoltar }) {
     </div>
   );
 
+  const MultiSelect = ({ label, options, selected, onToggle, disabled }) => (
+    <div className="form-group">
+      <label className="form-label">
+        {label}
+        {selected.length > 0 && (
+          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
+            {selected.length} selecionada{selected.length > 1 ? 's' : ''}
+          </span>
+        )}
+      </label>
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto',
+        border: '1px solid var(--border)', borderRadius: 8, padding: '6px 4px',
+        opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto',
+      }}>
+        {options.length === 0 && (
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
+            {disabled ? 'Selecione o nível anterior primeiro' : 'Nenhuma opção disponível'}
+          </p>
+        )}
+        {options.map(o => {
+          const isSel = selected.includes(o);
+          return (
+            <label key={o} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6,
+              cursor: 'pointer', background: isSel ? 'rgba(232,98,42,.08)' : 'transparent', fontSize: 13,
+            }}>
+              <input type="checkbox" checked={isSel} onChange={() => onToggle(o)}
+                style={{ accentColor: '#E8681A', width: 15, height: 15, flexShrink: 0 }}/>
+              <span style={{ color: 'var(--text)' }}>{o}</span>
+            </label>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <div className="page-header">
@@ -251,8 +308,8 @@ function NovaSessao({ userId, profile, onCriar, onVoltar }) {
         <Select label="1. Setor" field="setor" options={opts.setores} />
         <Select label="2. Departamento" field="departamento" options={opts.departamentos} disabled={!sel.setor} />
         <Select label="3. Seção" field="secao" options={opts.secoes} disabled={!sel.departamento} />
-        <Select label="4. Linha" field="linha" options={opts.linhas} disabled={!sel.secao} />
-        <Select label="5. Fine Line" field="sulinha" options={opts.sulinhas} disabled={!sel.linha} />
+        <MultiSelect label="4. Linha" options={opts.linhas} selected={sel.linha} onToggle={toggleLinha} disabled={!sel.secao} />
+        <MultiSelect label="5. Fine Line" options={opts.sulinhas} selected={sel.sulinha} onToggle={toggleSulinha} disabled={!sel.linha.length} />
 
         <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
           <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={onVoltar}>Cancelar</button>
@@ -366,8 +423,8 @@ function Coleta({ userId, profile, sessao, onFinalizar, onVoltar }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <button className="btn btn-ghost" onClick={onVoltar}><ArrowLeft size={15} /></button>
           <div>
-            <div className="page-title" style={{ fontSize: 16 }}>{sessao.sulinha || sessao.linha}</div>
-            <div className="page-subtitle">{sessao.linha} · {sessao.secao} · {sessao.departamento}</div>
+            <div className="page-title" style={{ fontSize: 16 }}>{fmtList(sessao.sulinha) || fmtList(sessao.linha)}</div>
+            <div className="page-subtitle">{fmtList(sessao.linha)} · {sessao.secao} · {sessao.departamento}</div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -491,8 +548,8 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
       setor:        sessao.setor        || '',
       departamento: sessao.departamento || '',
       secao:        sessao.secao        || '',
-      linha:        sessao.linha        || '',
-      sulinha:      sessao.sulinha      || '',
+      linha:        csvList(sessao.linha),
+      sulinha:      csvList(sessao.sulinha),
     }).toString();
     api.get(`/conferencia/linha?${q}`)
       .then(r => setTodos(r.data))
@@ -513,7 +570,7 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
     doc.text('Relatório de Conferência de Seção', 14, 18);
     doc.setFontSize(9); doc.setFont(undefined, 'normal'); doc.setTextColor(100);
     doc.text(`Gerado em: ${agora}`, 14, 25);
-    doc.text(`Fine Line: ${sessao.sulinha || '—'}  ·  Linha: ${sessao.linha}  ·  Seção: ${sessao.secao}  ·  Dept: ${sessao.departamento}`, 14, 30);
+    doc.text(`Fine Line: ${fmtList(sessao.sulinha) || '—'}  ·  Linha: ${fmtList(sessao.linha)}  ·  Seção: ${sessao.secao}  ·  Dept: ${sessao.departamento}`, 14, 30);
 
     // Resumo
     doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
@@ -540,7 +597,7 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
       });
     }
 
-    doc.save(`conferencia_${(sessao.sulinha || sessao.linha)?.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`conferencia_${(fmtList(sessao.sulinha) || fmtList(sessao.linha) || 'itens').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
   const pct = todos.length ? Math.round((expostos.length / todos.length) * 100) : 0;
@@ -549,7 +606,7 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
     <div>
       <div className="page-header">
         <button className="btn btn-ghost" onClick={onVoltar}><ArrowLeft size={15} /> Voltar</button>
-        <div className="page-title" style={{ marginTop: 8 }}>Relatório — {sessao.sulinha || sessao.linha}</div>
+        <div className="page-title" style={{ marginTop: 8 }}>Relatório — {fmtList(sessao.sulinha) || fmtList(sessao.linha)}</div>
         <button className="btn btn-primary" onClick={gerarPDF}>
           <FileText size={15} /> Exportar PDF
         </button>

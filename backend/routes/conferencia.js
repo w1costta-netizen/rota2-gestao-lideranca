@@ -138,7 +138,7 @@ router.get('/filtros', async (req, res) => {
   if (setor)        q = q.eq('setor', setor);
   if (departamento) q = q.eq('departamento', departamento);
   if (secao)        q = q.eq('secao', secao);
-  if (linha)        q = q.eq('linha', linha);
+  if (linha)        q = q.in('linha', linha.split(',').filter(Boolean));
 
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
@@ -196,8 +196,8 @@ router.get('/linha', async (req, res) => {
   if (setor)        q = q.eq('descricao_setor', setor);
   if (departamento) q = q.eq('descricao_departamento', departamento);
   if (secao)        q = q.eq('descricao_secao', secao);
-  if (linha)        q = q.eq('descricao_linha', linha);
-  if (sulinha)      q = q.eq('descricao_sulinha', sulinha);
+  if (linha)        q = q.in('descricao_linha', linha.split(',').filter(Boolean));
+  if (sulinha)      q = q.in('descricao_sulinha', sulinha.split(',').filter(Boolean));
 
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
