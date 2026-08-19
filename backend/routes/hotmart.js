@@ -174,15 +174,17 @@ router.post('/ativar-conta', async (req, res) => {
   if (signup.used)         return res.status(400).json({ error: 'Token já utilizado.' });
   if (signup.email !== email) return res.status(400).json({ error: 'E-mail não corresponde.' });
 
-  // 2. Criar tenant
-  const { data: tenant, error: tenantErr } = await supabase
-    .from('tenants')
-    .insert({ name: company, owner_id: user_id, hotmart_email: email, status: 'active' })
+  // 2. Criar a loja (workspace) já ativa — quem comprou na Hotmart não precisa
+  // esperar aprovação de ninguém. Segue o mesmo modelo usado no resto do app
+  // (tabela "stores" + profiles.company), não uma tabela "tenants" separada.
+  const { data: store, error: storeErr } = await supabase
+    .from('stores')
+    .insert({ name: company, active: true, created_by: user_id, approved_by: user_id })
     .select()
     .single();
 
-  if (tenantErr) {
-    console.error('[Hotmart] Erro ao criar tenant:', tenantErr);
+  if (storeErr) {
+    console.error('[Hotmart] Erro ao criar loja:', storeErr);
     return res.status(500).json({ error: 'Erro ao criar workspace.' });
   }
 
@@ -194,8 +196,8 @@ router.post('/ativar-conta', async (req, res) => {
       full_name,
       email,
       company,
-      tenant_id:    tenant.id,
       access_level: 'admin',
+      active:       true,
       aceite_termos_em: new Date().toISOString(),
       aceite_privacidade_em: new Date().toISOString(),
       versao_termos: '1.0',
@@ -212,8 +214,8 @@ router.post('/ativar-conta', async (req, res) => {
     .update({ used: true })
     .eq('token', token);
 
-  console.log(`[Hotmart] Conta ativada: ${email} → tenant ${tenant.id}`);
-  res.json({ ok: true, tenant_id: tenant.id });
+  console.log(`[Hotmart] Conta ativada: ${email} → loja ${store.id}`);
+  res.json({ ok: true, store_id: store.id });
 });
 
 module.exports = router;
