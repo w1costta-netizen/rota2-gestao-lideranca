@@ -11,6 +11,7 @@ export default function Register({ onGoLogin }) {
   const [loading, setLoading]   = useState(false);
   const [done, setDone]         = useState(false);
   const [error, setError]       = useState('');
+  const [precisaConfirmar, setPrecisaConfirmar] = useState(false);
 
   const [form, setForm] = useState({
     full_name: '',
@@ -68,6 +69,10 @@ export default function Register({ onGoLogin }) {
 
       const userId = authData.user?.id;
       if (!userId) throw new Error('Erro ao criar usuário.');
+
+      // Se o Supabase exige confirmação de e-mail, o signUp não retorna sessão
+      // ativa — nesse caso a pessoa precisa confirmar antes de conseguir logar.
+      setPrecisaConfirmar(!authData.session);
 
       // 2. Criar tenant + perfil via backend (usa service key)
       const resp = await fetch('/api/hotmart/ativar-conta', {
@@ -135,12 +140,19 @@ export default function Register({ onGoLogin }) {
       <div style={{ textAlign:'center', padding:'24px 0' }}>
         <CheckCircle size={56} color="#10b981" style={{ marginBottom:16 }}/>
         <h2 style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>Conta criada com sucesso!</h2>
-        <p style={{ fontSize:13, color:'var(--text-muted)', marginBottom:24 }}>
-          Seu workspace <strong>{form.company}</strong> está pronto.<br/>
-          Faça login para começar.
+        <p style={{ fontSize:13, color:'var(--text-muted)', marginBottom:16 }}>
+          Seu workspace <strong>{form.company}</strong> está pronto.
         </p>
+        {precisaConfirmar && (
+          <div style={{ background:'#f59e0b15', border:'1px solid #f59e0b40', borderRadius:10,
+            padding:'12px 14px', marginBottom:20, textAlign:'left', fontSize:13, color:'var(--text)' }}>
+            <strong>⚠️ Confirme seu e-mail antes de entrar.</strong><br/>
+            Enviamos um link de confirmação para <strong>{form.email}</strong> — verifique a caixa de
+            entrada (e o spam) e clique nele. Só depois disso o login vai funcionar.
+          </div>
+        )}
         <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center' }} onClick={onGoLogin}>
-          Fazer login agora
+          {precisaConfirmar ? 'Já confirmei, fazer login' : 'Fazer login agora'}
         </button>
       </div>
     </div>

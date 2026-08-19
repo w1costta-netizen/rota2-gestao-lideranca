@@ -17,7 +17,12 @@ export default function Login({ onGoRegister }) {
     if (!email || !password) return setError('Preencha e-mail e senha.');
     setLoading(true);
     const { error: e } = await supabase.auth.signInWithPassword({ email, password });
-    if (e) setError(e.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : e.message);
+    if (e) {
+      const msg = e.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.'
+        : e.message === 'Email not confirmed' ? 'Confirme seu e-mail antes de entrar — verifique a caixa de entrada (e o spam) e clique no link de confirmação que enviamos.'
+        : e.message;
+      setError(msg);
+    }
     setLoading(false);
   };
 
