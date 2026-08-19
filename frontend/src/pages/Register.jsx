@@ -36,18 +36,15 @@ export default function Register({ onGoLogin }) {
 
   async function verificarToken(t) {
     setTokenOk(null);
-    const { data, error } = await supabase
-      .from('pending_signups')
-      .select('email, used')
-      .eq('token', t)
-      .single();
-
-    if (error || !data || data.used) {
+    try {
+      const resp = await fetch(`/api/hotmart/verificar-token?token=${encodeURIComponent(t)}`);
+      if (!resp.ok) { setTokenOk(false); return; }
+      const data = await resp.json();
+      setTokenOk(true);
+      setForm(f => ({ ...f, email: data.email }));
+    } catch {
       setTokenOk(false);
-      return;
     }
-    setTokenOk(true);
-    setForm(f => ({ ...f, email: data.email }));
   }
 
   const submit = async () => {

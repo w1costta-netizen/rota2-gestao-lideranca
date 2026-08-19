@@ -154,6 +154,24 @@ async function enviarEmailAcesso(email, nome, token) {
   }
 }
 
+// GET /api/hotmart/verificar-token?token=
+// Usado pela tela de cadastro para validar o link recebido por e-mail.
+// Fica no backend (service role) para não expor a tabela pending_signups
+// direto pro cliente via chave anon do Supabase.
+router.get('/verificar-token', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).json({ error: 'token obrigatório' });
+
+  const { data, error } = await supabase
+    .from('pending_signups')
+    .select('email, used')
+    .eq('token', token)
+    .single();
+
+  if (error || !data || data.used) return res.status(404).json({ error: 'Token inválido ou já utilizado.' });
+  res.json({ email: data.email });
+});
+
 // POST /api/hotmart/ativar-conta
 // Chamado pelo frontend após criar usuário no Supabase Auth
 router.post('/ativar-conta', async (req, res) => {
