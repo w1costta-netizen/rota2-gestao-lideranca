@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Trash2, Camera, Hash, Barcode, ChevronRight, CheckCircle2,
+import { Plus, Trash2, Camera, Hash, Barcode, ChevronRight, ChevronUp, ChevronDown, CheckCircle2,
          AlertCircle, Clock, Package, FileText, ArrowLeft, Upload, X, Search } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
@@ -260,43 +260,6 @@ function NovaSessao({ userId, profile, onCriar, onVoltar }) {
     </div>
   );
 
-  const MultiSelect = ({ label, options, selected, onToggle, disabled }) => (
-    <div className="form-group">
-      <label className="form-label">
-        {label}
-        {selected.length > 0 && (
-          <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
-            {selected.length} selecionada{selected.length > 1 ? 's' : ''}
-          </span>
-        )}
-      </label>
-      <div style={{
-        display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto',
-        border: '1px solid var(--border)', borderRadius: 8, padding: '6px 4px',
-        opacity: disabled ? 0.5 : 1, pointerEvents: disabled ? 'none' : 'auto',
-      }}>
-        {options.length === 0 && (
-          <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
-            {disabled ? 'Selecione o nível anterior primeiro' : 'Nenhuma opção disponível'}
-          </p>
-        )}
-        {options.map(o => {
-          const isSel = selected.includes(o);
-          return (
-            <label key={o} style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6,
-              cursor: 'pointer', background: isSel ? 'rgba(232,98,42,.08)' : 'transparent', fontSize: 13,
-            }}>
-              <input type="checkbox" checked={isSel} onChange={() => onToggle(o)}
-                style={{ accentColor: '#E8681A', width: 15, height: 15, flexShrink: 0 }}/>
-              <span style={{ color: 'var(--text)' }}>{o}</span>
-            </label>
-          );
-        })}
-      </div>
-    </div>
-  );
-
   return (
     <div>
       <div className="page-header">
@@ -318,6 +281,72 @@ function NovaSessao({ userId, profile, onCriar, onVoltar }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Multi-seleção em formato de dropdown — fecha ao clicar fora, mostra um
+// resumo ("N selecionadas") quando fechado. Fica fora de NovaSessao pra não
+// perder o estado de aberto/fechado a cada re-render do formulário.
+function MultiSelect({ label, options, selected, onToggle, disabled }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef();
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
+
+  const resumo = selected.length === 0 ? 'Selecione...'
+    : selected.length <= 2 ? selected.join(', ')
+    : `${selected.length} selecionadas`;
+
+  return (
+    <div className="form-group" ref={ref} style={{ position: 'relative' }}>
+      <label className="form-label">{label}</label>
+      <button type="button" onClick={() => !disabled && setOpen(o => !o)} disabled={disabled}
+        className="input" style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          width: '100%', textAlign: 'left', cursor: disabled ? 'default' : 'pointer',
+          color: selected.length ? 'var(--text)' : 'var(--text-muted)',
+          opacity: disabled ? 0.5 : 1,
+        }}>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{resumo}</span>
+        {open ? <ChevronUp size={15} style={{ flexShrink: 0 }}/> : <ChevronDown size={15} style={{ flexShrink: 0 }}/>}
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, zIndex: 20,
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+          boxShadow: '0 8px 24px rgba(0,0,0,.15)', maxHeight: 240, overflowY: 'auto', padding: '6px 4px',
+        }}>
+          {options.length === 0 && (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>
+              Nenhuma opção disponível
+            </p>
+          )}
+          {options.map(o => {
+            const isSel = selected.includes(o);
+            return (
+              <label key={o} style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 6,
+                cursor: 'pointer', background: isSel ? 'rgba(232,98,42,.08)' : 'transparent', fontSize: 13,
+              }}>
+                <input type="checkbox" checked={isSel} onChange={() => onToggle(o)}
+                  style={{ accentColor: '#E8681A', width: 15, height: 15, flexShrink: 0 }}/>
+                <span style={{ color: 'var(--text)' }}>{o}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

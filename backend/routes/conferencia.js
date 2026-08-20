@@ -53,7 +53,7 @@ router.post('/importar', upload.single('file'), async (req, res) => {
       descricao_departamento: r['DESCRICAO_DEPARTAMENTO']        || null,
       descricao_secao:        r['DESCRICAO_SECAO']               || null,
       descricao_linha:        r['DESCRICAO_LINHA']               || null,
-      descricao_sulinha:      pick(r, ['DESCRICAO_SULINHA', 'SULINHA', 'DESCRICAO_FINE_LINE', 'FINE_LINE']),
+      descricao_sulinha:      pick(r, ['DESCRICAO_SUBLINHA', 'SUBLINHA', 'DESCRICAO_SULINHA', 'SULINHA', 'DESCRICAO_FINE_LINE', 'FINE_LINE']),
       data_ultima_nf:         r['DATA_ULTIMA_NF'] instanceof Date ? r['DATA_ULTIMA_NF'].toISOString() : null,
       estoque_qty:            Math.round(r['sum_ESTOQUE_ON_HAND_LOJA_QTD'] ?? 0),
       importado_at,
