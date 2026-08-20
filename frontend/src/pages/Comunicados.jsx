@@ -314,7 +314,7 @@ export default function Comunicados({ userId, profile }) {
                   </div>
                 )}
               </div>
-              {canManage && (
+              {(canManage || c.created_by === userId) && (
                 <div style={{ display:'flex', gap:6, flexShrink:0 }} onClick={e => e.stopPropagation()}>
                   <button className="btn-icon" onClick={() => openEdit(c)} title="Editar">
                     <Pencil size={14}/>

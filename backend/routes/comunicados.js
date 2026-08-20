@@ -43,13 +43,12 @@ router.get('/', async (req, res) => {
   res.json(result);
 });
 
-// POST /api/comunicados — cria comunicado (admin/supervisor)
+// POST /api/comunicados — cria comunicado (qualquer pessoa da empresa)
 router.post('/', async (req, res) => {
   const { requester_id, title, body, priority, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!me || !['admin', 'supervisor', 'master'].includes(me.access_level))
-    return res.status(403).json({ error: 'Acesso negado' });
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
   if (!title || !body) return res.status(400).json({ error: 'title e body obrigatórios' });
   const targetCompany = me.access_level === 'master' ? bodyCompany : me.company;
 
@@ -87,8 +86,12 @@ router.put('/:id', async (req, res) => {
   const { requester_id, title, body, priority } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!me || !['admin', 'supervisor', 'master'].includes(me.access_level))
-    return res.status(403).json({ error: 'Acesso negado' });
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const { data: existente } = await supabase.from('comunicados').select('created_by').eq('id', req.params.id).single();
+  const isOwner = existente?.created_by === requester_id;
+  if (!isOwner && !['admin', 'supervisor', 'master'].includes(me.access_level))
+    return res.status(403).json({ error: 'Acesso negado — só quem criou ou um gestor pode editar' });
 
   const updates = {};
   if (title)    updates.title    = title.trim();
@@ -109,10 +112,13 @@ router.delete('/:id', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!me || !['admin', 'supervisor', 'master'].includes(me.access_level))
-    return res.status(403).json({ error: 'Acesso negado' });
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
-  const { data: com } = await supabase.from('comunicados').select('title').eq('id', req.params.id).single();
+  const { data: com } = await supabase.from('comunicados').select('title, created_by').eq('id', req.params.id).single();
+  const isOwner = com?.created_by === requester_id;
+  if (!isOwner && !['admin', 'supervisor', 'master'].includes(me.access_level))
+    return res.status(403).json({ error: 'Acesso negado — só quem criou ou um gestor pode excluir' });
+
   const { error } = await supabase.from('comunicados').update({ active: false }).eq('id', req.params.id);
   if (error) {
     logError({ company: me.company, user_id: requester_id, acao: 'excluir_comunicado', tabela: 'comunicados', rota: req.originalUrl, erro_mensagem: error.message });

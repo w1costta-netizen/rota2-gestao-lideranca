@@ -46,7 +46,7 @@ router.post('/', async (req, res) => {
   const { requester_id, title, content, category, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!isManager(me) && me.access_level !== 'master') return res.status(403).json({ error: 'Acesso negado' });
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
   if (!title || !content) return res.status(400).json({ error: 'title e content obrigatórios' });
   const targetCompany = me.access_level === 'master' ? bodyCompany : me.company;
 
@@ -71,7 +71,12 @@ router.put('/:id', async (req, res) => {
   const { requester_id, title, content, category, sort_order } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!isManager(me)) return res.status(403).json({ error: 'Acesso negado' });
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const { data: existente } = await supabase.from('mural').select('created_by').eq('id', req.params.id).single();
+  const isOwner = existente?.created_by === requester_id;
+  if (!isOwner && !isManager(me))
+    return res.status(403).json({ error: 'Acesso negado — só quem criou ou um gestor pode editar' });
 
   const updates = { updated_at: new Date().toISOString() };
   if (title !== undefined)      updates.title      = title.trim();
@@ -94,8 +99,11 @@ router.delete('/:id', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!isManager(me)) return res.status(403).json({ error: 'Acesso negado' });
-  const { data: item } = await supabase.from('mural').select('title').eq('id', req.params.id).single();
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const { data: item } = await supabase.from('mural').select('title, created_by').eq('id', req.params.id).single();
+  const isOwner = item?.created_by === requester_id;
+  if (!isOwner && !isManager(me))
+    return res.status(403).json({ error: 'Acesso negado — só quem criou ou um gestor pode excluir' });
   const { error } = await supabase.from('mural').delete().eq('id', req.params.id);
   if (error) {
     logError({ company: me.company, user_id: requester_id, acao: 'excluir_mural', tabela: 'mural', rota: req.originalUrl, erro_mensagem: error.message });

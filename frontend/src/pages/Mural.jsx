@@ -190,7 +190,7 @@ export default function Mural({ userId, profile }) {
                   </span>
                   <div style={{ fontWeight:700, fontSize:15 }}>{m.title}</div>
                 </div>
-                {canManage && (
+                {(canManage || m.created_by === userId) && (
                   <div style={{ display:'flex', gap:4, flexShrink:0 }} onClick={e => e.stopPropagation()}>
                     <button className="btn-icon" onClick={() => openEdit(m)}><Pencil size={13}/></button>
                     <button className="btn-icon" onClick={() => remove(m.id)} style={{ color:'#ef4444' }}><Trash2 size={13}/></button>
