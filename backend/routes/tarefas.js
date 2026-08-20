@@ -24,46 +24,57 @@ function nextDueDate(due_date, recorrencia) {
 router.get('/', async (req, res) => {
   const { requester_id, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
-  const me = await getProfile(requester_id);
-  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
-  const targetCompany = me.access_level === 'master' ? queryCompany : me.company;
-  if (me.access_level === 'master' && !targetCompany) return res.json([]);
+  // Tudo dentro de um try/catch: sem isso, qualquer erro inesperado aqui
+  // (dado corrompido, falha de rede pontual etc.) deixava a requisição sem
+  // resposta nenhuma — o navegador ficava "carregando" pra sempre, e como
+  // nada era logado, não sobrava nenhum rastro pra investigar depois.
+  try {
+    const me = await getProfile(requester_id);
+    if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
-  // Busca membros do time que reportam ao usuário (para líderes)
-  let teamIds = [];
-  if (!['admin','master'].includes(me.access_level)) {
-    const { data: teamMembers } = await supabase
-      .from('profiles')
-      .select('id, reports_to_list')
-      .eq('company', targetCompany);
-    teamIds = (teamMembers || [])
-      .filter(m => Array.isArray(m.reports_to_list) && m.reports_to_list.includes(requester_id))
-      .map(m => m.id);
+    const targetCompany = me.access_level === 'master' ? queryCompany : me.company;
+    if (me.access_level === 'master' && !targetCompany) return res.json([]);
+
+    // Busca membros do time que reportam ao usuário (para líderes)
+    let teamIds = [];
+    if (!['admin','master'].includes(me.access_level)) {
+      const { data: teamMembers, error: teamErr } = await supabase
+        .from('profiles')
+        .select('id, reports_to_list')
+        .eq('company', targetCompany);
+      if (teamErr) throw teamErr;
+      teamIds = (teamMembers || [])
+        .filter(m => Array.isArray(m.reports_to_list) && m.reports_to_list.includes(requester_id))
+        .map(m => m.id);
+    }
+
+    let query = supabase
+      .from('tarefas')
+      .select('*, assigned:assigned_to(id,full_name,sector,avatar_url), creator:created_by(full_name,avatar_url)')
+      .eq('company', targetCompany)
+      .order('created_at', { ascending: false });
+
+    if (me.access_level === 'admin' || me.access_level === 'master') {
+      // vê tudo da empresa
+    } else if (me.access_level === 'supervisor') {
+      const ids = [requester_id, ...teamIds];
+      query = query.in('assigned_to', ids);
+    } else if (teamIds.length > 0) {
+      // lider com time: vê próprias + do time
+      const ids = [requester_id, ...teamIds];
+      query = query.in('assigned_to', ids);
+    } else {
+      query = query.eq('assigned_to', requester_id);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    res.json(data);
+  } catch (e) {
+    logError({ company: queryCompany || null, user_id: requester_id, acao: 'listar_tarefas', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: e.message });
+    res.status(500).json({ error: 'Erro ao carregar tarefas.' });
   }
-
-  let query = supabase
-    .from('tarefas')
-    .select('*, assigned:assigned_to(id,full_name,sector,avatar_url), creator:created_by(full_name,avatar_url)')
-    .eq('company', targetCompany)
-    .order('created_at', { ascending: false });
-
-  if (me.access_level === 'admin' || me.access_level === 'master') {
-    // vê tudo da empresa
-  } else if (me.access_level === 'supervisor') {
-    const ids = [requester_id, ...teamIds];
-    query = query.in('assigned_to', ids);
-  } else if (teamIds.length > 0) {
-    // lider com time: vê próprias + do time
-    const ids = [requester_id, ...teamIds];
-    query = query.in('assigned_to', ids);
-  } else {
-    query = query.eq('assigned_to', requester_id);
-  }
-
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
 });
 
 // POST /api/tarefas
