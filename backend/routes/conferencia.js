@@ -132,24 +132,41 @@ router.get('/filtros', async (req, res) => {
   const targetCompany = me.access_level === 'master' ? (queryCompany || me.company) : me.company;
 
   // Usa tabela de filtros pré-computada (evita limite de 1000 rows do Supabase)
+  // Consulta base — NUNCA filtra por linha, senão a própria lista de linhas
+  // encolhe pra só as já selecionadas (bug: sumia da tela ao marcar uma).
   let q = supabase.from('conferencia_filtros')
-    .select('setor, departamento, secao, linha, sulinha')
+    .select('setor, departamento, secao, linha')
     .eq('company', targetCompany);
   if (setor)        q = q.eq('setor', setor);
   if (departamento) q = q.eq('departamento', departamento);
   if (secao)        q = q.eq('secao', secao);
-  if (linha)        q = q.in('linha', linha.split(',').filter(Boolean));
 
   const { data, error } = await q;
   if (error) return res.status(500).json({ error: error.message });
 
-  const unique = (key) => [...new Set((data || []).map(r => r[key]).filter(Boolean))].sort();
+  const unique = (arr, key) => [...new Set((arr || []).map(r => r[key]).filter(Boolean))].sort();
+
+  // Fine Line (sulinha) SÓ é filtrado pelas linhas selecionadas — consulta separada.
+  let sulinhas = [];
+  if (linha) {
+    let qSul = supabase.from('conferencia_filtros')
+      .select('sulinha')
+      .eq('company', targetCompany)
+      .in('linha', linha.split(',').filter(Boolean));
+    if (setor)        qSul = qSul.eq('setor', setor);
+    if (departamento) qSul = qSul.eq('departamento', departamento);
+    if (secao)        qSul = qSul.eq('secao', secao);
+    const { data: sulData, error: sulErr } = await qSul;
+    if (sulErr) return res.status(500).json({ error: sulErr.message });
+    sulinhas = unique(sulData, 'sulinha');
+  }
+
   res.json({
-    setores:       unique('setor'),
-    departamentos: unique('departamento'),
-    secoes:        unique('secao'),
-    linhas:        unique('linha'),
-    sulinhas:      unique('sulinha'),
+    setores:       unique(data, 'setor'),
+    departamentos: unique(data, 'departamento'),
+    secoes:        unique(data, 'secao'),
+    linhas:        unique(data, 'linha'),
+    sulinhas,
   });
 });
 
