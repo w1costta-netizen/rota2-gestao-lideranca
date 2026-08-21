@@ -626,6 +626,26 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
       });
     }
 
+    // Tabela expostos — no mesmo relatório, logo abaixo da de não expostos
+    if (expostos.length > 0) {
+      let y = naoExpostos.length > 0 ? doc.lastAutoTable.finalY + 10 : 47;
+      if (y > 260) { doc.addPage(); y = 20; }
+      doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
+      doc.text('Itens expostos', 14, y);
+      autoTable(doc, {
+        startY: y + 4,
+        head: [['Código', 'Descrição', 'Estoque']],
+        body: expostos.map(p => [
+          p.cd_produto,
+          p.descricao_produto || '',
+          p.estoque_qty ?? '',
+        ]),
+        headStyles: { fillColor: [16, 185, 129] },
+        styles: { fontSize: 8 },
+        columnStyles: { 1: { cellWidth: 100 } },
+      });
+    }
+
     doc.save(`conferencia_${(fmtList(sessao.sulinha) || fmtList(sessao.linha) || 'itens').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
