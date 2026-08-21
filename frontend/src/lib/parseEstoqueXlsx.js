@@ -233,7 +233,9 @@ export async function parseEstoqueXlsx(file) {
   const urgente_15        = urgente.filter(r => r.dias_cobertura < 15);
   // Aging: qualquer item ativo com mais de 365 dias sem NF, independente de ter estoque hoje —
   // senão itens ativos zerados há mais de um ano ficavam de fora da lista.
-  const aging             = ativos_geral.filter(r => (r.IDADE_ULTIMA_NF || 0) > 365);
+  // Aging: só itens ativos que TÊM estoque parado há mais de 1 ano — item sem
+  // estoque nenhum não é "aging" (estoque parado), é ruptura/sem movimento.
+  const aging             = ativos.filter(r => (r.IDADE_ULTIMA_NF || 0) > 365);
   const sem4s             = ativos.filter(r => r.total_5s === 0);
   const giro_lento        = ativos.filter(r => r.dias_cobertura != null && r.dias_cobertura >= 45).sort((a, b) => b.sum_VALOR_ESTOQUE_LOJA_A_CUSTO - a.sum_VALOR_ESTOQUE_LOJA_A_CUSTO);
   const estq_neg          = items.filter(r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD < 0);

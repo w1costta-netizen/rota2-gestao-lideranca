@@ -494,6 +494,7 @@ function TabGiroLento({ d }) {
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
         { key: 'dias_cobertura', label: 'Cobertura', right: true, fmt: v => v != null ? `${n1(v)}d` : '—', cor: () => '#f59e0b' },
+        { key: 'IDADE_ULTIMA_NF', label: 'Última entrada', right: true, fmt: v => v != null ? `${n0(v)}d atrás` : '—', cor: () => '#8b5cf6' },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
     </>
