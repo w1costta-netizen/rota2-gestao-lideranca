@@ -162,7 +162,12 @@ export async function parseEstoqueXlsx(file) {
   if (!items.length) throw new Error('Nenhum item encontrado após aplicar os filtros de divisão/seção.');
 
   const sum     = (arr, k) => arr.reduce((a, r) => a + (r[k] || 0), 0);
-  const topN    = (arr, key, asc = false, n = 9999) =>
+  // Limite de 500 itens por lista "top" — sem isso, listas grandes (ex: suspensos
+  // após corrigir o status via MOTIVO_SUSPENCAO) geram um payload gigante que
+  // estoura o tempo limite da query ao salvar no Supabase. Os totais/contagens
+  // exibidos nos cards continuam exatos, pois são calculados antes desse corte —
+  // só a tabela "Top itens" fica limitada às 500 primeiras.
+  const topN    = (arr, key, asc = false, n = 500) =>
     [...arr].sort((a, b) => asc ? (a[key] || 0) - (b[key] || 0) : (b[key] || 0) - (a[key] || 0)).slice(0, n);
   const bySecao = (arr, valKey = 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO') => {
     const m = {};
