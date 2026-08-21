@@ -11,6 +11,7 @@ const COL_MAP = {
   MOTIVO_SUSPENCAO:              ['MOTIVO_SUSPENCAO'],
   NOME_FORNECEDOR:               ['NOME_FORNECEDOR','FORNECEDOR'],
   IDADE_ULTIMA_NF:               ['IDADE_ULTIMA_NF','IDADE_NF','DIAS_ULTIMA_NF'],
+  DATA_ULTIMO_RECEBIMENTO:       ['DATA_ULTIMO_RECEBIMENTO'],
   DT_ULTIMA_VENDA:               ['DT_ULTIMA_VENDA','DATA_ULTIMA_VENDA','ULTIMA_VENDA'],
   sum_ESTOQUE_ON_HAND_LOJA_QTD:  ['sum_ESTOQUE_ON_HAND_LOJA_QTD','ESTOQUE_ON_HAND_LOJA_QTD','ESTOQUE_QTD','QTD_ESTOQUE'],
   ESTOQUE_ON_HAND_CD_CXS:        ['ESTOQUE_ON_HAND_CD_CXS','ESTOQUE_CD_CXS','ESTOQUE_CD','QTD_CD'],
@@ -82,6 +83,7 @@ export async function parseEstoqueXlsx(file) {
     'sum_ESTOQUE_SEPARADO_CD_LOJA_QTD',
     'sum_ESTOQUE_TRANSITO_LOJA_QTD',
     'MOTIVO_SUSPENCAO',
+    'DATA_ULTIMO_RECEBIMENTO',
   ]);
   const { result: colMap, missing } = resolveColumns(Object.keys(rows[0]));
   const missingObrigatorias = missing.filter(c => !COLUNAS_OPCIONAIS.has(c));
@@ -123,6 +125,14 @@ export async function parseEstoqueXlsx(file) {
     const estoque_separado_cd = parseFloat(get(row, 'sum_ESTOQUE_SEPARADO_CD_LOJA_QTD')) || 0;
     const estoque_transito_loja = parseFloat(get(row, 'sum_ESTOQUE_TRANSITO_LOJA_QTD')) || 0;
 
+    // "Última entrada" de verdade é a data do último recebimento físico —
+    // diferente de IDADE_ULTIMA_NF, que é sobre a nota fiscal, não sobre o
+    // recebimento em si. Se a coluna não vier na planilha, cai pro IDADE_ULTIMA_NF.
+    const dataRecebimento = parseDate(get(row, 'DATA_ULTIMO_RECEBIMENTO'));
+    const idadeRecebimento = dataRecebimento
+      ? Math.floor((Date.now() - new Date(dataRecebimento + 'T00:00:00').getTime()) / 86400000)
+      : (parseFloat(get(row, 'IDADE_ULTIMA_NF')) || null);
+
     items.push({
       CD_PRODUTO:                    parseInt(get(row, 'CD_PRODUTO')) || 0,
       DESCRICAO_PRODUTO:             String(get(row, 'DESCRICAO_PRODUTO') || ''),
@@ -134,6 +144,8 @@ export async function parseEstoqueXlsx(file) {
       DESCRICAO_SECAO:               String(get(row, 'DESCRICAO_SECAO') || ''),
       NOME_FORNECEDOR:               String(get(row, 'NOME_FORNECEDOR') || ''),
       IDADE_ULTIMA_NF:               parseFloat(get(row, 'IDADE_ULTIMA_NF')) || null,
+      DATA_ULTIMO_RECEBIMENTO:       dataRecebimento,
+      IDADE_ULTIMO_RECEBIMENTO:      idadeRecebimento,
       DT_ULTIMA_VENDA:               parseDate(get(row, 'DT_ULTIMA_VENDA')),
       sum_ESTOQUE_ON_HAND_LOJA_QTD:  estoque,
       sum_VALOR_ESTOQUE_LOJA_A_CUSTO: parseFloat(get(row, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO')) || 0,
@@ -234,7 +246,7 @@ export async function parseEstoqueXlsx(file) {
   // Aging, Sem venda 5s e Giro lento: consideram TODOS os itens com estoque
   // (ativos e suspensos) — a única exigência é ter estoque parado, o status
   // não importa pra esses três indicadores.
-  const aging             = com_estoque.filter(r => (r.IDADE_ULTIMA_NF || 0) > 365);
+  const aging             = com_estoque.filter(r => (r.IDADE_ULTIMO_RECEBIMENTO || 0) > 365);
   const sem4s             = com_estoque.filter(r => r.total_5s === 0);
   const giro_lento        = com_estoque.filter(r => r.dias_cobertura != null && r.dias_cobertura >= 45).sort((a, b) => b.sum_VALOR_ESTOQUE_LOJA_A_CUSTO - a.sum_VALOR_ESTOQUE_LOJA_A_CUSTO);
   const estq_neg          = items.filter(r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD < 0);
@@ -295,7 +307,7 @@ export async function parseEstoqueXlsx(file) {
     secao_estq_neg:   bySecao(estq_neg, 'sum_ESTOQUE_ON_HAND_LOJA_QTD'),
     ruptura_top:      topN(ruptura, 'sum_QTD_VENDAS_MES_ATUAL'),
     urgente_top:      topN(urgente, 'dias_cobertura', true),
-    aging_top:        topN(aging, 'IDADE_ULTIMA_NF'),
+    aging_top:        topN(aging, 'IDADE_ULTIMO_RECEBIMENTO'),
     sem4s_top:        topN(sem4s, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
     giro_lento_top:   topN(giro_lento, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO'),
     estq_neg_top:     topN([...estq_neg].sort((a, b) => a.sum_ESTOQUE_ON_HAND_LOJA_QTD - b.sum_ESTOQUE_ON_HAND_LOJA_QTD), 'sum_ESTOQUE_ON_HAND_LOJA_QTD', true),

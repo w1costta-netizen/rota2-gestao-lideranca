@@ -440,7 +440,7 @@ function TabAging({ d }) {
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
-        { key: 'IDADE_ULTIMA_NF', label: 'Dias NF', right: true, fmt: v => n0(v), cor: () => '#6366f1' },
+        { key: 'IDADE_ULTIMO_RECEBIMENTO', label: 'Última entrada', right: true, fmt: v => v != null ? `${n0(v)}d atrás` : '—', cor: () => '#6366f1' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
@@ -467,7 +467,7 @@ function TabSem4s({ d }) {
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
-        { key: 'IDADE_ULTIMA_NF', label: 'Última entrada', right: true, fmt: v => v != null ? `${n0(v)}d atrás` : '—', cor: () => '#8b5cf6' },
+        { key: 'IDADE_ULTIMO_RECEBIMENTO', label: 'Última entrada', right: true, fmt: v => v != null ? `${n0(v)}d atrás` : '—', cor: () => '#8b5cf6' },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
     </>
@@ -494,7 +494,7 @@ function TabGiroLento({ d }) {
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
         { key: 'dias_cobertura', label: 'Cobertura', right: true, fmt: v => v != null ? `${n1(v)}d` : '—', cor: () => '#f59e0b' },
-        { key: 'IDADE_ULTIMA_NF', label: 'Última entrada', right: true, fmt: v => v != null ? `${n0(v)}d atrás` : '—', cor: () => '#8b5cf6' },
+        { key: 'IDADE_ULTIMO_RECEBIMENTO', label: 'Última entrada', right: true, fmt: v => v != null ? `${n0(v)}d atrás` : '—', cor: () => '#8b5cf6' },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
     </>
@@ -773,7 +773,7 @@ export default function Estoque({ profile }) {
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
-            { header: 'Dias NF', dataKey: 'IDADE_ULTIMA_NF' },
+            { header: 'Última entrada', dataKey: 'IDADE_ULTIMO_RECEBIMENTO' },
             { header: 'Qtd estoque', dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
             { header: 'Custo R$', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
           ],
@@ -858,10 +858,10 @@ export default function Estoque({ profile }) {
         },
         {
           nome: 'Aging',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Dias NF', 'Qtd estoque', 'Custo R$'],
+          colunas: ['Cód.', 'Produto', 'Seção', 'Última entrada', 'Qtd estoque', 'Custo R$'],
           rows: (d.aging_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
-            r.IDADE_ULTIMA_NF, r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
+            r.IDADE_ULTIMO_RECEBIMENTO, r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
         },
         {
