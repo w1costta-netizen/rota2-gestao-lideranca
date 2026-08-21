@@ -588,8 +588,10 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
 
   const coletadosCDs = new Set(itensColetados.map(i => i.cd_produto));
   const coletadosEANs = new Set(itensColetados.map(i => i.ean).filter(Boolean));
-  const naoExpostos = todos.filter(p => !coletadosCDs.has(p.cd_produto) && !coletadosEANs.has(p.ean));
-  const expostos = todos.filter(p => coletadosCDs.has(p.cd_produto) || coletadosEANs.has(p.ean));
+  // Suspensos primeiro, depois ativos — agrupados pra facilitar a análise visual
+  const porStatus = (a, b) => (a.produto_status === 'Suspenso' ? 0 : 1) - (b.produto_status === 'Suspenso' ? 0 : 1);
+  const naoExpostos = todos.filter(p => !coletadosCDs.has(p.cd_produto) && !coletadosEANs.has(p.ean)).sort(porStatus);
+  const expostos = todos.filter(p => coletadosCDs.has(p.cd_produto) || coletadosEANs.has(p.ean)).sort(porStatus);
 
   const gerarPDF = () => {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -634,15 +636,18 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
       doc.text('Itens expostos', 14, y);
       autoTable(doc, {
         startY: y + 4,
-        head: [['Código', 'Descrição', 'Estoque']],
+        head: [['Código', 'Descrição', 'Status', 'Estoque', 'Última NF', 'Motivo Susp.']],
         body: expostos.map(p => [
           p.cd_produto,
           p.descricao_produto || '',
+          p.produto_status || '',
           p.estoque_qty ?? '',
+          p.data_ultima_nf ? new Date(p.data_ultima_nf).toLocaleDateString('pt-BR') : '—',
+          MOTIVO_LABEL[p.motivo_suspencao] || '—',
         ]),
         headStyles: { fillColor: [16, 185, 129] },
         styles: { fontSize: 8 },
-        columnStyles: { 1: { cellWidth: 100 } },
+        columnStyles: { 1: { cellWidth: 70 } },
       });
     }
 
@@ -734,6 +739,15 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
                       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>CD: {p.cd_produto}</span>
                       {p.ean && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>EAN: {p.ean}</span>}
                       <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Estoque: <strong>{p.estoque_qty ?? '—'}</strong></span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Última NF: {p.data_ultima_nf ? new Date(p.data_ultima_nf).toLocaleDateString('pt-BR') : '—'}</span>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 4,
+                        background: p.produto_status === 'Ativo' ? '#10b98120' : '#f59e0b20',
+                        color: p.produto_status === 'Ativo' ? '#10b981' : '#f59e0b',
+                      }}>{p.produto_status}</span>
+                      {p.motivo_suspencao > 0 && (
+                        <span style={{ fontSize: 11, color: '#f59e0b' }}>Susp: {MOTIVO_LABEL[p.motivo_suspencao]}</span>
+                      )}
                     </div>
                   </div>
                 ))}
