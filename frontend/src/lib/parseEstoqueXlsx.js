@@ -8,6 +8,7 @@ const COL_MAP = {
   DESCRICAO_DEPARTAMENTO:        ['DESCRICAO_DEPARTAMENTO','DESC_DEPARTAMENTO','DEPARTAMENTO'],
   DESCRICAO_SECAO:               ['DESCRICAO_SECAO','DESC_SECAO','SECAO'],
   DESC_MOTIVO_SUSPENCAO:         ['DESC_MOTIVO_SUSPENCAO','DESC_MOTIVO_SUSPENSAO','MOTIVO_SUSPENSAO','MOTIVO SUSPENSAO'],
+  MOTIVO_SUSPENCAO:              ['MOTIVO_SUSPENCAO'],
   NOME_FORNECEDOR:               ['NOME_FORNECEDOR','FORNECEDOR'],
   IDADE_ULTIMA_NF:               ['IDADE_ULTIMA_NF','IDADE_NF','DIAS_ULTIMA_NF'],
   DT_ULTIMA_VENDA:               ['DT_ULTIMA_VENDA','DATA_ULTIMA_VENDA','ULTIMA_VENDA'],
@@ -80,6 +81,7 @@ export async function parseEstoqueXlsx(file) {
     'sum_QTD_VENDAS_SEMANA_5',
     'sum_ESTOQUE_SEPARADO_CD_LOJA_QTD',
     'sum_ESTOQUE_TRANSITO_LOJA_QTD',
+    'MOTIVO_SUSPENCAO',
   ]);
   const { result: colMap, missing } = resolveColumns(Object.keys(rows[0]));
   const missingObrigatorias = missing.filter(c => !COLUNAS_OPCIONAIS.has(c));
@@ -95,8 +97,14 @@ export async function parseEstoqueXlsx(file) {
     if (EXCLUIR_SECOES.has(secao)) continue;
 
     const motivo = get(row, 'DESC_MOTIVO_SUSPENCAO');
-    const statusReal = (motivo && motivo !== 'null' && String(motivo).trim() !== '')
-      ? 'Suspenso' : String(get(row, 'PRODUTO_STATUS') || '');
+    // Fonte da verdade pro status: coluna MOTIVO_SUSPENCAO (código numérico) —
+    // 0 = Ativo, qualquer outro valor = Suspenso. A coluna PRODUTO_STATUS não
+    // é confiável e é ignorada de propósito (mesma regra da Conferência de Seção).
+    const motivoColPresente = colMap.MOTIVO_SUSPENCAO != null;
+    const motivoNum = Math.round(parseFloat(get(row, 'MOTIVO_SUSPENCAO')) || 0);
+    const statusReal = motivoColPresente
+      ? (motivoNum > 0 ? 'Suspenso' : 'Ativo')
+      : ((motivo && motivo !== 'null' && String(motivo).trim() !== '') ? 'Suspenso' : String(get(row, 'PRODUTO_STATUS') || ''));
 
     const s1 = parseFloat(get(row, 'sum_QTD_VENDAS_SEMANA_1')) || 0;
     const s2 = parseFloat(get(row, 'sum_QTD_VENDAS_SEMANA_2')) || 0;
