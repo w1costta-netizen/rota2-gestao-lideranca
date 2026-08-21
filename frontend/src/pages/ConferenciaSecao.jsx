@@ -694,8 +694,12 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
   // estar desatualizado. Um item ativo exposto conta como sem ruptura,
   // mesmo que a planilha diga estoque zero; um ativo não encontrado conta
   // como ruptura, mesmo que a planilha diga que tem estoque.
+  // O total considerado como "ativo" também inclui os suspensos que têm
+  // estoque — na prática esses itens estão disponíveis pra venda, então
+  // entram na base de cálculo mesmo a planilha marcando como suspenso.
   const ativosNaoExpostos = naoExpostos.filter(p => p.produto_status === 'Ativo');
-  const pctRuptura = totalAtivos ? Math.round((ativosNaoExpostos.length / totalAtivos) * 100) : 0;
+  const totalAtivosRuptura = totalAtivos + suspComEstoque.length;
+  const pctRuptura = totalAtivosRuptura ? Math.round((ativosNaoExpostos.length / totalAtivosRuptura) * 100) : 0;
 
   return (
     <div>
