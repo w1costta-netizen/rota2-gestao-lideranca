@@ -47,8 +47,11 @@ router.post('/importar', upload.single('file'), async (req, res) => {
       cd_produto:             r['CD_PRODUTO'] != null ? String(r['CD_PRODUTO']).padStart(6, '0') : null,
       ean:                    r['EAN']        != null ? String(r['EAN']) : null,
       descricao_produto:      r['DESCRICAO_PRODUTO']             || null,
+      // Status real do produto vem de MOTIVO_SUSPENCAO (0 = ativo, >0 = suspenso).
+      // A coluna PRODUTO_STATUS (G) é ignorada de propósito — ela não reflete
+      // suspensão e estava fazendo o relatório mostrar item suspenso como ativo.
       motivo_suspencao:       Math.round(r['MOTIVO_SUSPENCAO']   ?? 0),
-      produto_status:         r['PRODUTO_STATUS']                || null,
+      produto_status:         Math.round(r['MOTIVO_SUSPENCAO'] ?? 0) > 0 ? 'Suspenso' : 'Ativo',
       descricao_setor:        r['DESCRICAO_SETOR']               || null,
       descricao_departamento: r['DESCRICAO_DEPARTAMENTO']        || null,
       descricao_secao:        r['DESCRICAO_SECAO']               || null,
