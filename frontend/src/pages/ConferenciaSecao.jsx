@@ -605,7 +605,7 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
 
     // Resumo
     doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
-    doc.text(`Total na linha: ${todos.length}   Coletados: ${expostos.length}   Não expostos: ${naoExpostos.length}`, 14, 38);
+    doc.text(`Total na linha: ${todos.length}   Expostos: ${expostos.length}   Não expostos: ${naoExpostos.length}`, 14, 38);
     doc.setFontSize(9); doc.setFont(undefined, 'normal');
     doc.text(
       `Susp. c/ estoque: ${suspComEstoque.length}   Susp. s/ estoque: ${suspSemEstoque.length}   `
