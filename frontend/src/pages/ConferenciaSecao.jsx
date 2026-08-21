@@ -656,6 +656,21 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
       });
     }
 
+    // Rodapé com a marca do app em todas as páginas
+    const totalPages = doc.internal.getNumberOfPages();
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+      doc.setDrawColor(220); doc.setLineWidth(0.2);
+      doc.line(14, pageH - 14, pageW - 14, pageH - 14);
+      doc.setFontSize(8); doc.setFont(undefined, 'bold'); doc.setTextColor(120);
+      doc.text('Rota Líder', 14, pageH - 9);
+      doc.setFont(undefined, 'normal');
+      doc.text('rotalider.com.br', pageW - 14, pageH - 9, { align: 'right' });
+      doc.text(`Página ${i} de ${totalPages}`, pageW / 2, pageH - 9, { align: 'center' });
+    }
+
     doc.save(`conferencia_${(fmtList(sessao.sulinha) || fmtList(sessao.linha) || 'itens').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
