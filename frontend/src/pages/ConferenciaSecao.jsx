@@ -606,13 +606,18 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
     // Resumo
     doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
     doc.text(`Total na linha: ${todos.length}   Coletados: ${expostos.length}   Não expostos: ${naoExpostos.length}`, 14, 38);
+    doc.setFontSize(9); doc.setFont(undefined, 'normal');
+    doc.text(
+      `Susp. c/ estoque: ${suspComEstoque.length}   Susp. s/ estoque: ${suspSemEstoque.length}   `
+      + `Ativos c/ estoque: ${ativComEstoque.length}   Ativos s/ estoque: ${ativSemEstoque.length}   `
+      + `% Ruptura (ativos): ${pctRuptura}%`, 14, 44);
 
     // Tabela não expostos
     if (naoExpostos.length > 0) {
       doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
-      doc.text('Itens NÃO expostos', 14, 47);
+      doc.text('Itens NÃO expostos', 14, 53);
       autoTable(doc, {
-        startY: 51,
+        startY: 57,
         head: [['Código', 'Descrição', 'Status', 'Estoque', 'Última NF', 'Motivo Susp.']],
         body: naoExpostos.map(p => [
           p.cd_produto,
@@ -630,7 +635,7 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
 
     // Tabela expostos — no mesmo relatório, logo abaixo da de não expostos
     if (expostos.length > 0) {
-      let y = naoExpostos.length > 0 ? doc.lastAutoTable.finalY + 10 : 47;
+      let y = naoExpostos.length > 0 ? doc.lastAutoTable.finalY + 10 : 53;
       if (y > 260) { doc.addPage(); y = 20; }
       doc.setFontSize(11); doc.setFont(undefined, 'bold'); doc.setTextColor(0);
       doc.text('Itens expostos', 14, y);
@@ -656,6 +661,15 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
 
   const pct = todos.length ? Math.round((expostos.length / todos.length) * 100) : 0;
 
+  // Resumo por status x estoque + % de ruptura (só considera itens ativos)
+  const temEstoque = p => (p.estoque_qty || 0) > 0;
+  const suspComEstoque = todos.filter(p => p.produto_status === 'Suspenso' && temEstoque(p));
+  const suspSemEstoque = todos.filter(p => p.produto_status === 'Suspenso' && !temEstoque(p));
+  const ativComEstoque = todos.filter(p => p.produto_status === 'Ativo' && temEstoque(p));
+  const ativSemEstoque = todos.filter(p => p.produto_status === 'Ativo' && !temEstoque(p));
+  const totalAtivos = ativComEstoque.length + ativSemEstoque.length;
+  const pctRuptura = totalAtivos ? Math.round((ativSemEstoque.length / totalAtivos) * 100) : 0;
+
   return (
     <div>
       <div className="page-header">
@@ -670,6 +684,22 @@ function Relatorio({ userId, profile, sessao, itensColetados, onVoltar }) {
 
       {!loading && (
         <>
+          {/* Resumo status x estoque + % de ruptura */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10, marginBottom: 14 }}>
+            {[
+              { label: 'Susp. c/ estoque', value: suspComEstoque.length, color: '#f59e0b' },
+              { label: 'Susp. s/ estoque', value: suspSemEstoque.length, color: '#f59e0b' },
+              { label: 'Ativos c/ estoque', value: ativComEstoque.length, color: '#10b981' },
+              { label: 'Ativos s/ estoque', value: ativSemEstoque.length, color: '#ef4444' },
+              { label: '% Ruptura (ativos)', value: `${pctRuptura}%`, color: '#ef4444' },
+            ].map(c => (
+              <div key={c.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 8px', textAlign: 'center' }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color: c.color }}>{c.value}</div>
+                <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 2 }}>{c.label}</div>
+              </div>
+            ))}
+          </div>
+
           {/* Cards de resumo */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
             {[
