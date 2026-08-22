@@ -233,6 +233,70 @@ function detectarTotal(linhas) {
   return { totalRow: null, subRows: linhas };
 }
 
+// ─── Filtro de departamento (multi-seleção com "Selecionar todos") ────────
+function DeptoFilter({ opcoes, selecionados, onChange, carregando }) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef();
+
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [open]);
+
+  if (carregando) {
+    return <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Carregando departamentos…</span>;
+  }
+  if (!opcoes.length) {
+    return <span style={{ fontSize: 12, color: 'var(--text-muted)' }} title="Importe o Estoque para habilitar o filtro por departamento">
+      Filtro por departamento indisponível (importe o Estoque)
+    </span>;
+  }
+
+  const todosSelecionados = selecionados.length === 0;
+  const resumo = todosSelecionados ? 'Todos os departamentos'
+    : selecionados.length === 1 ? selecionados[0]
+    : `${selecionados.length} departamentos`;
+
+  const toggle = (op) => onChange(sel => sel.includes(op) ? sel.filter(x => x !== op) : [...sel, op]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" onClick={() => setOpen(o => !o)}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)',
+          border: '1px solid var(--border)', borderRadius: 8, padding: '7px 12px', fontSize: 12,
+          color: 'var(--text)', cursor: 'pointer' }}>
+        {resumo} <ChevronDown size={13} />
+      </button>
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 20,
+          background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+          boxShadow: '0 8px 24px rgba(0,0,0,.15)', padding: 6, minWidth: 240, maxHeight: 280, overflowY: 'auto' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6,
+            cursor: 'pointer', fontSize: 13, fontWeight: 700, borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
+            <input type="checkbox" checked={todosSelecionados} onChange={() => onChange([])}
+              style={{ accentColor: 'var(--primary)', width: 15, height: 15 }} />
+            Todos os departamentos
+          </label>
+          {opcoes.map(op => {
+            const sel = selecionados.includes(op);
+            return (
+              <label key={op} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px',
+                borderRadius: 6, cursor: 'pointer', fontSize: 13,
+                background: sel ? 'rgba(255,112,0,.08)' : 'transparent' }}>
+                <input type="checkbox" checked={sel} onChange={() => toggle(op)}
+                  style={{ accentColor: 'var(--primary)', width: 15, height: 15 }} />
+                {op}
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Tela principal ──────────────────────────────────────
 export default function PainelVendas({ profile }) {
   const [tab, setTab] = useState(0);
@@ -244,6 +308,11 @@ export default function PainelVendas({ profile }) {
   const tenantId = profile?.tenant_id;
 
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // Mapa código do produto → departamento, vindo do Estoque (a planilha de
+  // vendas não traz departamento junto do item, só o Estoque tem essa ligação)
+  const [mapaDepto, setMapaDepto] = useState(null); // Map | null (null = ainda não carregou)
+  const [deptosSelecionados, setDeptosSelecionados] = useState([]); // vazio = todos
 
   const carregarPeriodos = useCallback(async () => {
     if (!company) return;
@@ -262,14 +331,32 @@ export default function PainelVendas({ profile }) {
     setLoading(false);
   }, [company, periodo]);
 
+  const carregarMapaDepto = useCallback(async () => {
+    if (!company) return;
+    const { data } = await supabase.from('estoque_payloads').select('payload').eq('company', company).single();
+    const lista = data?.payload?.mapa_departamentos || [];
+    setMapaDepto(new Map(lista));
+  }, [company]);
+
   useEffect(() => { carregarPeriodos(); }, [carregarPeriodos, refreshKey]);
   useEffect(() => { carregarDados(); }, [carregarDados]);
+  useEffect(() => { carregarMapaDepto(); }, [carregarMapaDepto]);
 
   // Agrupa por tipo de bloco
   const canais  = dados.filter(d => d.canal);
   const deptos  = dados.filter(d => d.departamento).map(d => ({ ...d, nome: d.departamento }));
   const cats    = dados.filter(d => d.categoria).map(d => ({ ...d, nome: d.categoria }));
-  const itens   = dados.filter(d => d.item).map(d => ({ ...d, nome: d.item }));
+  // Descobre o departamento de cada item cruzando o código no início do nome
+  // (ex: "259183 - SACOLA SAMS...") com o mapa vindo do Estoque
+  const itens   = dados.filter(d => d.item).map(d => {
+    const cod = parseInt(String(d.item).match(/^\d+/)?.[0], 10);
+    const depto = mapaDepto?.get(cod) || null;
+    return { ...d, nome: d.item, departamentoItem: depto };
+  });
+  const deptosDisponiveis = [...new Set(itens.map(i => i.departamentoItem).filter(Boolean))].sort();
+  const filtrarPorDepto = (lista) => deptosSelecionados.length
+    ? lista.filter(i => deptosSelecionados.includes(i.departamentoItem))
+    : lista;
 
   // KPIs globais — usa linha de total do bloco CANAL se detectada, senão soma tudo
   const baseCanais = canais.length ? canais : dados;
@@ -503,20 +590,26 @@ export default function PainelVendas({ profile }) {
           )}
           {tab === 3 && (
             <>
-              <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', marginBottom: 12 }}>Por Item / Produto</h3>
-              <TabelaVendas linhas={itens} />
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Por Item / Produto</h3>
+                <DeptoFilter opcoes={deptosDisponiveis} selecionados={deptosSelecionados} onChange={setDeptosSelecionados} carregando={mapaDepto === null} />
+              </div>
+              <TabelaVendas linhas={filtrarPorDepto(itens)} />
             </>
           )}
           {tab === 4 && (
             <>
-              <h3 style={{ fontSize: 14, fontWeight: 600, color: '#ef4444', marginBottom: 4,
-                display: 'flex', alignItems: 'center', gap: 6 }}>
-                <AlertTriangle size={16} /> Itens em Queda
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 4 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 600, color: '#ef4444', margin: 0,
+                  display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertTriangle size={16} /> Itens em Queda
+                </h3>
+                <DeptoFilter opcoes={deptosDisponiveis} selecionados={deptosSelecionados} onChange={setDeptosSelecionados} carregando={mapaDepto === null} />
+              </div>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
                 Todos os itens com receita abaixo do período anterior (YoY negativo), do pior para o melhor.
               </p>
-              <TabelaVendas linhas={atencao.map(d => ({
+              <TabelaVendas linhas={filtrarPorDepto(atencao).map(d => ({
                 ...d,
                 nome: d.canal || d.departamento || d.categoria || d.item || d.nome,
               }))} />
