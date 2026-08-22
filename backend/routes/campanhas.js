@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
   const { data, error } = await supabase
     .from('campanhas')
     .select(`*, creator:created_by(full_name),
-      campanha_itens(id),
+      campanha_itens(id, sinalizacao),
       campanha_evidencias(id, item_id)`)
     .eq('company', targetCompany)
     .neq('status', 'arquivada')
@@ -257,6 +257,32 @@ router.delete('/itens/:itemId', async (req, res) => {
   if (!isManager(me)) return res.status(403).json({ error: 'Acesso negado' });
   await supabase.from('campanha_itens').delete().eq('id', req.params.itemId);
   res.json({ ok: true });
+});
+
+// PUT /api/campanhas/itens/:itemId/sinalizar — marca item como Ruptura ou
+// Armazenado/não exposto em vez de exigir foto. sinalizacao=null remove.
+const SINALIZACOES_VALIDAS = ['ruptura', 'nao_exposto'];
+router.put('/itens/:itemId/sinalizar', async (req, res) => {
+  const { requester_id, sinalizacao } = req.body;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const me = await getProfile(requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  if (sinalizacao !== null && !SINALIZACOES_VALIDAS.includes(sinalizacao))
+    return res.status(400).json({ error: 'sinalizacao inválida' });
+
+  const { data: item, error } = await supabase.from('campanha_itens')
+    .update({
+      sinalizacao,
+      sinalizado_por: sinalizacao ? requester_id : null,
+      sinalizado_em:  sinalizacao ? new Date().toISOString() : null,
+    })
+    .eq('id', req.params.itemId).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+
+  if (sinalizacao) {
+    logAction({ company: me.company, user_id: requester_id, acao: 'sinalizar_item_flyer', tabela: 'campanha_itens', depois: { item_id: req.params.itemId, sinalizacao } });
+  }
+  res.json(item);
 });
 
 // ── EVIDÊNCIAS ────────────────────────────────────────────────────

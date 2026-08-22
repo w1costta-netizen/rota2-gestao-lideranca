@@ -94,8 +94,9 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   // Campanhas ativas (não arquivadas, com itens)
   const campAtivasSemConcluir = campanhas.filter(c => {
     const total   = c.campanha_itens?.length || 0;
-    const itensIds = c.campanha_itens?.map(i => i.id) || [];
-    const feitos  = c.campanha_evidencias?.filter(e => itensIds.includes(e.item_id)).length || 0;
+    const comFoto = new Set((c.campanha_evidencias || []).map(e => e.item_id));
+    const sinalizados = (c.campanha_itens || []).filter(i => i.sinalizacao).length;
+    const feitos  = comFoto.size + sinalizados;
     return total > 0 && feitos < total;
   });
 
@@ -315,8 +316,9 @@ export default function Dashboard({ setPage, profile: propProfile }) {
             : <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                 {campanhas.slice(0,4).map(c => {
                   const total    = c.campanha_itens?.length || 0;
-                  const itensIds = c.campanha_itens?.map(i => i.id) || [];
-                  const feitos   = c.campanha_evidencias?.filter(e => itensIds.includes(e.item_id)).length || 0;
+                  const comFoto  = new Set((c.campanha_evidencias || []).map(e => e.item_id));
+                  const sinalizados = (c.campanha_itens || []).filter(i => i.sinalizacao).length;
+                  const feitos   = comFoto.size + sinalizados;
                   const pct      = total ? Math.round((feitos/total)*100) : 0;
                   const ok       = total > 0 && feitos === total;
                   return (

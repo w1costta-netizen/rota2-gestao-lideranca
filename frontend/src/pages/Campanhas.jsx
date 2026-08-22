@@ -188,7 +188,10 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
   useEffect(() => { load(); }, [campanha.id]);
 
   const totalItens = itens.length;
-  const validados  = itens.filter(i => i.campanha_evidencias?.length > 0).length;
+  // Um item conta como concluído com foto OU sinalizado (ruptura / armazenado e não exposto)
+  const validados  = itens.filter(i => i.campanha_evidencias?.length > 0 || i.sinalizacao).length;
+  const sinalizadosRuptura   = itens.filter(i => i.sinalizacao === 'ruptura').length;
+  const sinalizadosNaoExposto = itens.filter(i => i.sinalizacao === 'nao_exposto').length;
   const progresso  = totalItens ? Math.round((validados / totalItens) * 100) : 0;
   const concluido  = totalItens > 0 && validados === totalItens;
 
@@ -223,6 +226,18 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
     await api.delete(`/campanhas/itens/${id}?requester_id=${userId}`).catch(() => {});
     setItens(l => l.filter(i => i.id !== id));
     toast('Item removido');
+  };
+
+  // Sinalizar item como Ruptura ou Armazenado/não exposto — substitui a
+  // exigência de foto pra casos onde não dá pra fotografar o item na loja.
+  const [sinalizarMenu, setSinalizarMenu] = useState(null); // id do item com o menu aberto
+  const sinalizarItem = async (item, sinalizacao) => {
+    setSinalizarMenu(null);
+    try {
+      const { data } = await api.put(`/campanhas/itens/${item.id}/sinalizar`, { requester_id: userId, sinalizacao });
+      setItens(l => l.map(i => i.id === item.id ? { ...i, sinalizacao: data.sinalizacao } : i));
+      toast(sinalizacao ? 'Item sinalizado' : 'Sinalização removida');
+    } catch { toast('Erro ao sinalizar item'); }
   };
 
   // ── Import Excel
@@ -486,7 +501,10 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, W - 14, 20, { align: 'right' });
 
       const total = its.length;
-      const validadosPDF = its.filter(i => i.campanha_evidencias?.length > 0).length;
+      const comFoto = its.filter(i => i.campanha_evidencias?.length > 0).length;
+      const rupturaCount = its.filter(i => i.sinalizacao === 'ruptura').length;
+      const naoExpostoCount = its.filter(i => i.sinalizacao === 'nao_exposto').length;
+      const validadosPDF = comFoto + rupturaCount + naoExpostoCount;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(11); doc.setFont('helvetica', 'bold');
       doc.text('RESUMO', 14, 36);
@@ -495,16 +513,23 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       doc.text(`Sinalizados: ${validadosPDF}`, 70, 43);
       doc.text(`Pendentes: ${total - validadosPDF}`, 130, 43);
       doc.text(`Progresso: ${Math.round((validadosPDF / total) * 100)}%`, 14, 50);
+      if (rupturaCount > 0 || naoExpostoCount > 0) {
+        doc.setTextColor(150, 60, 0);
+        doc.text(`⚠ Ruptura: ${rupturaCount}   📦 Armazenado, não exposto: ${naoExpostoCount}`, 14, 57);
+        doc.setTextColor(0, 0, 0);
+      }
 
+      const barY = (rupturaCount > 0 || naoExpostoCount > 0) ? 61 : 53;
       doc.setFillColor(220, 220, 220);
-      doc.rect(14, 53, W - 28, 5, 'F');
+      doc.rect(14, barY, W - 28, 5, 'F');
       doc.setFillColor(232, 104, 26);
-      doc.rect(14, 53, ((W - 28) * validadosPDF / total), 5, 'F');
+      doc.rect(14, barY, ((W - 28) * validadosPDF / total), 5, 'F');
 
-      let y = 65;
+      let y = barY + 12;
       for (const item of its) {
         const evs = item.campanha_evidencias || [];
-        const validado = evs.length > 0;
+        const sinal = item.sinalizacao;
+        const validado = evs.length > 0 || !!sinal;
         if (y > 260) { doc.addPage(); y = 15; }
 
         doc.setFillColor(validado ? 232 : 245, validado ? 248 : 245, validado ? 232 : 245);
@@ -520,7 +545,11 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
           doc.setFont('helvetica', 'bold'); doc.setTextColor(232, 104, 26);
           doc.text(item.preco, W - 16, y + 2, { align: 'right' });
         }
-        if (validado) {
+        if (sinal) {
+          doc.setFont('helvetica', 'bold'); doc.setFontSize(8);
+          doc.setTextColor(sinal === 'ruptura' ? 200 : 100, sinal === 'ruptura' ? 120 : 60, sinal === 'ruptura' ? 0 : 200);
+          doc.text(`Sinalizado: ${sinal === 'ruptura' ? 'Ruptura' : 'Armazenado, não exposto'}`, 26, y + 8);
+        } else if (validado) {
           doc.setFont('helvetica', 'normal'); doc.setFontSize(8); doc.setTextColor(100, 100, 100);
           const nomes = [...new Set(evs.map(e => e.user?.full_name).filter(Boolean))].join(', ');
           doc.text(`Por: ${nomes || '—'} | ${evs.length} foto${evs.length > 1 ? 's' : ''}`, 26, y + 8);
@@ -645,6 +674,12 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
             background: concluido ? '#10b981' : 'linear-gradient(90deg, var(--primary), #f59e0b)',
           }} />
         </div>
+        {(sinalizadosRuptura > 0 || sinalizadosNaoExposto > 0) && (
+          <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+            {sinalizadosRuptura > 0 && <span>⚠️ {sinalizadosRuptura} em ruptura</span>}
+            {sinalizadosNaoExposto > 0 && <span>📦 {sinalizadosNaoExposto} armazenado(s), não expostos</span>}
+          </div>
+        )}
         {concluido && (
           <div style={{ textAlign: 'center', marginTop: 10, color: '#10b981', fontWeight: 700, fontSize: 13 }}>
             ✅ Sinalização concluída! Gere o relatório PDF.
@@ -658,24 +693,42 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {itens.map(item => {
           const evs = item.campanha_evidencias || [];
-          const ok  = evs.length > 0;
+          const sinal = item.sinalizacao; // 'ruptura' | 'nao_exposto' | null
+          const ok  = evs.length > 0 || !!sinal;
           const cheio = evs.length >= 5;
+          const sinalInfo = sinal === 'ruptura'
+            ? { emoji: '⚠️', label: 'Ruptura', cor: '#f59e0b' }
+            : sinal === 'nao_exposto'
+              ? { emoji: '📦', label: 'Armazenado, não exposto', cor: '#8b5cf6' }
+              : null;
           return (
             <div key={item.id} style={{
               background: 'var(--surface)', borderRadius: 12, padding: '14px 16px',
-              border: `1px solid ${ok ? '#10b98140' : 'var(--border)'}`,
-              borderLeft: `4px solid ${ok ? '#10b981' : '#f59e0b'}`,
+              border: `1px solid ${sinalInfo ? sinalInfo.cor + '40' : ok ? '#10b98140' : 'var(--border)'}`,
+              borderLeft: `4px solid ${sinalInfo ? sinalInfo.cor : ok ? '#10b981' : '#f59e0b'}`,
             }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-                {ok ? <CheckCircle size={22} style={{ color: '#10b981', flexShrink: 0, marginTop: 2 }} />
+                {sinalInfo ? <AlertTriangle size={22} style={{ color: sinalInfo.cor, flexShrink: 0, marginTop: 2 }} />
+                  : ok ? <CheckCircle size={22} style={{ color: '#10b981', flexShrink: 0, marginTop: 2 }} />
                     : <Circle size={22} style={{ color: '#f59e0b', flexShrink: 0, marginTop: 2 }} />}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 14 }}>{item.descricao}</div>
                   <div style={{ display: 'flex', gap: 10, fontSize: 12, color: 'var(--text-muted)', marginTop: 2, flexWrap: 'wrap' }}>
                     {item.preco && <span style={{ color: '#E8681A', fontWeight: 700 }}>{item.preco}</span>}
                     {item.categoria && <span>{item.categoria}</span>}
-                    {ok && <span style={{ color: '#10b981' }}>✓ {evs.length} foto{evs.length > 1 ? 's' : ''}</span>}
+                    {!sinalInfo && ok && <span style={{ color: '#10b981' }}>✓ {evs.length} foto{evs.length > 1 ? 's' : ''}</span>}
                   </div>
+                  {sinalInfo && (
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6,
+                      background: sinalInfo.cor + '18', color: sinalInfo.cor, fontWeight: 700, fontSize: 12,
+                      padding: '4px 10px', borderRadius: 20 }}>
+                      {sinalInfo.emoji} Sinalizado: {sinalInfo.label}
+                      <button onClick={() => sinalizarItem(item, null)} title="Remover sinalização"
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: sinalInfo.cor }}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  )}
                   {item.dinamica_comercial && (
                     <div style={{ fontSize: 11, color: '#6366f1', marginTop: 3, fontStyle: 'italic' }}>
                       🏷️ {item.dinamica_comercial}
@@ -700,14 +753,38 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
                     </div>
                   )}
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-                  {!cheio && (
+                <div style={{ display: 'flex', gap: 6, flexShrink: 0, position: 'relative' }}>
+                  {!sinalInfo && !cheio && (
                     <button className="btn btn-primary" style={{ fontSize: 12, padding: '6px 12px' }}
                       onClick={() => { setFotoModal(item); setFotoPreview(null); setObs(''); }}>
                       <Camera size={13} /> {ok ? `+Foto (${evs.length}/5)` : 'Foto'}
                     </button>
                   )}
-                  {cheio && <span style={{ fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center' }}>5/5 fotos</span>}
+                  {!sinalInfo && cheio && <span style={{ fontSize: 11, color: 'var(--text-muted)', alignSelf: 'center' }}>5/5 fotos</span>}
+                  {!sinalInfo && !ok && (
+                    <button className="btn-icon" title="Não dá pra fotografar (ruptura ou armazenado)"
+                      onClick={() => setSinalizarMenu(m => m === item.id ? null : item.id)}>
+                      <AlertTriangle size={13} />
+                    </button>
+                  )}
+                  {sinalizarMenu === item.id && (
+                    <div style={{
+                      position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 20,
+                      background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+                      boxShadow: '0 8px 24px rgba(0,0,0,.15)', padding: 4, minWidth: 220,
+                    }}>
+                      <button onClick={() => sinalizarItem(item, 'ruptura')} style={{
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                        background: 'none', border: 'none', cursor: 'pointer', padding: '8px 10px',
+                        borderRadius: 6, fontSize: 13, color: 'var(--text)',
+                      }}>⚠️ Sinalizar: Ruptura</button>
+                      <button onClick={() => sinalizarItem(item, 'nao_exposto')} style={{
+                        display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
+                        background: 'none', border: 'none', cursor: 'pointer', padding: '8px 10px',
+                        borderRadius: 6, fontSize: 13, color: 'var(--text)',
+                      }}>📦 Sinalizar: Armazenado, não exposto</button>
+                    </div>
+                  )}
                   {isAdmin && (
                     <>
                       <button className="btn-icon" onClick={() => openEditItem(item)}><Pencil size={13} /></button>
@@ -1096,7 +1173,9 @@ export default function Campanhas({ userId, profile }) {
               .filter(e => itensIds.includes(e.item_id))
               .map(e => e.item_id)
           );
-          const feitos   = itensComFoto.size;
+          // Item sinalizado (ruptura / armazenado e não exposto) também conta como concluído
+          const itensSinalizados = (c.campanha_itens || []).filter(i => i.sinalizacao).length;
+          const feitos   = itensComFoto.size + itensSinalizados;
           const pct      = total ? Math.min(100, Math.round((feitos / total) * 100)) : 0;
           const ok       = total > 0 && feitos === total;
 
