@@ -183,7 +183,7 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
     <aside ref={sidebarRef} className="sidebar" style={mobileStyle}>
       <div className="sidebar-logo" style={collapsed ? { padding:'16px 8px', justifyContent:'center', flexDirection:'column', gap:4 } : undefined}>
         <div className="sidebar-logo-icon" style={collapsed ? { width:26, height:26, background:'#1a1a1a' } : { background:'#1a1a1a' }}>
-          <img src="/logo-icon.png" alt="Rota Líder" style={{ width:'70%', height:'70%', objectFit:'contain' }} />
+          <img src="/logo-icon.png" alt="Rota Líder" style={{ width:'95%', height:'95%', objectFit:'contain' }} />
         </div>
         {!collapsed && (
           <div>
