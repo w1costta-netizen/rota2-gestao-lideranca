@@ -175,10 +175,13 @@ router.get('/verificar-token', async (req, res) => {
 // POST /api/hotmart/ativar-conta
 // Chamado pelo frontend após criar usuário no Supabase Auth
 router.post('/ativar-conta', async (req, res) => {
-  const { token, user_id, full_name, email, company } = req.body;
+  const { token, user_id, full_name, email, company, aceite_termos } = req.body;
 
   if (!token || !user_id || !email || !company) {
     return res.status(400).json({ error: 'Dados incompletos.' });
+  }
+  if (!aceite_termos) {
+    return res.status(400).json({ error: 'É necessário aceitar os Termos de Uso e a Política de Privacidade.' });
   }
 
   // 1. Validar token

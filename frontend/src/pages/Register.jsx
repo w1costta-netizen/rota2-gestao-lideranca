@@ -12,6 +12,7 @@ export default function Register({ onGoLogin }) {
   const [done, setDone]         = useState(false);
   const [error, setError]       = useState('');
   const [precisaConfirmar, setPrecisaConfirmar] = useState(false);
+  const [aceiteTermos, setAceiteTermos] = useState(false);
 
   const [form, setForm] = useState({
     full_name: '',
@@ -53,6 +54,7 @@ export default function Register({ onGoLogin }) {
     if (!form.company.trim())   return setError('Digite o nome da sua empresa ou equipe.');
     if (!form.password || form.password.length < 6) return setError('A senha deve ter ao menos 6 caracteres.');
     if (form.password !== form.password2) return setError('As senhas não coincidem.');
+    if (!aceiteTermos) return setError('Você precisa aceitar os Termos de Uso e a Política de Privacidade para continuar.');
 
     setLoading(true);
     try {
@@ -81,6 +83,7 @@ export default function Register({ onGoLogin }) {
           full_name:  form.full_name,
           email:      form.email,
           company:    form.company,
+          aceite_termos: aceiteTermos,
         }),
       });
 
@@ -215,9 +218,23 @@ export default function Register({ onGoLogin }) {
           </div>
         </div>
 
+        <label style={{ display:'flex', alignItems:'flex-start', gap:8, marginTop:4, cursor:'pointer' }}>
+          <input type="checkbox" checked={aceiteTermos} onChange={e => setAceiteTermos(e.target.checked)}
+            style={{ marginTop:3, width:15, height:15, flexShrink:0, accentColor:'var(--primary)' }} />
+          <span style={{ fontSize:12, color:'var(--text-muted)', lineHeight:1.5 }}>
+            Li e aceito os{' '}
+            <a href="/termos-de-uso-rotalider.html" target="_blank" rel="noopener noreferrer"
+              style={{ color:'var(--primary)', textDecoration:'underline' }}>Termos de Uso</a>
+            {' '}e a{' '}
+            <a href="/politica-de-privacidade-rotalider.html" target="_blank" rel="noopener noreferrer"
+              style={{ color:'var(--primary)', textDecoration:'underline' }}>Política de Privacidade</a>
+            {' '}do Rota Líder.
+          </span>
+        </label>
+
         <button className="btn btn-primary"
           style={{ width:'100%', justifyContent:'center', marginTop:8 }}
-          onClick={submit} disabled={loading}>
+          onClick={submit} disabled={loading || !aceiteTermos}>
           {loading ? 'Criando conta...' : 'Criar minha conta'}
         </button>
       </div>
