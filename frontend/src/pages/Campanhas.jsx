@@ -10,6 +10,9 @@ import jsPDF from 'jspdf';
 import 'jspdf-autotable';
 
 const TIPO_LABEL = { feira: '🛒 Feira', fds: '🏷️ Final de Semana', catalogo: '📋 Catálogo' };
+// Versão sem emoji — as fontes padrão do jsPDF não têm esses glifos e
+// renderizam caracteres corrompidos no PDF gerado.
+const TIPO_LABEL_PDF = { feira: 'Feira', fds: 'Final de Semana', catalogo: 'Catálogo' };
 const TIPO_COLOR = { feira: '#6366f1', fds: '#E8681A', catalogo: '#0ea5e9' };
 
 function fmt(d) {
@@ -491,38 +494,50 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const W = doc.internal.pageSize.getWidth();
 
+      // Título/tipo/validade pode ser longo — quebra em várias linhas em vez
+      // de estourar a página. Emoji sai do texto (fonte padrão do PDF não tem
+      // esses glifos e renderiza caracteres corrompidos).
+      doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+      const infoText = `${c.titulo} | ${TIPO_LABEL_PDF[c.tipo]} | ${fmt(c.validade_ini)} a ${fmt(c.validade_fim)}`;
+      const infoLines = doc.splitTextToSize(infoText, W - 28);
+      const headerH = 21 + infoLines.length * 5 + 6;
+
       doc.setFillColor(232, 104, 26);
-      doc.rect(0, 0, W, 34, 'F');
+      doc.rect(0, 0, W, headerH, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(16); doc.setFont('helvetica', 'bold');
       doc.text('ROTA 2.0 — Relatório de Sinalização', 14, 12);
       doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-      // Título/tipo/validade e "gerado em" cada um na sua linha — dividindo a
-      // mesma linha eles se sobrepunham quando o título da campanha era longo.
-      doc.text(`${c.titulo} | ${TIPO_LABEL[c.tipo]} | ${fmt(c.validade_ini)} a ${fmt(c.validade_fim)}`, 14, 21);
+      doc.text(infoLines, 14, 21);
+      const geradoEmY = 21 + infoLines.length * 5;
       doc.setFontSize(8.5);
-      doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 14, 28);
+      doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 14, geradoEmY);
 
       const total = its.length;
       const comFoto = its.filter(i => i.campanha_evidencias?.length > 0).length;
       const rupturaCount = its.filter(i => i.sinalizacao === 'ruptura').length;
       const naoExpostoCount = its.filter(i => i.sinalizacao === 'nao_exposto').length;
       const validadosPDF = comFoto + rupturaCount + naoExpostoCount;
+      let ry = headerH + 8;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-      doc.text('RESUMO', 14, 42);
+      doc.text('RESUMO', 14, ry);
+      ry += 7;
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-      doc.text(`Total de itens: ${total}`, 14, 49);
-      doc.text(`Sinalizados: ${validadosPDF}`, 70, 49);
-      doc.text(`Pendentes: ${total - validadosPDF}`, 130, 49);
-      doc.text(`Progresso: ${Math.round((validadosPDF / total) * 100)}%`, 14, 56);
+      doc.text(`Total de itens: ${total}`, 14, ry);
+      doc.text(`Sinalizados: ${validadosPDF}`, 70, ry);
+      doc.text(`Pendentes: ${total - validadosPDF}`, 130, ry);
+      ry += 7;
+      doc.text(`Progresso: ${Math.round((validadosPDF / total) * 100)}%`, 14, ry);
+      ry += 7;
       if (rupturaCount > 0 || naoExpostoCount > 0) {
         doc.setTextColor(150, 60, 0);
-        doc.text(`⚠ Ruptura: ${rupturaCount}   📦 Armazenado, não exposto: ${naoExpostoCount}`, 14, 63);
+        doc.text(`Ruptura: ${rupturaCount}   Armazenado, não exposto: ${naoExpostoCount}`, 14, ry);
         doc.setTextColor(0, 0, 0);
+        ry += 4;
       }
 
-      const barY = (rupturaCount > 0 || naoExpostoCount > 0) ? 67 : 59;
+      const barY = ry;
       doc.setFillColor(220, 220, 220);
       doc.rect(14, barY, W - 28, 5, 'F');
       doc.setFillColor(232, 104, 26);
