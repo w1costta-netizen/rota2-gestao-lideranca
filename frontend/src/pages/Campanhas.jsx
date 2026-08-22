@@ -747,7 +747,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
                             style={{ position: 'absolute', top: -6, right: -6, background: '#ef4444', border: 'none', borderRadius: '50%', width: 18, height: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
                             <X size={10} color="#fff" />
                           </button>
-                          {ev.obs && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, maxWidth: 72, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={ev.obs}>"{ev.obs}"</div>}
+                          {ev.obs && <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 2, maxWidth: 72, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.3 }}>"{ev.obs}"</div>}
                         </div>
                       ))}
                     </div>
