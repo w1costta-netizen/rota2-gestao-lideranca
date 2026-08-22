@@ -492,13 +492,16 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       const W = doc.internal.pageSize.getWidth();
 
       doc.setFillColor(232, 104, 26);
-      doc.rect(0, 0, W, 28, 'F');
+      doc.rect(0, 0, W, 34, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(16); doc.setFont('helvetica', 'bold');
       doc.text('ROTA 2.0 — Relatório de Sinalização', 14, 12);
       doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-      doc.text(`${c.titulo} | ${TIPO_LABEL[c.tipo]} | ${fmt(c.validade_ini)} a ${fmt(c.validade_fim)}`, 14, 20);
-      doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, W - 14, 20, { align: 'right' });
+      // Título/tipo/validade e "gerado em" cada um na sua linha — dividindo a
+      // mesma linha eles se sobrepunham quando o título da campanha era longo.
+      doc.text(`${c.titulo} | ${TIPO_LABEL[c.tipo]} | ${fmt(c.validade_ini)} a ${fmt(c.validade_fim)}`, 14, 21);
+      doc.setFontSize(8.5);
+      doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 14, 28);
 
       const total = its.length;
       const comFoto = its.filter(i => i.campanha_evidencias?.length > 0).length;
@@ -507,19 +510,19 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       const validadosPDF = comFoto + rupturaCount + naoExpostoCount;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(11); doc.setFont('helvetica', 'bold');
-      doc.text('RESUMO', 14, 36);
+      doc.text('RESUMO', 14, 42);
       doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
-      doc.text(`Total de itens: ${total}`, 14, 43);
-      doc.text(`Sinalizados: ${validadosPDF}`, 70, 43);
-      doc.text(`Pendentes: ${total - validadosPDF}`, 130, 43);
-      doc.text(`Progresso: ${Math.round((validadosPDF / total) * 100)}%`, 14, 50);
+      doc.text(`Total de itens: ${total}`, 14, 49);
+      doc.text(`Sinalizados: ${validadosPDF}`, 70, 49);
+      doc.text(`Pendentes: ${total - validadosPDF}`, 130, 49);
+      doc.text(`Progresso: ${Math.round((validadosPDF / total) * 100)}%`, 14, 56);
       if (rupturaCount > 0 || naoExpostoCount > 0) {
         doc.setTextColor(150, 60, 0);
-        doc.text(`⚠ Ruptura: ${rupturaCount}   📦 Armazenado, não exposto: ${naoExpostoCount}`, 14, 57);
+        doc.text(`⚠ Ruptura: ${rupturaCount}   📦 Armazenado, não exposto: ${naoExpostoCount}`, 14, 63);
         doc.setTextColor(0, 0, 0);
       }
 
-      const barY = (rupturaCount > 0 || naoExpostoCount > 0) ? 61 : 53;
+      const barY = (rupturaCount > 0 || naoExpostoCount > 0) ? 67 : 59;
       doc.setFillColor(220, 220, 220);
       doc.rect(14, barY, W - 28, 5, 'F');
       doc.setFillColor(232, 104, 26);
