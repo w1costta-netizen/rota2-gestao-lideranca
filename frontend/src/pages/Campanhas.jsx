@@ -506,7 +506,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       doc.rect(0, 0, W, headerH, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-      doc.text('ROTA 2.0 — Relatório de Sinalização', 14, 12);
+      doc.text('Rota Líder — Relatório de Sinalização', 14, 12);
       doc.setFontSize(10); doc.setFont('helvetica', 'normal');
       doc.text(infoLines, 14, 21);
       const geradoEmY = 21 + infoLines.length * 5;
@@ -599,6 +599,20 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
             if (col === perLinha - 1 || f === evs.length - 1) y += imgH + 12;
           }
         }
+      }
+
+      // Rodapé com a marca em todas as páginas
+      const totalPaginas = doc.internal.getNumberOfPages();
+      const pageH = doc.internal.pageSize.getHeight();
+      for (let p = 1; p <= totalPaginas; p++) {
+        doc.setPage(p);
+        doc.setDrawColor(220); doc.setLineWidth(0.2);
+        doc.line(14, pageH - 14, W - 14, pageH - 14);
+        doc.setFontSize(8); doc.setFont('helvetica', 'bold'); doc.setTextColor(120);
+        doc.text('Rota Líder', 14, pageH - 9);
+        doc.setFont('helvetica', 'normal');
+        doc.text('rotalider.com.br', W - 14, pageH - 9, { align: 'right' });
+        doc.text(`Página ${p} de ${totalPaginas}`, W / 2, pageH - 9, { align: 'center' });
       }
 
       doc.save(`relatorio_${c.titulo.replace(/\s/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
