@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Planos · Rota Líder</title>
+<style>
+  :root {
+    --bg:#0F1116;--card:#171A22;--line:#262B38;--orange:#E8681A;
+    --text:#F3F4F7;--text-dim:#9AA0B4;--text-faint:#676E82;--radius:14px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased;}
+  .header{background:var(--card);border-bottom:1px solid var(--line);padding:18px 24px;position:sticky;top:0;z-index:10;text-align:center;}
+  .logo{font-size:18px;font-weight:900;color:var(--orange);}
+  .logo span{color:var(--text);}
+  .header-sub{font-size:11px;color:var(--text-faint);margin-top:2px;}
+  .container{max-width:900px;margin:0 auto;padding:56px 24px 80px;}
+  .hero{text-align:center;margin-bottom:48px;}
+  .hero h1{font-size:32px;font-weight:900;letter-spacing:-.02em;margin-bottom:10px;}
+  .hero p{font-size:15px;color:var(--text-dim);max-width:520px;margin:0 auto;line-height:1.6;}
+  .plans{display:grid;grid-template-columns:1fr 1fr;gap:24px;}
+  .plan{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:32px 28px;display:flex;flex-direction:column;position:relative;}
+  .plan.destaque{border-color:var(--orange);box-shadow:0 0 0 1px var(--orange);}
+  .badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--orange);color:#1a0e06;font-size:11px;font-weight:900;padding:4px 14px;border-radius:20px;text-transform:uppercase;letter-spacing:.05em;white-space:nowrap;}
+  .plan-name{font-size:13px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;}
+  .plan-price{font-size:36px;font-weight:900;letter-spacing:-.02em;margin-bottom:2px;}
+  .plan-price span{font-size:14px;font-weight:600;color:var(--text-dim);}
+  .plan-sub{font-size:12px;color:var(--text-faint);margin-bottom:24px;}
+  .plan-features{list-style:none;margin-bottom:28px;flex-grow:1;}
+  .plan-features li{font-size:13px;color:var(--text-dim);padding:8px 0;border-bottom:1px solid rgba(38,43,56,.5);display:flex;align-items:center;gap:8px;}
+  .plan-features li:last-child{border-bottom:none;}
+  .plan-features li::before{content:"✓";color:var(--orange);font-weight:900;}
+  .btn{display:block;text-align:center;background:var(--orange);color:#1a0e06;font-size:14px;font-weight:800;padding:14px;border-radius:10px;text-decoration:none;transition:opacity .15s;}
+  .btn:hover{opacity:.9;}
+  .plan:not(.destaque) .btn{background:transparent;border:1px solid var(--orange);color:var(--orange);}
+  .footer-note{text-align:center;margin-top:40px;font-size:12px;color:var(--text-faint);}
+  .footer-note a{color:var(--orange);text-decoration:none;}
+  @media(max-width:680px){.plans{grid-template-columns:1fr;}.hero h1{font-size:26px;}}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">Rota <span>Líder</span></div>
+  <div class="header-sub">Gestão, Liderança e Produtividade · rotalider.com.br</div>
+</div>
+<div class="container">
+  <div class="hero">
+    <h1>Escolha seu plano</h1>
+    <p>Gestão de equipes, escalas, tarefas, indicadores e muito mais em um único lugar. Comece hoje mesmo.</p>
+  </div>
+
+  <div class="plans">
+    <div class="plan">
+      <div class="plan-name">Mensal</div>
+      <div class="plan-price">R$ 59,90<span>/mês</span></div>
+      <div class="plan-sub">Cobrança recorrente mensal</div>
+      <ul class="plan-features">
+        <li>Acesso completo à plataforma</li>
+        <li>Gestão de equipes e escalas</li>
+        <li>Tarefas, indicadores e relatórios</li>
+        <li>Suporte via e-mail</li>
+      </ul>
+      <a class="btn" href="https://pay.hotmart.com/T107241537N" target="_blank" rel="noopener noreferrer">Assinar Mensal</a>
+    </div>
+
+    <div class="plan destaque">
+      <div class="badge">Mais econômico</div>
+      <div class="plan-name">Anual</div>
+      <div class="plan-price">R$ 479,76<span>/ano</span></div>
+      <div class="plan-sub">Ou 12x de R$ 49,62 · equivalente a 2 meses grátis</div>
+      <ul class="plan-features">
+        <li>Acesso completo à plataforma</li>
+        <li>Gestão de equipes e escalas</li>
+        <li>Tarefas, indicadores e relatórios</li>
+        <li>Suporte prioritário</li>
+      </ul>
+      <a class="btn" href="https://pay.hotmart.com/T107241537N?off=21jshcy1" target="_blank" rel="noopener noreferrer">Assinar Anual</a>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Pagamento processado com segurança pela Hotmart. Ao assinar, você concorda com nossos
+    <a href="/termos-de-uso-rotalider.html" target="_blank" rel="noopener noreferrer">Termos de Uso</a> e
+    <a href="/politica-de-privacidade-rotalider.html" target="_blank" rel="noopener noreferrer">Política de Privacidade</a>.
+  </div>
+</div>
+</body>
+</html>
