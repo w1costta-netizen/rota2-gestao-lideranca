@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
-import { Store, Users, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, X, Plus, Save } from 'lucide-react';
+import { Store, Users, CheckCircle, XCircle, Clock, ChevronDown, ChevronUp, X, Plus, Save, Sparkles } from 'lucide-react';
 import api from '../api';
+import { PREMIUM_MODULES, MODULES } from '../lib/permissions';
+
+const PREMIUM_LABELS = MODULES.filter(m => PREMIUM_MODULES.includes(m.key));
 
 function Modal({ title, onClose, children }) {
   return (
@@ -65,6 +68,17 @@ export default function MasterDashboard({ userId, viewingStore, onSelectStore })
       load();
     } catch (e) {
       showToast(e.response?.data?.error || 'Erro ao aprovar', 'error');
+    }
+  };
+
+  const toggleModulo = async (store, key) => {
+    const atual = store.modulos_premium || [];
+    const novo = atual.includes(key) ? atual.filter(k => k !== key) : [...atual, key];
+    try {
+      await api.put(`/stores/${store.id}/modulos`, { requester_id: userId, modulos_premium: novo });
+      setStores(list => list.map(s => s.id === store.id ? { ...s, modulos_premium: novo } : s));
+    } catch (e) {
+      showToast(e.response?.data?.error || 'Erro ao atualizar módulos', 'error');
     }
   };
 
@@ -235,6 +249,32 @@ export default function MasterDashboard({ userId, viewingStore, onSelectStore })
               {/* Usuários da loja expandida */}
               {expanded === s.id && (
                 <div style={{ padding: '0 20px 16px', background: 'var(--surface-2)' }}>
+                  <div style={{ padding: '14px 0', borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Sparkles size={14} color="var(--primary)"/> Módulos premium contratados
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {PREMIUM_LABELS.map(m => {
+                        const ativo = (s.modulos_premium || []).includes(m.key);
+                        return (
+                          <button
+                            key={m.key}
+                            onClick={() => toggleModulo(s, m.key)}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: 6,
+                              padding: '6px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600,
+                              cursor: 'pointer', transition: 'all .15s',
+                              background: ativo ? 'var(--primary)15' : 'var(--surface)',
+                              color: ativo ? 'var(--primary)' : 'var(--text-muted)',
+                              border: `1px solid ${ativo ? 'var(--primary)40' : 'var(--border)'}`,
+                            }}
+                          >
+                            {m.icon} {m.label} {ativo ? '✓' : ''}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   {loadingUsers === s.id ? (
                     <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Carregando usuários...</div>
                   ) : (storeUsers[s.id] || []).length === 0 ? (

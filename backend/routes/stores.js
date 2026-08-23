@@ -122,6 +122,23 @@ router.get('/my', async (req, res) => {
   res.json(data || null);
 });
 
+// PUT /api/stores/:id/modulos — master ativa/desativa módulos premium da loja
+router.put('/:id/modulos', async (req, res) => {
+  const me = await requireMaster(req, res);
+  if (!me) return;
+
+  const { modulos_premium } = req.body;
+  if (!Array.isArray(modulos_premium)) return res.status(400).json({ error: 'modulos_premium deve ser um array' });
+
+  const { data, error } = await supabase
+    .from('stores')
+    .update({ modulos_premium })
+    .eq('id', req.params.id)
+    .select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 // GET /api/stores/users?company= — master vê usuários de uma loja
 router.get('/users', async (req, res) => {
   const me = await requireMaster(req, res);

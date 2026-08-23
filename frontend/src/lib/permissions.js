@@ -29,6 +29,10 @@ export const DEFAULT_PERMISSIONS = {
   colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'produtividade'],
 };
 
+// Módulos premium: exigem que a loja tenha contratado o módulo além da
+// permissão de cargo. Controlado pelo master em "Gestão de Lojas".
+export const PREMIUM_MODULES = ['vendas_gestao', 'vendas_painel', 'estoque', 'importador_estoque', 'conferencia_secao', 'campanhas'];
+
 export function getEffectivePermissions(profile) {
   if (profile?.access_level === 'master') return DEFAULT_PERMISSIONS.master;
   if (profile?.permissions?.length) return profile.permissions;
@@ -36,5 +40,10 @@ export function getEffectivePermissions(profile) {
 }
 
 export function hasPermission(profile, key) {
-  return getEffectivePermissions(profile).includes(key);
+  if (!getEffectivePermissions(profile).includes(key)) return false;
+  if (profile?.access_level === 'master') return true;
+  if (PREMIUM_MODULES.includes(key)) {
+    return (profile?.modulos_premium || []).includes(key);
+  }
+  return true;
 }
