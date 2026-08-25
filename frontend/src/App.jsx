@@ -17,6 +17,7 @@ const Dashboard              = lazy(() => import('./pages/Dashboard'));
 const Leaders                = lazy(() => import('./pages/Leaders'));
 const Agenda                 = lazy(() => import('./pages/Agenda'));
 const Listas                 = lazy(() => import('./pages/Listas'));
+const AtaReuniao             = lazy(() => import('./pages/AtaReuniao'));
 const Scale                  = lazy(() => import('./pages/Scale'));
 const Profile                = lazy(() => import('./pages/Profile'));
 const CashierAnalysis        = lazy(() => import('./pages/CashierAnalysis'));
@@ -227,6 +228,7 @@ function AppContent() {
     leaders:      () => <Leaders setPage={setPage} />,
     agenda:       () => has('agenda')     ? <Agenda setPage={setPage} userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     listas:       () => has('listas')     ? <Listas userId={userId} /> : <AccessDenied />,
+    atas:         () => has('atas')       ? <AtaReuniao userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     scale:        () => <Scale setPage={setPage} />,
     team:         () => <TeamMembers userId={userId} userSector={userSector} />,
     nscale:       () => has('escala')     ? <NativeSchedule userId={userId} profile={effectiveProfile} />           : <AccessDenied />,

@@ -45,7 +45,7 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     full_name:'', email:'', company:'', employee_id:'',
-    sector:'', role:'', phone:'', whatsapp:''
+    sector:'', role:'', phone:'', whatsapp:'', assinatura_texto:''
   });
   const [pushStatus, setPushStatus] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
@@ -72,6 +72,7 @@ export default function Profile() {
         role:        profile.role        || '',
         phone:       profile.phone       || '',
         whatsapp:    profile.whatsapp    || '',
+        assinatura_texto: profile.assinatura_texto || profile.full_name || '',
       });
     }
   }, [profile]);
@@ -167,6 +168,7 @@ export default function Profile() {
       role:        form.role,
       phone:       form.phone,
       whatsapp:    form.whatsapp,
+      assinatura_texto: form.assinatura_texto,
     }).eq('id', session.user.id);
 
     if (error) toast('Erro ao salvar: ' + error.message, 'error');
@@ -389,6 +391,33 @@ export default function Profile() {
                 <PhoneInput value={form.whatsapp} onChange={v => set('whatsapp', v)} />
               </div>
             </div>
+
+            <div style={{ marginTop:24, paddingTop:20, borderTop:'1px solid var(--border)' }}>
+              <div style={{ fontWeight:700, fontSize:14, marginBottom:4, display:'flex', alignItems:'center', gap:8 }}>
+                ✍️ Assinatura digital
+              </div>
+              <p style={{ fontSize:12, color:'var(--text-muted)', marginBottom:12 }}>
+                Usada para assinar documentos no app, como Atas de Reunião. Fica salva no seu perfil — você só assina uma vez aqui, depois é só um clique.
+              </p>
+              <div className="form-group" style={{ margin:0, maxWidth:340 }}>
+                <label className="form-label">Como você quer assinar</label>
+                <input className="input" value={form.assinatura_texto}
+                  onChange={e => set('assinatura_texto', e.target.value)}
+                  placeholder="Ex: Ana Souza"/>
+              </div>
+              {form.assinatura_texto && (
+                <div style={{
+                  marginTop:12, padding:'16px 20px', borderRadius:10, background:'var(--surface-2)',
+                  border:'1px solid var(--border)', display:'inline-block', minWidth:220,
+                }}>
+                  <div style={{ fontFamily:"'Dancing Script', cursive", fontSize:28, color:'var(--text)' }}>
+                    {form.assinatura_texto}
+                  </div>
+                  <div style={{ fontSize:10, color:'var(--text-muted)', marginTop:4 }}>Prévia da sua assinatura</div>
+                </div>
+              )}
+            </div>
+
             <div style={{ marginTop:24, display:'flex', justifyContent:'flex-end' }}>
               <button className="btn btn-primary" onClick={saveProfile} disabled={saving}>
                 <Save size={15}/> {saving ? 'Salvando...' : 'Salvar alterações'}
