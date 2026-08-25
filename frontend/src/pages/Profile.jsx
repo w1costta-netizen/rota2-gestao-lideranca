@@ -206,7 +206,15 @@ export default function Profile() {
       </div>
 
       {/* Header card com foto */}
-      <div className="card" style={{ marginBottom: 20, display: 'flex', alignItems: 'center', gap: 24 }}>
+      <div className="card" style={{
+        marginBottom: 20, display: 'flex', alignItems: 'center', gap: 24,
+        position: 'relative', overflow: 'hidden', paddingTop: 28, paddingBottom: 28,
+      }}>
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: 72,
+          background: 'linear-gradient(135deg, var(--primary), var(--primary-light))',
+          opacity: .1,
+        }}/>
         {/* Avatar com botão de editar */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <div style={{
@@ -214,7 +222,8 @@ export default function Profile() {
             background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, var(--primary), var(--primary-light))',
             color: 'white', fontSize: 28, fontWeight: 700,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 4px 16px rgba(30,58,95,.25)',
+            boxShadow: '0 6px 20px rgba(238,90,36,.3)',
+            border: '3px solid var(--surface)',
             overflow: 'hidden',
           }}>
             {avatarUrl
@@ -335,17 +344,6 @@ export default function Profile() {
               </div>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Orientação sobre foto */}
-      {!photoPreview && !photoError && (
-        <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:10, padding:'10px 16px', marginBottom:20, fontSize:12.5, color:'#1e40af', display:'flex', gap:10, alignItems:'flex-start' }}>
-          <Camera size={16} style={{ flexShrink:0, marginTop:1 }}/>
-          <div>
-            <strong>Foto de perfil profissional:</strong> Use uma foto de rosto, bem iluminada e com fundo neutro.
-            Formatos aceitos: JPG, PNG ou WEBP · Máximo 3MB · Mínimo 200×200px.
-          </div>
         </div>
       )}
 
