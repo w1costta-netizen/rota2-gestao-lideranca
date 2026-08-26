@@ -7,6 +7,7 @@ import { gerarPDF, gerarExcel, compartilharWhatsApp, compartilharEmail } from '.
 const brl = v => v == null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 const n0  = v => v == null ? '—' : Math.round(v).toLocaleString('pt-BR');
 const n1  = v => v == null ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const fmtData = v => { if (!v) return '—'; const [y, m, d] = String(v).slice(0, 10).split('-'); return (y && m && d) ? `${d}/${m}/${y}` : '—'; };
 
 const TABS = [
   { id: 'acervo',     label: 'Acervo Ativo', cor: '#0ea5e9' },
@@ -440,7 +441,7 @@ function TabAging({ d }) {
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
-        { key: 'IDADE_ULTIMO_RECEBIMENTO', label: 'Última entrada', right: true, fmt: v => v != null ? `${n0(v)}d atrás` : '—', cor: () => '#6366f1' },
+        { key: 'DATA_ULTIMA_ENTRADA', label: 'Última entrada', right: true, fmt: fmtData, cor: () => '#6366f1' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
@@ -467,7 +468,7 @@ function TabSem4s({ d }) {
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
-        { key: 'IDADE_ULTIMO_RECEBIMENTO', label: 'Última entrada', right: true, fmt: v => v != null ? `${n0(v)}d atrás` : '—', cor: () => '#8b5cf6' },
+        { key: 'DATA_ULTIMA_ENTRADA', label: 'Última entrada', right: true, fmt: fmtData, cor: () => '#8b5cf6' },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
     </>
@@ -494,7 +495,7 @@ function TabGiroLento({ d }) {
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
         { key: 'dias_cobertura', label: 'Cobertura', right: true, fmt: v => v != null ? `${n1(v)}d` : '—', cor: () => '#f59e0b' },
-        { key: 'IDADE_ULTIMO_RECEBIMENTO', label: 'Última entrada', right: true, fmt: v => v != null ? `${n0(v)}d atrás` : '—', cor: () => '#8b5cf6' },
+        { key: 'DATA_ULTIMA_ENTRADA', label: 'Última entrada', right: true, fmt: fmtData, cor: () => '#8b5cf6' },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
     </>
@@ -773,11 +774,11 @@ export default function Estoque({ profile }) {
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
-            { header: 'Última entrada', dataKey: 'IDADE_ULTIMO_RECEBIMENTO' },
+            { header: 'Última entrada', dataKey: 'ultima_entrada_fmt' },
             { header: 'Qtd estoque', dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
             { header: 'Custo R$', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
           ],
-          rows: (d.aging_top || []).slice(0, 30),
+          rows: (d.aging_top || []).slice(0, 30).map(r => ({ ...r, ultima_entrada_fmt: fmtData(r.DATA_ULTIMA_ENTRADA) })),
         },
         {
           titulo: 'Sem venda 5 semanas — Top itens',
@@ -785,11 +786,11 @@ export default function Estoque({ profile }) {
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
-            { header: 'Última entrada', dataKey: 'IDADE_ULTIMO_RECEBIMENTO' },
+            { header: 'Última entrada', dataKey: 'ultima_entrada_fmt' },
             { header: 'Qtd estoque', dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
             { header: 'Custo R$', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
           ],
-          rows: (d.sem4s_top || []).slice(0, 30),
+          rows: (d.sem4s_top || []).slice(0, 30).map(r => ({ ...r, ultima_entrada_fmt: fmtData(r.DATA_ULTIMA_ENTRADA) })),
         },
         {
           titulo: 'Giro Lento — Top itens',
@@ -862,7 +863,7 @@ export default function Estoque({ profile }) {
           colunas: ['Cód.', 'Produto', 'Seção', 'Última entrada', 'Qtd estoque', 'Custo R$'],
           rows: (d.aging_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
-            r.IDADE_ULTIMO_RECEBIMENTO, r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
+            fmtData(r.DATA_ULTIMA_ENTRADA), r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
         },
         {
@@ -870,7 +871,7 @@ export default function Estoque({ profile }) {
           colunas: ['Cód.', 'Produto', 'Seção', 'Última entrada', 'Qtd estoque', 'Custo R$'],
           rows: (d.sem4s_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
-            r.IDADE_ULTIMO_RECEBIMENTO, r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
+            fmtData(r.DATA_ULTIMA_ENTRADA), r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
         },
         {

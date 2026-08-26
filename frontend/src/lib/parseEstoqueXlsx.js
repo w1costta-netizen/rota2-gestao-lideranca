@@ -11,6 +11,7 @@ const COL_MAP = {
   MOTIVO_SUSPENCAO:              ['MOTIVO_SUSPENCAO'],
   NOME_FORNECEDOR:               ['NOME_FORNECEDOR','FORNECEDOR'],
   IDADE_ULTIMA_NF:               ['IDADE_ULTIMA_NF','IDADE_NF','DIAS_ULTIMA_NF'],
+  DATA_ULTIMA_NF:                ['DATA_ULTIMA_NF'],
   DATA_ULTIMO_RECEBIMENTO:       ['DATA_ULTIMO_RECEBIMENTO'],
   DT_ULTIMA_VENDA:               ['DT_ULTIMA_VENDA','DATA_ULTIMA_VENDA','ULTIMA_VENDA'],
   sum_ESTOQUE_ON_HAND_LOJA_QTD:  ['sum_ESTOQUE_ON_HAND_LOJA_QTD','ESTOQUE_ON_HAND_LOJA_QTD','ESTOQUE_QTD','QTD_ESTOQUE'],
@@ -84,6 +85,7 @@ export async function parseEstoqueXlsx(file) {
     'sum_ESTOQUE_TRANSITO_LOJA_QTD',
     'MOTIVO_SUSPENCAO',
     'DATA_ULTIMO_RECEBIMENTO',
+    'DATA_ULTIMA_NF',
   ]);
   const { result: colMap, missing } = resolveColumns(Object.keys(rows[0]));
   const missingObrigatorias = missing.filter(c => !COLUNAS_OPCIONAIS.has(c));
@@ -125,18 +127,20 @@ export async function parseEstoqueXlsx(file) {
     const estoque_separado_cd = parseFloat(get(row, 'sum_ESTOQUE_SEPARADO_CD_LOJA_QTD')) || 0;
     const estoque_transito_loja = parseFloat(get(row, 'sum_ESTOQUE_TRANSITO_LOJA_QTD')) || 0;
 
-    // IDADE_ULTIMA_NF é a fonte principal pra "última entrada" — o
-    // DATA_ULTIMO_RECEBIMENTO da planilha vem com datas absurdas (ex: 2010)
-    // em itens de giro rápido que claramente foram reabastecidos há pouco
-    // tempo, então não é confiável. Só usamos a data de recebimento quando
-    // não há IDADE_ULTIMA_NF disponível.
+    // IDADE_ULTIMA_NF / DATA_ULTIMA_NF são a fonte principal pra "última
+    // entrada" — o DATA_ULTIMO_RECEBIMENTO da planilha vem com datas
+    // absurdas (ex: 2010) em itens de giro rápido claramente reabastecidos
+    // há pouco tempo, então não é confiável. Só cai pra data de recebimento
+    // quando não há IDADE_ULTIMA_NF/DATA_ULTIMA_NF disponível.
     const dataRecebimento = parseDate(get(row, 'DATA_ULTIMO_RECEBIMENTO'));
+    const dataUltimaNf = parseDate(get(row, 'DATA_ULTIMA_NF'));
     const idadeUltimaNf = parseFloat(get(row, 'IDADE_ULTIMA_NF'));
     const idadeRecebimento = !isNaN(idadeUltimaNf)
       ? idadeUltimaNf
       : (dataRecebimento
         ? Math.floor((Date.now() - new Date(dataRecebimento + 'T00:00:00').getTime()) / 86400000)
         : null);
+    const dataUltimaEntrada = !isNaN(idadeUltimaNf) && dataUltimaNf ? dataUltimaNf : dataRecebimento;
 
     items.push({
       CD_PRODUTO:                    parseInt(get(row, 'CD_PRODUTO')) || 0,
@@ -151,6 +155,7 @@ export async function parseEstoqueXlsx(file) {
       IDADE_ULTIMA_NF:               parseFloat(get(row, 'IDADE_ULTIMA_NF')) || null,
       DATA_ULTIMO_RECEBIMENTO:       dataRecebimento,
       IDADE_ULTIMO_RECEBIMENTO:      idadeRecebimento,
+      DATA_ULTIMA_ENTRADA:           dataUltimaEntrada,
       DT_ULTIMA_VENDA:               parseDate(get(row, 'DT_ULTIMA_VENDA')),
       sum_ESTOQUE_ON_HAND_LOJA_QTD:  estoque,
       sum_VALOR_ESTOQUE_LOJA_A_CUSTO: parseFloat(get(row, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO')) || 0,
