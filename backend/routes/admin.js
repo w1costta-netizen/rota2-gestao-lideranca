@@ -47,6 +47,9 @@ router.post('/users', async (req, res) => {
   if (!full_name || !email || !password) return res.status(400).json({ error: 'full_name, email e password são obrigatórios' });
 
   const targetCompany = reqCompany !== undefined ? (reqCompany || null) : me.company;
+  if (me.access_level === 'master' && !targetCompany) {
+    return res.status(400).json({ error: 'Selecione a loja do usuário.' });
+  }
 
   // Cria o usuário no Supabase Auth
   const { data: authData, error: authErr } = await supabase.auth.admin.createUser({

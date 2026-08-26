@@ -346,12 +346,14 @@ export default function UsersAdmin({ userId, profile }) {
       return setError('Nome, e-mail e senha são obrigatórios.');
     if (form.password.length < 6)
       return setError('Senha precisa ter pelo menos 6 caracteres.');
+    if (isMaster && !form.company && !selectedCompany)
+      return setError('Selecione a loja do usuário.');
     setSaving(true);
     try {
       await api.post('/admin/users', {
         requester_id: userId,
         ...form,
-        company: isMaster ? (form.company || null) : undefined,
+        company: isMaster ? (form.company || selectedCompany || null) : undefined,
       });
       setCreatedUser({ full_name: form.full_name, email: form.email, password: form.password });
       sessionStorage.removeItem(FORM_KEY);
@@ -474,7 +476,7 @@ export default function UsersAdmin({ userId, profile }) {
           <button onClick={() => setShowCfg(true)} className="btn btn-ghost btn-sm">
             <Settings size={14}/> Configurações
           </button>
-          <button onClick={() => { setShowNew(true); setCreatedUser(null); setError(''); }} className="btn btn-primary btn-sm">
+          <button onClick={() => { setShowNew(true); setCreatedUser(null); setError(''); if (isMaster && !form.company && selectedCompany) set('company', selectedCompany); }} className="btn btn-primary btn-sm">
             <Plus size={14}/> Novo Usuário
           </button>
         </div>

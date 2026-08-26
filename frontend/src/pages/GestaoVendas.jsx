@@ -23,8 +23,8 @@ export default function GestaoVendas({ userId, profile }) {
     setLoading(true);
     try {
       const [{ count }, { data: hist }] = await Promise.all([
-        supabase.from('vendas_atual').select('*', { count: 'exact', head: true }).eq('tenant_id', tenantId),
-        supabase.from('vendas_historico').select('periodo, created_at').eq('tenant_id', tenantId)
+        supabase.from('vendas_atual').select('*', { count: 'exact', head: true }).eq('company', company),
+        supabase.from('vendas_historico').select('periodo, created_at').eq('company', company)
           .order('created_at', { ascending: false }),
       ]);
       setTotalAtual(count || 0);
@@ -59,7 +59,7 @@ export default function GestaoVendas({ userId, profile }) {
       }
 
       // Apaga os dados atuais da empresa
-      await supabase.from('vendas_atual').delete().eq('tenant_id', tenantId);
+      await supabase.from('vendas_atual').delete().eq('company', company);
 
       // Insere novo lote
       const rows = linhas.map(l => ({
@@ -102,7 +102,7 @@ export default function GestaoVendas({ userId, profile }) {
     setFechando(true);
     try {
       const { data: linhas, error: errLer } = await supabase
-        .from('vendas_atual').select('*').eq('tenant_id', tenantId);
+        .from('vendas_atual').select('*').eq('company', company);
       if (errLer) throw errLer;
       if (!linhas?.length) { showToast('Não há dados atuais para fechar.', 'error'); return; }
 
@@ -140,7 +140,7 @@ export default function GestaoVendas({ userId, profile }) {
       const periodo = `ANUAL-${ano}`;
 
       // Remove acumulado anterior do mesmo ano
-      await supabase.from('vendas_historico').delete().eq('tenant_id', tenantId).eq('periodo', periodo);
+      await supabase.from('vendas_historico').delete().eq('company', company).eq('periodo', periodo);
 
       const rows = linhas.map(l => ({
         company,
@@ -172,7 +172,7 @@ export default function GestaoVendas({ userId, profile }) {
 
   async function handleExcluirPeriodo(periodo) {
     if (!window.confirm(`Excluir o histórico de ${periodo}?`)) return;
-    await supabase.from('vendas_historico').delete().eq('tenant_id', tenantId).eq('periodo', periodo);
+    await supabase.from('vendas_historico').delete().eq('company', company).eq('periodo', periodo);
     showToast('Período excluído.', 'success');
     carregarDados();
   }
