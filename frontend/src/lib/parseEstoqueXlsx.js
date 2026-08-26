@@ -125,13 +125,18 @@ export async function parseEstoqueXlsx(file) {
     const estoque_separado_cd = parseFloat(get(row, 'sum_ESTOQUE_SEPARADO_CD_LOJA_QTD')) || 0;
     const estoque_transito_loja = parseFloat(get(row, 'sum_ESTOQUE_TRANSITO_LOJA_QTD')) || 0;
 
-    // "Última entrada" de verdade é a data do último recebimento físico —
-    // diferente de IDADE_ULTIMA_NF, que é sobre a nota fiscal, não sobre o
-    // recebimento em si. Se a coluna não vier na planilha, cai pro IDADE_ULTIMA_NF.
+    // IDADE_ULTIMA_NF é a fonte principal pra "última entrada" — o
+    // DATA_ULTIMO_RECEBIMENTO da planilha vem com datas absurdas (ex: 2010)
+    // em itens de giro rápido que claramente foram reabastecidos há pouco
+    // tempo, então não é confiável. Só usamos a data de recebimento quando
+    // não há IDADE_ULTIMA_NF disponível.
     const dataRecebimento = parseDate(get(row, 'DATA_ULTIMO_RECEBIMENTO'));
-    const idadeRecebimento = dataRecebimento
-      ? Math.floor((Date.now() - new Date(dataRecebimento + 'T00:00:00').getTime()) / 86400000)
-      : (parseFloat(get(row, 'IDADE_ULTIMA_NF')) || null);
+    const idadeUltimaNf = parseFloat(get(row, 'IDADE_ULTIMA_NF'));
+    const idadeRecebimento = !isNaN(idadeUltimaNf)
+      ? idadeUltimaNf
+      : (dataRecebimento
+        ? Math.floor((Date.now() - new Date(dataRecebimento + 'T00:00:00').getTime()) / 86400000)
+        : null);
 
     items.push({
       CD_PRODUTO:                    parseInt(get(row, 'CD_PRODUTO')) || 0,

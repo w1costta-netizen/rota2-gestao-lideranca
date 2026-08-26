@@ -785,6 +785,7 @@ export default function Estoque({ profile }) {
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
+            { header: 'Última entrada', dataKey: 'IDADE_ULTIMO_RECEBIMENTO' },
             { header: 'Qtd estoque', dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
             { header: 'Custo R$', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
           ],
@@ -866,10 +867,10 @@ export default function Estoque({ profile }) {
         },
         {
           nome: 'Sem venda 5s',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Qtd estoque', 'Custo R$'],
+          colunas: ['Cód.', 'Produto', 'Seção', 'Última entrada', 'Qtd estoque', 'Custo R$'],
           rows: (d.sem4s_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
-            r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
+            r.IDADE_ULTIMO_RECEBIMENTO, r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
         },
         {
