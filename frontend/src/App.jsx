@@ -70,10 +70,18 @@ function AppContent() {
   const { session, profile } = useAuth();
   const toast = useToast();
   // Restaura a última página visitada — evita voltar pro dashboard quando o
-  // Android descarrega o app ao abrir a câmera/galeria para tirar foto
-  const [page, setPageState] = useState(() => sessionStorage.getItem('current_page') || 'dashboard');
+  // celular descarrega o app da memória (ao trocar de aplicativo, abrir a
+  // câmera/galeria etc.). Precisa ser localStorage: o sessionStorage é
+  // apagado exatamente nesse cenário, que é o que queremos cobrir.
+  const [page, setPageState] = useState(() => {
+    try {
+      return localStorage.getItem('current_page') || 'dashboard';
+    } catch {
+      return 'dashboard';
+    }
+  });
   const setPage = useCallback((p) => {
-    sessionStorage.setItem('current_page', p);
+    try { localStorage.setItem('current_page', p); } catch { /* aba anônima */ }
     setPageState(p);
   }, []);
   const [authPage, setAuthPage] = useState('login');

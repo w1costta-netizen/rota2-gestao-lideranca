@@ -39,6 +39,12 @@ export function AuthProvider({ children }) {
   }
 
   async function signOut() {
+    // Limpa a última tela salva: em aparelho compartilhado (comum na loja),
+    // sem isso a próxima pessoa a entrar cairia na tela de quem saiu.
+    try {
+      localStorage.removeItem('current_page');
+      localStorage.removeItem('master_viewing_store');
+    } catch { /* aba anônima */ }
     await supabase.auth.signOut();
   }
 
