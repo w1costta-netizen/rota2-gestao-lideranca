@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 function getWeekStart(dateStr) {
   const d = new Date(dateStr + 'T12:00:00Z');
@@ -131,7 +132,12 @@ router.post('/submit', async (req, res) => {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  const { data: prof } = await supabase.from('profiles').select('company').eq('id', user_id).maybeSingle();
+  if (error) {
+    logError({ company: prof?.company, user_id, acao: 'enviar_escala', tabela: 'schedule_submissions', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: prof?.company, user_id, acao: 'enviar_escala', tabela: 'schedule_submissions', depois: { year, month } });
   res.json(data);
 });
 
@@ -147,7 +153,12 @@ router.delete('/submission', async (req, res) => {
     .eq('year', parseInt(year))
     .eq('month', parseInt(month));
 
-  if (error) return res.status(500).json({ error: error.message });
+  const { data: prof } = await supabase.from('profiles').select('company').eq('id', user_id).maybeSingle();
+  if (error) {
+    logError({ company: prof?.company, user_id, acao: 'reabrir_escala', tabela: 'schedule_submissions', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: prof?.company, user_id, acao: 'reabrir_escala', tabela: 'schedule_submissions', antes: { year, month } });
   res.json({ ok: true });
 });
 

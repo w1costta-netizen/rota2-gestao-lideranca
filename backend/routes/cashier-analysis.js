@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -48,7 +49,12 @@ router.post('/tickets', async (req, res) => {
     .from('cashier_ticket_history')
     .upsert(rows, { onConflict: 'user_id,date,hour' });
 
-  if (error) return res.status(500).json({ error: error.message });
+  const { data: prof } = await supabase.from('profiles').select('company').eq('id', user_id).maybeSingle();
+  if (error) {
+    logError({ company: prof?.company, user_id, acao: 'salvar_caixas', tabela: 'cashier_ticket_history', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: prof?.company, user_id, acao: 'salvar_caixas', tabela: 'cashier_ticket_history', depois: { data: date, registros: rows.length } });
   res.json({ ok: true, saved: rows.length });
 });
 
@@ -225,7 +231,12 @@ router.delete('/tickets', async (req, res) => {
     .delete()
     .eq('user_id', user_id)
     .eq('date', date);
-  if (error) return res.status(500).json({ error: error.message });
+  const { data: prof } = await supabase.from('profiles').select('company').eq('id', user_id).maybeSingle();
+  if (error) {
+    logError({ company: prof?.company, user_id, acao: 'excluir_caixas', tabela: 'cashier_ticket_history', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: prof?.company, user_id, acao: 'excluir_caixas', tabela: 'cashier_ticket_history', antes: { data: date } });
   res.json({ ok: true });
 });
 

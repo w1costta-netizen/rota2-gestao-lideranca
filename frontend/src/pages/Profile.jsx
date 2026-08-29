@@ -7,6 +7,7 @@ import { registerPush } from '../lib/push';
 import api from '../api';
 import PhoneInput from '../components/PhoneInput';
 import { formatPhone } from '../utils';
+import { reportAction, reportError } from '../lib/reportError';
 
 const FUNCOES = ['Diretor(a)','Gerente','Coordenador(a)','Supervisor(a)','Líder','Analista','Assistente','Outro'];
 const NIVEL_LABELS = { admin: 'Administrador', gestor: 'Gestor', lider: 'Líder' };
@@ -171,8 +172,17 @@ export default function Profile() {
       assinatura_texto: form.assinatura_texto,
     }).eq('id', session.user.id);
 
-    if (error) toast('Erro ao salvar: ' + error.message, 'error');
-    else { toast('Perfil atualizado!'); loadProfile(session.user.id); }
+    if (error) {
+      toast('Erro ao salvar: ' + error.message, 'error');
+      reportError({ userId: session.user.id, acao: 'editar_perfil', tabela: 'profiles', erro: error });
+    } else {
+      toast('Perfil atualizado!');
+      loadProfile(session.user.id);
+      reportAction({
+        userId: session.user.id, acao: 'editar_perfil', tabela: 'profiles',
+        depois: { full_name: form.full_name, sector: form.sector, role: form.role },
+      });
+    }
     setSaving(false);
   };
 

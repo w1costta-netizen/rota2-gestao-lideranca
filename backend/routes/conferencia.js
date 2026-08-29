@@ -3,6 +3,7 @@ const router  = express.Router();
 const multer  = require('multer');
 const XLSX    = require('xlsx');
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -102,8 +103,14 @@ router.post('/importar', upload.single('file'), async (req, res) => {
       if (error) console.error('Erro ao salvar filtros:', error.message);
     }
 
+    logAction({
+      company: targetCompany, user_id: requester_id,
+      acao: 'importar_conferencia', tabela: 'produtos_conferencia',
+      depois: { itens: mapped.length, filtros: filtrosRows.length, arquivo: req.file?.originalname },
+    });
     res.json({ ok: true, total: mapped.length, filtros: filtrosRows.length });
   } catch (e) {
+    logError({ company: targetCompany, user_id: requester_id, acao: 'importar_conferencia', tabela: 'produtos_conferencia', rota: req.originalUrl, erro_mensagem: e.message });
     res.status(500).json({ error: e.message });
   }
 });
@@ -239,7 +246,11 @@ router.post('/sessoes', async (req, res) => {
     status:       'em_andamento',
   }).select().single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: targetCompany, user_id: requester_id, acao: 'criar_conferencia', tabela: 'conferencias_secao', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_conferencia', tabela: 'conferencias_secao', depois: { id: data.id, secao, linha, sulinha } });
   res.json(data);
 });
 
@@ -268,12 +279,13 @@ router.delete('/sessoes/:id', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
-  const { data: sess } = await supabase.from('conferencias_secao').select('created_by').eq('id', req.params.id).single();
+  const { data: sess } = await supabase.from('conferencias_secao').select('created_by, company, secao').eq('id', req.params.id).single();
   if (!sess) return res.status(404).json({ error: 'Não encontrado' });
   const isOwner = sess.created_by === requester_id;
   if (!isOwner && !['admin', 'master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
   await supabase.from('conferencias_secao').delete().eq('id', req.params.id);
+  logAction({ company: sess.company, user_id: requester_id, acao: 'excluir_conferencia', tabela: 'conferencias_secao', antes: { id: req.params.id, secao: sess.secao } });
   res.json({ ok: true });
 });
 
@@ -313,7 +325,11 @@ router.put('/sessoes/:id/finalizar', async (req, res) => {
     .update({ status: 'finalizada', finalizada_at: new Date().toISOString() })
     .eq('id', req.params.id)
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ user_id: requester_id, acao: 'finalizar_conferencia', tabela: 'conferencias_secao', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: data?.company, user_id: requester_id, acao: 'finalizar_conferencia', tabela: 'conferencias_secao', depois: { id: data.id, secao: data.secao } });
   res.json(data);
 });
 

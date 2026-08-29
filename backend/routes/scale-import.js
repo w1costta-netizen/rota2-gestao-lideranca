@@ -4,6 +4,7 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const pdfParse = require('pdf-parse');
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -224,6 +225,13 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       }
     }
 
+    const { data: prof } = await supabase.from('profiles').select('company').eq('id', user_id).maybeSingle();
+    logAction({
+      company: prof?.company, user_id,
+      acao: 'importar_escala', tabela: 'scale_imports',
+      depois: { arquivo: filename, periodo: period || null, entradas: validEntries.length },
+    });
+
     res.json({
       import: importRec,
       total: validEntries.length,
@@ -234,6 +242,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 
   } catch (err) {
     console.error('Parse error:', err);
+    logError({ user_id, acao: 'importar_escala', tabela: 'scale_imports', rota: req.originalUrl, erro_mensagem: err.message });
     res.status(500).json({ error: 'Erro ao processar arquivo: ' + err.message });
   }
 });

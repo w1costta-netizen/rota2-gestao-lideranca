@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -206,6 +207,7 @@ router.post('/ativar-conta', async (req, res) => {
 
   if (storeErr) {
     console.error('[Hotmart] Erro ao criar loja:', storeErr);
+    logError({ company, user_id, acao: 'ativar_conta_hotmart', tabela: 'stores', rota: req.originalUrl, erro_mensagem: storeErr.message });
     return res.status(500).json({ error: 'Erro ao criar workspace.' });
   }
 
@@ -226,6 +228,7 @@ router.post('/ativar-conta', async (req, res) => {
 
   if (profileErr) {
     console.error('[Hotmart] Erro ao criar perfil:', profileErr);
+    logError({ company, user_id, acao: 'ativar_conta_hotmart', tabela: 'profiles', rota: req.originalUrl, erro_mensagem: profileErr.message });
     return res.status(500).json({ error: 'Erro ao criar perfil.' });
   }
 
@@ -236,6 +239,11 @@ router.post('/ativar-conta', async (req, res) => {
     .eq('token', token);
 
   console.log(`[Hotmart] Conta ativada: ${email} → loja ${store.id}`);
+  logAction({
+    company, user_id,
+    acao: 'ativar_conta_hotmart', tabela: 'stores',
+    depois: { store_id: store.id, loja: company, email },
+  });
   res.json({ ok: true, store_id: store.id });
 });
 
