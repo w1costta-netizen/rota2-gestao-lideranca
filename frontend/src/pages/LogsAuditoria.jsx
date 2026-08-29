@@ -35,6 +35,108 @@ const ACAO_LABEL = {
   adicionar_foto_flyer: 'Adicionou foto (Flyer)',
   remover_foto_flyer: 'Removeu foto (Flyer)',
   erro_nao_tratado: 'Erro inesperado',
+
+  // Organograma e equipe
+  editar_organograma: 'Alterou o organograma',
+  criar_membro_equipe: 'Cadastrou membro da equipe',
+  editar_membro_equipe: 'Editou membro da equipe',
+  excluir_membro_equipe: 'Excluiu membro da equipe',
+  criar_lider: 'Cadastrou líder',
+  editar_lider: 'Editou líder',
+  excluir_lider: 'Excluiu líder',
+  importar_lideres_csv: 'Importou líderes (CSV)',
+
+  // Atas de reunião
+  criar_ata: 'Criou ata de reunião',
+  excluir_ata: 'Excluiu ata de reunião',
+  assinar_ata: 'Assinou ata de reunião',
+  desfazer_assinatura_ata: 'Desfez assinatura da ata',
+  comentar_ata: 'Comentou em ata',
+
+  // Listas pessoais
+  criar_lista: 'Criou lista',
+  editar_lista: 'Editou lista',
+  excluir_lista: 'Excluiu lista',
+  adicionar_item_lista: 'Adicionou item à lista',
+  editar_item_lista: 'Editou item da lista',
+  excluir_item_lista: 'Excluiu item da lista',
+
+  // Estoque e conferência
+  importar_estoque: 'Importou planilha de estoque',
+  importar_conferencia: 'Importou planilha de conferência',
+  criar_conferencia: 'Iniciou conferência de seção',
+  finalizar_conferencia: 'Finalizou conferência de seção',
+  excluir_conferencia: 'Excluiu conferência de seção',
+  coletar_item_conferencia: 'Coletou item na conferência',
+  remover_item_conferencia: 'Removeu item da conferência',
+
+  // Escala e caixas
+  enviar_escala: 'Enviou a escala do mês',
+  reabrir_escala: 'Reabriu a escala do mês',
+  importar_escala: 'Importou planilha de escala',
+  excluir_importacao_escala: 'Excluiu importação de escala',
+  excluir_entrada_escala: 'Excluiu entrada da escala',
+  salvar_escala: 'Salvou a escala',
+  alerta_escala_pendente: 'Alerta de escala pendente',
+  salvar_caixas: 'Salvou registros de caixas',
+  excluir_caixas: 'Excluiu registros de caixas',
+
+  // Flyers
+  adicionar_itens_flyer: 'Adicionou itens ao flyer',
+  editar_item_flyer: 'Editou item do flyer',
+  excluir_item_flyer: 'Excluiu item do flyer',
+  sinalizar_item_flyer: 'Sinalizou item do flyer',
+  ler_flyer_ia: 'Leu flyer com IA',
+
+  // Tour 4x4
+  criar_tour_4x4: 'Criou Tour 4x4',
+  editar_tour_4x4: 'Editou Tour 4x4',
+  excluir_tour_4x4: 'Excluiu Tour 4x4',
+  editar_foto_tour_4x4: 'Editou foto do Tour 4x4',
+  exportar_organograma_pdf: 'Exportou PDF do organograma',
+
+  // PDCA
+  criar_acao_pdca: 'Criou ação do PDCA',
+  editar_acao_pdca: 'Editou ação do PDCA',
+
+  // Tarefas, comunicados e mural
+  comentar_tarefa: 'Comentou em tarefa',
+  editar_comentario_tarefa: 'Editou comentário de tarefa',
+  excluir_comentario_tarefa: 'Excluiu comentário de tarefa',
+  marcar_comunicado_lido: 'Marcou comunicado como lido',
+  marcar_mural_lido: 'Marcou item do mural como lido',
+  reagir: 'Reagiu a um item',
+  remover_reacao: 'Removeu reação',
+
+  // Lojas, perfil e acesso
+  criar_loja: 'Criou loja',
+  solicitar_loja: 'Solicitou cadastro de loja',
+  aprovar_loja: 'Aprovou loja',
+  desativar_loja: 'Desativou loja',
+  editar_modulos_premium: 'Alterou módulos da loja',
+  adicionar_loja_extra: 'Liberou loja extra',
+  remover_loja_extra: 'Removeu loja extra',
+  criar_cargo: 'Criou cargo',
+  excluir_cargo: 'Excluiu cargo',
+  criar_setor: 'Criou setor',
+  excluir_setor: 'Excluiu setor',
+  salvar_perfil: 'Salvou perfil',
+  editar_perfil: 'Editou o próprio perfil',
+  concluir_boas_vindas: 'Concluiu as boas-vindas',
+  ativar_conta_hotmart: 'Ativou conta (Hotmart)',
+  webhook_hotmart: 'Recebeu compra (Hotmart)',
+
+  // Notificações e erros de tela
+  testar_notificacao: 'Testou notificação',
+  registrar_dispositivo_push: 'Registrou dispositivo de notificação',
+  remover_dispositivo_push: 'Removeu dispositivo de notificação',
+  erro_tela: 'Erro na tela',
+  acao_tela: 'Ação na tela',
+
+  // Treinamentos e leitura de tarefas
+  atualizar_progresso_produtividade: 'Avançou em treinamento',
+  concluir_treinamento_produtividade: 'Concluiu treinamento',
+  listar_tarefas: 'Carregou as tarefas',
 };
 
 function formatData(iso) {
