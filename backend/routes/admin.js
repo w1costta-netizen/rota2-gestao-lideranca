@@ -18,14 +18,16 @@ router.get('/users', async (req, res) => {
   const { requester_id, company: queryCompany } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
-  if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin','master','supervisor','lider'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
   // master pode ver qualquer empresa passada via query, admin vê apenas a sua
   const targetCompany = me.access_level === 'master' ? (queryCompany || me.company) : me.company;
 
+  const ehLideranca = ['supervisor','lider'].includes(me.access_level);
+
   let query = supabase
     .from('profiles')
-    .select('id, full_name, email, role, sector, access_level, permissions, phone, active, first_access, created_at, avatar_url')
+    .select(`id, full_name, email, role, sector, access_level, permissions, phone, active, first_access, created_at, avatar_url${ehLideranca ? ', reports_to_list' : ''}`)
     .neq('id', requester_id)
     .order('full_name');
 
@@ -33,6 +35,16 @@ router.get('/users', async (req, res) => {
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
+
+  // Supervisor/líder não gerenciam usuários — só precisam da lista pra delegar
+  // tarefas e agenda. Por isso enxergam apenas quem reporta a eles no
+  // organograma, e não a empresa inteira (que continua exclusiva do admin).
+  if (ehLideranca) {
+    return res.json((data || [])
+      .filter(u => (u.reports_to_list || []).includes(requester_id))
+      .map(({ reports_to_list, ...u }) => u));
+  }
+
   res.json(data);
 });
 
