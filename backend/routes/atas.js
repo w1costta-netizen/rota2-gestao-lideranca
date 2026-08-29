@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getRequester(requester_id) {
   if (!requester_id) return null;
@@ -143,7 +143,11 @@ router.post('/:id/comentarios', async (req, res) => {
   const { data, error } = await supabase.from('ata_comentarios').insert({
     ata_id: req.params.id, autor_id: me.id, texto: req.body.texto.trim(),
   }).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('comentar_ata', 'ata_comentarios', 'erro', { company: me.company, user_id: me.id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('comentar_ata', 'ata_comentarios', 'sucesso', { company: me.company, user_id: me.id, depois: { ata_id: req.params.id } });
   res.json({ ...data, autor_nome: me.full_name });
 });
 

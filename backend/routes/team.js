@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 // GET /api/team?user_id=
 router.get('/', async (req, res) => {
@@ -20,7 +20,11 @@ router.post('/', async (req, res) => {
   const { data, error } = await supabase.from('team_members')
     .insert({ user_id, matricula, name: name.toUpperCase(), role, sector })
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('criar_membro_equipe', 'team_members', 'erro', { user_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('criar_membro_equipe', 'team_members', 'sucesso', { user_id, depois: { id: data.id, name: data.name, sector: data.sector } });
   res.json(data);
 });
 

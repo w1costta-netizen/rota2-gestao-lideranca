@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company').eq('id', id).single();
@@ -127,8 +127,10 @@ router.post('/empresas-extras', async (req, res) => {
 
   if (error) {
     if (error.code === '23505') return res.status(409).json({ error: 'Essa loja já está na sua lista' });
+    registrarLog('adicionar_loja_extra', 'admin_companies', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
     return res.status(500).json({ error: error.message });
   }
+  registrarLog('adicionar_loja_extra', 'admin_companies', 'sucesso', { company: me.company, user_id: requester_id, depois: { loja: data.company } });
   res.json(data);
 });
 
@@ -140,12 +142,17 @@ router.delete('/empresas-extras/:id', async (req, res) => {
   if (!me || !['admin', 'master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
   // Só pode remover empresas da própria lista
+  const { data: antes } = await supabase.from('admin_companies').select('company').eq('id', req.params.id).maybeSingle();
   const { error } = await supabase.from('admin_companies')
     .delete()
     .eq('id', req.params.id)
     .eq('user_id', requester_id);
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('remover_loja_extra', 'admin_companies', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('remover_loja_extra', 'admin_companies', 'sucesso', { company: me.company, user_id: requester_id, antes: { loja: antes?.company } });
   res.json({ ok: true });
 });
 

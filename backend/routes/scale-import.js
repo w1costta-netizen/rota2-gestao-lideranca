@@ -4,7 +4,7 @@ const multer = require('multer');
 const XLSX = require('xlsx');
 const pdfParse = require('pdf-parse');
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -266,8 +266,13 @@ router.get('/imports/:id/entries', async (req, res) => {
 
 // Delete import (cascades to entries)
 router.delete('/imports/:id', async (req, res) => {
+  const { data: antes } = await supabase.from('scale_imports').select('user_id, filename').eq('id', req.params.id).maybeSingle();
   const { error } = await supabase.from('scale_imports').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('excluir_importacao_escala', 'scale_imports', 'erro', { user_id: antes?.user_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('excluir_importacao_escala', 'scale_imports', 'sucesso', { user_id: antes?.user_id, antes: { arquivo: antes?.filename } });
   res.json({ ok: true });
 });
 

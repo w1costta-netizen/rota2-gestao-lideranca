@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { sendPushToUsers } = require('../lib/push');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function companyDoUsuario(user_id) {
   const { data } = await supabase.from('profiles').select('company').eq('id', user_id).maybeSingle();
@@ -22,14 +22,27 @@ router.post('/subscribe', async (req, res) => {
     { user_id, endpoint: subscription.endpoint, subscription },
     { onConflict: 'endpoint' }
   );
-  if (error) return res.status(500).json({ error: error.message });
+  // Só a falha é registrada: o cadastro do dispositivo roda sozinho a cada
+  // login (autoRegisterPush), então logar sucesso geraria uma linha por acesso.
+  if (error) {
+    registrarLog('registrar_dispositivo_push', 'push_subscriptions', 'erro', { user_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
   res.json({ ok: true });
 });
 
 // DELETE /api/push/subscribe
 router.delete('/subscribe', async (req, res) => {
   const { endpoint } = req.body;
-  if (endpoint) await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  if (endpoint) {
+    const { data: sub } = await supabase.from('push_subscriptions').select('user_id').eq('endpoint', endpoint).maybeSingle();
+    const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+    if (error) {
+      registrarLog('remover_dispositivo_push', 'push_subscriptions', 'erro', { user_id: sub?.user_id, rota: req.originalUrl, erro: error.message });
+      return res.status(500).json({ error: error.message });
+    }
+    registrarLog('remover_dispositivo_push', 'push_subscriptions', 'sucesso', { user_id: sub?.user_id });
+  }
   res.json({ ok: true });
 });
 

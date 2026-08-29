@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const supabase = require('../supabase');
+const { registrarLog } = require('../lib/auditLog');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -25,23 +26,41 @@ router.post('/', async (req, res) => {
   const { data, error } = await supabase.from('leaders')
     .insert({ name, sector, whatsapp, work_days, start_time, end_time })
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('criar_lider', 'leaders', 'erro', { user_id: req.body.requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('criar_lider', 'leaders', 'sucesso', { user_id: req.body.requester_id, depois: { id: data.id, name: data.name, sector: data.sector } });
   res.status(201).json(data);
 });
 
 router.put('/:id', async (req, res) => {
   const { name, sector, whatsapp, work_days, start_time, end_time } = req.body;
+  const { data: antes } = await supabase.from('leaders').select('name, sector').eq('id', req.params.id).maybeSingle();
   const { data, error } = await supabase.from('leaders')
     .update({ name, sector, whatsapp, work_days, start_time, end_time })
     .eq('id', req.params.id)
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('editar_lider', 'leaders', 'erro', { user_id: req.body.requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('editar_lider', 'leaders', 'sucesso', {
+    user_id: req.body.requester_id,
+    antes: { name: antes?.name, sector: antes?.sector },
+    depois: { name: data.name, sector: data.sector },
+  });
   res.json(data);
 });
 
 router.delete('/:id', async (req, res) => {
+  const { data: antes } = await supabase.from('leaders').select('name, sector').eq('id', req.params.id).maybeSingle();
   const { error } = await supabase.from('leaders').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('excluir_lider', 'leaders', 'erro', { user_id: req.query.requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('excluir_lider', 'leaders', 'sucesso', { user_id: req.query.requester_id, antes: { name: antes?.name, sector: antes?.sector } });
   res.json({ ok: true });
 });
 
@@ -66,7 +85,14 @@ router.post('/import/csv', upload.single('file'), async (req, res) => {
   }
 
   const { error } = await supabase.from('leaders').insert(rows);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('importar_lideres_csv', 'leaders', 'erro', { user_id: req.body.requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('importar_lideres_csv', 'leaders', 'sucesso', {
+    user_id: req.body.requester_id,
+    depois: { arquivo: req.file.originalname, importados: rows.length },
+  });
   res.json({ imported: rows.length });
 });
 

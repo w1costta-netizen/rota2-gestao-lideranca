@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 // Verifica se o solicitante é admin da empresa
 async function requireAdmin(req, res, next) {
@@ -211,7 +211,11 @@ router.post('/roles', async (req, res) => {
   const { data, error } = await supabase.from('company_roles')
     .upsert({ company: targetCompany, role_name: role_name.trim() }, { onConflict: 'company,role_name' })
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('criar_cargo', 'company_roles', 'erro', { company: targetCompany, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('criar_cargo', 'company_roles', 'sucesso', { company: targetCompany, user_id: requester_id, depois: { role_name: data.role_name } });
   res.json(data);
 });
 
@@ -222,8 +226,13 @@ router.delete('/roles/:id', async (req, res) => {
   const { data: me } = await supabase.from('profiles').select('access_level').eq('id', requester_id).single();
   if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
+  const { data: antes } = await supabase.from('company_roles').select('role_name, company').eq('id', req.params.id).maybeSingle();
   const { error } = await supabase.from('company_roles').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('excluir_cargo', 'company_roles', 'erro', { company: antes?.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('excluir_cargo', 'company_roles', 'sucesso', { company: antes?.company, user_id: requester_id, antes: { role_name: antes?.role_name } });
   res.json({ ok: true });
 });
 
@@ -252,7 +261,11 @@ router.post('/sectors', async (req, res) => {
   const { data, error } = await supabase.from('company_sectors')
     .upsert({ company: targetCompany, sector_name: sector_name.trim() }, { onConflict: 'company,sector_name' })
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('criar_setor', 'company_sectors', 'erro', { company: targetCompany, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('criar_setor', 'company_sectors', 'sucesso', { company: targetCompany, user_id: requester_id, depois: { sector_name: data.sector_name } });
   res.json(data);
 });
 
@@ -263,8 +276,13 @@ router.delete('/sectors/:id', async (req, res) => {
   const { data: me } = await supabase.from('profiles').select('access_level').eq('id', requester_id).single();
   if (!me || !['admin','master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
+  const { data: antes } = await supabase.from('company_sectors').select('sector_name, company').eq('id', req.params.id).maybeSingle();
   const { error } = await supabase.from('company_sectors').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('excluir_setor', 'company_sectors', 'erro', { company: antes?.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('excluir_setor', 'company_sectors', 'sucesso', { company: antes?.company, user_id: requester_id, antes: { sector_name: antes?.sector_name } });
   res.json({ ok: true });
 });
 

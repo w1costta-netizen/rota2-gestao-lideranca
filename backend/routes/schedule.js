@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 function getWeekStart(dateStr) {
   const d = new Date(dateStr + 'T12:00:00Z');
@@ -97,7 +97,16 @@ router.post('/save', async (req, res) => {
     .select('*, team_members(name,matricula,role,sector)')
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  // Só a falha é registrada: o salvamento acontece a cada célula editada na
+  // escala, então logar sucesso geraria centenas de linhas por montagem.
+  // O envio do mês (POST /submit) é que fica registrado como ação.
+  if (error) {
+    registrarLog('salvar_escala', 'schedule_entries', 'erro', {
+      company: prof?.company, user_id,
+      rota: req.originalUrl, erro: error.message,
+    });
+    return res.status(500).json({ error: error.message });
+  }
   res.json(data);
 });
 
@@ -258,8 +267,13 @@ router.get('/operators', async (req, res) => {
 
 // DELETE /api/schedule/:id
 router.delete('/:id', async (req, res) => {
+  const { data: antes } = await supabase.from('schedule_entries').select('user_id, work_date').eq('id', req.params.id).maybeSingle();
   const { error } = await supabase.from('schedule_entries').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('excluir_entrada_escala', 'schedule_entries', 'erro', { user_id: antes?.user_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('excluir_entrada_escala', 'schedule_entries', 'sucesso', { user_id: antes?.user_id, antes: { work_date: antes?.work_date } });
   res.json({ ok: true });
 });
 

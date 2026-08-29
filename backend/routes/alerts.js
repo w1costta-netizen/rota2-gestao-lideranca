@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { registrarLog } = require('../lib/auditLog');
 
 const MONTHS_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -23,7 +24,12 @@ router.post('/schedule-reminder', async (req, res) => {
     .from('profiles')
     .select('id, full_name, email, sector, company');
 
-  if (pErr) return res.status(500).json({ error: pErr.message });
+  if (pErr) {
+    // Rotina automática (cron): registra só a falha. Se logasse cada
+    // execução bem-sucedida, encheria o log de auditoria todo dia.
+    registrarLog('alerta_escala_pendente', 'schedule_submissions', 'erro', { rota: req.originalUrl, erro: pErr.message });
+    return res.status(500).json({ error: pErr.message });
+  }
 
   // Busca quem já fechou a escala deste mês
   const { data: submissions } = await supabase

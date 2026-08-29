@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const crypto  = require('crypto');
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -18,6 +18,7 @@ router.post('/webhook', async (req, res) => {
   // 1. Validar autenticidade
   if (!validarHottok(req)) {
     console.warn('[Hotmart] Hottok inválido:', req.headers['x-hotmart-hottok']);
+    registrarLog('webhook_hotmart', 'pending_signups', 'erro', { rota: req.originalUrl, erro: 'Hottok inválido — requisição rejeitada' });
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
@@ -36,10 +37,12 @@ router.post('/webhook', async (req, res) => {
 
   if (!email) {
     console.error('[Hotmart] E-mail não encontrado no payload');
+    registrarLog('webhook_hotmart', 'pending_signups', 'erro', { rota: req.originalUrl, erro: 'Compra aprovada sem e-mail no payload' });
     return res.status(400).json({ error: 'E-mail não encontrado' });
   }
 
   console.log('[Hotmart] Compra aprovada para:', email);
+  registrarLog('webhook_hotmart', 'pending_signups', 'sucesso', { depois: { evento, email, nome } });
 
   // 3. Verificar se já existe cadastro pendente para este e-mail
   const { data: existente } = await supabase

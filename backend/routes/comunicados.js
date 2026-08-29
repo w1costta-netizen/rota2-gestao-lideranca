@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { sendPushToTargets } = require('../lib/push');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -134,7 +134,11 @@ router.post('/:id/lido', async (req, res) => {
   if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
   const { error } = await supabase.from('comunicados_lidos')
     .upsert({ comunicado_id: req.params.id, user_id }, { onConflict: 'comunicado_id,user_id' });
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('marcar_comunicado_lido', 'comunicados_lidos', 'erro', { user_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('marcar_comunicado_lido', 'comunicados_lidos', 'sucesso', { user_id, depois: { comunicado_id: req.params.id } });
   res.json({ ok: true });
 });
 

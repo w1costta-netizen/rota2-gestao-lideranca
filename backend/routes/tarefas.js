@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { sendPushToUsers } = require('../lib/push');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -204,9 +204,13 @@ router.post('/:id/comentarios', async (req, res) => {
     .from('tarefa_comentarios')
     .insert({ tarefa_id: req.params.id, user_id: requester_id, text: text.trim() })
     .select('*, author:user_id(full_name)').single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('comentar_tarefa', 'tarefa_comentarios', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
 
-  const { data: task } = await supabase.from('tarefas').select('assigned_to, title, created_by').eq('id', req.params.id).single();
+  const { data: task } = await supabase.from('tarefas').select('assigned_to, title, created_by, company').eq('id', req.params.id).single();
+  registrarLog('comentar_tarefa', 'tarefa_comentarios', 'sucesso', { company: task?.company, user_id: requester_id, depois: { tarefa: task?.title } });
   const notify = [...new Set([task?.assigned_to, task?.created_by].filter(id => id && id !== requester_id))];
   if (notify.length) {
     sendPushToUsers(notify, {
@@ -228,7 +232,11 @@ router.put('/comentarios/:cid', async (req, res) => {
   const { data, error } = await supabase.from('tarefa_comentarios')
     .update({ text: text.trim() }).eq('id', req.params.cid)
     .select('*, author:user_id(full_name)').single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('editar_comentario_tarefa', 'tarefa_comentarios', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('editar_comentario_tarefa', 'tarefa_comentarios', 'sucesso', { user_id: requester_id, depois: { id: req.params.cid } });
   res.json(data);
 });
 
@@ -239,7 +247,11 @@ router.delete('/comentarios/:cid', async (req, res) => {
   if (!c) return res.status(404).json({ error: 'Comentário não encontrado' });
   if (c.user_id !== requester_id) return res.status(403).json({ error: 'Só o autor pode apagar' });
   const { error } = await supabase.from('tarefa_comentarios').delete().eq('id', req.params.cid);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('excluir_comentario_tarefa', 'tarefa_comentarios', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('excluir_comentario_tarefa', 'tarefa_comentarios', 'sucesso', { user_id: requester_id, antes: { id: req.params.cid } });
   res.json({ ok: true });
 });
 

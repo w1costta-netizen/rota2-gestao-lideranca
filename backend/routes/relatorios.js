@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -60,7 +60,11 @@ router.post('/', async (req, res) => {
     status: 'rascunho',
   }).select('*, creator:created_by(full_name)').single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('criar_tour_4x4', 'relatorios_fotograficos', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('criar_tour_4x4', 'relatorios_fotograficos', 'sucesso', { company: me.company, user_id: requester_id, depois: { id: data.id, title: data.title } });
   res.json(data);
 });
 
@@ -85,7 +89,11 @@ router.put('/:id', async (req, res) => {
 
   const { data, error } = await supabase.from('relatorios_fotograficos').update(updates).eq('id', req.params.id)
     .select('*, creator:created_by(full_name)').single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('editar_tour_4x4', 'relatorios_fotograficos', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('editar_tour_4x4', 'relatorios_fotograficos', 'sucesso', { company: me.company, user_id: requester_id, depois: updates });
   res.json(data);
 });
 
@@ -103,7 +111,11 @@ router.delete('/:id', async (req, res) => {
     return res.status(403).json({ error: 'Acesso negado' });
 
   const { error } = await supabase.from('relatorios_fotograficos').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('excluir_tour_4x4', 'relatorios_fotograficos', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('excluir_tour_4x4', 'relatorios_fotograficos', 'sucesso', { company: me.company, user_id: requester_id, antes: { id: req.params.id } });
   res.json({ ok: true });
 });
 
@@ -143,7 +155,14 @@ router.put('/fotos/:fotoId', async (req, res) => {
   if (evidencia_by !== undefined)         updates.evidencia_by          = evidencia_by;
 
   const { data, error } = await supabase.from('relatorio_fotos').update(updates).eq('id', req.params.fotoId).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('editar_foto_tour_4x4', 'relatorio_fotos', 'erro', { user_id: evidencia_by || req.body.requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('editar_foto_tour_4x4', 'relatorio_fotos', 'sucesso', {
+    user_id: evidencia_by || req.body.requester_id,
+    depois: { foto_id: req.params.fotoId, campos: Object.keys(updates) },
+  });
   res.json(data);
 });
 

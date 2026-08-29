@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function requireMaster(req, res) {
   const id = req.body?.requester_id || req.query?.requester_id;
@@ -53,7 +53,11 @@ router.post('/master', async (req, res) => {
   const { data, error } = await supabase.from('stores').insert({
     name, city: city || null, active: true, approved_by: req.body.requester_id,
   }).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('criar_loja', 'stores', 'erro', { company: name, user_id: req.body.requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('criar_loja', 'stores', 'sucesso', { company: data.name, user_id: req.body.requester_id, depois: { id: data.id, name: data.name, city: data.city } });
   res.json(data);
 });
 
@@ -69,11 +73,15 @@ router.post('/', async (req, res) => {
   const { data, error } = await supabase.from('stores').insert({
     name, city: city || null, active: false, created_by: requester_id
   }).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('solicitar_loja', 'stores', 'erro', { company: name, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
 
   // Atualiza o company do gerente para o nome da loja
   await supabase.from('profiles').update({ company: name }).eq('id', requester_id);
 
+  registrarLog('solicitar_loja', 'stores', 'sucesso', { company: data.name, user_id: requester_id, depois: { id: data.id, name: data.name, city: data.city } });
   res.json(data);
 });
 

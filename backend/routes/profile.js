@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const supabase = require('../supabase');
+const { registrarLog } = require('../lib/auditLog');
 
 // Lista perfis por empresa (id, full_name, sector) — para seletores de setor
 router.get('/all', async (req, res) => {
@@ -26,7 +27,14 @@ router.post('/upsert', async (req, res) => {
     access_level: access_level || 'lider',
   }, { onConflict: 'id' }).select().single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('salvar_perfil', 'profiles', 'erro', { company, user_id: id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('salvar_perfil', 'profiles', 'sucesso', {
+    company: data.company, user_id: id,
+    depois: { full_name: data.full_name, sector: data.sector, role: data.role, access_level: data.access_level },
+  });
   res.json(data);
 });
 
@@ -63,7 +71,11 @@ router.post('/first-access-done', async (req, res) => {
   const { user_id } = req.body;
   if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
   const { error } = await supabase.from('profiles').update({ first_access: false }).eq('id', user_id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('concluir_boas_vindas', 'profiles', 'erro', { user_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('concluir_boas_vindas', 'profiles', 'sucesso', { user_id });
   res.json({ ok: true });
 });
 

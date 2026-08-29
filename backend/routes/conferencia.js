@@ -3,7 +3,7 @@ const router  = express.Router();
 const multer  = require('multer');
 const XLSX    = require('xlsx');
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
@@ -301,19 +301,34 @@ router.get('/sessoes/:id/itens', async (req, res) => {
 
 // POST /api/conferencia/sessoes/:id/itens — registra item coletado
 router.post('/sessoes/:id/itens', async (req, res) => {
-  const { cd_produto, ean, descricao_produto } = req.body;
+  const { cd_produto, ean, descricao_produto, requester_id } = req.body;
   const { data, error } = await supabase.from('conferencia_itens').insert({
     conferencia_id: req.params.id,
     cd_produto, ean, descricao_produto,
   }).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('coletar_item_conferencia', 'conferencia_itens', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('coletar_item_conferencia', 'conferencia_itens', 'sucesso', {
+    user_id: requester_id,
+    depois: { conferencia_id: req.params.id, cd_produto, descricao_produto },
+  });
   res.json(data);
 });
 
 // DELETE /api/conferencia/sessoes/:id/itens/:iid — remove item coletado
 router.delete('/sessoes/:id/itens/:iid', async (req, res) => {
+  const { data: antes } = await supabase.from('conferencia_itens').select('cd_produto, descricao_produto').eq('id', req.params.iid).maybeSingle();
   const { error } = await supabase.from('conferencia_itens').delete().eq('id', req.params.iid);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('remover_item_conferencia', 'conferencia_itens', 'erro', { user_id: req.query.requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('remover_item_conferencia', 'conferencia_itens', 'sucesso', {
+    user_id: req.query.requester_id,
+    antes: { cd_produto: antes?.cd_produto, descricao_produto: antes?.descricao_produto },
+  });
   res.json({ ok: true });
 });
 

@@ -3,7 +3,7 @@ const router    = express.Router();
 const multer    = require('multer');
 const Anthropic = require('@anthropic-ai/sdk');
 const supabase  = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -129,7 +129,11 @@ router.post('/:id/itens', async (req, res) => {
   }));
 
   const { data, error } = await supabase.from('campanha_itens').insert(rows).select();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('adicionar_itens_flyer', 'campanha_itens', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('adicionar_itens_flyer', 'campanha_itens', 'sucesso', { company: me.company, user_id: requester_id, depois: { campanha_id: req.params.id, itens: rows.length } });
   res.json(data);
 });
 
@@ -230,9 +234,14 @@ REGRAS:
 
     const itens = Array.isArray(toolUse.input.itens) ? toolUse.input.itens : Array.isArray(toolUse.input) ? toolUse.input : [];
     console.log('[IA] Itens extraídos:', itens.length);
+    registrarLog('ler_flyer_ia', 'campanha_itens', 'sucesso', {
+      company: me.company, user_id: requester_id,
+      depois: { campanha_id: req.params.id, arquivos: req.files.length, itens_extraidos: itens.length },
+    });
     res.json({ itens });
   } catch (e) {
     console.error('Erro extração IA:', e.status, e.message, e.error);
+    registrarLog('ler_flyer_ia', 'campanha_itens', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: e.message });
     res.status(500).json({ error: e.message || 'Erro interno' });
   }
 });
@@ -246,7 +255,11 @@ router.put('/itens/:itemId', async (req, res) => {
   const { data, error } = await supabase.from('campanha_itens')
     .update({ descricao, preco, categoria })
     .eq('id', req.params.itemId).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('editar_item_flyer', 'campanha_itens', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('editar_item_flyer', 'campanha_itens', 'sucesso', { company: me.company, user_id: requester_id, depois: { id: req.params.itemId, descricao } });
   res.json(data);
 });
 
@@ -255,7 +268,9 @@ router.delete('/itens/:itemId', async (req, res) => {
   const { requester_id } = req.query;
   const me = await getProfile(requester_id);
   if (!isManager(me)) return res.status(403).json({ error: 'Acesso negado' });
+  const { data: antes } = await supabase.from('campanha_itens').select('descricao').eq('id', req.params.itemId).maybeSingle();
   await supabase.from('campanha_itens').delete().eq('id', req.params.itemId);
+  registrarLog('excluir_item_flyer', 'campanha_itens', 'sucesso', { company: me.company, user_id: requester_id, antes: { descricao: antes?.descricao } });
   res.json({ ok: true });
 });
 
@@ -277,11 +292,15 @@ router.put('/itens/:itemId/sinalizar', async (req, res) => {
       sinalizado_em:  sinalizacao ? new Date().toISOString() : null,
     })
     .eq('id', req.params.itemId).select().single();
-  if (error) return res.status(500).json({ error: error.message });
-
-  if (sinalizacao) {
-    logAction({ company: me.company, user_id: requester_id, acao: 'sinalizar_item_flyer', tabela: 'campanha_itens', depois: { item_id: req.params.itemId, sinalizacao } });
+  if (error) {
+    registrarLog('sinalizar_item_flyer', 'campanha_itens', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
   }
+
+  registrarLog('sinalizar_item_flyer', 'campanha_itens', 'sucesso', {
+    company: me.company, user_id: requester_id,
+    depois: { item_id: req.params.itemId, sinalizacao: sinalizacao || 'removida' },
+  });
   res.json(item);
 });
 

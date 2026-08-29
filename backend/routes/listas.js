@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { registrarLog } = require('../lib/auditLog');
 
 // GET /api/listas?requester_id= — lista as listas do usuário com itens
 router.get('/', async (req, res) => {
@@ -36,7 +37,11 @@ router.post('/', async (req, res) => {
     .from('listas')
     .insert({ user_id: requester_id, nome: nome.trim(), emoji: emoji || '📝', ordem: count || 0 })
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('criar_lista', 'listas', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('criar_lista', 'listas', 'sucesso', { user_id: requester_id, depois: { id: data.id, nome: data.nome } });
   res.json({ ...data, itens: [] });
 });
 
@@ -53,7 +58,11 @@ router.put('/:id', async (req, res) => {
   if (emoji) patch.emoji = emoji;
 
   const { data, error } = await supabase.from('listas').update(patch).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('editar_lista', 'listas', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('editar_lista', 'listas', 'sucesso', { user_id: requester_id, depois: { id: data.id, nome: data.nome } });
   res.json(data);
 });
 
@@ -62,11 +71,15 @@ router.delete('/:id', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(400).json({ error: 'requester_id obrigatório' });
 
-  const { data: lista } = await supabase.from('listas').select('user_id').eq('id', req.params.id).single();
+  const { data: lista } = await supabase.from('listas').select('user_id, nome').eq('id', req.params.id).single();
   if (!lista || lista.user_id !== requester_id) return res.status(403).json({ error: 'Acesso negado' });
 
   const { error } = await supabase.from('listas').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('excluir_lista', 'listas', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('excluir_lista', 'listas', 'sucesso', { user_id: requester_id, antes: { nome: lista.nome } });
   res.json({ ok: true });
 });
 
@@ -87,7 +100,11 @@ router.post('/:id/itens', async (req, res) => {
     .from('lista_itens')
     .insert({ lista_id: req.params.id, texto: texto.trim(), ordem: count || 0 })
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('adicionar_item_lista', 'lista_itens', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('adicionar_item_lista', 'lista_itens', 'sucesso', { user_id: requester_id, depois: { texto: data.texto } });
   res.json(data);
 });
 
@@ -108,7 +125,11 @@ router.put('/itens/:id', async (req, res) => {
   if (texto?.trim()) patch.texto = texto.trim();
 
   const { data, error } = await supabase.from('lista_itens').update(patch).eq('id', req.params.id).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('editar_item_lista', 'lista_itens', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('editar_item_lista', 'lista_itens', 'sucesso', { user_id: requester_id, depois: { texto: data.texto, concluido: data.concluido } });
   res.json(data);
 });
 
@@ -125,7 +146,11 @@ router.delete('/itens/:id', async (req, res) => {
   if (!item || item.listas.user_id !== requester_id) return res.status(403).json({ error: 'Acesso negado' });
 
   const { error } = await supabase.from('lista_itens').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('excluir_item_lista', 'lista_itens', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('excluir_item_lista', 'lista_itens', 'sucesso', { user_id: requester_id });
   res.json({ ok: true });
 });
 

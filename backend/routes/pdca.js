@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { logAction, logError } = require('../lib/auditLog');
+const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -177,7 +177,14 @@ router.post('/:id/acoes', async (req, res) => {
     criar_tarefa: criar_tarefa !== false,
   }).select('*, responsavel:responsavel_id(id, full_name, avatar_url)').single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('criar_acao_pdca', 'acoes_pdca', 'erro', { company: plano.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('criar_acao_pdca', 'acoes_pdca', 'sucesso', {
+    company: plano.company, user_id: requester_id,
+    depois: { plano: plano.titulo, quadrante, descricao: acao.descricao, prazo },
+  });
 
   // Auto-criar tarefa se toggle ativo + responsavel + prazo
   if (criar_tarefa !== false && responsavel_id && prazo) {
@@ -238,7 +245,15 @@ router.put('/acoes/:id', async (req, res) => {
 
   const { data, error } = await supabase.from('acoes_pdca').update(updates).eq('id', req.params.id)
     .select('*, responsavel:responsavel_id(id, full_name, avatar_url)').single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    registrarLog('editar_acao_pdca', 'acoes_pdca', 'erro', { company: acaoAtual.plano?.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('editar_acao_pdca', 'acoes_pdca', 'sucesso', {
+    company: acaoAtual.plano?.company, user_id: requester_id,
+    antes: { descricao: acaoAtual.descricao, concluida: acaoAtual.concluida },
+    depois: updates,
+  });
 
   // Sync tarefa vinculada quando concluida muda
   if (concluida !== undefined && acaoAtual.tarefa_id) {
