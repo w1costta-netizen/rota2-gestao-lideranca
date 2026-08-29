@@ -250,23 +250,32 @@ export default function Organograma({ userId, profile }) {
     if (!treeRef.current || exporting) return;
     setExporting(true);
     try {
-      const canvas = await html2canvas(treeRef.current, {
+      // allowTaint NÃO pode ser usado aqui: com ele o html2canvas desenha as
+      // fotos de perfil sem CORS, o que "contamina" o canvas e faz o
+      // toDataURL() abaixo estourar SecurityError. Só useCORS — o Supabase
+      // Storage já responde com Access-Control-Allow-Origin: *.
+      // A escala cai quando a árvore é grande, porque o navegador tem limite
+      // de tamanho de canvas e acima dele o resultado sai em branco.
+      const alvo = treeRef.current;
+      const escala = alvo.scrollWidth * alvo.scrollHeight > 4000000 ? 1 : 2;
+      const canvas = await html2canvas(alvo, {
         backgroundColor: '#111111',
-        scale: 2,
+        scale: escala,
         useCORS: true,
-        allowTaint: true,
       });
       const imgData = canvas.toDataURL('image/png');
+      const larguraPdf = canvas.width / escala;
+      const alturaPdf  = canvas.height / escala;
       const pdf = new jsPDF({
-        orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+        orientation: larguraPdf > alturaPdf ? 'landscape' : 'portrait',
         unit: 'px',
-        format: [canvas.width / 2, canvas.height / 2],
+        format: [larguraPdf, alturaPdf],
       });
-      pdf.addImage(imgData, 'PNG', 0, 0, canvas.width / 2, canvas.height / 2);
+      pdf.addImage(imgData, 'PNG', 0, 0, larguraPdf, alturaPdf);
       const pdfBlob = pdf.output('blob');
       const file = new File([pdfBlob], 'organograma-lideranca.pdf', { type: 'application/pdf' });
 
-      if (navigator.share && navigator.canShare({ files: [file] })) {
+      if (navigator.share && typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: 'Organograma de Liderança' });
       } else {
         const url = URL.createObjectURL(pdfBlob);
@@ -276,7 +285,10 @@ export default function Organograma({ userId, profile }) {
         toast('PDF baixado! Envie pelo WhatsApp manualmente.');
       }
     } catch (e) {
-      if (e.name !== 'AbortError') toast('Erro ao exportar', 'error');
+      if (e.name !== 'AbortError') {
+        console.error('[Organograma] Falha ao exportar PDF:', e);
+        toast(`Erro ao exportar: ${e.message || e.name || 'falha desconhecida'}`, 'error');
+      }
     } finally { setExporting(false); }
   };
 
