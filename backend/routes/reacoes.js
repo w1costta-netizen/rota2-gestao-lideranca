@@ -1,6 +1,12 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { logAction } = require('../lib/auditLog');
+
+async function companyDoUsuario(user_id) {
+  const { data } = await supabase.from('profiles').select('company').eq('id', user_id).maybeSingle();
+  return data?.company || null;
+}
 
 // POST /api/reacoes/toggle
 // Regra: 1 reação por usuário por item. Trocar emoji remove o anterior.
@@ -19,21 +25,26 @@ router.post('/toggle', async (req, res) => {
     .eq('user_id', user_id)
     .maybeSingle();
 
+  const company = await companyDoUsuario(user_id);
+
   if (existing) {
     // Remove a reação atual
     await supabase.from('reacoes').delete().eq('id', existing.id);
 
     if (existing.emoji === emoji) {
       // Mesmo emoji → apenas remove (toggle off)
+      logAction({ company, user_id, acao: 'remover_reacao', tabela: 'reacoes', antes: { tipo, item_id, emoji } });
       return res.json({ action: 'removed', old_emoji: emoji });
     } else {
       // Emoji diferente → remove o antigo e adiciona o novo
       await supabase.from('reacoes').insert({ tipo, item_id, user_id, emoji });
+      logAction({ company, user_id, acao: 'reagir', tabela: 'reacoes', antes: { emoji: existing.emoji }, depois: { tipo, item_id, emoji } });
       return res.json({ action: 'changed', old_emoji: existing.emoji });
     }
   } else {
     // Nenhuma reação ainda → adiciona
     await supabase.from('reacoes').insert({ tipo, item_id, user_id, emoji });
+    logAction({ company, user_id, acao: 'reagir', tabela: 'reacoes', depois: { tipo, item_id, emoji } });
     return res.json({ action: 'added' });
   }
 });
