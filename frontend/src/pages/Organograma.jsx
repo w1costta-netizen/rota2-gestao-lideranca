@@ -4,6 +4,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import api from '../api';
 import { useToast } from '../components/Toast';
+import { reportError } from '../lib/reportError';
 
 const ACCESS_LABEL = { master:'Master', admin:'Admin', supervisor:'Supervisor', lider:'Líder', colaborador:'Colaborador' };
 
@@ -287,6 +288,7 @@ export default function Organograma({ userId, profile }) {
     } catch (e) {
       if (e.name !== 'AbortError') {
         console.error('[Organograma] Falha ao exportar PDF:', e);
+        reportError({ userId, acao: 'exportar_organograma_pdf', tabela: 'organograma', erro: e });
         toast(`Erro ao exportar: ${e.message || e.name || 'falha desconhecida'}`, 'error');
       }
     } finally { setExporting(false); }

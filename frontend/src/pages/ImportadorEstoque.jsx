@@ -3,6 +3,7 @@ import { Upload, CheckCircle, AlertTriangle, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { parseEstoqueXlsx } from '../lib/parseEstoqueXlsx';
 import { useToast } from '../components/Toast';
+import { reportAction, reportError } from '../lib/reportError';
 
 const brl = v => v == null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 const n0  = v => v == null ? '—' : Math.round(v).toLocaleString('pt-BR');
@@ -43,10 +44,15 @@ export default function ImportadorEstoque({ profile }) {
       setEstado('ok');
       setMensagem(`Importação concluída — ${n0(payload.linhas)} itens · ${payload.gerado_em}`);
       toast('Estoque importado e sincronizado!');
+      reportAction({
+        userId: profile?.id, acao: 'importar_estoque', tabela: 'estoque_payloads',
+        depois: { itens: payload.linhas, gerado_em: payload.gerado_em, arquivo: file.name },
+      });
     } catch (e) {
       setEstado('erro');
       setMensagem(e.message || 'Erro ao processar o arquivo.');
       toast(e.message || 'Erro ao importar.', 'error');
+      reportError({ userId: profile?.id, acao: 'importar_estoque', tabela: 'estoque_payloads', erro: e });
     }
   }
 

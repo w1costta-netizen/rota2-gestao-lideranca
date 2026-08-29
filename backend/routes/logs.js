@@ -1,11 +1,42 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company').eq('id', id).single();
   return data;
 }
+
+// POST /api/logs/frontend — registra no log de auditoria algo que aconteceu
+// no navegador. Ações feitas direto contra o Supabase (importar estoque) e
+// erros de tela (gerar PDF, upload) nunca passavam pelo servidor, então
+// simplesmente não existiam no log. Aberto a qualquer usuário logado, porque
+// qualquer um pode executar essas ações — mas só grava se o requester_id for
+// um perfil real, e a empresa vem sempre do perfil (nunca do corpo da
+// requisição), pra ninguém conseguir plantar log em outra loja.
+router.post('/frontend', async (req, res) => {
+  const { requester_id, acao, tabela, rota, erro_mensagem, status, depois } = req.body;
+  if (!requester_id) return res.status(400).json({ error: 'requester_id obrigatório' });
+
+  const me = await getProfile(requester_id);
+  if (!me) return res.status(403).json({ error: 'Acesso negado' });
+
+  const base = {
+    company: me.company,
+    user_id: requester_id,
+    acao: String(acao || 'acao_tela').slice(0, 80),
+    tabela: tabela ? String(tabela).slice(0, 80) : null,
+  };
+
+  if (status === 'sucesso') {
+    await logAction({ ...base, depois: depois ?? null });
+  } else {
+    if (!erro_mensagem) return res.status(400).json({ error: 'erro_mensagem obrigatório' });
+    await logError({ ...base, rota: rota ? String(rota).slice(0, 200) : null, erro_mensagem });
+  }
+  res.json({ ok: true });
+});
 
 // GET /api/logs?requester_id=&company=&acao=&tabela=&status=&q=&user_id=&data_ini=&data_fim=
 router.get('/', async (req, res) => {

@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 async function getRequester(requester_id) {
   if (!requester_id) return null;
@@ -102,7 +103,11 @@ router.post('/', async (req, res) => {
     acoes: Array.isArray(acoes) ? acoes : [],
     proxima_reuniao: proxima_reuniao || null,
   }).select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: me.id, acao: 'criar_ata', tabela: 'atas_reuniao', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: me.id, acao: 'criar_ata', tabela: 'atas_reuniao', depois: { id: nova.id, titulo: nova.titulo, data: nova.data } });
   res.json(nova);
 });
 
@@ -112,13 +117,17 @@ router.delete('/:id', async (req, res) => {
   if (!me) return res.status(401).json({ error: 'requester_id inválido' });
 
   const { data: profileFull } = await supabase.from('profiles').select('access_level').eq('id', me.id).single();
-  const { data: ata } = await supabase.from('atas_reuniao').select('criado_por, company').eq('id', req.params.id).single();
+  const { data: ata } = await supabase.from('atas_reuniao').select('criado_por, company, titulo').eq('id', req.params.id).single();
   if (!ata || ata.company !== me.company) return res.status(404).json({ error: 'Ata não encontrada' });
   const podeApagar = ata.criado_por === me.id || ['admin', 'master'].includes(profileFull?.access_level);
   if (!podeApagar) return res.status(403).json({ error: 'Acesso negado' });
 
   const { error } = await supabase.from('atas_reuniao').delete().eq('id', req.params.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: me.id, acao: 'excluir_ata', tabela: 'atas_reuniao', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: me.id, acao: 'excluir_ata', tabela: 'atas_reuniao', antes: { titulo: ata.titulo } });
   res.json({ ok: true });
 });
 
@@ -153,7 +162,11 @@ router.post('/:id/assinar', async (req, res) => {
   const { data, error } = await supabase.from('ata_assinaturas')
     .upsert({ ata_id: req.params.id, user_id: me.id, texto_assinatura: texto, assinado_em: new Date().toISOString() }, { onConflict: 'ata_id,user_id' })
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: me.id, acao: 'assinar_ata', tabela: 'ata_assinaturas', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: me.id, acao: 'assinar_ata', tabela: 'ata_assinaturas', depois: { ata_id: req.params.id, assinatura: texto } });
   res.json(data);
 });
 
@@ -163,7 +176,11 @@ router.delete('/:id/assinar', async (req, res) => {
   if (!me) return res.status(401).json({ error: 'requester_id inválido' });
 
   const { error } = await supabase.from('ata_assinaturas').delete().eq('ata_id', req.params.id).eq('user_id', me.id);
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: me.id, acao: 'desfazer_assinatura_ata', tabela: 'ata_assinaturas', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: me.company, user_id: me.id, acao: 'desfazer_assinatura_ata', tabela: 'ata_assinaturas', antes: { ata_id: req.params.id } });
   res.json({ ok: true });
 });
 

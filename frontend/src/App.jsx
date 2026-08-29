@@ -368,7 +368,7 @@ function AppContent() {
             Carregando...
           </div>
         }>
-          <ErrorBoundary key={page}>
+          <ErrorBoundary key={page} userId={userId}>
             <PageComponent />
           </ErrorBoundary>
         </React.Suspense>

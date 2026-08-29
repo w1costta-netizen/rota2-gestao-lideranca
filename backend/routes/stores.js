@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 async function requireMaster(req, res) {
   const id = req.body?.requester_id || req.query?.requester_id;
@@ -86,7 +87,11 @@ router.put('/:id/approve', async (req, res) => {
     .update({ active: true, approved_by: req.body.requester_id })
     .eq('id', req.params.id)
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ user_id: req.body.requester_id, acao: 'aprovar_loja', tabela: 'stores', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: data.name, user_id: req.body.requester_id, acao: 'aprovar_loja', tabela: 'stores', depois: { id: data.id, name: data.name } });
 
   // Ativa o gerente que criou a loja como admin dela
   if (data.created_by) {
@@ -106,7 +111,11 @@ router.put('/:id/disable', async (req, res) => {
     .update({ active: false })
     .eq('id', req.params.id)
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ user_id: req.body.requester_id, acao: 'desativar_loja', tabela: 'stores', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: data.name, user_id: req.body.requester_id, acao: 'desativar_loja', tabela: 'stores', antes: { id: data.id, name: data.name } });
   res.json(data);
 });
 
@@ -130,12 +139,23 @@ router.put('/:id/modulos', async (req, res) => {
   const { modulos_premium } = req.body;
   if (!Array.isArray(modulos_premium)) return res.status(400).json({ error: 'modulos_premium deve ser um array' });
 
+  const { data: antes } = await supabase.from('stores').select('name, modulos_premium').eq('id', req.params.id).single();
+
   const { data, error } = await supabase
     .from('stores')
     .update({ modulos_premium })
     .eq('id', req.params.id)
     .select().single();
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: antes?.name, user_id: req.body.requester_id, acao: 'editar_modulos_premium', tabela: 'stores', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({
+    company: data.name, user_id: req.body.requester_id,
+    acao: 'editar_modulos_premium', tabela: 'stores',
+    antes: { modulos_premium: antes?.modulos_premium },
+    depois: { modulos_premium: data.modulos_premium },
+  });
   res.json(data);
 });
 

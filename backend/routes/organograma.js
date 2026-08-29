@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { logAction, logError } = require('../lib/auditLog');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company').eq('id', id).single();
@@ -36,6 +37,9 @@ router.put('/:id', async (req, res) => {
   if (!me || !['admin','master'].includes(me.access_level))
     return res.status(403).json({ error: 'Apenas admin pode editar o organograma' });
 
+  const { data: antes } = await supabase
+    .from('profiles').select('full_name, reports_to_list').eq('id', req.params.id).single();
+
   const { data, error } = await supabase
     .from('profiles')
     .update({ reports_to_list: reports_to_list || [] })
@@ -43,7 +47,17 @@ router.put('/:id', async (req, res) => {
     .select('id, full_name, access_level, sector, reports_to_list, avatar_url')
     .single();
 
-  if (error) return res.status(500).json({ error: error.message });
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'editar_organograma', tabela: 'profiles', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+
+  logAction({
+    company: me.company, user_id: requester_id,
+    acao: 'editar_organograma', tabela: 'profiles',
+    antes: { colaborador: antes?.full_name, reports_to_list: antes?.reports_to_list },
+    depois: { colaborador: data.full_name, reports_to_list: data.reports_to_list },
+  });
   res.json(data);
 });
 

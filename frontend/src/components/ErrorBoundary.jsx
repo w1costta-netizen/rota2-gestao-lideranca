@@ -1,4 +1,5 @@
 import React from 'react';
+import { reportError } from '../lib/reportError';
 
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -12,6 +13,13 @@ export default class ErrorBoundary extends React.Component {
 
   componentDidCatch(error, info) {
     console.error('[ErrorBoundary]', error, info?.componentStack);
+    // Registra a quebra de tela no log de auditoria — antes esse tipo de erro
+    // só existia no console do navegador do usuário.
+    reportError({
+      userId: this.props.userId,
+      acao: 'erro_tela',
+      erro: error,
+    });
   }
 
   render() {
