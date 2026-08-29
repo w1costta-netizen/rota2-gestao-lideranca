@@ -3,7 +3,18 @@ import { supabase } from '../lib/supabase';
 import { autoRegisterPush } from '../lib/push';
 import api from '../api';
 
-const AuthCtx = createContext(null);
+// O padrão precisa ser um objeto, não null: quando sai uma versão nova e o
+// navegador fica com pedaços do código antigo e novo misturados, o contexto
+// pode chegar vazio num componente. Com null, o "const { session } = useAuth()"
+// estourava e derrubava a tela inteira ("Cannot destructure property 'session'").
+// Com este padrão, o app apenas entende que ainda está carregando — e o
+// recarregamento automático de versão resolve em seguida.
+const AuthCtx = createContext({
+  session: undefined, // undefined = carregando
+  profile: null,
+  signOut: async () => {},
+  loadProfile: async () => {},
+});
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined); // undefined = loading
