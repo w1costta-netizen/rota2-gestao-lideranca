@@ -1,7 +1,7 @@
 {
-  "name": "Rota Líder - Gestão de Liderança",
+  "name": "Rota Líder - Gestão, Liderança e Produtividade",
   "short_name": "Rota Líder",
-  "description": "Gestão de liderança Sam's Club",
+  "description": "Tarefas, escalas, comunicados e gestão de equipe em um só lugar.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#2E1A47",
