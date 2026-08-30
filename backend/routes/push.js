@@ -101,6 +101,35 @@ router.get('/meus-dispositivos', async (req, res) => {
   res.json({ aparelhos });
 });
 
+// POST /api/push/recebido — o service worker do aparelho avisa que um push
+// chegou e se conseguiu exibi-lo.
+//
+// Existe porque sem isso o diagnóstico é cego: a Apple responde "aceito",
+// mas não há como saber se o push chegou ao aparelho, se o conteúdo foi
+// lido e se a notificação chegou a ser exibida. Cada uma dessas três etapas
+// falha de um jeito diferente e todas parecem iguais de fora.
+//
+// Sem autenticação porque quem chama é o service worker, que não tem sessão.
+// Só grava se o identificador for de um perfil real, então no máximo alguém
+// consegue poluir o próprio log.
+router.post('/recebido', async (req, res) => {
+  const { rastreio, fase, detalhe, versao } = req.body || {};
+  if (!rastreio) return res.status(400).json({ error: 'rastreio obrigatório' });
+
+  const { data: perfil } = await supabase
+    .from('profiles').select('company').eq('id', rastreio).maybeSingle();
+  if (!perfil) return res.status(403).json({ error: 'Acesso negado' });
+
+  registrarLog('push_no_aparelho', 'push_subscriptions', fase === 'erro_ao_exibir' ? 'erro' : 'sucesso', {
+    company: perfil.company,
+    user_id: rastreio,
+    depois: { fase, versao: versao || null, ...(detalhe || {}) },
+    ...(fase === 'erro_ao_exibir' ? { erro: `Aparelho recebeu o push mas não conseguiu exibir: ${detalhe?.erro || 'sem detalhe'}` } : {}),
+  });
+
+  res.json({ ok: true });
+});
+
 // POST /api/push/test — envia push de teste para o próprio usuário
 router.post('/test', async (req, res) => {
   const { user_id } = req.body;
@@ -125,6 +154,10 @@ router.post('/test', async (req, res) => {
     title: '🔔 Teste Rota Líder',
     body: 'As notificações estão funcionando corretamente!',
     page: 'dashboard',
+    // Vai de volta no aviso que o aparelho manda, para sabermos qual
+    // aparelho recebeu. O conteúdo do push é criptografado ponta a ponta,
+    // então só o próprio aparelho do usuário consegue ler.
+    rastreio: user_id,
   });
 
   // O endereço de identificação vai assinado em cada envio e a Apple o

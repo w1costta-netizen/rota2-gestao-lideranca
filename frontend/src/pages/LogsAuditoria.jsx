@@ -138,6 +138,7 @@ const ACAO_LABEL = {
   registrar_dispositivo_push: 'Registrou dispositivo de notificação',
   remover_dispositivo_push: 'Removeu dispositivo de notificação',
   limpar_dispositivos_push: 'Limpou os aparelhos de notificação',
+  push_no_aparelho: 'Push chegou ao aparelho',
   listar_dispositivos_push: 'Consultou os aparelhos de notificação',
   erro_tela: 'Erro na tela',
   acao_tela: 'Ação na tela',
