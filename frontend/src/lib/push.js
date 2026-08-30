@@ -40,8 +40,25 @@ function chaveDaInscricaoConfere(subscription, publicKeyServidor) {
   try {
     const atual = subscription?.options?.applicationServerKey;
     if (!atual) return true; // navegador não expõe: não dá pra comparar
+
+    // Só dá para comparar se vier como bloco de bytes. O Safari pode
+    // devolver em outro formato, e aí `new Uint8Array(...)` gera um valor
+    // vazio: a comparação falharia por engano e o app cancelaria a
+    // inscrição boa do iPhone a cada abertura, criando um registro novo e
+    // deixando o anterior morto no banco. Na dúvida, não mexe.
+    // Identifica pelo formato, e não por `instanceof`: este último falha
+    // quando o objeto vem de outro contexto (service worker), e o engano
+    // custaria caro — cancelaria a inscrição boa.
+    const marca = Object.prototype.toString.call(atual);
+    const ehArrayBuffer = marca === '[object ArrayBuffer]';
+    const ehView = typeof atual === 'object' && atual !== null
+      && typeof atual.byteLength === 'number' && !ehArrayBuffer
+      && Object.prototype.toString.call(atual.buffer) === '[object ArrayBuffer]';
+    if (!ehArrayBuffer && !ehView) return true;
+
     const doServidor = urlBase64ToUint8Array(publicKeyServidor);
-    const daInscricao = new Uint8Array(atual);
+    const daInscricao = new Uint8Array(ehArrayBuffer ? atual : atual.buffer);
+    if (!daInscricao.length) return true; // sem bytes para comparar
     if (daInscricao.length !== doServidor.length) return false;
     return daInscricao.every((b, i) => b === doServidor[i]);
   } catch {
