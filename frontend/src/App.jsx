@@ -10,6 +10,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Welcome from './pages/Welcome';
 import AceiteTermos from './pages/AceiteTermos';
+import { VERSAO_ESPERADA } from './lib/notificacoes';
 
 // Lazy-load de todas as páginas — reduz o bundle inicial em ~70%
 const lazy = (fn) => React.lazy(fn);
@@ -339,7 +340,10 @@ function AppContent() {
           alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,.4)', fontSize: 13,
           whiteSpace: 'nowrap',
         }}>
-          <span>Nova versão disponível — v2026.07.30</span>
+          {/* O número aqui era fixo no código e nunca mudava, então mostrava
+              a mesma versão para sempre — e atrapalhou o diagnóstico do push,
+              porque parecia ser a versão real do aparelho. */}
+          <span>Nova versão disponível — {VERSAO_ESPERADA}</span>
           <button
             onClick={() => { if ('caches' in window) { caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))).then(() => window.location.reload()); } else { window.location.reload(); } }}
             style={{ background: '#fff', color: 'var(--primary)', border: 'none',

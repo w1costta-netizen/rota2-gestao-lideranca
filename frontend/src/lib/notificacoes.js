@@ -113,7 +113,7 @@ export async function enviarTeste(userId) {
 // enxergar essa versão, "o push não chegou" e "chegou mas o código velho
 // não sabia exibir" são indistinguíveis.
 // ─────────────────────────────────────────────────────────────
-export const VERSAO_ESPERADA = 'rota2-v17';
+export const VERSAO_ESPERADA = 'rota2-v18';
 
 export async function versaoAtiva() {
   if (!('serviceWorker' in navigator)) return null;

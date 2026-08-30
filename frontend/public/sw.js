@@ -1,4 +1,4 @@
-const CACHE = 'rota2-v17';
+const CACHE = 'rota2-v18';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
 // Instala e pré-cacheia apenas assets imutáveis (sem index.html)
