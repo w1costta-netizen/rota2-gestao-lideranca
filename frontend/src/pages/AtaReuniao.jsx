@@ -107,8 +107,12 @@ function BlocoPauta({ pauta, indice, aoMudar, aoRemover }) {
           </div>
         ))}
         <div style={{ display: 'flex', gap: 8 }}>
+          {/* Guarda também ao sair do campo. Sem isso, quem digitava e ia
+              direto salvar perdia o texto em silêncio — foi o que aconteceu
+              numa reunião real, e o subtema simplesmente não saiu na ata. */}
           <input className="input" value={subtema} onChange={e => setSubtema(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addSubtema()}
+            onBlur={addSubtema}
             placeholder="Ex: Avarias no recebimento" />
           <button className="btn" onClick={addSubtema}>+</button>
         </div>
@@ -125,6 +129,7 @@ function BlocoPauta({ pauta, indice, aoMudar, aoRemover }) {
         <div style={{ display: 'flex', gap: 8 }}>
           <input className="input" value={decisao} onChange={e => setDecisao(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addDecisao()}
+            onBlur={addDecisao}
             placeholder="Ex: Conferir avaria antes de assinar o canhoto" />
           <button className="btn" onClick={addDecisao}>+</button>
         </div>
@@ -143,7 +148,12 @@ function BlocoPauta({ pauta, indice, aoMudar, aoRemover }) {
             <X size={13} style={{ cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }} onClick={() => tira('acoes', i)} />
           </div>
         ))}
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8 }}>
+        {/* A ação tem três campos, então só é guardada quando o foco deixa o
+            bloco INTEIRO — guardar ao sair do primeiro campo criaria uma
+            ação sem responsável e sem prazo, no meio da digitação. */}
+        <div
+          onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget)) addAcao(); }}
+          style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8 }}>
           <input className="input" value={acao.desc} onChange={e => setAcao(a => ({ ...a, desc: e.target.value }))} placeholder="O que precisa ser feito" />
           <input className="input" value={acao.resp} onChange={e => setAcao(a => ({ ...a, resp: e.target.value }))} placeholder="Responsável" />
           <input className="input" type="date" value={acao.prazo} onChange={e => setAcao(a => ({ ...a, prazo: e.target.value }))} />
@@ -385,31 +395,45 @@ export default function AtaReuniao({ userId, profile }) {
     doc.setFontSize(9); doc.setFont('helvetica', 'normal');
     doc.text('Ata de Reunião', 14, 19);
 
-    y = 36;
-    doc.setTextColor(...dark);
-    doc.setFontSize(14); doc.setFont('helvetica', 'bold');
-    doc.text(detalhe.titulo, 14, y);
-    y += 8;
-
-    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 100, 105);
-    doc.text(`Data: ${formatDateBR(detalhe.data)}   ·   Horário: ${detalhe.hora_inicio || '—'} às ${detalhe.hora_fim || '—'}   ·   Local: ${detalhe.local || '—'}`, 14, y);
-    y += 10;
-    doc.setDrawColor(230, 230, 230);
-    doc.line(14, y, 196, y);
-    y += 8;
-
     function checkPage(min) { if (y > 270 - min) { doc.addPage(); y = 20; } }
+
+    // Escreve respeitando a largura e avança pelo NÚMERO REAL de linhas.
+    // Antes o avanço era fixo: com muitos participantes o texto ocupava três
+    // linhas e o título seguinte caía por cima.
+    function escreve(texto, x = 14, largura = 182, alturaLinha = 5, folgaDepois = 0) {
+      const linhas = doc.splitTextToSize(String(texto ?? ''), largura);
+      checkPage(linhas.length * alturaLinha + 6);
+      doc.text(linhas, x, y);
+      y += linhas.length * alturaLinha + folgaDepois;
+    }
+
     function sectionTitle(t) {
-      checkPage(20);
+      checkPage(22);
       doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(...orange);
-      doc.text(t.toUpperCase(), 14, y); y += 7;
+      doc.text(t.toUpperCase(), 14, y); y += 8;
       doc.setFont('helvetica', 'normal'); doc.setTextColor(...dark); doc.setFontSize(10);
     }
 
+    y = 38;
+    doc.setTextColor(...dark);
+    doc.setFontSize(14); doc.setFont('helvetica', 'bold');
+    escreve(detalhe.titulo, 14, 182, 7, 3);
+
+    doc.setFontSize(10); doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 100, 105);
+    escreve(
+      `Data: ${formatDateBR(detalhe.data)}   ·   Horário: ${detalhe.hora_inicio || '—'} às ${detalhe.hora_fim || '—'}   ·   Local: ${detalhe.local || '—'}`,
+      14, 182, 5, 6,
+    );
+
+    doc.setDrawColor(230, 230, 230);
+    doc.line(14, y, 196, y);
+    y += 10;
+
     sectionTitle('Participantes');
+    doc.setTextColor(...dark);
     const nomes = detalhe.participantes_detalhe.map(p => p.full_name).join(', ') || 'Nenhum participante';
-    doc.text(nomes, 14, y, { maxWidth: 182 }); y += 12;
+    escreve(nomes, 14, 182, 5, 10);
 
     // Cada assunto sai com o que pertence a ele. No papel isso é ainda mais
     // importante que na tela: quem lê a ata depois precisa saber a qual
@@ -749,7 +773,7 @@ export default function AtaReuniao({ userId, profile }) {
 
             <div style={{ display: 'flex', gap: 8 }}>
               <input className="input" value={novaPautaTitulo} onChange={e => setNovaPautaTitulo(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addPauta()} placeholder="Novo assunto (ex: Quebras)"/>
+                onKeyDown={e => e.key === 'Enter' && addPauta()} onBlur={addPauta} placeholder="Novo assunto (ex: Quebras)"/>
               <button className="btn btn-primary" onClick={addPauta} style={{ flexShrink: 0 }}>
                 <Plus size={14}/> Assunto
               </button>
