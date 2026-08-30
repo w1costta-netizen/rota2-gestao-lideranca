@@ -14,6 +14,39 @@ const { enviarPush } = require('../lib/notificacoes');
 
 const LIMITE_TEXTO = 2000;
 
+// ─── Anexos ──────────────────────────────────────────────────
+// O arquivo NÃO passa pelo servidor: ele sobe direto do aparelho para o
+// armazenamento, com uma autorização temporária que o servidor emite. Isso
+// evita gastar a banda do servidor (plano gratuito) com áudio e foto.
+//
+// O espaço é FECHADO. Para ler, o servidor gera um link temporário — e só
+// depois de confirmar que quem pediu participa da conversa.
+const BALDE = 'chat';
+const VALIDADE_LINK = 60 * 60; // 1 hora: tempo de sobra para ver e baixar
+
+// Limite por arquivo. Existe por causa do custo: o plano do banco dá 1GB no
+// total, e sem teto um vídeo de alguns minutos consome isso sozinho.
+const LIMITE_ARQUIVO = 20 * 1024 * 1024; // 20 MB
+
+const TIPOS = ['texto', 'imagem', 'arquivo', 'audio'];
+
+// Nome de arquivo vindo do aparelho não entra no caminho de armazenamento:
+// barra e ".." permitiriam gravar fora da pasta da conversa.
+function nomeSeguro(nome) {
+  return String(nome || 'arquivo')
+    .replace(/[^\w.\- ]+/g, '_')   // tira barra e tudo que não é comum em nome
+    .replace(/\.{2,}/g, '.')       // colapsa ".." — sem barra ele já não sobe
+    .replace(/\s+/g, '_')          // pasta, mas não deixa dúvida na leitura
+    .replace(/^[._-]+/, '')        // não começa por ponto: evita arquivo oculto
+    .slice(-80) || 'arquivo';
+}
+
+async function linkTemporario(path) {
+  if (!path) return null;
+  const { data } = await supabase.storage.from(BALDE).createSignedUrl(path, VALIDADE_LINK);
+  return data?.signedUrl || null;
+}
+
 // O id vai cru dentro de uma string de filtro (.or) mais abaixo. Conferir o
 // formato antes fecha a porta para alguém montar um filtro próprio e ler
 // conversa alheia. Mesma proteção já usada em tarefas.
@@ -127,28 +160,82 @@ router.get('/conversas/:id/mensagens', async (req, res) => {
   if (!conversa) return res.status(404).json({ error: 'Conversa não encontrada' });
 
   let consulta = supabase
-    .from('mensagens').select('id, de_id, texto, created_at').eq('conversa_id', conversa.id);
+    .from('mensagens')
+    .select('id, de_id, texto, tipo, arquivo_path, arquivo_nome, arquivo_tamanho, duracao, created_at')
+    .eq('conversa_id', conversa.id);
   if (depois) consulta = consulta.gt('created_at', depois);
 
   const { data, error } = await consulta.order('created_at', { ascending: true }).limit(300);
   if (error) return res.status(500).json({ error: 'Erro ao carregar as mensagens.' });
-  res.json(data || []);
+
+  // O link do anexo é gerado AGORA e vale por uma hora. O caminho do arquivo
+  // nunca sai daqui: sem link temporário não há como abrir o anexo, mesmo
+  // conhecendo o endereço do armazenamento.
+  const comLink = await Promise.all((data || []).map(async m => {
+    const { arquivo_path, ...resto } = m;
+    return { ...resto, arquivo_url: arquivo_path ? await linkTemporario(arquivo_path) : null };
+  }));
+  res.json(comLink);
 });
 
-// POST /api/chat/mensagens  { requester_id, conversa_id, texto }
-router.post('/mensagens', async (req, res) => {
-  const { requester_id, conversa_id, texto } = req.body || {};
+// POST /api/chat/anexo  { requester_id, conversa_id, nome, tamanho }
+// Autoriza o envio de UM arquivo e devolve para onde mandá-lo. O arquivo em
+// si vai do aparelho direto para o armazenamento, sem passar pelo servidor.
+router.post('/anexo', async (req, res) => {
+  const { requester_id, conversa_id, nome, tamanho } = req.body || {};
   const me = await getPerfil(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
-  if (!texto?.trim()) return res.status(400).json({ error: 'Escreva a mensagem.' });
 
   const conversa = await minhaConversa(conversa_id, me.id);
   if (!conversa) return res.status(404).json({ error: 'Conversa não encontrada' });
 
-  const limpo = texto.trim().slice(0, LIMITE_TEXTO);
+  if (Number(tamanho) > LIMITE_ARQUIVO) {
+    return res.status(413).json({ error: `Arquivo muito grande. O limite é ${LIMITE_ARQUIVO / 1024 / 1024} MB.` });
+  }
+
+  // O caminho começa pelo id da conversa: mantém os arquivos separados por
+  // conversa e facilita apagar tudo junto se ela for removida.
+  const path = `${conversa.id}/${Date.now()}-${nomeSeguro(nome)}`;
+  const { data, error } = await supabase.storage.from(BALDE).createSignedUploadUrl(path);
+  if (error) {
+    registrarLog('enviar_anexo', 'mensagens', 'erro', { company: conversa.company, user_id: me.id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: 'Não foi possível preparar o envio.' });
+  }
+  res.json({ path, url: data.signedUrl, token: data.token });
+});
+
+// POST /api/chat/mensagens  { requester_id, conversa_id, texto }
+router.post('/mensagens', async (req, res) => {
+  const { requester_id, conversa_id, texto, tipo, arquivo_path, arquivo_nome, arquivo_tamanho, duracao } = req.body || {};
+  const me = await getPerfil(requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const oTipo = TIPOS.includes(tipo) ? tipo : 'texto';
+  // Mensagem de texto precisa de texto; a de arquivo precisa do arquivo. A
+  // legenda continua opcional nas de arquivo.
+  if (oTipo === 'texto' && !texto?.trim()) return res.status(400).json({ error: 'Escreva a mensagem.' });
+  if (oTipo !== 'texto' && !arquivo_path)  return res.status(400).json({ error: 'Anexo não enviado.' });
+
+  const conversa = await minhaConversa(conversa_id, me.id);
+  if (!conversa) return res.status(404).json({ error: 'Conversa não encontrada' });
+
+  // O caminho do arquivo tem que ser desta conversa. Sem esta conferência,
+  // alguém poderia apontar uma mensagem para o anexo de outra conversa e
+  // receber um link válido para ele.
+  if (arquivo_path && !String(arquivo_path).startsWith(`${conversa.id}/`)) {
+    return res.status(400).json({ error: 'Anexo inválido.' });
+  }
+
+  const limpo = (texto || '').trim().slice(0, LIMITE_TEXTO);
   const { data: msg, error } = await supabase.from('mensagens')
-    .insert({ conversa_id: conversa.id, de_id: me.id, texto: limpo })
-    .select('id, de_id, texto, created_at').single();
+    .insert({
+      conversa_id: conversa.id, de_id: me.id, texto: limpo, tipo: oTipo,
+      arquivo_path: arquivo_path || null,
+      arquivo_nome: arquivo_nome ? nomeSeguro(arquivo_nome) : null,
+      arquivo_tamanho: arquivo_tamanho || null,
+      duracao: duracao || null,
+    })
+    .select('id, de_id, texto, tipo, arquivo_path, arquivo_nome, arquivo_tamanho, duracao, created_at').single();
 
   if (error) {
     registrarLog('enviar_mensagem', 'mensagens', 'erro', { company: conversa.company, user_id: me.id, rota: req.originalUrl, erro: error.message });
@@ -158,8 +245,15 @@ router.post('/mensagens', async (req, res) => {
   // Atualiza o resumo da conversa e soma uma não lida para o OUTRO lado.
   const souA = conversa.usuario_a === me.id;
   const outroId = souA ? conversa.usuario_b : conversa.usuario_a;
+
+  // Na lista de conversas e na notificação, anexo sem legenda vira um
+  // rótulo. Sem isso a última mensagem apareceria em branco e a pessoa não
+  // saberia que recebeu alguma coisa.
+  const rotulo = { imagem: '📷 Foto', arquivo: '📎 Arquivo', audio: '🎤 Áudio' };
+  const resumo = limpo || rotulo[oTipo] || '';
+
   await supabase.from('conversas').update({
-    ultima_texto: limpo.slice(0, 140),
+    ultima_texto: resumo.slice(0, 140),
     ultima_de: me.id,
     ultima_em: msg.created_at,
     ...(souA
@@ -175,7 +269,7 @@ router.post('/mensagens', async (req, res) => {
 
   // O push é o que faz o chat funcionar de verdade: sem ele a pessoa só
   // descobre a mensagem se abrir o app por conta própria.
-  enviarPush(outroId, `💬 ${me.full_name || 'Mensagem'}`, limpo.slice(0, 120), 'chat',
+  enviarPush(outroId, `💬 ${me.full_name || 'Mensagem'}`, resumo.slice(0, 120), 'chat',
     { company: conversa.company, rota: req.originalUrl });
 
   res.json(msg);

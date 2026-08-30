@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Plus, Search, X, ArrowLeft, MessageCircle } from 'lucide-react';
+import { Send, Plus, Search, X, ArrowLeft, MessageCircle, Paperclip, Mic } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
 import Avatar from '../components/Avatar';
@@ -15,6 +15,13 @@ import Avatar from '../components/Avatar';
 // ─────────────────────────────────────────────────────────────
 const INTERVALO_MENSAGENS = 4000;   // conversa aberta
 const INTERVALO_LISTA     = 15000;  // lista de conversas
+
+function tamanhoLegivel(bytes) {
+  if (!bytes) return '';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
 
 function horaCurta(iso) {
   return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -44,6 +51,110 @@ export default function Chat({ userId }) {
   const fimRef = useRef(null);
   const abertaRef = useRef(null);
   abertaRef.current = aberta;
+
+  const arquivoRef = useRef(null);
+  const [enviandoAnexo, setEnviandoAnexo] = useState(false);
+  const [gravando, setGravando] = useState(false);
+  const [segundos, setSegundos] = useState(0);
+  const gravadorRef = useRef(null);
+  const relogioRef = useRef(null);
+
+  // O arquivo sobe DIRETO do aparelho para o armazenamento, com uma
+  // autorização temporária que o servidor emite. Não passa pelo servidor,
+  // que no plano gratuito tem banda limitada.
+  const enviarArquivo = async (blob, nome, tipo, duracao) => {
+    if (!aberta) return;
+    setEnviandoAnexo(true);
+    try {
+      const permissao = await api.post('/chat/anexo', {
+        requester_id: userId, conversa_id: aberta.id, nome, tamanho: blob.size,
+      });
+      const { path, url, token } = permissao.data;
+
+      const envio = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': blob.type || 'application/octet-stream', 'x-upsert': 'true', Authorization: `Bearer ${token}` },
+        body: blob,
+      });
+      if (!envio.ok) throw new Error('falha no envio do arquivo');
+
+      const r = await api.post('/chat/mensagens', {
+        requester_id: userId, conversa_id: aberta.id, tipo,
+        arquivo_path: path, arquivo_nome: nome, arquivo_tamanho: blob.size, duracao,
+      });
+      setMensagens(m => [...m, r.data]);
+      carregarConversas();
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Não foi possível enviar o arquivo.', 'error');
+    }
+    setEnviandoAnexo(false);
+  };
+
+  const escolherArquivo = (e) => {
+    const f = e.target.files?.[0];
+    e.target.value = '';
+    if (!f) return;
+    enviarArquivo(f, f.name, f.type?.startsWith('image/') ? 'imagem' : 'arquivo');
+  };
+
+  const gravar = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      toast('Este navegador não grava áudio. Escreva a mensagem.', 'error');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Cada navegador grava num formato: o Safari em mp4, o Chrome em webm.
+      // Deixar o navegador escolher evita gravação que não toca depois.
+      const formatos = ['audio/mp4', 'audio/webm'];
+      const suportado = formatos.find(f => MediaRecorder.isTypeSupported?.(f));
+      const rec = new MediaRecorder(stream, suportado ? { mimeType: suportado } : undefined);
+      const pedacos = [];
+
+      rec.ondataavailable = ev => { if (ev.data.size) pedacos.push(ev.data); };
+      rec.onstop = () => {
+        // Desliga o microfone. Sem isto o indicador de gravação fica aceso
+        // no aparelho mesmo depois de terminar.
+        stream.getTracks().forEach(t => t.stop());
+        clearInterval(relogioRef.current);
+        const total = segundosRef.current;
+        setGravando(false);
+        setSegundos(0);
+        if (!pedacos.length || total < 1) return; // toque sem querer
+        const blob = new Blob(pedacos, { type: rec.mimeType || 'audio/mp4' });
+        const ext = (rec.mimeType || '').includes('webm') ? 'webm' : 'm4a';
+        enviarArquivo(blob, `audio-${Date.now()}.${ext}`, 'audio', total);
+      };
+
+      gravadorRef.current = rec;
+      rec.start();
+      setGravando(true);
+      setSegundos(0);
+      segundosRef.current = 0;
+      relogioRef.current = setInterval(() => {
+        segundosRef.current += 1;
+        setSegundos(segundosRef.current);
+        if (segundosRef.current >= 300) pararGravacao(); // teto de 5 min
+      }, 1000);
+    } catch {
+      toast('Não foi possível usar o microfone. Verifique a permissão nos ajustes.', 'error');
+    }
+  };
+
+  const segundosRef = useRef(0);
+  const pararGravacao = () => { try { gravadorRef.current?.stop(); } catch { /* já parou */ } };
+  const cancelarGravacao = () => {
+    // Marca como descartado antes de parar: o `onstop` só envia se passou de
+    // 1 segundo, então zerar aqui faz a gravação ser jogada fora.
+    segundosRef.current = 0;
+    pararGravacao();
+  };
+
+  // Ao sair da tela, garante que o microfone não fique ligado.
+  useEffect(() => () => {
+    clearInterval(relogioRef.current);
+    try { gravadorRef.current?.stream?.getTracks().forEach(t => t.stop()); } catch { /* nada */ }
+  }, []);
 
   const carregarConversas = async () => {
     try {
@@ -272,9 +383,49 @@ export default function Chat({ userId }) {
                                         color: minha ? '#fff' : 'var(--text)',
                                         borderBottomRightRadius: minha ? 4 : 14,
                                         borderBottomLeftRadius: minha ? 14 : 4 }}>
-                            <div style={{ fontSize:13.5, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
-                              {m.texto}
-                            </div>
+                            {m.tipo === 'imagem' && m.arquivo_url && (
+                              <img src={m.arquivo_url} alt={m.arquivo_nome || 'Foto'}
+                                onClick={() => window.open(m.arquivo_url, '_blank')}
+                                style={{ maxWidth:'100%', borderRadius:10, display:'block', cursor:'pointer', marginBottom: m.texto ? 6 : 0 }}/>
+                            )}
+
+                            {m.tipo === 'audio' && m.arquivo_url && (
+                              // O player do próprio navegador: no iPhone é o
+                              // que garante que o áudio toque sem plugin.
+                              <audio controls src={m.arquivo_url} style={{ width:'100%', minWidth:200, marginBottom: m.texto ? 6 : 0 }}/>
+                            )}
+
+                            {m.tipo === 'arquivo' && m.arquivo_url && (
+                              <a href={m.arquivo_url} target="_blank" rel="noreferrer"
+                                style={{ display:'flex', alignItems:'center', gap:8, textDecoration:'none',
+                                         color:'inherit', marginBottom: m.texto ? 6 : 0 }}>
+                                <Paperclip size={16} style={{ flexShrink:0 }}/>
+                                <span style={{ minWidth:0 }}>
+                                  <span style={{ display:'block', fontSize:13, fontWeight:600, overflow:'hidden',
+                                                 textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                    {m.arquivo_nome || 'Arquivo'}
+                                  </span>
+                                  {m.arquivo_tamanho && (
+                                    <span style={{ fontSize:11, opacity:.8 }}>{tamanhoLegivel(m.arquivo_tamanho)}</span>
+                                  )}
+                                </span>
+                              </a>
+                            )}
+
+                            {/* Anexo que não abre: o link vale 1 hora, então
+                                mensagem antiga carregada há muito tempo pode
+                                cair aqui. Recarregar a tela resolve. */}
+                            {m.tipo !== 'texto' && !m.arquivo_url && (
+                              <div style={{ fontSize:12, opacity:.85, marginBottom: m.texto ? 6 : 0 }}>
+                                Anexo indisponível — recarregue a tela.
+                              </div>
+                            )}
+
+                            {m.texto && (
+                              <div style={{ fontSize:13.5, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+                                {m.texto}
+                              </div>
+                            )}
                             <div style={{ fontSize:10, marginTop:3, textAlign:'right',
                                           color: minha ? 'rgba(255,255,255,.75)' : 'var(--text-muted)' }}>
                               {horaCurta(m.created_at)}
@@ -287,7 +438,29 @@ export default function Chat({ userId }) {
                   <div ref={fimRef}/>
                 </div>
 
-                <div style={{ display:'flex', gap:8, padding:'11px 14px', borderTop:'1px solid var(--border)', flexShrink:0 }}>
+                {gravando ? (
+                  <div style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 14px',
+                                borderTop:'1px solid var(--border)', flexShrink:0 }}>
+                    <span style={{ width:10, height:10, borderRadius:'50%', background:'#ef4444', flexShrink:0 }}/>
+                    <span style={{ fontSize:13.5, fontWeight:600, flex:1 }}>
+                      Gravando · {String(Math.floor(segundos / 60)).padStart(2,'0')}:{String(segundos % 60).padStart(2,'0')}
+                    </span>
+                    <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={cancelarGravacao}>
+                      Descartar
+                    </button>
+                    <button className="btn btn-primary" onClick={pararGravacao} aria-label="Enviar áudio">
+                      <Send size={16}/>
+                    </button>
+                  </div>
+                ) : (
+                <div style={{ display:'flex', gap:8, padding:'11px 14px', borderTop:'1px solid var(--border)', flexShrink:0, alignItems:'flex-end' }}>
+                  <input ref={arquivoRef} type="file" onChange={escolherArquivo} style={{ display:'none' }}/>
+                  <button onClick={() => arquivoRef.current?.click()} disabled={enviandoAnexo}
+                    aria-label="Anexar foto ou arquivo" title="Anexar foto ou arquivo"
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)',
+                             padding:9, flexShrink:0 }}>
+                    <Paperclip size={19}/>
+                  </button>
                   <textarea
                     value={texto} rows={1}
                     onChange={e => setTexto(e.target.value)}
@@ -301,11 +474,24 @@ export default function Chat({ userId }) {
                     style={{ flex:1, resize:'none', padding:'9px 12px', borderRadius:'var(--radius)',
                              border:'1px solid var(--border)', background:'var(--surface)',
                              color:'var(--text)', fontSize:13.5, fontFamily:'inherit', maxHeight:100 }}/>
-                  <button className="btn btn-primary" onClick={enviar} disabled={!texto.trim() || enviando}
-                    aria-label="Enviar mensagem" style={{ flexShrink:0 }}>
-                    <Send size={16}/>
-                  </button>
+                  {/* Sem texto escrito, o botão grava áudio — como no
+                      WhatsApp. Com texto, ele envia. */}
+                  {texto.trim() ? (
+                    <button className="btn btn-primary" onClick={enviar} disabled={enviando}
+                      aria-label="Enviar mensagem" style={{ flexShrink:0 }}>
+                      <Send size={16}/>
+                    </button>
+                  ) : (
+                    <button className="btn btn-primary" onClick={gravar} disabled={enviandoAnexo}
+                      aria-label="Gravar áudio" title="Gravar áudio" style={{ flexShrink:0 }}>
+                      <Mic size={16}/>
+                    </button>
+                  )}
                 </div>
+                )}
+                {enviandoAnexo && (
+                  <div style={{ fontSize:12, color:'var(--text-muted)', padding:'0 14px 10px' }}>Enviando anexo...</div>
+                )}
               </>
             )}
           </div>
