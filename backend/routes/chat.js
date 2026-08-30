@@ -272,7 +272,12 @@ router.post('/mensagens', async (req, res) => {
   enviarPush(outroId, `💬 ${me.full_name || 'Mensagem'}`, resumo.slice(0, 120), 'chat',
     { company: conversa.company, rota: req.originalUrl });
 
-  res.json(msg);
+  // A resposta devolve o LINK do anexo, não o caminho no armazenamento.
+  // Quem envia coloca esta mensagem direto na tela, sem passar pela
+  // listagem — sem o link aqui, o próprio remetente veria "anexo
+  // indisponível" na foto que acabou de mandar.
+  const { arquivo_path: caminhoGravado, ...semCaminho } = msg;
+  res.json({ ...semCaminho, arquivo_url: await linkTemporario(caminhoGravado) });
 });
 
 // POST /api/chat/conversas/:id/lida  { requester_id } — zera as minhas
