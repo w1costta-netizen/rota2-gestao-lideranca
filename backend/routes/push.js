@@ -127,8 +127,14 @@ router.post('/test', async (req, res) => {
     page: 'dashboard',
   });
 
-  logAction({ company, user_id, acao: 'testar_notificacao', tabela: 'push_subscriptions', depois: { enviados: sent, dispositivos: subs.length } });
-  res.json({ ok: true, sent, subscriptions: subs.length });
+  // O endereço de identificação vai assinado em cada envio e a Apple o
+  // valida — trocá-lo já derrubou a entrega no iOS sem gerar erro nenhum.
+  // Sai aqui para dar para conferir qual está valendo de fato, já que uma
+  // variável de ambiente pode estar sobrescrevendo o valor do código.
+  const identificacao = process.env.VAPID_EMAIL || 'mailto:admin@rota2.app';
+
+  logAction({ company, user_id, acao: 'testar_notificacao', tabela: 'push_subscriptions', depois: { enviados: sent, dispositivos: subs.length, identificacao } });
+  res.json({ ok: true, sent, subscriptions: subs.length, identificacao });
 });
 
 module.exports = router;

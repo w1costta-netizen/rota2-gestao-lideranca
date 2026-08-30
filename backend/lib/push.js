@@ -2,8 +2,12 @@ const webpush = require('web-push');
 const supabase = require('../supabase');
 const { registrarLog } = require('./auditLog');
 
+// NÃO TROCAR este endereço sem testar num iPhone de verdade. Ele vai
+// assinado em cada envio; o Chrome ignora, mas a Apple valida. Trocá-lo
+// por um endereço do domínio novo derrubou a entrega no iOS — e sem
+// nenhum erro: a Apple seguia respondendo "aceito" e nada chegava.
 webpush.setVapidDetails(
-  process.env.VAPID_EMAIL || 'mailto:acesso@rotalider.com.br',
+  process.env.VAPID_EMAIL || 'mailto:admin@rota2.app',
   process.env.VAPID_PUBLIC_KEY,
   process.env.VAPID_PRIVATE_KEY
 );
