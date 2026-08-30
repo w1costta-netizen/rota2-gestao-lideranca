@@ -134,6 +134,7 @@ const ACAO_LABEL = {
 
   // Notificações e erros de tela
   testar_notificacao: 'Testou notificação',
+  enviar_push: 'Falha ao enviar notificação',
   registrar_dispositivo_push: 'Registrou dispositivo de notificação',
   remover_dispositivo_push: 'Removeu dispositivo de notificação',
   erro_tela: 'Erro na tela',

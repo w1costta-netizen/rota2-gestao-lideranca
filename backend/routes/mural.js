@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
-const { sendPushToUsers } = require('../lib/push');
+const { sendPushToUsers, sendPushToTargets } = require('../lib/push');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -64,6 +64,14 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_mural', tabela: 'mural', depois: { id: data.id, title: data.title } });
+
+  // Avisa a equipe do novo card. O Comunicado já fazia isso; o Mural não,
+  // então quem não abrisse a tela por conta própria nunca ficava sabendo.
+  sendPushToTargets({
+    targetType: 'geral', company: targetCompany,
+    payload: { title: `📌 Novo no mural: ${data.title}`, body: content.trim().slice(0, 100), page: 'mural', tipo: 'mural' },
+  }).catch(() => {});
+
   res.json(data);
 });
 

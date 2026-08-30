@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
+const { enviarPush } = require('../lib/push');
 
 async function getRequester(requester_id) {
   if (!requester_id) return null;
@@ -108,6 +109,18 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: me.company, user_id: me.id, acao: 'criar_ata', tabela: 'atas_reuniao', depois: { id: nova.id, titulo: nova.titulo, data: nova.data } });
+
+  // Avisa os participantes de que há uma ata para ler e assinar. Sem isso
+  // a assinatura ficava dependendo de alguém lembrar de cobrar pessoalmente.
+  const convidados = (nova.participantes || []).filter(id => id !== me.id);
+  if (convidados.length) {
+    enviarPush(convidados, {
+      titulo: '🖋️ Ata de reunião para assinar',
+      mensagem: nova.titulo,
+      tipo: 'ata', pagina: 'atas', company: me.company,
+    }).catch(() => {});
+  }
+
   res.json(nova);
 });
 
@@ -148,6 +161,19 @@ router.post('/:id/comentarios', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   registrarLog('comentar_ata', 'ata_comentarios', 'sucesso', { company: me.company, user_id: me.id, depois: { ata_id: req.params.id } });
+
+  // Avisa os demais participantes do comentário
+  const { data: ataFull } = await supabase.from('atas_reuniao').select('titulo, participantes, criado_por').eq('id', req.params.id).single();
+  const avisar = [...new Set([...(ataFull?.participantes || []), ataFull?.criado_por])]
+    .filter(id => id && id !== me.id);
+  if (avisar.length) {
+    enviarPush(avisar, {
+      titulo: `💬 ${me.full_name || 'Alguém'} comentou na ata`,
+      mensagem: `${ataFull?.titulo || ''}: ${req.body.texto.trim().slice(0, 60)}`,
+      tipo: 'ata', pagina: 'atas', company: me.company,
+    }).catch(() => {});
+  }
+
   res.json({ ...data, autor_nome: me.full_name });
 });
 

@@ -22,6 +22,10 @@ const NAO_ALERTAR = new Set([
   'testar_notificacao',          // usuário testando sem notificação ligada
   'registrar_dispositivo_push',  // navegador que bloqueou notificação
   'listar_tarefas',
+  // OBRIGATÓRIO: o alerta é enviado por push, e o envio de push registra
+  // falha no log. Sem esta entrada, uma falha de envio dispararia um alerta
+  // que também falharia, registrando outra falha... em laço infinito.
+  'enviar_push',
 ]);
 
 function podeAlertar(acao) {
