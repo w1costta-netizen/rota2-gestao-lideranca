@@ -138,6 +138,48 @@ router.put('/:id/disable', async (req, res) => {
   res.json(data);
 });
 
+// DELETE /api/stores/:id — master apaga a loja de vez
+//
+// Existe porque recusar um pedido não tinha como sair da tela: o botão
+// "Recusar" marcava a loja como inativa, e loja inativa era exatamente o
+// que a fila de aprovação mostrava. O pedido recusado voltava para a fila
+// para sempre.
+//
+// Só apaga loja inativa. Apagar uma loja em uso deixaria os usuários dela
+// órfãos, sem loja e sem aviso — para isso existe o desativar, que é
+// reversível.
+router.delete('/:id', async (req, res) => {
+  const me = await requireMaster(req, res);
+  if (!me) return;
+  // O apagar vem por query (DELETE não carrega corpo em toda biblioteca).
+  const quem = req.body?.requester_id || req.query?.requester_id;
+
+  const { data: loja } = await supabase
+    .from('stores').select('id, name, active').eq('id', req.params.id).maybeSingle();
+  if (!loja) return res.status(404).json({ error: 'Loja não encontrada' });
+  if (loja.active) {
+    return res.status(400).json({ error: 'Desative a loja antes de apagá-la.' });
+  }
+
+  // Quantas pessoas ficam sem loja. Não impede: um pedido recusado costuma
+  // ter o próprio solicitante ligado a ele. Mas vai para o log, porque
+  // depois ninguém lembra quantos eram.
+  const { count: usuarios } = await supabase
+    .from('profiles').select('id', { count: 'exact', head: true }).eq('company', loja.name);
+
+  const { error } = await supabase.from('stores').delete().eq('id', req.params.id);
+  if (error) {
+    logError({ company: loja.name, user_id: quem, acao: 'apagar_loja', tabela: 'stores', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+
+  logAction({
+    company: loja.name, user_id: quem, acao: 'apagar_loja', tabela: 'stores',
+    antes: { id: loja.id, name: loja.name, usuarios_vinculados: usuarios || 0 },
+  });
+  res.json({ ok: true, usuarios_vinculados: usuarios || 0 });
+});
+
 // GET /api/stores/my — verifica se o usuário tem loja cadastrada
 router.get('/my', async (req, res) => {
   const { requester_id } = req.query;

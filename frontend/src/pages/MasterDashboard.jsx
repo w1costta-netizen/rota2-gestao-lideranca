@@ -82,6 +82,25 @@ export default function MasterDashboard({ userId, viewingStore, onSelectStore })
     }
   };
 
+  const excluir = async (store, motivo) => {
+    const gente = store.user_count
+      ? `
+
+${store.user_count} usuário(s) estão ligados a esta loja e ficarão sem loja.`
+      : '';
+    if (!confirm(`${motivo} "${store.name}"?${gente}
+
+Isso não tem volta.`)) return;
+    try {
+      const r = await api.delete(`/stores/${store.id}?requester_id=${userId}`);
+      const n = r.data?.usuarios_vinculados || 0;
+      showToast(`"${store.name}" apagada.${n ? ` ${n} usuário(s) ficaram sem loja.` : ''}`);
+      load();
+    } catch (e) {
+      showToast(e.response?.data?.error || 'Erro ao apagar a loja', 'error');
+    }
+  };
+
   const disable = async (store) => {
     if (!confirm(`Desativar a loja "${store.name}"? Os usuários perderão acesso.`)) return;
     try {
@@ -105,8 +124,12 @@ export default function MasterDashboard({ userId, viewingStore, onSelectStore })
     setLoadingUsers(null);
   };
 
-  const pending = stores.filter(s => !s.active);
-  const active  = stores.filter(s =>  s.active);
+  // Fila de aprovação = pedido que NUNCA passou por aprovação. Antes era
+  // qualquer loja inativa, e por isso uma loja desativada voltava para a
+  // fila com botão "Aprovar", como se fosse um cliente novo esperando.
+  const pending    = stores.filter(s => !s.active && !s.approved_by);
+  const desativadas = stores.filter(s => !s.active &&  s.approved_by);
+  const active     = stores.filter(s =>  s.active);
 
   return (
     <div>
@@ -175,9 +198,45 @@ export default function MasterDashboard({ userId, viewingStore, onSelectStore })
                   <button className="btn btn-primary btn-sm" onClick={() => approve(s)}>
                     <CheckCircle size={13}/> Aprovar
                   </button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => disable(s)}
+                  <button className="btn btn-ghost btn-sm" onClick={() => excluir(s, 'Recusar o pedido de')}
                     style={{ color: 'var(--danger)' }}>
                     <XCircle size={13}/> Recusar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Desativadas: já foram aprovadas um dia, então não voltam para a
+          fila de aprovação. Ficam aqui para reativar ou apagar de vez. */}
+      {desativadas.length > 0 && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, color: 'var(--text-muted)',
+                        display: 'flex', alignItems: 'center', gap: 8 }}>
+            <XCircle size={16}/> Desativadas ({desativadas.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {desativadas.map(s => (
+              <div key={s.id} style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '14px 16px', borderRadius: 10, flexWrap: 'wrap', gap: 10,
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+              }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                    {s.city || 'Cidade não informada'} · {s.user_count} usuário{s.user_count !== 1 ? 's' : ''}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button className="btn btn-sm" onClick={() => approve(s)}>
+                    <CheckCircle size={13}/> Reativar
+                  </button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => excluir(s, 'Apagar a loja')}
+                    style={{ color: 'var(--danger)' }}>
+                    <XCircle size={13}/> Apagar
                   </button>
                 </div>
               </div>
@@ -189,7 +248,7 @@ export default function MasterDashboard({ userId, viewingStore, onSelectStore })
       {/* Lojas ativas */}
       {loading ? (
         <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Carregando...</div>
-      ) : active.length === 0 && pending.length === 0 ? (
+      ) : active.length === 0 && pending.length === 0 && desativadas.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: 40 }}>
           <Store size={48} style={{ opacity: .15, marginBottom: 12 }}/>
           <h3>Nenhuma loja cadastrada</h3>
