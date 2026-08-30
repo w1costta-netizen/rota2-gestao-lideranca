@@ -339,7 +339,7 @@ export default function DiarioBordo({ userId, profile }) {
                   <div key={r.id} className="card" style={{ borderLeft:`4px solid ${c.cor}`, borderRadius:'0 12px 12px 0' }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:8 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:9, minWidth:0 }}>
-                        <Avatar url={r.autor?.avatar_url} name={r.autor?.full_name} size={28}/>
+                        <Avatar avatarUrl={r.autor?.avatar_url} name={r.autor?.full_name} size={28}/>
                         <div style={{ minWidth:0 }}>
                           <div style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                             {r.autor?.full_name || 'Alguém'}

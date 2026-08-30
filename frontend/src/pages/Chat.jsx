@@ -305,7 +305,7 @@ export default function Chat({ userId }) {
                              padding:'11px 14px', cursor:'pointer', border:'none',
                              borderBottom:'1px solid var(--border)',
                              background: aberta?.id === c.id ? 'var(--surface-1)' : 'transparent' }}>
-                    <Avatar url={c.outro?.avatar_url} name={c.outro?.full_name} size={36}/>
+                    <Avatar avatarUrl={c.outro?.avatar_url} name={c.outro?.full_name} size={36}/>
                     <div style={{ minWidth:0, flex:1 }}>
                       <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
                         <span style={{ fontSize:13.5, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
@@ -351,7 +351,7 @@ export default function Chat({ userId }) {
                       <ArrowLeft size={18}/>
                     </button>
                   )}
-                  <Avatar url={aberta.outro?.avatar_url} name={aberta.outro?.full_name} size={34}/>
+                  <Avatar avatarUrl={aberta.outro?.avatar_url} name={aberta.outro?.full_name} size={34}/>
                   <div style={{ minWidth:0 }}>
                     <div style={{ fontSize:14, fontWeight:600 }}>{aberta.outro?.full_name || 'Alguém'}</div>
                     {aberta.outro?.role && (
@@ -529,7 +529,7 @@ export default function Chat({ userId }) {
                   style={{ width:'100%', textAlign:'left', display:'flex', gap:10, alignItems:'center',
                            padding:'10px 16px', cursor:'pointer', border:'none', background:'transparent',
                            borderBottom:'1px solid var(--border)' }}>
-                  <Avatar url={p.avatar_url} name={p.full_name} size={32}/>
+                  <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={32}/>
                   <div style={{ minWidth:0 }}>
                     <div style={{ fontSize:13.5, fontWeight:600 }}>{p.full_name}</div>
                     {(p.role || p.sector) && (
