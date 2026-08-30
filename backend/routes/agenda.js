@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError } = require('../lib/auditLog');
 
 async function getProfile(id) {
@@ -8,6 +9,27 @@ async function getProfile(id) {
   return data;
 }
 const canManage = p => p && ['admin', 'supervisor', 'lider', 'master'].includes(p.access_level);
+
+const DIA_POR_EXTENSO = {
+  segunda:'Segunda', terca:'Terça', quarta:'Quarta', quinta:'Quinta',
+  sexta:'Sexta', sabado:'Sábado', domingo:'Domingo',
+};
+
+// Quem deve ser avisado de um item da agenda. A mesma regra de três casos
+// usada na tela e nos lembretes: para toda a loja, para um setor, ou para
+// pessoas específicas.
+async function destinatarios(target_type, target_value, company) {
+  if (target_type === 'lider') {
+    return String(target_value || '').split(',').map(s => s.trim()).filter(Boolean);
+  }
+  if (!company) return [];
+
+  let consulta = supabase.from('profiles').select('id').eq('company', company).eq('active', true);
+  if (target_type === 'setor') consulta = consulta.eq('sector', target_value);
+
+  const { data } = await consulta;
+  return (data || []).map(p => p.id);
+}
 
 // GET /api/agenda?week_start=&user_id=&sector=&company=
 // Sempre filtra pelo destinatário: cada pessoa só vê o que é destinado a ela
@@ -84,6 +106,17 @@ router.post('/', async (req, res) => {
   }
   logAction({ company, user_id: created_by, acao: 'criar_agenda', tabela: 'agenda_items', depois: { id: data.id, title: data.title, target_type, target_value } });
 
+  // Avisa o público do item. Quem criou não recebe aviso da própria ação.
+  destinatarios(target_type, target_value, company).then(pessoas => {
+    enviarPush(
+      pessoas.filter(id => id !== created_by),
+      '📅 Novo na agenda',
+      `${title}${time ? ' às ' + time : ''} — ${DIA_POR_EXTENSO[day_of_week] || day_of_week}`,
+      'agenda',
+      { company, rota: req.originalUrl },
+    );
+  }).catch(() => {});
+
   res.status(201).json(data);
 });
 
@@ -108,6 +141,18 @@ router.put('/:id', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company, user_id: updated_by, acao: 'editar_agenda', tabela: 'agenda_items', depois: { title, target_type, target_value } });
+
+  // Alteração de agenda é o que a equipe mais precisa saber na hora: quem
+  // não for avisado aparece no horário antigo. Quem alterou não recebe.
+  destinatarios(target_type, target_value, company).then(pessoas => {
+    enviarPush(
+      pessoas.filter(id => id !== updated_by),
+      '📅 Agenda alterada',
+      `${title}${time ? ' às ' + time : ''} — ${DIA_POR_EXTENSO[day_of_week] || day_of_week}`,
+      'agenda',
+      { company, rota: req.originalUrl },
+    );
+  }).catch(() => {});
 
   res.json(data);
 });
