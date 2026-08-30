@@ -15,8 +15,29 @@ const { registrarLog } = require('../lib/auditLog');
 
 // As categorias existem para a análise depois funcionar. Texto solto não
 // responde "quantos dias tiveram ocorrência de segurança?"; categoria sim.
-const CATEGORIAS = ['resultado', 'operacao', 'clima', 'seguranca', 'equipe', 'cliente', 'outro'];
-const categoriaValida = c => (CATEGORIAS.includes(c) ? c : 'outro');
+//
+// Estas 7 ficam no código: toda loja nova já nasce com elas, sem carga
+// inicial, e nenhuma pode ser apagada — são a base que garante que a
+// análise funcione em qualquer loja.
+const CATEGORIAS_BASE = ['resultado', 'operacao', 'clima', 'seguranca', 'equipe', 'cliente', 'outro'];
+
+// Vira identificador sem acento nem espaço. É o que fica gravado no relato,
+// então "Quebra de Energia" e "quebra de energia" caem na mesma categoria em
+// vez de virarem duas — que é exatamente o problema a evitar.
+function paraChave(nome) {
+  return String(nome || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+}
+
+async function chavesDaLoja(company) {
+  const { data } = await supabase
+    .from('diario_categorias').select('chave').eq('company', company);
+  return [...CATEGORIAS_BASE, ...(data || []).map(c => c.chave)];
+}
 
 const ehGestor = p => p && ['admin', 'supervisor', 'master'].includes(p.access_level);
 
@@ -25,6 +46,78 @@ async function getPerfil(id) {
     .from('profiles').select('id, company, full_name, access_level').eq('id', id).maybeSingle();
   return data || null;
 }
+
+// GET /api/diario/categorias?requester_id= — as que esta loja acrescentou
+router.get('/categorias', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  if (!me.company) return res.json([]);
+
+  const { data, error } = await supabase
+    .from('diario_categorias').select('id, chave, nome, cor')
+    .eq('company', me.company).order('nome');
+  if (error) return res.status(500).json({ error: 'Erro ao carregar as categorias.' });
+  res.json(data || []);
+});
+
+// POST /api/diario/categorias  { requester_id, nome, cor }
+router.post('/categorias', async (req, res) => {
+  const { requester_id, nome, cor } = req.body || {};
+  const me = await getPerfil(requester_id);
+  if (!me?.company) return res.status(403).json({ error: 'Usuário sem loja definida' });
+  if (!nome?.trim()) return res.status(400).json({ error: 'Dê um nome à categoria.' });
+
+  const chave = paraChave(nome);
+  if (!chave) return res.status(400).json({ error: 'Use letras ou números no nome.' });
+  if (CATEGORIAS_BASE.includes(chave)) {
+    return res.status(400).json({ error: 'Essa categoria já existe.' });
+  }
+
+  const { data, error } = await supabase.from('diario_categorias')
+    .insert({ company: me.company, chave, nome: nome.trim().slice(0, 40), cor: cor || '#6b7280', created_by: requester_id })
+    .select('id, chave, nome, cor').single();
+
+  if (error) {
+    // Chave repetida na mesma loja é o caso mais provável, e não é erro do
+    // sistema: alguém já criou essa categoria antes.
+    const jaExiste = String(error.message || '').includes('duplicate') || error.code === '23505';
+    if (jaExiste) return res.status(409).json({ error: 'Essa categoria já existe nesta loja.' });
+    registrarLog('criar_categoria_diario', 'diario_categorias', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: 'Erro ao criar a categoria.' });
+  }
+  registrarLog('criar_categoria_diario', 'diario_categorias', 'sucesso', { company: me.company, user_id: requester_id, depois: { nome: data.nome } });
+  res.json(data);
+});
+
+// DELETE /api/diario/categorias/:id?requester_id=
+router.delete('/categorias/:id', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  if (!ehGestor(me)) return res.status(403).json({ error: 'Só um gestor pode remover categoria' });
+
+  const { data: cat } = await supabase
+    .from('diario_categorias').select('company, chave, nome').eq('id', req.params.id).maybeSingle();
+  if (!cat) return res.status(404).json({ error: 'Categoria não encontrada' });
+  if (me.access_level !== 'master' && cat.company !== me.company) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+
+  // Remover categoria em uso deixaria relatos antigos sem rótulo — e o
+  // histórico é justamente o que este módulo existe para preservar.
+  const { count } = await supabase
+    .from('diario_bordo').select('id', { count: 'exact', head: true })
+    .eq('company', cat.company).eq('categoria', cat.chave);
+  if (count) {
+    return res.status(409).json({
+      error: `${count} relato(s) usam "${cat.nome}". Só dá para remover categoria que ninguém usou.`,
+    });
+  }
+
+  const { error } = await supabase.from('diario_categorias').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: 'Erro ao remover a categoria.' });
+  registrarLog('excluir_categoria_diario', 'diario_categorias', 'sucesso', { company: cat.company, user_id: req.query.requester_id, antes: { nome: cat.nome } });
+  res.json({ ok: true });
+});
 
 // GET /api/diario?requester_id=&data=&de=&ate=&categoria=&company=
 //
@@ -77,7 +170,7 @@ router.post('/', async (req, res) => {
     user_id:   requester_id,
     data:      data || new Date().toISOString().split('T')[0],
     hora:      hora || null,
-    categoria: categoriaValida(categoria),
+    categoria: (await chavesDaLoja(me.company)).includes(categoria) ? categoria : 'outro',
     texto:     texto.trim(),
   }).select('*, autor:user_id(full_name, avatar_url)').single();
 
@@ -113,7 +206,7 @@ router.put('/:id', async (req, res) => {
   const mudancas = { updated_at: new Date().toISOString() };
   if (data      !== undefined) mudancas.data      = data;
   if (hora      !== undefined) mudancas.hora      = hora || null;
-  if (categoria !== undefined) mudancas.categoria = categoriaValida(categoria);
+  if (categoria !== undefined) mudancas.categoria = (await chavesDaLoja(atual.company)).includes(categoria) ? categoria : 'outro';
   if (texto     !== undefined) mudancas.texto     = texto.trim();
 
   const { data: novo, error } = await supabase

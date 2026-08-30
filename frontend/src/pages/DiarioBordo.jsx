@@ -13,7 +13,11 @@ import { gerarPDF, gerarExcel } from '../lib/exportUtils';
 // depois. "Por que a venda caiu na terça?" só tem resposta se o relato da
 // chuva estiver marcado como clima, e não perdido no meio do texto.
 // ─────────────────────────────────────────────────────────────
-const CATEGORIAS = {
+// Estas 7 são a base: toda loja já nasce com elas e nenhuma pode ser
+// apagada. A loja acrescenta as suas com o tempo, e elas valem para todo
+// mundo dali — se cada pessoa criasse a sua, "Chuva", "chuva" e "Tempo"
+// virariam três categorias e o filtro pararia de agrupar.
+const CATEGORIAS_BASE = {
   resultado: { nome: 'Resultado',  cor: '#10b981', desc: 'Venda, meta, indicadores' },
   operacao:  { nome: 'Operação',   cor: '#3b82f6', desc: 'Ruptura, abastecimento, equipamento' },
   clima:     { nome: 'Clima',      cor: '#06b6d4', desc: 'Chuva, calor, feriado, movimento' },
@@ -22,6 +26,8 @@ const CATEGORIAS = {
   cliente:   { nome: 'Cliente',    cor: '#f59e0b', desc: 'Reclamação, elogio' },
   outro:     { nome: 'Outro',      cor: '#6b7280', desc: 'Qualquer outro registro' },
 };
+
+const CORES_NOVA = ['#0ea5e9', '#14b8a6', '#a855f7', '#ec4899', '#f97316', '#84cc16', '#64748b'];
 
 const hoje = () => new Date().toISOString().split('T')[0];
 
@@ -56,6 +62,50 @@ export default function DiarioBordo({ userId, profile }) {
   const [relatos, setRelatos] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [editando, setEditando] = useState(null);
+
+  // Categorias próprias da loja, somadas às 7 de base.
+  const [extras, setExtras] = useState([]);
+  const [criandoCat, setCriandoCat] = useState(null); // null = fechado
+
+  const CATEGORIAS = {
+    ...CATEGORIAS_BASE,
+    ...Object.fromEntries(extras.map(c => [c.chave, { nome: c.nome, cor: c.cor, desc: 'Categoria criada na loja', id: c.id, daLoja: true }])),
+  };
+
+  const carregarCategorias = async () => {
+    try {
+      const r = await api.get(`/diario/categorias?requester_id=${userId}`);
+      setExtras(r.data || []);
+    } catch { /* segue com as de base */ }
+  };
+
+  useEffect(() => { if (userId) carregarCategorias(); }, [userId]);
+
+  const criarCategoria = async () => {
+    const nome = (criandoCat?.nome || '').trim();
+    if (!nome) { toast('Dê um nome à categoria.', 'error'); return; }
+    try {
+      const r = await api.post('/diario/categorias', { requester_id: userId, nome, cor: criandoCat.cor });
+      setExtras(lista => [...lista, r.data]);
+      // Já deixa selecionada: quem criou a categoria era porque ia usá-la.
+      if (editando) setEditando(ed => ({ ...ed, categoria: r.data.chave }));
+      setCriandoCat(null);
+      toast(`Categoria "${r.data.nome}" criada para a loja.`);
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Erro ao criar a categoria.', 'error');
+    }
+  };
+
+  const removerCategoria = async (cat) => {
+    if (!window.confirm(`Remover a categoria "${cat.nome}" da loja?`)) return;
+    try {
+      await api.delete(`/diario/categorias/${cat.id}?requester_id=${userId}`);
+      setExtras(lista => lista.filter(c => c.id !== cat.id));
+      toast('Categoria removida.');
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Erro ao remover.', 'error');
+    }
+  };
 
   const carregar = async () => {
     setCarregando(true);
@@ -234,14 +284,33 @@ export default function DiarioBordo({ userId, profile }) {
               Todas
             </button>
             {Object.entries(CATEGORIAS).map(([id, c]) => (
-              <button key={id} onClick={() => setFiltroCat(f => f === id ? '' : id)} title={c.desc}
-                style={{ padding:'5px 11px', borderRadius:99, fontSize:12, cursor:'pointer', fontWeight:600,
-                         border:`1px solid ${filtroCat === id ? c.cor : 'var(--border)'}`,
-                         background: filtroCat === id ? c.cor : 'transparent',
-                         color: filtroCat === id ? '#fff' : 'var(--text-muted)' }}>
-                {c.nome}
-              </button>
+              <span key={id} style={{ display:'inline-flex', alignItems:'center' }}>
+                <button onClick={() => setFiltroCat(f => f === id ? '' : id)} title={c.desc}
+                  style={{ padding:'5px 11px', borderRadius:99, fontSize:12, cursor:'pointer', fontWeight:600,
+                           border:`1px solid ${filtroCat === id ? c.cor : 'var(--border)'}`,
+                           background: filtroCat === id ? c.cor : 'transparent',
+                           color: filtroCat === id ? '#fff' : 'var(--text-muted)' }}>
+                  {c.nome}
+                </button>
+                {/* Só gestor remove, e só categoria da loja: as 7 de base
+                    sustentam a análise e não podem sumir. */}
+                {c.daLoja && ehGestor && (
+                  <button onClick={() => removerCategoria(c)} title={`Remover "${c.nome}" da loja`}
+                    aria-label={`Remover categoria ${c.nome}`}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)',
+                             padding:'4px 2px 4px 4px', marginLeft:-2 }}>
+                    <X size={12}/>
+                  </button>
+                )}
+              </span>
             ))}
+            <button onClick={() => setCriandoCat({ nome:'', cor:CORES_NOVA[0] })}
+              title="Criar uma categoria para a loja"
+              style={{ padding:'5px 11px', borderRadius:99, fontSize:12, cursor:'pointer', fontWeight:600,
+                       border:'1px dashed var(--border)', background:'transparent', color:'var(--text-muted)',
+                       display:'inline-flex', alignItems:'center', gap:4 }}>
+              <Plus size={12}/> Categoria
+            </button>
           </div>
         </div>
       </div>
@@ -306,6 +375,50 @@ export default function DiarioBordo({ userId, profile }) {
         ))
       )}
 
+      {criandoCat && (
+        <div onClick={() => setCriandoCat(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1100,
+                   display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div onClick={e => e.stopPropagation()} className="card" style={{ width:'100%', maxWidth:400 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6 }}>
+              <h2 style={{ fontSize:16, fontWeight:700 }}>Nova categoria</h2>
+              <button onClick={() => setCriandoCat(null)} aria-label="Fechar"
+                style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:6, margin:-6 }}>
+                <X size={18}/>
+              </button>
+            </div>
+            <p style={{ fontSize:12.5, color:'var(--text-muted)', lineHeight:1.6, marginBottom:14 }}>
+              Ela fica disponível para toda a loja — assim todo mundo usa a mesma
+              e o filtro continua agrupando.
+            </p>
+
+            <input
+              value={criandoCat.nome} autoFocus maxLength={40}
+              onChange={e => setCriandoCat({ ...criandoCat, nome:e.target.value })}
+              onKeyDown={e => { if (e.key === 'Enter') criarCategoria(); }}
+              placeholder="Ex: Quebra, Inventário, Manutenção"
+              style={{ width:'100%', padding:'9px 12px', borderRadius:'var(--radius)', marginBottom:14,
+                       border:'1px solid var(--border)', background:'var(--surface)', color:'var(--text)', fontSize:13.5 }}/>
+
+            <label style={{ fontSize:11.5, color:'var(--text-muted)', fontWeight:600, display:'block', marginBottom:7 }}>
+              COR
+            </label>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:18 }}>
+              {CORES_NOVA.map(cor => (
+                <button key={cor} onClick={() => setCriandoCat({ ...criandoCat, cor })} aria-label={`Cor ${cor}`}
+                  style={{ width:26, height:26, borderRadius:'50%', cursor:'pointer', background:cor,
+                           border: criandoCat.cor === cor ? '3px solid var(--text)' : '1px solid var(--border)' }}/>
+              ))}
+            </div>
+
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
+              <button className="btn btn-ghost" onClick={() => setCriandoCat(null)}>Cancelar</button>
+              <button className="btn btn-primary" onClick={criarCategoria}>Criar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {editando && (
         <div onClick={() => setEditando(null)}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000,
@@ -354,6 +467,13 @@ export default function DiarioBordo({ userId, profile }) {
                   {c.nome}
                 </button>
               ))}
+              <button onClick={() => setCriandoCat({ nome:'', cor:CORES_NOVA[0] })}
+                title="Criar uma categoria para a loja"
+                style={{ padding:'6px 12px', borderRadius:99, fontSize:12, cursor:'pointer', fontWeight:600,
+                         border:'1px dashed var(--border)', background:'transparent', color:'var(--text-muted)',
+                         display:'inline-flex', alignItems:'center', gap:4 }}>
+                <Plus size={12}/> Nova
+              </button>
             </div>
             <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:-8, marginBottom:14 }}>
               {CATEGORIAS[editando.categoria]?.desc}

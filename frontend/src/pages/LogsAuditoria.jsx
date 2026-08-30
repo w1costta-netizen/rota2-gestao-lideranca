@@ -71,6 +71,8 @@ const ACAO_LABEL = {
   editar_relato_diario: 'Editou relato do Diário',
   excluir_relato_diario: 'Excluiu relato do Diário',
   listar_diario: 'Consultou o Diário de Bordo',
+  criar_categoria_diario: 'Criou categoria no Diário',
+  excluir_categoria_diario: 'Removeu categoria do Diário',
   listar_anotacoes: 'Carregou as anotações',
 
   // Estoque e conferência
