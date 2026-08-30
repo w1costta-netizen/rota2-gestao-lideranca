@@ -506,7 +506,8 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       doc.rect(0, 0, W, headerH, 'F');
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-      doc.text('Rota Líder — Relatório de Sinalização', 14, 12);
+      // O cabeçalho leva a loja; o nome do app fica no rodapé.
+      doc.text(`${profile?.company || 'Relatório'} — Sinalização`, 14, 12, { maxWidth: W - 28 });
       doc.setFontSize(10); doc.setFont('helvetica', 'normal');
       doc.text(infoLines, 14, 21);
       const geradoEmY = 21 + infoLines.length * 5;

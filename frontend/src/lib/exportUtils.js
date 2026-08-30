@@ -44,13 +44,14 @@ export function gerarPDF({ titulo, subtitulo, secoes = [] }) {
       headStyles: { fillColor: [232, 104, 26], textColor: 255, fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [248, 248, 248] },
       margin: { left: 40, right: 40 },
-      didDrawPage: (data) => {
+      didDrawPage: () => {
+        // O nome do app fica só aqui, no rodapé. O cabeçalho é do assunto e
+        // da loja — o documento pertence ao cliente, não ao sistema.
+        const alturaPagina = doc.internal.pageSize.getHeight();
         doc.setFontSize(7);
         doc.setTextColor(150);
-        doc.text(
-          `Gerado em ${new Date().toLocaleString('pt-BR')}`,
-          40, doc.internal.pageSize.getHeight() - 14
-        );
+        doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, 40, alturaPagina - 14);
+        doc.text('Rota Líder · rotalider.com.br', W - 40, alturaPagina - 14, { align: 'right' });
         doc.setTextColor(0);
       },
     });

@@ -374,11 +374,14 @@ export default function AtaReuniao({ userId, profile }) {
     const dark = [40, 40, 45];
     let y = 20;
 
+    // O cabeçalho leva o nome da LOJA, não o do app: o documento é dela, e
+    // é ela que aparece quando a ata circula impressa ou por e-mail. O nome
+    // do app fica no rodapé.
     doc.setFillColor(46, 26, 71);
     doc.rect(0, 0, 210, 26, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFontSize(16); doc.setFont('helvetica', 'bold');
-    doc.text('Rota Líder', 14, 12);
+    doc.text(profile?.company || 'Ata de Reunião', 14, 12, { maxWidth: 182 });
     doc.setFontSize(9); doc.setFont('helvetica', 'normal');
     doc.text('Ata de Reunião', 14, 19);
 
@@ -521,8 +524,17 @@ export default function AtaReuniao({ userId, profile }) {
       });
     }
 
-    doc.setFontSize(8); doc.setTextColor(150, 150, 155);
-    doc.text('Rota Líder · Gestão, Liderança e Produtividade · rotalider.com.br', 14, 290);
+    // Rodapé em TODAS as páginas. Antes era escrito uma vez só, no fim, e
+    // numa ata de várias páginas ele aparecia apenas na última — as outras
+    // saíam sem identificação nenhuma e sem número de página.
+    const totalPaginas = doc.internal.getNumberOfPages();
+    for (let pagina = 1; pagina <= totalPaginas; pagina++) {
+      doc.setPage(pagina);
+      doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(150, 150, 155);
+      doc.text('Rota Líder · rotalider.com.br', 14, 290);
+      doc.text(`Página ${pagina} de ${totalPaginas}`, 196, 290, { align: 'right' });
+    }
+
     doc.save(`ata-${detalhe.titulo.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`);
   };
 
