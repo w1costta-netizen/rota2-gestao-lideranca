@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
+import CardNotificacoes from '../components/CardNotificacoes';
 import { User, Lock, Save, Eye, EyeOff, Building2, Phone, Briefcase, Hash, Shield, Camera, X, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import PhoneInput from '../components/PhoneInput';
@@ -274,6 +275,8 @@ export default function Profile() {
           <div style={{ marginTop:4 }}>{formatPhone(form.phone)}</div>
         </div>
       </div>
+
+      <CardNotificacoes userId={session?.user?.id} />
 
       {/* Preview da nova foto */}
       {(photoPreview || photoError) && (

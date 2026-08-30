@@ -1,4 +1,4 @@
-const CACHE = 'rota2-v15';
+const CACHE = 'rota2-v16';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
 // Instala e pré-cacheia apenas assets imutáveis (sem index.html)
@@ -59,6 +59,51 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// O push foi removido daqui por inteiro para ser reconstruído do zero.
-// Este service worker cuida só do cache que faz o app abrir offline e
-// instalar como aplicativo — nada disso depende de notificação.
+// ─────────────────────────────────────────────────────────────
+// NOTIFICAÇÕES — ETAPA 1
+//
+// REGRA INEGOCIÁVEL: todo push recebido tem que virar uma notificação
+// visível. O iOS exige isso e pune quem não cumpre — ele cancela a
+// inscrição do aparelho, e a partir daí a permissão continua aparecendo
+// como ativa enquanto nada mais chega. Por isso não existe nenhum caminho
+// aqui que termine sem exibir: nem sem conteúdo, nem com conteúdo
+// ilegível, nem se o navegador recusar as opções.
+// ─────────────────────────────────────────────────────────────
+self.addEventListener('push', event => {
+  event.waitUntil((async () => {
+    let dados = {};
+    try {
+      dados = event.data ? event.data.json() : {};
+    } catch {
+      // Conteúdo que não é JSON ainda serve como texto da notificação.
+      try { dados = { mensagem: event.data.text() }; } catch { dados = {}; }
+    }
+
+    const titulo   = dados.titulo   || 'Rota Líder';
+    const mensagem = dados.mensagem || 'Você tem uma novidade no Rota Líder.';
+
+    // Só o essencial. Opção que o iOS não conhece pode fazer a chamada
+    // inteira falhar — e falhar aqui significa não exibir nada.
+    try {
+      await self.registration.showNotification(titulo, {
+        body: mensagem,
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        data: { pagina: dados.pagina || null },
+      });
+    } catch {
+      await self.registration.showNotification(titulo, { body: mensagem });
+    }
+  })());
+});
+
+// Toque na notificação: traz o app para frente, ou abre se estiver fechado.
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil((async () => {
+    const janelas = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const aberta = janelas.find(c => c.url.startsWith(self.location.origin));
+    if (aberta) return aberta.focus();
+    return clients.openWindow('/');
+  })());
+});
