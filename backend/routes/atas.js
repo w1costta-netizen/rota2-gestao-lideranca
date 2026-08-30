@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getRequester(requester_id) {
@@ -113,6 +114,13 @@ router.post('/', async (req, res) => {
   // a assinatura ficava dependendo de alguém lembrar de cobrar pessoalmente.
   const convidados = (nova.participantes || []).filter(id => id !== me.id);
   if (convidados.length) {
+    enviarPush(
+      convidados,
+      '🖋️ Ata de reunião para assinar',
+      nova.titulo,
+      'ata',
+      { company: me.company, rota: req.originalUrl },
+    );
   }
 
   res.json(nova);
@@ -161,6 +169,13 @@ router.post('/:id/comentarios', async (req, res) => {
   const avisar = [...new Set([...(ataFull?.participantes || []), ataFull?.criado_por])]
     .filter(id => id && id !== me.id);
   if (avisar.length) {
+    enviarPush(
+      avisar,
+      `💬 ${me.full_name || 'Alguém'} comentou na ata`,
+      `${ataFull?.titulo || ''}: ${req.body.texto.trim().slice(0, 60)}`,
+      'ata',
+      { company: me.company, rota: req.originalUrl },
+    );
   }
 
   res.json({ ...data, autor_nome: me.full_name });

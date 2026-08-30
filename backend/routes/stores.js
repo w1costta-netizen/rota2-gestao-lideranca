@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function requireMaster(req, res) {
@@ -104,8 +105,16 @@ router.put('/:id/approve', async (req, res) => {
   // Ativa o gerente que criou a loja como admin dela
   if (data.created_by) {
     await supabase.from('profiles').update({ active: true, access_level: 'admin' }).eq('id', data.created_by);
-    // Avisa que o acesso foi liberado — antes ele precisava ficar tentando
-    // entrar até funcionar, sem saber se tinha sido aprovado.
+    // Avisa que o acesso foi liberado — sem isso ele fica tentando entrar
+    // até funcionar, sem saber se foi aprovado. É a primeira notificação
+    // que um cliente novo recebe, então vale ela chegar.
+    enviarPush(
+      data.created_by,
+      '✅ Sua loja foi aprovada!',
+      `${data.name} está liberada. Já pode usar o Rota Líder.`,
+      'loja',
+      { company: data.name, rota: req.originalUrl },
+    );
   }
 
   res.json(data);
