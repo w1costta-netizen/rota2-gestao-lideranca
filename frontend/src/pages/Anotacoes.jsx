@@ -10,13 +10,23 @@ import { useToast } from '../components/Toast';
 // A cor é guardada por nome e traduzida aqui, para o mesmo cartão funcionar
 // no tema claro e no escuro sem precisar migrar dado.
 // ─────────────────────────────────────────────────────────────
+// Cores fortes, com o texto sempre em branco ou quase-preto — o que der
+// mais contraste contra aquele fundo. Sem isso a letra se perde na cor.
+//
+// Cada combinação foi conferida pela régua da WCAG (mínimo 4.5 para texto
+// normal). A mais apertada da paleta é o vermelho, com 4.6. Ao trocar
+// qualquer cor daqui, refaça essa conta — a olho é fácil errar.
 const CORES = {
-  padrao:  { fundo: 'var(--surface-1)', texto: 'var(--text)',    apoio: 'var(--text-muted)', nome: 'Sem cor' },
-  amarelo: { fundo: '#FAEEDA',          texto: '#412402',        apoio: '#854F0B',           nome: 'Amarelo' },
-  verde:   { fundo: '#E1F5EE',          texto: '#04342C',        apoio: '#0F6E56',           nome: 'Verde' },
-  roxo:    { fundo: '#EEEDFE',          texto: '#26215C',        apoio: '#534AB7',           nome: 'Roxo' },
-  coral:   { fundo: '#FAECE7',          texto: '#4A1B0C',        apoio: '#993C1D',           nome: 'Coral' },
-  azul:    { fundo: '#E6F1FB',          texto: '#042C53',        apoio: '#185FA5',           nome: 'Azul' },
+  padrao:   { fundo: 'var(--surface-1)', texto: 'var(--text)', apoio: 'var(--text-muted)', nome: 'Sem cor' },
+  preto:    { fundo: '#262626', texto: '#FFFFFF', apoio: '#DCDCDC', nome: 'Preto' },
+  cinza:    { fundo: '#616161', texto: '#FFFFFF', apoio: '#EAEAEA', nome: 'Cinza' },
+  vermelho: { fundo: '#C62828', texto: '#FFFFFF', apoio: '#FBE3E3', nome: 'Vermelho' },
+  laranja:  { fundo: '#E8681A', texto: '#1A1A1A', apoio: '#2E1B0C', nome: 'Laranja' },
+  amarelo:  { fundo: '#F5C518', texto: '#1A1A1A', apoio: '#3D3308', nome: 'Amarelo' },
+  verde:    { fundo: '#2E7D32', texto: '#FFFFFF', apoio: '#F0F9F1', nome: 'Verde' },
+  azul:     { fundo: '#1565C0', texto: '#FFFFFF', apoio: '#E3EEFA', nome: 'Azul' },
+  roxo:     { fundo: '#5E35B1', texto: '#FFFFFF', apoio: '#EAE3F7', nome: 'Roxo' },
+  rosa:     { fundo: '#C2185B', texto: '#FFFFFF', apoio: '#FBE3ED', nome: 'Rosa' },
 };
 
 function vozDisponivel() {
@@ -113,6 +123,10 @@ export default function Anotacoes({ userId }) {
     : anotacoes;
   const fixadas = visiveis.filter(a => a.fixada);
   const demais  = visiveis.filter(a => !a.fixada);
+
+  // Cor da anotação aberta na janela de edição. Cai no padrão quando a cor
+  // gravada não existe mais — evita tela quebrada se a paleta mudar.
+  const corAtual = (editando && CORES[editando.cor]) || CORES.padrao;
 
   if (carregando) {
     return <div className="card" style={{ textAlign:'center', padding:40, color:'var(--text-muted)' }}>Carregando...</div>;
@@ -236,7 +250,7 @@ export default function Anotacoes({ userId }) {
                    display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div
             onClick={e => e.stopPropagation()}
-            style={{ background:(CORES[editando.cor] || CORES.padrao).fundo, borderRadius:14,
+            style={{ background:corAtual.fundo, borderRadius:14,
                      width:'100%', maxWidth:460, padding:'18px 18px 14px', maxHeight:'90vh', overflowY:'auto' }}>
             <input
               value={editando.titulo}
@@ -244,7 +258,7 @@ export default function Anotacoes({ userId }) {
               placeholder="Título"
               style={{ border:'none', background:'none', outline:'none', width:'100%',
                        fontSize:16, fontWeight:600, marginBottom:8,
-                       color:(CORES[editando.cor] || CORES.padrao).texto }}/>
+                       color:corAtual.texto }}/>
             <textarea
               value={editando.texto}
               onChange={e => setEditando({ ...editando, texto:e.target.value })}
@@ -252,7 +266,7 @@ export default function Anotacoes({ userId }) {
               rows={8}
               style={{ border:'none', background:'none', outline:'none', width:'100%', resize:'vertical',
                        fontSize:14, lineHeight:1.6, fontFamily:'inherit',
-                       color:(CORES[editando.cor] || CORES.padrao).apoio }}/>
+                       color:corAtual.apoio }}/>
 
             <div style={{ display:'flex', gap:7, margin:'12px 0 14px', flexWrap:'wrap' }}>
               {Object.entries(CORES).map(([chave, c]) => (
@@ -264,21 +278,35 @@ export default function Anotacoes({ userId }) {
               ))}
             </div>
 
+            {/* Os botões não podem usar a cor do tema: num cartão preto ou
+                vermelho eles sumiriam. Aqui a cor vem do próprio cartão —
+                o texto usa a cor do título, e o "Salvar" inverte fundo e
+                texto, o que garante contraste em qualquer cor da paleta. */}
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10 }}>
               <button
-                className="btn btn-ghost" style={{ fontSize:12 }}
                 onClick={ouvindo ? pararDitado : ditar}
-                title={vozDisponivel() ? 'Ditar o texto' : 'Ditado não disponível neste navegador'}>
-                <Mic size={14} style={{ color: ouvindo ? 'var(--danger)' : undefined }}/>
-                {ouvindo ? 'Parar' : 'Ditar'}
+                title={vozDisponivel() ? 'Ditar o texto' : 'Ditado não disponível neste navegador'}
+                style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12.5,
+                         background:'none', border:'none', padding:'6px 4px',
+                         color: ouvindo ? '#FF5252' : corAtual.texto }}>
+                <Mic size={14}/> {ouvindo ? 'Parar' : 'Ditar'}
               </button>
-              <div style={{ display:'flex', gap:8 }}>
+              <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                 {editando.id && (
-                  <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => excluir(editando)}>
+                  <button
+                    onClick={() => excluir(editando)}
+                    style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:12.5,
+                             background:'none', border:'none', padding:'6px 8px', color: corAtual.texto }}>
                     <Trash2 size={14}/> Excluir
                   </button>
                 )}
-                <button className="btn btn-primary" onClick={salvar}>Salvar</button>
+                <button
+                  onClick={salvar}
+                  style={{ cursor:'pointer', fontSize:13, fontWeight:600, padding:'8px 18px',
+                           borderRadius:'var(--radius)', border:'none',
+                           background: corAtual.texto, color: corAtual.fundo }}>
+                  Salvar
+                </button>
               </div>
             </div>
           </div>

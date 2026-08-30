@@ -13,7 +13,7 @@ const { registrarLog } = require('../lib/auditLog');
 
 // Cor é guardada por nome, não por código, para o cartão se adaptar ao tema
 // claro e escuro. Qualquer valor fora desta lista vira 'padrao'.
-const CORES = ['padrao', 'amarelo', 'verde', 'roxo', 'coral', 'azul'];
+const CORES = ['padrao', 'preto', 'cinza', 'vermelho', 'laranja', 'amarelo', 'verde', 'azul', 'roxo', 'rosa'];
 const corValida = c => (CORES.includes(c) ? c : 'padrao');
 
 async function daPessoa(id, user_id) {
