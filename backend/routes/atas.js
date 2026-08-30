@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
-const { enviarPush } = require('../lib/push');
+const { sendPushToUsers } = require('../lib/push');
 
 async function getRequester(requester_id) {
   if (!requester_id) return null;
@@ -114,10 +114,10 @@ router.post('/', async (req, res) => {
   // a assinatura ficava dependendo de alguém lembrar de cobrar pessoalmente.
   const convidados = (nova.participantes || []).filter(id => id !== me.id);
   if (convidados.length) {
-    enviarPush(convidados, {
-      titulo: '🖋️ Ata de reunião para assinar',
-      mensagem: nova.titulo,
-      tipo: 'ata', pagina: 'atas', company: me.company,
+    sendPushToUsers(convidados, {
+      title: '🖋️ Ata de reunião para assinar',
+      body: nova.titulo,
+      page: 'atas',
     }).catch(() => {});
   }
 
@@ -167,10 +167,10 @@ router.post('/:id/comentarios', async (req, res) => {
   const avisar = [...new Set([...(ataFull?.participantes || []), ataFull?.criado_por])]
     .filter(id => id && id !== me.id);
   if (avisar.length) {
-    enviarPush(avisar, {
-      titulo: `💬 ${me.full_name || 'Alguém'} comentou na ata`,
-      mensagem: `${ataFull?.titulo || ''}: ${req.body.texto.trim().slice(0, 60)}`,
-      tipo: 'ata', pagina: 'atas', company: me.company,
+    sendPushToUsers(avisar, {
+      title: `💬 ${me.full_name || 'Alguém'} comentou na ata`,
+      body: `${ataFull?.titulo || ''}: ${req.body.texto.trim().slice(0, 60)}`,
+      page: 'atas',
     }).catch(() => {});
   }
 

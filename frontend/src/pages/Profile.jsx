@@ -51,10 +51,6 @@ export default function Profile() {
   const [pushStatus, setPushStatus] = useState(
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
   );
-  // null = ainda não consultado. Mostrar os aparelhos registrados é o que
-  // revela na hora quando a permissão está ativa no celular mas o cadastro
-  // não chegou ao servidor — caso em que nada chega e nada avisa.
-  const [aparelhosPush, setAparelhosPush] = useState(null);
   const [passForm, setPassForm] = useState({ current:'', novo:'', confirmar:'' });
   const [showPass, setShowPass] = useState({ current:false, novo:false, confirmar:false });
   const [passLoading, setPassLoading] = useState(false);
@@ -64,43 +60,6 @@ export default function Profile() {
   const [photoFile, setPhotoFile] = useState(null);
   const [photoError, setPhotoError] = useState('');
   const [photoUploading, setPhotoUploading] = useState(false);
-
-  // Consulta os aparelhos registrados. Falha aqui é silenciosa de propósito:
-  // é uma informação de apoio e não pode atrapalhar a tela de perfil.
-  async function carregarAparelhosPush() {
-    if (!session?.user?.id) return;
-    try {
-      const r = await api.get(`/push/meus-dispositivos?requester_id=${session.user.id}`);
-      setAparelhosPush(r.data?.aparelhos || []);
-    } catch {
-      setAparelhosPush(null);
-    }
-  }
-
-  // Pergunta ao service worker qual versão está ativa NESTE aparelho. O iOS
-  // costuma segurar o código antigo, e um aparelho rodando versão velha
-  // parece exatamente igual a um que não está recebendo push.
-  const [versaoSW, setVersaoSW] = useState(null);
-  useEffect(() => {
-    let vivo = true;
-    if (!('serviceWorker' in navigator)) return;
-    navigator.serviceWorker.ready.then(reg => {
-      const alvo = reg.active;
-      if (!alvo) return;
-      const canal = new MessageChannel();
-      const relogio = setTimeout(() => { if (vivo) setVersaoSW('sem resposta'); }, 3000);
-      canal.port1.onmessage = e => {
-        clearTimeout(relogio);
-        if (vivo) setVersaoSW(e.data?.versao || 'sem resposta');
-      };
-      alvo.postMessage({ type: 'VERSAO' }, [canal.port2]);
-    }).catch(() => {});
-    return () => { vivo = false; };
-  }, []);
-
-  useEffect(() => {
-    if (pushStatus === 'granted') carregarAparelhosPush();
-  }, [pushStatus, session?.user?.id]);
 
   // Auto-preenche com dados do perfil salvo no cadastro
   useEffect(() => {
@@ -336,18 +295,6 @@ export default function Profile() {
                   : pushStatus === 'denied' ? 'Desbloqueie nas configurações do navegador'
                   : 'Toque para ativar alertas no seu dispositivo'}
               </div>
-              {pushStatus === 'granted' && aparelhosPush !== null && (
-                <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:4 }}>
-                  {aparelhosPush.length === 0
-                    ? '⚠️ Nenhum aparelho registrado — recarregue esta página.'
-                    : `Aparelhos: ${aparelhosPush.map(a => a.tipo).join(', ')}`}
-                </div>
-              )}
-              {versaoSW && (
-                <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:2 }}>
-                  Versão neste aparelho: <strong>{versaoSW}</strong>
-                </div>
-              )}
             </div>
           </div>
           {pushStatus !== 'denied' && pushStatus !== 'granted' && (
@@ -365,40 +312,14 @@ export default function Profile() {
             <button className="btn btn-ghost" style={{ flexShrink:0, fontSize:12 }}
               onClick={async () => {
                 try {
-                  const r = await api.post('/push/test', { user_id: session?.user?.id });
-                  const { sent = 0, subscriptions = 0 } = r.data || {};
-                  // Dizer para quantos aparelhos foi ajuda a entender por que a
-                  // notificação chegou no PC mas não no celular, por exemplo.
-                  toast(
-                    subscriptions > 1
-                      ? `Enviado para ${sent} de ${subscriptions} aparelhos registrados. Se algum não recebeu, use "Limpar aparelhos" nesse aparelho.`
-                      : 'Notificação de teste enviada! Verifique seu dispositivo.'
-                  );
+                  await api.post('/push/test', { user_id: session?.user?.id });
+                  toast('Notificação de teste enviada! Verifique seu dispositivo.');
                 } catch (e) {
                   const msg = e?.response?.data?.error || e?.message || 'Erro desconhecido';
                   toast(msg, 'error');
                 }
               }}>
               <Bell size={13}/> Testar
-            </button>
-          )}
-          {pushStatus === 'granted' && (
-            <button className="btn btn-ghost" style={{ flexShrink:0, fontSize:12 }}
-              title="Apaga todos os aparelhos registrados e cadastra só este"
-              onClick={async () => {
-                if (!window.confirm('Isso apaga todos os aparelhos registrados para você e cadastra apenas este.\n\nUse quando a notificação chegar duplicada ou parar de chegar num aparelho.\n\nNos outros aparelhos, é só abrir o app para registrar de novo.')) return;
-                try {
-                  const r = await api.delete(`/push/meus-dispositivos?requester_id=${session?.user?.id}`);
-                  // Depois de limpar, registra este aparelho de novo — senão a
-                  // pessoa fica sem nenhuma notificação até o próximo login.
-                  await registerPush(session?.user?.id);
-                  await carregarAparelhosPush();
-                  toast(`${r.data?.removidos || 0} registro(s) removido(s). Este aparelho foi cadastrado de novo.`);
-                } catch (e) {
-                  toast(e?.response?.data?.error || 'Erro ao limpar aparelhos', 'error');
-                }
-              }}>
-              Limpar aparelhos
             </button>
           )}
         </div>

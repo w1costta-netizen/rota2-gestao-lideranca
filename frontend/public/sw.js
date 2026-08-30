@@ -1,4 +1,4 @@
-const CACHE = 'rota2-v14';
+const CACHE = 'rota2-v11';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
 // Instala e pré-cacheia apenas assets imutáveis (sem index.html)
@@ -59,88 +59,19 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// Avisa o servidor o que aconteceu com um push que chegou. Sem isto o
-// diagnóstico é cego: a Apple responde "aceito", mas de fora não dá para
-// distinguir entre o push não ter chegado ao aparelho, o conteúdo não ter
-// sido lido, ou a notificação não ter sido exibida. As três falhas são
-// idênticas vistas do servidor.
-async function relatar(rastreio, fase, detalhe) {
-  if (!rastreio) return;
-  // Identifica QUAL aparelho está relatando. Sem isto, quando o push chega
-  // num aparelho e não no outro, os dois casos ficam indistinguíveis: só se
-  // vê "um relato" sem saber de quem. O endereço completo é secreto, então
-  // vai só o serviço de destino e o final, o bastante para diferenciar.
-  let aparelho = 'desconhecido';
-  try {
-    const sub = await self.registration.pushManager.getSubscription();
-    const url = (sub && sub.endpoint) || '';
-    const servico = url.includes('apple') ? 'iPhone/iPad'
-      : url.includes('googleapis') ? 'Chrome/Android'
-      : url.includes('mozilla') ? 'Firefox'
-      : url ? 'outro' : 'sem inscrição';
-    aparelho = servico + (url ? ' …' + url.slice(-8) : '');
-  } catch { /* segue sem identificar */ }
-
-  try {
-    await fetch('/api/push/recebido', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rastreio, fase, detalhe: { aparelho, ...(detalhe || {}) }, versao: CACHE }),
-    });
-  } catch { /* relatar nunca pode atrapalhar a notificação */ }
-}
-
-// Responde qual versão está ativa. É o que diz se o aparelho realmente
-// trocou o código: o iOS costuma segurar o service worker antigo, e um
-// aparelho rodando código velho parece exatamente igual a um aparelho que
-// não está recebendo push.
-self.addEventListener('message', event => {
-  if (event.data && event.data.type === 'VERSAO' && event.ports && event.ports[0]) {
-    event.ports[0].postMessage({ versao: CACHE });
-  }
-});
-
 // Exibe notificação push
 self.addEventListener('push', event => {
-  event.waitUntil((async () => {
-    let dados = {};
-    let leitura = 'ok';
-    try {
-      dados = event.data ? event.data.json() : {};
-    } catch (e) {
-      leitura = 'falhou: ' + (e && e.message);
-    }
-    const rastreio = dados.rastreio;
-
-    await relatar(rastreio, 'recebido', { leitura, temDados: !!event.data });
-
-    // Comportamento original preservado de propósito: o objetivo aqui é
-    // medir o que já acontece, não mudar o que está sendo medido.
-    if (!event.data) return;
-    const { title, body, url, page } = dados;
-
-    try {
-      await self.registration.showNotification(title, {
-        body,
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
-        data: { url: url || '/', page: page || 'dashboard' },
-        vibrate: [200, 100, 200],
-      });
-      // Confirma junto ao sistema que a notificação existe de fato. Se
-      // aparecer aqui e o usuário não vir nada na tela, o problema é de
-      // exibição do iOS (resumo agendado, foco, banner desligado) e não
-      // do aplicativo.
-      let quantidade = null;
-      try {
-        const abertas = await self.registration.getNotifications();
-        quantidade = abertas.length;
-      } catch { /* nem todo navegador expõe */ }
-      await relatar(rastreio, 'exibida', { quantidade });
-    } catch (e) {
-      await relatar(rastreio, 'erro_ao_exibir', { erro: (e && e.message) || 'sem mensagem' });
-    }
-  })());
+  if (!event.data) return;
+  const { title, body, url, page } = event.data.json();
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: url || '/', page: page || 'dashboard' },
+      vibrate: [200, 100, 200],
+    })
+  );
 });
 
 // Clique na notificação → abre/foca o app E navega para dashboard

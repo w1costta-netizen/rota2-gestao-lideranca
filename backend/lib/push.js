@@ -55,17 +55,4 @@ async function sendPushToTargets({ targetType, targetValue, company, payload }) 
   }
 }
 
-// Atalho usado pelas rotas de atas e lojas. É só uma tradução de nomes
-// para o sendPushToUsers acima — o envio em si continua sendo exatamente
-// o mesmo, porque foi o que se provou funcionar no iPhone.
-async function enviarPush(userIds, { titulo, mensagem, pagina = 'dashboard' } = {}) {
-  const ids = Array.isArray(userIds) ? userIds : [userIds];
-  const enviados = await sendPushToUsers(ids.filter(Boolean), {
-    title: titulo,
-    body: mensagem,
-    page: pagina,
-  });
-  return { enviados };
-}
-
-module.exports = { sendPushToTargets, sendPushToUsers, enviarPush };
+module.exports = { sendPushToTargets, sendPushToUsers };
