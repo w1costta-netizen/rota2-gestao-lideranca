@@ -295,7 +295,16 @@ function AppContent() {
     logs:               () => has('logs')               ? <LogsAuditoria userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
   };
 
-  const PageComponent = pages[page] || pages.dashboard;
+  // CHAMA a função em vez de usá-la como componente.
+  //
+  // Antes era `<PageComponent />`, com PageComponent vindo do objeto acima.
+  // Esse objeto é recriado a cada desenho da tela, então a função era nova
+  // toda vez — e para o React, componente novo significa começar do zero.
+  // Resultado: abrir o menu no celular, o app renovar a sessão ou girar a
+  // tela apagava tudo o que a pessoa tinha digitado numa ata, num relato ou
+  // numa tarefa. Chamando a função, o que chega ao React é sempre o mesmo
+  // componente, e o preenchimento sobrevive.
+  const paginaAtual = (pages[page] || pages.dashboard)();
 
   const handleNavMobile = (p) => { setPage(p); setMobileMenuOpen(false); };
 
@@ -415,7 +424,7 @@ function AppContent() {
           </div>
         }>
           <ErrorBoundary key={page} userId={userId}>
-            <PageComponent />
+            {paginaAtual}
           </ErrorBoundary>
         </React.Suspense>
       </main>

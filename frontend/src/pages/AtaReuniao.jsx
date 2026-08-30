@@ -11,6 +11,40 @@ function formatDateBR(iso) {
   return `${d}/${m}/${y}`;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Rascunho guardado no aparelho.
+//
+// A ata é preenchida DURANTE a reunião, aos poucos. Se a pessoa sai do app
+// para conferir alguma coisa, o celular pode descarregar a página da
+// memória — e sem isto tudo o que ela digitou some. Numa reunião de uma
+// hora, isso é inaceitável.
+//
+// Fica por usuário: em aparelho compartilhado (comum na loja), o rascunho
+// de um não pode aparecer para o próximo que entrar.
+// ─────────────────────────────────────────────────────────────
+const chaveRascunho = userId => `ata_rascunho_${userId}`;
+
+function lerRascunho(userId) {
+  try {
+    const bruto = localStorage.getItem(chaveRascunho(userId));
+    if (!bruto) return null;
+    const d = JSON.parse(bruto);
+    // Só vale a pena recuperar se tem conteúdo de verdade — senão a pessoa
+    // veria um aviso de "rascunho recuperado" por causa de um campo vazio.
+    const temAlgo = d.titulo?.trim() || d.local?.trim() || d.participantes?.length
+      || d.pautas?.length || d.decisoes?.length || d.acoes?.length;
+    return temAlgo ? d : null;
+  } catch {
+    return null;
+  }
+}
+
+const formVazio = () => ({
+  titulo: '', data: new Date().toISOString().slice(0, 10),
+  hora_inicio: '', hora_fim: '', local: '',
+  participantes: [], pautas: [], decisoes: [], acoes: [], proxima_reuniao: '',
+});
+
 export default function AtaReuniao({ userId, profile }) {
   const toast = useToast();
   const [aba, setAba] = useState('lista'); // lista | nova | detalhe
@@ -20,11 +54,10 @@ export default function AtaReuniao({ userId, profile }) {
   const [detalhe, setDetalhe] = useState(null);
   const [carregandoDetalhe, setCarregandoDetalhe] = useState(false);
 
-  const [form, setForm] = useState({
-    titulo: '', data: new Date().toISOString().slice(0, 10),
-    hora_inicio: '', hora_fim: '', local: '',
-    participantes: [], pautas: [], decisoes: [], acoes: [], proxima_reuniao: '',
-  });
+  // Começa do rascunho, se houver: a recuperação precisa acontecer já na
+  // primeira renderização, senão a tela pisca vazia antes de preencher.
+  const [form, setForm] = useState(() => lerRascunho(userId) || formVazio());
+  const [rascunhoRecuperado, setRascunhoRecuperado] = useState(() => !!lerRascunho(userId));
   const [novaPautaTitulo, setNovaPautaTitulo] = useState('');
   const [novaDecisao, setNovaDecisao] = useState('');
   const [novaAcao, setNovaAcao] = useState({ desc: '', resp: '', prazo: '' });
@@ -53,6 +86,39 @@ export default function AtaReuniao({ userId, profile }) {
         .catch(() => {});
     }
   }, [userId, profile?.company]);
+
+  // Guarda o rascunho a cada mudança. É barato (texto curto) e é o que
+  // garante que nada se perca se o celular descarregar a página.
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      const temAlgo = form.titulo?.trim() || form.local?.trim() || form.participantes.length
+        || form.pautas.length || form.decisoes.length || form.acoes.length;
+      if (temAlgo) localStorage.setItem(chaveRascunho(userId), JSON.stringify(form));
+      else localStorage.removeItem(chaveRascunho(userId));
+    } catch { /* aba anônima ou armazenamento cheio */ }
+  }, [form, userId]);
+
+  const descartarRascunho = () => {
+    if (!window.confirm('Descartar o que já foi preenchido?')) return;
+    try { localStorage.removeItem(chaveRascunho(userId)); } catch { /* nada */ }
+    setForm(formVazio());
+    setRascunhoRecuperado(false);
+  };
+
+  // Avisa antes de fechar a aba com coisa não salva. No celular o navegador
+  // costuma ignorar, e é por isso que o rascunho acima existe — este aviso
+  // é a segunda camada, não a principal.
+  useEffect(() => {
+    const aoSair = (e) => {
+      const temAlgo = form.titulo?.trim() || form.pautas.length || form.decisoes.length || form.acoes.length;
+      if (!temAlgo) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', aoSair);
+    return () => window.removeEventListener('beforeunload', aoSair);
+  }, [form]);
 
   const removeParticipante = (id) => setForm(f => ({ ...f, participantes: f.participantes.filter(p => p.id !== id) }));
 
@@ -122,7 +188,11 @@ export default function AtaReuniao({ userId, profile }) {
         proxima_reuniao: form.proxima_reuniao || null,
       });
       toast('Ata criada!');
-      setForm({ titulo: '', data: new Date().toISOString().slice(0, 10), hora_inicio: '', hora_fim: '', local: '', participantes: [], pautas: [], decisoes: [], acoes: [], proxima_reuniao: '' });
+      // O rascunho só sai DEPOIS de a ata ser gravada com sucesso. Limpar
+      // antes significaria perder tudo se o envio falhasse.
+      try { localStorage.removeItem(chaveRascunho(userId)); } catch { /* nada */ }
+      setRascunhoRecuperado(false);
+      setForm(formVazio());
       await loadAtas();
       abrirDetalhe(r.data.id);
     } catch (e) {
@@ -144,11 +214,34 @@ export default function AtaReuniao({ userId, profile }) {
     setCarregandoDetalhe(false);
   };
 
+  // O comentário sendo digitado também é guardado, por ata. Numa reunião a
+  // pessoa escreve um parágrafo, é interrompida, sai do app — e voltava
+  // para um campo em branco.
+  const chaveComentario = id => `ata_comentario_${userId}_${id}`;
+
+  useEffect(() => {
+    if (!detalhe?.id) return;
+    try {
+      const guardado = localStorage.getItem(chaveComentario(detalhe.id));
+      if (guardado) setNovoComentario(guardado);
+    } catch { /* aba anônima */ }
+  }, [detalhe?.id]);
+
+  useEffect(() => {
+    if (!detalhe?.id) return;
+    try {
+      if (novoComentario.trim()) localStorage.setItem(chaveComentario(detalhe.id), novoComentario);
+      else localStorage.removeItem(chaveComentario(detalhe.id));
+    } catch { /* aba anônima */ }
+  }, [novoComentario, detalhe?.id]);
+
   const enviarComentario = async () => {
     if (!novoComentario.trim()) return;
     try {
       const r = await api.post(`/atas/${detalhe.id}/comentarios`, { requester_id: userId, texto: novoComentario.trim() });
       setDetalhe(d => ({ ...d, comentarios: [...d.comentarios, r.data] }));
+      // Só limpa depois de o comentário ser aceito pelo servidor.
+      try { localStorage.removeItem(chaveComentario(detalhe.id)); } catch { /* nada */ }
       setNovoComentario('');
     } catch {
       toast('Erro ao adicionar comentário', 'error');
@@ -341,6 +434,20 @@ export default function AtaReuniao({ userId, profile }) {
 
       {aba === 'nova' && (
         <div>
+          {rascunhoRecuperado && (
+            <div className="card" style={{ marginBottom: 12, display:'flex', alignItems:'center',
+                                           justifyContent:'space-between', gap:12, flexWrap:'wrap',
+                                           borderLeft:'4px solid var(--primary)', borderRadius:'0 12px 12px 0' }}>
+              <div style={{ fontSize:13, lineHeight:1.5 }}>
+                <strong>Rascunho recuperado.</strong> O que você tinha preenchido está aqui —
+                nada se perdeu quando o app fechou.
+              </div>
+              <button className="btn btn-ghost" style={{ fontSize:12, flexShrink:0 }} onClick={descartarRascunho}>
+                Começar do zero
+              </button>
+            </div>
+          )}
+
           <div className="card">
             <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 12, textTransform: 'uppercase' }}>Cabeçalho</div>
             <div className="form-group">
