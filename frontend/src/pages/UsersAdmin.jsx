@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, Edit2, X, Save, Trash2, UserCheck, UserX, Settings, AlertTriangle } from 'lucide-react';
 import api from '../api';
-import { MODULES, DEFAULT_PERMISSIONS } from '../lib/permissions';
+import { MODULES, DEFAULT_PERMISSIONS, CATALOGO_VERSAO, getEffectivePermissions } from '../lib/permissions';
 import Avatar from '../components/Avatar';
 
 const APP_URL = 'https://rotalider.com.br';
@@ -211,7 +211,13 @@ function ConfigModal({ userId, company, roles, sectors, onClose, onReload }) {
 }
 
 function PermissionsSection({ values, onChange }) {
-  const effective = values.permissions ?? DEFAULT_PERMISSIONS[values.access_level] ?? DEFAULT_PERMISSIONS.lider;
+  // Mostra o que a pessoa REALMENTE tem hoje, incluindo os módulos novos
+  // que entraram sozinhos numa lista personalizada antiga. Mostrar a lista
+  // crua faria o gestor abrir a tela, ver Conversas desmarcado e, ao salvar
+  // qualquer outra coisa, tirar de vez um acesso que a pessoa já usava.
+  const effective = values.permissions
+    ? getEffectivePermissions(values)
+    : (DEFAULT_PERMISSIONS[values.access_level] ?? DEFAULT_PERMISSIONS.lider);
   const isCustom  = values.permissions !== null && values.permissions !== undefined;
 
   const toggle = (key) => {
@@ -384,6 +390,9 @@ export default function UsersAdmin({ userId, profile }) {
         sector:       editing.sector,
         access_level: editing.access_level,
         permissions:  editing.permissions ?? null,
+        // Carimba em que versão do catálogo esta lista foi decidida. Sem
+        // isso não há como separar "o gestor tirou" de "ainda não existia".
+        permissions_versao: editing.permissions ? CATALOGO_VERSAO : null,
         phone:        editing.phone || null,
       });
       setEditing(null);

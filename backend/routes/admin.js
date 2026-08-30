@@ -27,7 +27,7 @@ router.get('/users', async (req, res) => {
 
   let query = supabase
     .from('profiles')
-    .select(`id, full_name, email, role, sector, access_level, permissions, phone, active, first_access, created_at, avatar_url${ehLideranca ? ', reports_to_list' : ''}`)
+    .select(`id, full_name, email, role, sector, access_level, permissions, permissions_versao, phone, active, first_access, created_at, avatar_url${ehLideranca ? ', reports_to_list' : ''}`)
     .neq('id', requester_id)
     .order('full_name');
 
@@ -148,6 +148,14 @@ router.put('/users/:id', async (req, res) => {
   if (access_level !== undefined) updates.access_level = access_level;
   if (active       !== undefined) updates.active       = active;
   if ('permissions' in req.body)  updates.permissions  = permissions;
+  // Versão do catálogo em que a lista personalizada foi decidida. Serve
+  // para separar "o gestor tirou este módulo" de "o módulo ainda nem
+  // existia quando a lista foi montada" — sem isso, quem tem lista
+  // personalizada nunca mais recebe nada novo.
+  if ('permissions_versao' in req.body) {
+    const v = req.body.permissions_versao;
+    updates.permissions_versao = Number.isInteger(v) && v > 0 && v < 1000 ? v : null;
+  }
   if (phone        !== undefined) updates.phone        = phone;
 
   const { data, error } = await supabase.from('profiles').update(updates).eq('id', req.params.id).select().single();

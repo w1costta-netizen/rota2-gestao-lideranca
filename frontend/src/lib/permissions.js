@@ -31,7 +31,10 @@ export const DEFAULT_PERMISSIONS = {
   admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'logs'],
   supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade'],
   lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade'],
-  colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'listas', 'anotacoes', 'atas', 'produtividade'],
+  // Agenda e escala entram aqui porque são a agenda e a escala DA PRÓPRIA
+  // pessoa — quem trabalha no dia precisa saber quando trabalha. Ver a
+  // escala de outros setores ('escala_setores') continua fora.
+  colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'produtividade'],
   // Suporte técnico (Help Desk): enxerga só os Logs de Auditoria, de todas as
   // lojas, para investigar erros. De propósito NÃO tem acesso a tarefas,
   // vendas, estoque, equipe nem qualquer dado de operação dos clientes.
@@ -42,9 +45,45 @@ export const DEFAULT_PERMISSIONS = {
 // permissão de cargo. Controlado pelo master em "Gestão de Lojas".
 export const PREMIUM_MODULES = ['vendas_gestao', 'vendas_painel', 'estoque', 'importador_estoque', 'conferencia_secao', 'campanhas'];
 
+// ─── Módulos novos e listas personalizadas ──────────────────────────
+//
+// Quem tem lista personalizada ficava congelado no dia em que ela foi
+// salva: nenhum módulo criado depois aparecia para essa pessoa, e ela ia
+// ficando para trás a cada novidade sem ninguém perceber. Só que também
+// não dá para simplesmente devolver tudo — um módulo tirado de propósito
+// tem que continuar fora.
+//
+// A diferença entre os dois casos é QUANDO a lista foi salva. Por isso o
+// catálogo tem versão: a lista guarda em que versão foi feita, e só os
+// módulos que nasceram depois dela entram sozinhos.
+//
+// Ao criar um módulo novo: suba CATALOGO_VERSAO em 1 e registre a chave
+// dele em MODULOS_DA_VERSAO com esse número. Só isso.
+export const CATALOGO_VERSAO = 2;
+
+const MODULOS_DA_VERSAO = {
+  2: ['chat', 'anotacoes', 'diario'],
+};
+
+function modulosDepoisDe(versao) {
+  const novos = [];
+  for (let v = (versao || 1) + 1; v <= CATALOGO_VERSAO; v++) {
+    novos.push(...(MODULOS_DA_VERSAO[v] || []));
+  }
+  return novos;
+}
+
 export function getEffectivePermissions(profile) {
   if (profile?.access_level === 'master') return DEFAULT_PERMISSIONS.master;
-  if (profile?.permissions?.length) return profile.permissions;
+
+  if (profile?.permissions?.length) {
+    const padrao = DEFAULT_PERMISSIONS[profile?.access_level] || DEFAULT_PERMISSIONS.lider;
+    // Módulo novo só entra se o nível da pessoa o teria por padrão.
+    const novos = modulosDepoisDe(profile.permissions_versao)
+      .filter(k => padrao.includes(k) && !profile.permissions.includes(k));
+    return novos.length ? [...profile.permissions, ...novos] : profile.permissions;
+  }
+
   return DEFAULT_PERMISSIONS[profile?.access_level] || DEFAULT_PERMISSIONS.lider;
 }
 
