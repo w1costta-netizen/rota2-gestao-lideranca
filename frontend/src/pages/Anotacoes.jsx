@@ -134,6 +134,14 @@ export default function Anotacoes({ userId }) {
 
   const Cartao = ({ a }) => {
     const c = CORES[a.cor] || CORES.padrao;
+    // Os ícones usam a cor do título, não a do texto de apoio, e sem
+    // transparência: apagados, eles somem no cartão colorido. O padding
+    // existe para o dedo — o ícone tem 16px, mas a área de toque fica com
+    // ~30px, que é o mínimo para acertar no celular sem errar o vizinho.
+    const botaoIcone = {
+      background:'none', border:'none', cursor:'pointer', color:c.texto,
+      padding:7, margin:-7, borderRadius:8, display:'flex', alignItems:'center',
+    };
     return (
       <div
         onClick={() => setEditando({ id:a.id, titulo:a.titulo, texto:a.texto, cor:a.cor })}
@@ -149,8 +157,9 @@ export default function Anotacoes({ userId }) {
           <button
             onClick={(e) => { e.stopPropagation(); alternar(a, 'fixada'); }}
             title={a.fixada ? 'Desafixar' : 'Fixar no topo'}
-            style={{ background:'none', border:'none', cursor:'pointer', color:c.apoio, padding:0, flexShrink:0 }}>
-            {a.fixada ? <Pin size={15}/> : <PinOff size={15} style={{ opacity:.45 }}/>}
+            aria-label={a.fixada ? 'Desafixar anotação' : 'Fixar anotação no topo'}
+            style={{ ...botaoIcone, flexShrink:0 }}>
+            {a.fixada ? <Pin size={17}/> : <PinOff size={17}/>}
           </button>
         </div>
         {a.texto && (
@@ -158,18 +167,20 @@ export default function Anotacoes({ userId }) {
             {a.texto}
           </div>
         )}
-        <div style={{ display:'flex', gap:10, marginTop:10 }}>
+        <div style={{ display:'flex', gap:16, marginTop:12 }}>
           <button
             onClick={(e) => { e.stopPropagation(); alternar(a, 'arquivada'); }}
             title={a.arquivada ? 'Tirar do arquivo' : 'Arquivar'}
-            style={{ background:'none', border:'none', cursor:'pointer', color:c.apoio, padding:0, opacity:.6 }}>
-            {a.arquivada ? <ArchiveRestore size={14}/> : <Archive size={14}/>}
+            aria-label={a.arquivada ? 'Tirar do arquivo' : 'Arquivar anotação'}
+            style={botaoIcone}>
+            {a.arquivada ? <ArchiveRestore size={17}/> : <Archive size={17}/>}
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); excluir(a); }}
             title="Excluir"
-            style={{ background:'none', border:'none', cursor:'pointer', color:c.apoio, padding:0, opacity:.6 }}>
-            <Trash2 size={14}/>
+            aria-label="Excluir anotação"
+            style={botaoIcone}>
+            <Trash2 size={17}/>
           </button>
         </div>
       </div>
