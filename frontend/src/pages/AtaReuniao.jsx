@@ -39,6 +39,121 @@ function lerRascunho(userId) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────
+// Um assunto da reunião, com tudo o que pertence a ele: os subtemas
+// discutidos, o que foi decidido e o que ficou para fazer.
+//
+// Antes eram três listas soltas no fim do formulário, sem ligação entre si
+// — na hora de ler a ata, ninguém sabia qual decisão pertencia a qual
+// assunto. Agora cada pauta carrega o que é dela.
+//
+// Fica FORA do componente principal de propósito: definido dentro, ele
+// seria recriado a cada tecla e o campo perderia o foco no meio da
+// digitação.
+// ─────────────────────────────────────────────────────────────
+function BlocoPauta({ pauta, indice, aoMudar, aoRemover }) {
+  const [subtema, setSubtema] = useState('');
+  const [decisao, setDecisao] = useState('');
+  const [acao, setAcao] = useState({ desc: '', resp: '', prazo: '' });
+
+  const muda = (campo, valor) => aoMudar(indice, { ...pauta, [campo]: valor });
+
+  const addSubtema = () => {
+    if (!subtema.trim()) return;
+    muda('subtemas', [...(pauta.subtemas || []), subtema.trim()]);
+    setSubtema('');
+  };
+  const addDecisao = () => {
+    if (!decisao.trim()) return;
+    muda('decisoes', [...(pauta.decisoes || []), decisao.trim()]);
+    setDecisao('');
+  };
+  const addAcao = () => {
+    if (!acao.desc.trim()) return;
+    muda('acoes', [...(pauta.acoes || []), { ...acao, prazo: acao.prazo ? formatDateBR(acao.prazo) : '' }]);
+    setAcao({ desc: '', resp: '', prazo: '' });
+  };
+  const tira = (campo, i) => muda(campo, (pauta[campo] || []).filter((_, idx) => idx !== i));
+
+  const rotulo = { fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 6, letterSpacing: .3 };
+  const itemLista = {
+    background: 'var(--surface-2)', borderRadius: 8, padding: '8px 11px', marginBottom: 6,
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 13,
+  };
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+          <span style={{ background: 'var(--primary)', color: '#fff', borderRadius: 8, minWidth: 24, height: 24,
+                         display: 'flex', alignItems: 'center', justifyContent: 'center',
+                         fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+            {indice + 1}
+          </span>
+          <strong style={{ fontSize: 14.5, wordBreak: 'break-word' }}>{pauta.titulo}</strong>
+        </div>
+        <button onClick={() => aoRemover(indice)} aria-label="Remover esta pauta" title="Remover esta pauta"
+          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 6, margin: -6, flexShrink: 0 }}>
+          <X size={15} />
+        </button>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <div style={rotulo}>SUBTEMAS DISCUTIDOS</div>
+        {(pauta.subtemas || []).map((s, i) => (
+          <div key={i} style={itemLista}>
+            <span style={{ minWidth: 0, wordBreak: 'break-word' }}>• {s}</span>
+            <X size={13} style={{ cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }} onClick={() => tira('subtemas', i)} />
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input className="input" value={subtema} onChange={e => setSubtema(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addSubtema()}
+            placeholder="Ex: Avarias no recebimento" />
+          <button className="btn" onClick={addSubtema}>+</button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <div style={rotulo}>DECISÕES DESTE ASSUNTO</div>
+        {(pauta.decisoes || []).map((d, i) => (
+          <div key={i} style={itemLista}>
+            <span style={{ minWidth: 0, wordBreak: 'break-word' }}>✓ {d}</span>
+            <X size={13} style={{ cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }} onClick={() => tira('decisoes', i)} />
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input className="input" value={decisao} onChange={e => setDecisao(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && addDecisao()}
+            placeholder="Ex: Conferir avaria antes de assinar o canhoto" />
+          <button className="btn" onClick={addDecisao}>+</button>
+        </div>
+      </div>
+
+      <div>
+        <div style={rotulo}>AÇÕES DESTE ASSUNTO</div>
+        {(pauta.acoes || []).map((a, i) => (
+          <div key={i} style={{ ...itemLista, alignItems: 'flex-start' }}>
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: 'block', fontWeight: 600, wordBreak: 'break-word' }}>{a.desc}</span>
+              <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                👤 {a.resp || '—'} · 📅 {a.prazo || 'sem prazo'}
+              </span>
+            </span>
+            <X size={13} style={{ cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }} onClick={() => tira('acoes', i)} />
+          </div>
+        ))}
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8 }}>
+          <input className="input" value={acao.desc} onChange={e => setAcao(a => ({ ...a, desc: e.target.value }))} placeholder="O que precisa ser feito" />
+          <input className="input" value={acao.resp} onChange={e => setAcao(a => ({ ...a, resp: e.target.value }))} placeholder="Responsável" />
+          <input className="input" type="date" value={acao.prazo} onChange={e => setAcao(a => ({ ...a, prazo: e.target.value }))} />
+        </div>
+        <button className="btn" style={{ marginTop: 8 }} onClick={addAcao}>+ Adicionar ação</button>
+      </div>
+    </div>
+  );
+}
+
 const formVazio = () => ({
   titulo: '', data: new Date().toISOString().slice(0, 10),
   hora_inicio: '', hora_fim: '', local: '',
@@ -59,8 +174,6 @@ export default function AtaReuniao({ userId, profile }) {
   const [form, setForm] = useState(() => lerRascunho(userId) || formVazio());
   const [rascunhoRecuperado, setRascunhoRecuperado] = useState(() => !!lerRascunho(userId));
   const [novaPautaTitulo, setNovaPautaTitulo] = useState('');
-  const [novaDecisao, setNovaDecisao] = useState('');
-  const [novaAcao, setNovaAcao] = useState({ desc: '', resp: '', prazo: '' });
   const [salvando, setSalvando] = useState(false);
   const [novoComentario, setNovoComentario] = useState('');
 
@@ -162,20 +275,9 @@ export default function AtaReuniao({ userId, profile }) {
 
   const addPauta = () => {
     if (!novaPautaTitulo.trim()) return;
-    setForm(f => ({ ...f, pautas: [...f.pautas, { titulo: novaPautaTitulo.trim(), obs: '' }] }));
+    setForm(f => ({ ...f, pautas: [...f.pautas, { titulo: novaPautaTitulo.trim(), subtemas: [], decisoes: [], acoes: [] }] }));
     setNovaPautaTitulo('');
   };
-  const addDecisao = () => {
-    if (!novaDecisao.trim()) return;
-    setForm(f => ({ ...f, decisoes: [...f.decisoes, novaDecisao.trim()] }));
-    setNovaDecisao('');
-  };
-  const addAcao = () => {
-    if (!novaAcao.desc.trim()) return;
-    setForm(f => ({ ...f, acoes: [...f.acoes, { ...novaAcao, prazo: novaAcao.prazo ? formatDateBR(novaAcao.prazo) : '' }] }));
-    setNovaAcao({ desc: '', resp: '', prazo: '' });
-  };
-
   const criarAta = async () => {
     if (!form.titulo.trim()) return toast('Digite o título da reunião', 'error');
     setSalvando(true);
@@ -184,7 +286,7 @@ export default function AtaReuniao({ userId, profile }) {
         requester_id: userId,
         titulo: form.titulo, data: form.data, hora_inicio: form.hora_inicio, hora_fim: form.hora_fim,
         local: form.local, participantes: form.participantes.map(p => p.id),
-        pauta: form.pautas, decisoes: form.decisoes, acoes: form.acoes,
+        pauta: form.pautas, decisoes: [], acoes: [],
         proxima_reuniao: form.proxima_reuniao || null,
       });
       toast('Ata criada!');
@@ -306,37 +408,85 @@ export default function AtaReuniao({ userId, profile }) {
     const nomes = detalhe.participantes_detalhe.map(p => p.full_name).join(', ') || 'Nenhum participante';
     doc.text(nomes, 14, y, { maxWidth: 182 }); y += 12;
 
-    sectionTitle('Pauta / Assuntos discutidos');
-    if (!detalhe.pauta.length) { doc.text('Nenhum assunto registrado', 14, y); y += 8; }
-    detalhe.pauta.forEach(p => {
-      checkPage(15);
-      doc.setFont('helvetica', 'bold'); doc.text(`• ${p.titulo}`, 14, y); y += 5;
-      if (p.obs) {
-        doc.setFont('helvetica', 'normal');
-        const lines = doc.splitTextToSize(p.obs, 176);
-        doc.text(lines, 18, y); y += lines.length * 5 + 3;
-      } else { y += 3; }
-    });
-    y += 4;
+    // Cada assunto sai com o que pertence a ele. No papel isso é ainda mais
+    // importante que na tela: quem lê a ata depois precisa saber a qual
+    // assunto cada decisão se refere.
+    sectionTitle('Assuntos da reunião');
+    const pautas = detalhe.pauta || [];
+    if (!pautas.length) { doc.text('Nenhum assunto registrado', 14, y); y += 8; }
 
-    sectionTitle('Decisões tomadas');
-    if (!detalhe.decisoes.length) { doc.text('Nenhuma decisão registrada', 14, y); y += 8; }
-    detalhe.decisoes.forEach(d => {
-      checkPage(10);
-      const lines = doc.splitTextToSize(`✓ ${d}`, 178);
-      doc.text(lines, 14, y); y += lines.length * 5 + 2;
-    });
-    y += 5;
+    pautas.forEach((p, i) => {
+      checkPage(22);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
+      const tituloLinhas = doc.splitTextToSize(`${i + 1}. ${p.titulo}`, 178);
+      doc.text(tituloLinhas, 14, y); y += tituloLinhas.length * 5 + 3;
+      doc.setFontSize(10);
 
-    sectionTitle('Ações e responsáveis');
-    if (!detalhe.acoes.length) { doc.text('Nenhuma ação registrada', 14, y); y += 8; }
-    detalhe.acoes.forEach(a => {
-      checkPage(15);
-      doc.setFont('helvetica', 'bold'); doc.text(`• ${a.desc}`, 14, y); y += 5;
-      doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 125);
-      doc.text(`Responsável: ${a.resp || '—'}   ·   Prazo: ${a.prazo || 'sem prazo'}`, 18, y);
-      doc.setTextColor(...dark); y += 8;
+      const subLista = (rotulo, itens, prefixo) => {
+        if (!itens?.length) return;
+        checkPage(12);
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(120, 120, 125);
+        doc.setFontSize(8); doc.text(rotulo, 20, y); y += 4;
+        doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(...dark);
+        itens.forEach(t => {
+          checkPage(9);
+          const linhas = doc.splitTextToSize(`${prefixo} ${t}`, 170);
+          doc.text(linhas, 22, y); y += linhas.length * 5;
+        });
+        y += 3;
+      };
+
+      subLista('SUBTEMAS', p.subtemas, '•');
+      subLista('DECISÕES', p.decisoes, '✓');
+
+      if (p.acoes?.length) {
+        checkPage(12);
+        doc.setFont('helvetica', 'bold'); doc.setTextColor(120, 120, 125);
+        doc.setFontSize(8); doc.text('AÇÕES', 20, y); y += 4;
+        doc.setFontSize(10); doc.setTextColor(...dark);
+        p.acoes.forEach(a => {
+          checkPage(14);
+          doc.setFont('helvetica', 'bold');
+          const linhas = doc.splitTextToSize(`• ${a.desc}`, 170);
+          doc.text(linhas, 22, y); y += linhas.length * 5;
+          doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 125);
+          doc.text(`Responsável: ${a.resp || '—'}   ·   Prazo: ${a.prazo || 'sem prazo'}`, 26, y);
+          doc.setTextColor(...dark); y += 6;
+        });
+        y += 2;
+      }
+
+      // Assunto sem detalhamento não fica com um vazio inexplicável.
+      if (!p.subtemas?.length && !p.decisoes?.length && !p.acoes?.length) {
+        doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 125);
+        doc.text('Sem detalhamento.', 22, y); doc.setTextColor(...dark); y += 6;
+      }
+      y += 3;
     });
+
+    // Atas antigas guardavam decisões e ações fora dos assuntos. Só saem no
+    // PDF se existirem, para o histórico não ficar incompleto.
+    if (detalhe.decisoes?.length) {
+      y += 2;
+      sectionTitle('Decisões gerais');
+      detalhe.decisoes.forEach(d => {
+        checkPage(10);
+        const linhas = doc.splitTextToSize(`✓ ${d}`, 178);
+        doc.text(linhas, 14, y); y += linhas.length * 5 + 2;
+      });
+    }
+
+    if (detalhe.acoes?.length) {
+      y += 3;
+      sectionTitle('Ações gerais');
+      detalhe.acoes.forEach(a => {
+        checkPage(15);
+        doc.setFont('helvetica', 'bold'); doc.text(`• ${a.desc}`, 14, y); y += 5;
+        doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 125);
+        doc.text(`Responsável: ${a.resp || '—'}   ·   Prazo: ${a.prazo || 'sem prazo'}`, 18, y);
+        doc.setTextColor(...dark); y += 8;
+      });
+    }
 
     if (detalhe.comentarios.length) {
       y += 2;
@@ -563,53 +713,35 @@ export default function AtaReuniao({ userId, profile }) {
           </div>
 
           <div className="card">
-            <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 12, textTransform: 'uppercase' }}>Pauta / Assuntos discutidos</div>
+            <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 4, textTransform: 'uppercase' }}>
+              Assuntos da reunião
+            </div>
+            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
+              Cada assunto guarda os próprios subtemas, decisões e ações — assim,
+              ao reler a ata, dá para ver o que foi decidido sobre o quê.
+            </p>
+
             {form.pautas.map((p, i) => (
-              <div key={i} style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, position: 'relative' }}>
-                <X size={13} style={{ position: 'absolute', top: 10, right: 10, cursor: 'pointer', color: 'var(--text-muted)' }}
-                  onClick={() => setForm(f => ({ ...f, pautas: f.pautas.filter((_, idx) => idx !== i) }))}/>
-                <strong style={{ fontSize: 13 }}>{p.titulo}</strong>
-              </div>
+              <BlocoPauta
+                key={i} pauta={p} indice={i}
+                aoMudar={(idx, nova) => setForm(f => ({ ...f, pautas: f.pautas.map((x, j) => j === idx ? nova : x) }))}
+                aoRemover={(idx) => setForm(f => ({ ...f, pautas: f.pautas.filter((_, j) => j !== idx) }))}
+              />
             ))}
+
+            {form.pautas.length === 0 && (
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>
+                Comece pelo primeiro assunto. Ex: <strong>Quebras</strong>.
+              </p>
+            )}
+
             <div style={{ display: 'flex', gap: 8 }}>
               <input className="input" value={novaPautaTitulo} onChange={e => setNovaPautaTitulo(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addPauta()} placeholder="Assunto (ex: Meta de vendas do mês)"/>
-              <button className="btn" onClick={addPauta}>+ Adicionar</button>
+                onKeyDown={e => e.key === 'Enter' && addPauta()} placeholder="Novo assunto (ex: Quebras)"/>
+              <button className="btn btn-primary" onClick={addPauta} style={{ flexShrink: 0 }}>
+                <Plus size={14}/> Assunto
+              </button>
             </div>
-          </div>
-
-          <div className="card">
-            <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 12, textTransform: 'uppercase' }}>Decisões tomadas</div>
-            {form.decisoes.map((d, i) => (
-              <div key={i} style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '9px 12px', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13 }}>✓ {d}</span>
-                <X size={13} style={{ cursor: 'pointer', color: 'var(--text-muted)' }}
-                  onClick={() => setForm(f => ({ ...f, decisoes: f.decisoes.filter((_, idx) => idx !== i) }))}/>
-              </div>
-            ))}
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input className="input" value={novaDecisao} onChange={e => setNovaDecisao(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addDecisao()} placeholder="Ex: Escala revisada até sexta-feira"/>
-              <button className="btn" onClick={addDecisao}>+ Adicionar</button>
-            </div>
-          </div>
-
-          <div className="card">
-            <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 12, textTransform: 'uppercase' }}>Ações e responsáveis</div>
-            {form.acoes.map((a, i) => (
-              <div key={i} style={{ background: 'var(--surface-2)', borderRadius: 8, padding: '10px 12px', marginBottom: 8, position: 'relative' }}>
-                <X size={13} style={{ position: 'absolute', top: 10, right: 10, cursor: 'pointer', color: 'var(--text-muted)' }}
-                  onClick={() => setForm(f => ({ ...f, acoes: f.acoes.filter((_, idx) => idx !== i) }))}/>
-                <strong style={{ fontSize: 13 }}>{a.desc}</strong>
-                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>👤 {a.resp || '—'} · 📅 {a.prazo || 'sem prazo'}</div>
-              </div>
-            ))}
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
-              <input className="input" value={novaAcao.desc} onChange={e => setNovaAcao(a => ({ ...a, desc: e.target.value }))} placeholder="O que precisa ser feito"/>
-              <input className="input" value={novaAcao.resp} onChange={e => setNovaAcao(a => ({ ...a, resp: e.target.value }))} placeholder="Responsável"/>
-              <input className="input" type="date" value={novaAcao.prazo} onChange={e => setNovaAcao(a => ({ ...a, prazo: e.target.value }))}/>
-            </div>
-            <button className="btn" style={{ marginTop: 8 }} onClick={addAcao}>+ Adicionar ação</button>
           </div>
 
           <div className="card">
@@ -647,27 +779,66 @@ export default function AtaReuniao({ userId, profile }) {
             </div>
 
             <div className="card">
-              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 10, textTransform: 'uppercase' }}>Pauta</div>
-              {detalhe.pauta.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Nenhum assunto registrado</p>}
-              {detalhe.pauta.map((p, i) => <div key={i} style={{ fontSize: 13, marginBottom: 6 }}>• {p.titulo}</div>)}
-            </div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 12, textTransform: 'uppercase' }}>Assuntos da reunião</div>
+              {(detalhe.pauta || []).length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Nenhum assunto registrado</p>}
+              {(detalhe.pauta || []).map((p, i) => (
+                <div key={i} style={{ borderLeft: '3px solid var(--primary)', paddingLeft: 12, marginBottom: 18 }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 8 }}>{i + 1}. {p.titulo}</div>
 
-            <div className="card">
-              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 10, textTransform: 'uppercase' }}>Decisões</div>
-              {detalhe.decisoes.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Nenhuma decisão registrada</p>}
-              {detalhe.decisoes.map((d, i) => <div key={i} style={{ fontSize: 13, marginBottom: 6 }}>✓ {d}</div>)}
-            </div>
+                  {(p.subtemas || []).length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>SUBTEMAS</div>
+                      {p.subtemas.map((s, j) => <div key={j} style={{ fontSize: 13, marginBottom: 3 }}>• {s}</div>)}
+                    </div>
+                  )}
 
-            <div className="card">
-              <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 10, textTransform: 'uppercase' }}>Ações</div>
-              {detalhe.acoes.length === 0 && <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>Nenhuma ação registrada</p>}
-              {detalhe.acoes.map((a, i) => (
-                <div key={i} style={{ fontSize: 13, marginBottom: 8 }}>
-                  <strong>{a.desc}</strong>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>👤 {a.resp || '—'} · 📅 {a.prazo || 'sem prazo'}</div>
+                  {(p.decisoes || []).length > 0 && (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>DECISÕES</div>
+                      {p.decisoes.map((d, j) => <div key={j} style={{ fontSize: 13, marginBottom: 3 }}>✓ {d}</div>)}
+                    </div>
+                  )}
+
+                  {(p.acoes || []).length > 0 && (
+                    <div>
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 4 }}>AÇÕES</div>
+                      {p.acoes.map((a, j) => (
+                        <div key={j} style={{ fontSize: 13, marginBottom: 6 }}>
+                          <strong>{a.desc}</strong>
+                          <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>👤 {a.resp || '—'} · 📅 {a.prazo || 'sem prazo'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {!(p.subtemas || []).length && !(p.decisoes || []).length && !(p.acoes || []).length && (
+                    <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Sem detalhamento.</div>
+                  )}
                 </div>
               ))}
             </div>
+
+            {/* Atas criadas antes desta organização guardavam decisões e ações
+                soltas, fora dos assuntos. Continuam aparecendo, senão o
+                histórico ficaria incompleto. */}
+            {(detalhe.decisoes || []).length > 0 && (
+              <div className="card">
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 10, textTransform: 'uppercase' }}>Decisões gerais</div>
+                {detalhe.decisoes.map((d, i) => <div key={i} style={{ fontSize: 13, marginBottom: 6 }}>✓ {d}</div>)}
+              </div>
+            )}
+
+            {(detalhe.acoes || []).length > 0 && (
+              <div className="card">
+                <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 10, textTransform: 'uppercase' }}>Ações gerais</div>
+                {detalhe.acoes.map((a, i) => (
+                  <div key={i} style={{ fontSize: 13, marginBottom: 8 }}>
+                    <strong>{a.desc}</strong>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>👤 {a.resp || '—'} · 📅 {a.prazo || 'sem prazo'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="card">
               <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--primary)', marginBottom: 10, textTransform: 'uppercase' }}>Comentários</div>
