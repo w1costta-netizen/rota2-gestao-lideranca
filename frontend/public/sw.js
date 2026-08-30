@@ -1,5 +1,12 @@
-const CACHE = 'rota2-v20';
+const CACHE = 'rota2-v21';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
+
+// Onde fica o que o service worker precisa para se reinscrever sozinho.
+// NÃO É CACHE DE ARQUIVO e não pode ser apagado junto com as versões
+// antigas — sem ele, uma troca de inscrição feita pelo navegador deixaria
+// a pessoa sem notificação até o próximo login.
+const DEPOSITO_PUSH = 'rota-push';
+const CONFIG_PUSH   = '/__push-config';
 
 // Instala e pré-cacheia apenas assets imutáveis (sem index.html)
 self.addEventListener('install', e => {
@@ -12,7 +19,7 @@ self.addEventListener('install', e => {
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+      Promise.all(keys.filter(k => k !== CACHE && k !== DEPOSITO_PUSH).map(k => caches.delete(k)))
     ).then(() => clients.claim())
   );
 });
@@ -122,6 +129,50 @@ self.addEventListener('push', event => {
         });
       } catch { /* sem rede: a notificação já foi exibida, que é o que importa */ }
     }
+  })());
+});
+
+// ─────────────────────────────────────────────────────────────
+// ETAPA 2 — o navegador trocou a inscrição por conta própria.
+//
+// Acontece em reinstalação, restauração de backup e limpeza do sistema.
+// Sem tratar, a inscrição antiga fica no banco recebendo envios que não
+// chegam a lugar nenhum, e a pessoa para de receber sem nenhum aviso.
+// ─────────────────────────────────────────────────────────────
+function chaveParaBytes(base64) {
+  const preenchimento = '='.repeat((4 - (base64.length % 4)) % 4);
+  const normalizada = (base64 + preenchimento).replace(/-/g, '+').replace(/_/g, '/');
+  const bruto = atob(normalizada);
+  return Uint8Array.from([...bruto].map(c => c.charCodeAt(0)));
+}
+
+self.addEventListener('pushsubscriptionchange', event => {
+  event.waitUntil((async () => {
+    try {
+      const deposito = await caches.open(DEPOSITO_PUSH);
+      const guardado = await deposito.match(CONFIG_PUSH);
+      if (!guardado) return; // nunca chegou a se inscrever por aqui
+
+      const { usuario, chave } = await guardado.json();
+      if (!usuario || !chave) return;
+
+      const nova = await self.registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: chaveParaBytes(chave),
+      });
+
+      await fetch('/api/notificacoes/inscrever', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: usuario,
+          inscricao: nova.toJSON(),
+          // Informa qual era a anterior para o servidor apagá-la; é a única
+          // hora em que dá para saber que as duas são do mesmo aparelho.
+          endereco_antigo: (event.oldSubscription && event.oldSubscription.endpoint) || null,
+        }),
+      });
+    } catch { /* na próxima abertura do app o registro se acerta */ }
   })());
 });
 

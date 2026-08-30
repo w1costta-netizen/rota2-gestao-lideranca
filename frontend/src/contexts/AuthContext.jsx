@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import api from '../api';
+import { registrarSeJaPermitido } from '../lib/notificacoes';
 
 // O padrão precisa ser um objeto, não null: quando sai uma versão nova e o
 // navegador fica com pedaços do código antigo e novo misturados, o contexto
@@ -45,6 +46,12 @@ export function AuthProvider({ children }) {
       }
     }
     setProfile(data);
+
+    // Mantém o cadastro do aparelho em dia. O navegador troca a inscrição
+    // sozinho de vez em quando (reinstalação, restauração de backup), e sem
+    // isto a pessoa pararia de receber sem nenhum aviso. Não usa await: é
+    // manutenção de fundo e não pode segurar a entrada no app.
+    registrarSeJaPermitido(userId).catch(() => {});
   }
 
   async function signOut() {

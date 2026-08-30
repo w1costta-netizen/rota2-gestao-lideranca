@@ -88,6 +88,8 @@ export async function ativarNotificacoes(userId) {
       });
     }
 
+    await guardarConfig(userId, data.chavePublica);
+
     const resposta = await api.post('/notificacoes/inscrever', {
       user_id: userId,
       inscricao: inscricao.toJSON(),
@@ -97,6 +99,48 @@ export async function ativarNotificacoes(userId) {
   } catch (e) {
     return { ok: false, motivo: 'erro_inscricao', detalhe: e?.message || String(e) };
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ETAPA 2 — o registro se mantém sozinho.
+//
+// O navegador troca a inscrição por conta própria: reinstalação do app,
+// restauração de backup, limpeza do sistema. Quando isso acontece, a linha
+// no banco vira lixo e a pessoa para de receber sem nenhum aviso — foi
+// assim que sobraram duas inscrições de iPhone, uma delas morta.
+// ─────────────────────────────────────────────────────────────
+
+// Guarda o necessário para o service worker conseguir se reinscrever
+// sozinho quando o navegador trocar a inscrição — ele não tem acesso à
+// sessão nem à tela, então precisa desses dados por perto.
+// Estes dois nomes têm que bater com os do sw.js — é lá que a configuração
+// é lida, e a limpeza de caches antigos preserva este depósito por nome.
+const DEPOSITO_PUSH = 'rota-push';
+const CONFIG_PUSH   = '/__push-config';
+
+async function guardarConfig(userId, chavePublica) {
+  try {
+    const deposito = await caches.open(DEPOSITO_PUSH);
+    await deposito.put(CONFIG_PUSH, new Response(JSON.stringify({ usuario: userId, chave: chavePublica })));
+  } catch { /* sem cache: perde só a reinscrição automática */ }
+}
+
+// Chamada a cada abertura do app, quando a permissão já foi concedida.
+// Barata (só atualiza a linha) e é o que mantém o cadastro em dia depois de
+// uma reinstalação.
+export async function registrarSeJaPermitido(userId) {
+  if (!userId || !suportaNotificacoes()) return;
+  if (Notification.permission !== 'granted') return;
+  try {
+    const registro = await navigator.serviceWorker.ready;
+    const inscricao = await registro.pushManager.getSubscription();
+    if (!inscricao) return; // sem inscrição: só o usuário pode recriar, com um clique
+
+    const { data } = await api.get('/notificacoes/chave-publica');
+    if (data?.chavePublica) await guardarConfig(userId, data.chavePublica);
+
+    await api.post('/notificacoes/inscrever', { user_id: userId, inscricao: inscricao.toJSON() });
+  } catch { /* silencioso: é manutenção de fundo, não pode atrapalhar o login */ }
 }
 
 export async function enviarTeste(userId) {
@@ -113,7 +157,7 @@ export async function enviarTeste(userId) {
 // enxergar essa versão, "o push não chegou" e "chegou mas o código velho
 // não sabia exibir" são indistinguíveis.
 // ─────────────────────────────────────────────────────────────
-export const VERSAO_ESPERADA = 'rota2-v20';
+export const VERSAO_ESPERADA = 'rota2-v21';
 
 const AVISO_REINSTALACAO = 'rota_push_precisa_registrar';
 

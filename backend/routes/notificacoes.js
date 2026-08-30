@@ -40,17 +40,72 @@ function servicoDoEndereco(endereco = '') {
   return 'outro navegador';
 }
 
+// ─────────────────────────────────────────────────────────────
+// ETAPA 2 — envio robusto.
+//
+// Duas coisas que só aparecem com o tempo: inscrição morta e falha de
+// entrega. Inscrição morta acumula a cada reinstalação e troca de aparelho,
+// e faz o envio parecer bem-sucedido para um aparelho que não existe mais.
+// Falha de entrega, sem registro, não deixa rastro nenhum.
+// ─────────────────────────────────────────────────────────────
+async function enviarParaUsuario(user_id, conteudo, contexto = {}) {
+  const { data: inscricoes } = await supabase
+    .from('push_subscriptions').select('endpoint, subscription').eq('user_id', user_id);
+
+  if (!inscricoes?.length) return { aparelhos: [], aceitos: 0, removidos: 0 };
+
+  const aparelhos = [];
+  const mortas = [];
+
+  for (const item of inscricoes) {
+    const servico = servicoDoEndereco(item.endpoint);
+    try {
+      const r = await webpush.sendNotification(item.subscription, conteudo);
+      aparelhos.push({ servico, aceito: true, codigo: r?.statusCode ?? 201 });
+    } catch (e) {
+      const codigo = e?.statusCode || null;
+      // 404 e 410 significam que aquele aparelho não existe mais para o
+      // serviço de push. Insistir nunca vai funcionar, então some.
+      const morta = codigo === 404 || codigo === 410;
+      if (morta) mortas.push(item.endpoint);
+      aparelhos.push({ servico, aceito: false, codigo, removida: morta });
+
+      // Falha real (não é aparelho que sumiu) precisa deixar rastro: é a
+      // diferença entre "ninguém recebeu porque ninguém tinha o app" e
+      // "ninguém recebeu porque o envio está quebrado".
+      if (!morta) {
+        registrarLog('enviar_push', 'push_subscriptions', 'erro', {
+          ...contexto,
+          user_id,
+          erro: `${servico} recusou o envio${codigo ? ` (código ${codigo})` : ''}: ${e?.body || e?.message || 'sem detalhe'}`,
+        });
+      }
+    }
+  }
+
+  if (mortas.length) {
+    await supabase.from('push_subscriptions').delete().in('endpoint', mortas);
+    registrarLog('limpar_inscricao_push', 'push_subscriptions', 'sucesso', {
+      ...contexto,
+      user_id,
+      depois: { removidas: mortas.length, motivo: 'aparelho não existe mais' },
+    });
+  }
+
+  return { aparelhos, aceitos: aparelhos.filter(a => a.aceito).length, removidos: mortas.length };
+}
+
 // GET /api/notificacoes/chave-publica
 router.get('/chave-publica', (req, res) => {
   if (!configurado) return res.status(503).json({ error: 'Notificações não configuradas no servidor' });
   res.json({ chavePublica: CHAVE_PUBLICA });
 });
 
-// POST /api/notificacoes/inscrever  { user_id, inscricao }
+// POST /api/notificacoes/inscrever  { user_id, inscricao, endereco_antigo }
 // Guarda a inscrição do aparelho. O endereço é único por aparelho, então
 // reenviar a mesma inscrição apenas atualiza a linha em vez de duplicar.
 router.post('/inscrever', async (req, res) => {
-  const { user_id, inscricao } = req.body || {};
+  const { user_id, inscricao, endereco_antigo } = req.body || {};
   if (!user_id)             return res.status(400).json({ error: 'user_id obrigatório' });
   if (!inscricao?.endpoint) return res.status(400).json({ error: 'inscrição inválida' });
 
@@ -65,6 +120,13 @@ router.post('/inscrever', async (req, res) => {
     { onConflict: 'endpoint' }
   );
   if (error) return res.status(500).json({ error: error.message });
+
+  // O navegador troca a inscrição sozinho de vez em quando, e quando isso
+  // acontece ele informa qual era a anterior. Sem apagá-la, ela ficaria para
+  // sempre no banco recebendo envios que não chegam a aparelho nenhum.
+  if (endereco_antigo && endereco_antigo !== inscricao.endpoint) {
+    await supabase.from('push_subscriptions').delete().eq('endpoint', endereco_antigo);
+  }
 
   res.json({ ok: true, servico: servicoDoEndereco(inscricao.endpoint) });
 });
@@ -100,11 +162,9 @@ router.post('/teste', async (req, res) => {
   if (!user_id)     return res.status(400).json({ error: 'user_id obrigatório' });
   if (!configurado) return res.status(503).json({ error: 'Notificações não configuradas no servidor' });
 
-  const { data: inscricoes, error } = await supabase
-    .from('push_subscriptions').select('endpoint, subscription').eq('user_id', user_id);
-
-  if (error) return res.status(500).json({ error: error.message });
-  if (!inscricoes?.length) {
+  const { count } = await supabase
+    .from('push_subscriptions').select('endpoint', { count: 'exact', head: true }).eq('user_id', user_id);
+  if (!count) {
     return res.status(404).json({ error: 'Nenhum aparelho registrado. Ative as notificações primeiro.' });
   }
 
@@ -124,18 +184,15 @@ router.post('/teste', async (req, res) => {
     usuario: user_id,
   });
 
-  const aparelhos = [];
-  for (const item of inscricoes) {
-    const servico = servicoDoEndereco(item.endpoint);
-    try {
-      const r = await webpush.sendNotification(item.subscription, conteudo);
-      aparelhos.push({ servico, aceito: true, codigo: r?.statusCode ?? 201 });
-    } catch (e) {
-      aparelhos.push({ servico, aceito: false, codigo: e?.statusCode || null, motivo: e?.body || e?.message || 'erro' });
-    }
-  }
+  const { data: perfil } = await supabase
+    .from('profiles').select('company').eq('id', user_id).maybeSingle();
 
-  res.json({ ok: true, aparelhos, aceitos: aparelhos.filter(a => a.aceito).length });
+  const r = await enviarParaUsuario(user_id, conteudo, {
+    company: perfil?.company || null,
+    rota: req.originalUrl,
+  });
+
+  res.json({ ok: true, ...r });
 });
 
 module.exports = router;

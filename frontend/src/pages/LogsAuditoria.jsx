@@ -7,7 +7,6 @@ import ExportMenu from '../components/ExportMenu';
 import { gerarPDF, gerarExcel } from '../lib/exportUtils';
 
 const ACAO_LABEL = {
-  push_chegou_no_aparelho: 'Push chegou no aparelho',
   criar_usuario: 'Criou usuário',
   editar_usuario: 'Editou usuário',
   desativar_usuario: 'Desativou usuário',
@@ -136,8 +135,8 @@ const ACAO_LABEL = {
   // Notificações e erros de tela
   testar_notificacao: 'Testou notificação',
   enviar_push: 'Falha ao enviar notificação',
-  registrar_dispositivo_push: 'Registrou dispositivo de notificação',
-  remover_dispositivo_push: 'Removeu dispositivo de notificação',
+  push_chegou_no_aparelho: 'Notificação chegou no aparelho',
+  limpar_inscricao_push: 'Removeu aparelho que não existe mais',
   erro_tela: 'Erro na tela',
   acao_tela: 'Ação na tela',
 
