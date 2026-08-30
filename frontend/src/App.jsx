@@ -69,7 +69,7 @@ function useIsMobile() {
 }
 
 function AppContent() {
-  const { session, profile } = useAuth();
+  const { session, profile, signOut, loadProfile } = useAuth();
   const toast = useToast();
   // Restaura a última página visitada — evita voltar pro dashboard quando o
   // celular descarrega o app da memória (ao trocar de aplicativo, abrir a
@@ -181,7 +181,10 @@ function AppContent() {
     if (page !== 'logs' && page !== 'profile') setPage('logs');
   }, [profile?.access_level, page, setPage]);
 
-  if (session === undefined) return (
+  // Espera o perfil antes de montar a tela. Sem isto o app decide permissão
+  // com o perfil ainda vazio: todo módulo aparecia como "Acesso restrito" por
+  // um instante e liberava sozinho logo depois, sem a pessoa fazer nada.
+  if (session === undefined || (session && profile === undefined)) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0D0D0D' }}>
       <div style={{ color:'var(--primary)', fontSize:18, fontWeight:700 }}>Carregando...</div>
     </div>
@@ -198,6 +201,24 @@ function AppContent() {
       </div>
     );
   }
+
+  // Perfil não veio, mesmo com a sessão válida (queda de rede, cadastro
+  // removido). Antes o app seguia em frente e mostrava "Acesso restrito" em
+  // todos os módulos, o que parece defeito do app em vez de falha ao carregar.
+  if (!profile) return (
+    <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center',
+                  justifyContent:'center', gap:14, padding:24, textAlign:'center', background:'#0D0D0D' }}>
+      <span style={{ fontSize:38 }}>⚠️</span>
+      <h2 style={{ color:'#fff', fontSize:18, fontWeight:700 }}>Não foi possível carregar seu perfil</h2>
+      <p style={{ color:'#999', fontSize:13.5, maxWidth:340, lineHeight:1.6 }}>
+        Verifique sua conexão e tente de novo. Se continuar assim, fale com o suporte.
+      </p>
+      <div style={{ display:'flex', gap:10, marginTop:4 }}>
+        <button className="btn btn-primary" onClick={() => loadProfile(session.user.id)}>Tentar de novo</button>
+        <button className="btn btn-ghost" onClick={signOut}>Sair</button>
+      </div>
+    </div>
+  );
 
   const isMaster = profile?.access_level === 'master';
 

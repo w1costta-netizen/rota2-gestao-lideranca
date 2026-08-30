@@ -11,14 +11,19 @@ import { registrarSeJaPermitido } from '../lib/notificacoes';
 // recarregamento automático de versão resolve em seguida.
 const AuthCtx = createContext({
   session: undefined, // undefined = carregando
-  profile: null,
+  profile: undefined, // idem — nunca `null` aqui, que significaria "não tem"
   signOut: async () => {},
   loadProfile: async () => {},
 });
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined); // undefined = loading
-  const [profile, setProfile] = useState(null);
+  // undefined = ainda carregando · null = tentou e não veio · objeto = pronto.
+  //
+  // A diferença entre "ainda não sei" e "não tem" é o que evita o app julgar
+  // permissão antes de conhecer o usuário — sem ela, todo módulo aparecia
+  // como "Acesso restrito" por um instante e depois liberava sozinho.
+  const [profile, setProfile] = useState(undefined);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -36,16 +41,24 @@ export function AuthProvider({ children }) {
   }, []);
 
   async function loadProfile(userId) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
-    if (data) {
-      try {
-        const res = await api.get(`/stores/my?requester_id=${userId}`);
-        data.modulos_premium = res.data?.modulos_premium || [];
-      } catch {
-        data.modulos_premium = [];
+    let carregado = null;
+    try {
+      const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      if (data) {
+        try {
+          const res = await api.get(`/stores/my?requester_id=${userId}`);
+          data.modulos_premium = res.data?.modulos_premium || [];
+        } catch {
+          data.modulos_premium = [];
+        }
       }
+      carregado = data || null;
+    } catch {
+      carregado = null;
     }
-    setProfile(data);
+    // Sempre termina com um valor definido, mesmo em falha: deixar como
+    // `undefined` prenderia o app na tela de carregamento para sempre.
+    setProfile(carregado);
 
     // Mantém o cadastro do aparelho em dia. O navegador troca a inscrição
     // sozinho de vez em quando (reinstalação, restauração de backup), e sem
