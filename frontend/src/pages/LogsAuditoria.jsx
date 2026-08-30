@@ -61,6 +61,12 @@ const ACAO_LABEL = {
   editar_item_lista: 'Editou item da lista',
   excluir_item_lista: 'Excluiu item da lista',
 
+  // Anotações pessoais
+  criar_anotacao: 'Criou anotação',
+  editar_anotacao: 'Editou anotação',
+  excluir_anotacao: 'Excluiu anotação',
+  listar_anotacoes: 'Carregou as anotações',
+
   // Estoque e conferência
   importar_estoque: 'Importou planilha de estoque',
   importar_conferencia: 'Importou planilha de conferência',

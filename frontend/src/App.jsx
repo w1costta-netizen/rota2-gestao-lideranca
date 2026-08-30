@@ -18,6 +18,7 @@ const Dashboard              = lazy(() => import('./pages/Dashboard'));
 const Leaders                = lazy(() => import('./pages/Leaders'));
 const Agenda                 = lazy(() => import('./pages/Agenda'));
 const Listas                 = lazy(() => import('./pages/Listas'));
+const Anotacoes              = lazy(() => import('./pages/Anotacoes'));
 const AtaReuniao             = lazy(() => import('./pages/AtaReuniao'));
 const Scale                  = lazy(() => import('./pages/Scale'));
 const Profile                = lazy(() => import('./pages/Profile'));
@@ -244,6 +245,7 @@ function AppContent() {
     leaders:      () => <Leaders setPage={setPage} />,
     agenda:       () => has('agenda')     ? <Agenda setPage={setPage} userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     listas:       () => has('listas')     ? <Listas userId={userId} /> : <AccessDenied />,
+    anotacoes:    () => has('anotacoes')  ? <Anotacoes userId={userId} /> : <AccessDenied />,
     atas:         () => has('atas')       ? <AtaReuniao userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     scale:        () => <Scale setPage={setPage} />,
     team:         () => <TeamMembers userId={userId} userSector={userSector} />,

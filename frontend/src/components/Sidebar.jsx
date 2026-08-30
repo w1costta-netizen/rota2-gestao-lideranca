@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, PenTool } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, PenTool } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 import { useTheme } from '../contexts/ThemeContext';
@@ -41,6 +41,7 @@ const NAV_GROUPS = [
       { id: 'tarefas', label: 'Tarefas',       icon: CheckSquare,  perm: 'tarefas' },
       { id: 'agenda',  label: 'Agenda',        icon: CalendarDays, perm: 'agenda' },
       { id: 'listas',  label: 'Listas',        icon: ListChecks,   perm: 'listas' },
+      { id: 'anotacoes', label: 'Anotações',   icon: StickyNote,   perm: 'anotacoes' },
       { id: 'atas',    label: 'Ata de Reunião', icon: PenTool,     perm: 'atas' },
       { id: 'pdca',    label: 'Plano de Ação', icon: Target,       perm: 'pdca' },
       { id: 'produtividade', label: 'Treinamentos', icon: GraduationCap, perm: 'produtividade' },
