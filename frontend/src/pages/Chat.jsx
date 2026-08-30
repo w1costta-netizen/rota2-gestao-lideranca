@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Plus, Search, X, ArrowLeft, MessageCircle, Paperclip, Mic } from 'lucide-react';
+import { Send, Plus, Search, X, ArrowLeft, MessageCircle, Paperclip, Mic, Trash2 } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
 import Avatar from '../components/Avatar';
@@ -171,27 +171,52 @@ export default function Chat({ userId }) {
     return () => clearInterval(t);
   }, [userId]);
 
-  // Busca só o que chegou depois da última mensagem já exibida — é o que
-  // deixa a atualização barata o bastante para rodar a cada 4 segundos.
-  const buscarNovas = async (conversaId, desde) => {
+  // Marca de tempo da última busca. O servidor devolve o que é novo E o que
+  // mudou desde então — é assim que uma mensagem apagada pelo outro lado
+  // some daqui sem precisar recarregar.
+  const ultimaBuscaRef = useRef(null);
+
+  const buscarNovas = async (conversaId) => {
     try {
       const p = new URLSearchParams({ requester_id: userId });
-      if (desde) p.set('depois', desde);
+      if (ultimaBuscaRef.current) p.set('depois', ultimaBuscaRef.current);
+      const agora = new Date().toISOString();
       const r = await api.get(`/chat/conversas/${conversaId}/mensagens?${p.toString()}`);
-      const novas = r.data || [];
-      if (!novas.length) return;
+      ultimaBuscaRef.current = agora;
+
+      const vindas = r.data || [];
+      if (!vindas.length) return;
       setMensagens(atuais => {
-        const jaTem = new Set(atuais.map(m => m.id));
-        return [...atuais, ...novas.filter(m => !jaTem.has(m.id))];
+        // Substitui a que já existe (caso de mensagem apagada) e acrescenta
+        // as novas, mantendo a ordem por horário.
+        const porId = new Map(atuais.map(m => [m.id, m]));
+        vindas.forEach(m => porId.set(m.id, m));
+        return [...porId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at));
       });
     } catch { /* silencioso */ }
+  };
+
+  const apagar = async (m) => {
+    if (!window.confirm('Apagar esta mensagem para todos?')) return;
+    try {
+      await api.delete(`/chat/mensagens/${m.id}?requester_id=${userId}`);
+      setMensagens(lista => lista.map(x => x.id === m.id
+        ? { ...x, apagada: true, texto: '', tipo: 'texto', arquivo_url: null }
+        : x));
+      carregarConversas();
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Não foi possível apagar.', 'error');
+    }
   };
 
   const abrir = async (conversa) => {
     setAberta(conversa);
     setMensagens([]);
     try {
+      // Abrir traz tudo; daqui em diante a busca é só do que mudar.
+      const agora = new Date().toISOString();
       const r = await api.get(`/chat/conversas/${conversa.id}/mensagens?requester_id=${userId}`);
+      ultimaBuscaRef.current = agora;
       setMensagens(r.data || []);
       await api.post(`/chat/conversas/${conversa.id}/lida`, { requester_id: userId });
       // Zera na tela sem esperar o próximo ciclo da lista.
@@ -205,12 +230,7 @@ export default function Chat({ userId }) {
     if (!aberta) return;
     const t = setInterval(() => {
       const atual = abertaRef.current;
-      if (!atual) return;
-      setMensagens(atuais => {
-        const ultima = atuais.length ? atuais[atuais.length - 1].created_at : null;
-        buscarNovas(atual.id, ultima);
-        return atuais;
-      });
+      if (atual) buscarNovas(atual.id);
     }, INTERVALO_MENSAGENS);
     return () => clearInterval(t);
   }, [aberta?.id]);
@@ -383,6 +403,15 @@ export default function Chat({ userId }) {
                                         color: minha ? '#fff' : 'var(--text)',
                                         borderBottomRightRadius: minha ? 4 : 14,
                                         borderBottomLeftRadius: minha ? 14 : 4 }}>
+                            {m.apagada ? (
+                              // Vira aviso em vez de sumir: sumir sem
+                              // rastro deixaria a conversa confusa para
+                              // quem estava do outro lado.
+                              <div style={{ fontSize:13, fontStyle:'italic',
+                                            color: minha ? 'rgba(255,255,255,.8)' : 'var(--text-muted)' }}>
+                                Mensagem apagada
+                              </div>
+                            ) : (<>
                             {m.tipo === 'imagem' && m.arquivo_url && (
                               <img src={m.arquivo_url} alt={m.arquivo_nome || 'Foto'}
                                 onClick={() => window.open(m.arquivo_url, '_blank')}
@@ -426,9 +455,21 @@ export default function Chat({ userId }) {
                                 {m.texto}
                               </div>
                             )}
-                            <div style={{ fontSize:10, marginTop:3, textAlign:'right',
+                            </>)}
+
+                            <div style={{ display:'flex', alignItems:'center', justifyContent:'flex-end',
+                                          gap:8, fontSize:10, marginTop:3,
                                           color: minha ? 'rgba(255,255,255,.75)' : 'var(--text-muted)' }}>
-                              {horaCurta(m.created_at)}
+                              {/* Só quem escreveu apaga, e só o que ainda
+                                  não foi apagado. */}
+                              {minha && !m.apagada && (
+                                <button onClick={() => apagar(m)} aria-label="Apagar mensagem" title="Apagar mensagem"
+                                  style={{ background:'none', border:'none', cursor:'pointer', padding:2, margin:-2,
+                                           color:'inherit', opacity:.85, display:'flex' }}>
+                                  <Trash2 size={12}/>
+                                </button>
+                              )}
+                              <span>{horaCurta(m.created_at)}</span>
                             </div>
                           </div>
                         </div>

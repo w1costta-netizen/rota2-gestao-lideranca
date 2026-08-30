@@ -75,6 +75,7 @@ const ACAO_LABEL = {
 
   // Conversas
   enviar_mensagem: 'Enviou mensagem',
+  apagar_mensagem: 'Apagou mensagem',
   excluir_categoria_diario: 'Removeu categoria do Diário',
   listar_anotacoes: 'Carregou as anotações',
 

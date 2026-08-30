@@ -159,11 +159,19 @@ router.get('/conversas/:id/mensagens', async (req, res) => {
   const conversa = await minhaConversa(req.params.id, me.id);
   if (!conversa) return res.status(404).json({ error: 'Conversa não encontrada' });
 
+  // `depois` entra cru numa string de filtro, então só passa se for uma data
+  // válida — mesma precaução usada com o identificador.
+  const desde = depois && !isNaN(Date.parse(depois)) ? new Date(depois).toISOString() : null;
+
   let consulta = supabase
     .from('mensagens')
-    .select('id, de_id, texto, tipo, arquivo_path, arquivo_nome, arquivo_tamanho, duracao, created_at')
+    .select('id, de_id, texto, tipo, apagada, arquivo_path, arquivo_nome, arquivo_tamanho, duracao, created_at')
     .eq('conversa_id', conversa.id);
-  if (depois) consulta = consulta.gt('created_at', depois);
+
+  // Traz o que é novo E o que mudou. Sem a segunda parte, uma mensagem
+  // apagada nunca sumiria da tela de quem está do outro lado — que é
+  // justamente o motivo de alguém apagar.
+  if (desde) consulta = consulta.or(`created_at.gt.${desde},atualizada_em.gt.${desde}`);
 
   const { data, error } = await consulta.order('created_at', { ascending: true }).limit(300);
   if (error) return res.status(500).json({ error: 'Erro ao carregar as mensagens.' });
@@ -235,7 +243,7 @@ router.post('/mensagens', async (req, res) => {
       arquivo_tamanho: arquivo_tamanho || null,
       duracao: duracao || null,
     })
-    .select('id, de_id, texto, tipo, arquivo_path, arquivo_nome, arquivo_tamanho, duracao, created_at').single();
+    .select('id, de_id, texto, tipo, apagada, arquivo_path, arquivo_nome, arquivo_tamanho, duracao, created_at').single();
 
   if (error) {
     registrarLog('enviar_mensagem', 'mensagens', 'erro', { company: conversa.company, user_id: me.id, rota: req.originalUrl, erro: error.message });
@@ -278,6 +286,64 @@ router.post('/mensagens', async (req, res) => {
   // indisponível" na foto que acabou de mandar.
   const { arquivo_path: caminhoGravado, ...semCaminho } = msg;
   res.json({ ...semCaminho, arquivo_url: await linkTemporario(caminhoGravado) });
+});
+
+// DELETE /api/chat/mensagens/:id?requester_id=
+//
+// Só quem escreveu apaga — nem gestor, nem master. Conversa privada de
+// outra pessoa não é território de moderação.
+//
+// A mensagem não some: vira "apagada", como no WhatsApp. Sumir sem deixar
+// rastro deixaria a conversa confusa para quem estava do outro lado.
+router.delete('/mensagens/:id', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const { data: msg } = await supabase
+    .from('mensagens').select('id, de_id, conversa_id, arquivo_path').eq('id', req.params.id).maybeSingle();
+  if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
+  if (msg.de_id !== me.id) return res.status(403).json({ error: 'Só quem enviou pode apagar.' });
+
+  const conversa = await minhaConversa(msg.conversa_id, me.id);
+  if (!conversa) return res.status(404).json({ error: 'Conversa não encontrada' });
+
+  // O arquivo sai do armazenamento de verdade. Sem isso ele continuaria
+  // ocupando espaço para sempre — e o plano do banco tem 1GB no total.
+  if (msg.arquivo_path) {
+    await supabase.storage.from(BALDE).remove([msg.arquivo_path]).catch(() => {});
+  }
+
+  const { error } = await supabase.from('mensagens').update({
+    apagada: true, texto: '', tipo: 'texto',
+    arquivo_path: null, arquivo_nome: null, arquivo_tamanho: null, duracao: null,
+    // Marca a hora da mudança: é por este campo que a tela do outro lado
+    // descobre que a mensagem foi apagada, sem precisar recarregar tudo.
+    atualizada_em: new Date().toISOString(),
+  }).eq('id', msg.id);
+
+  if (error) {
+    registrarLog('apagar_mensagem', 'mensagens', 'erro', { company: conversa.company, user_id: me.id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: 'Erro ao apagar.' });
+  }
+  registrarLog('apagar_mensagem', 'mensagens', 'sucesso', { company: conversa.company, user_id: me.id, antes: { conversa_id: conversa.id } });
+
+  // Se a apagada era a última, o resumo da conversa ficaria mostrando um
+  // texto que não existe mais. Recalcula a partir da última que sobrou.
+  const { data: ultima } = await supabase
+    .from('mensagens').select('texto, tipo, de_id, apagada, created_at')
+    .eq('conversa_id', conversa.id)
+    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+
+  const rotulo = { imagem: '📷 Foto', arquivo: '📎 Arquivo', audio: '🎤 Áudio' };
+  await supabase.from('conversas').update({
+    ultima_texto: !ultima ? null
+      : ultima.apagada ? 'Mensagem apagada'
+      : (ultima.texto || rotulo[ultima.tipo] || ''),
+    ultima_de: ultima?.de_id || null,
+    ultima_em: ultima?.created_at || null,
+  }).eq('id', conversa.id);
+
+  res.json({ ok: true });
 });
 
 // POST /api/chat/conversas/:id/lida  { requester_id } — zera as minhas
