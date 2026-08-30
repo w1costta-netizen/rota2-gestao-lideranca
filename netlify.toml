@@ -3,18 +3,6 @@
   command = "npm run build"
   publish = "dist"
 
-# O domínio antigo continuava servindo o app como um site separado. Para o
-# navegador são duas origens diferentes, cada uma com seu próprio service
-# worker e sua própria inscrição de notificação — por isso o mesmo push
-# chegava duas vezes, uma delas com a marca e a URL antigas.
-# Este redirecionamento unifica tudo em rotalider.com.br.
-# Precisa vir antes das outras regras: a primeira que casar é a que vale.
-[[redirects]]
-  from   = "https://rota2-gestao-lideranca.netlify.app/*"
-  to     = "https://rotalider.com.br/:splat"
-  status = 301
-  force  = true
-
 [[redirects]]
   from   = "/api/*"
   to     = "https://rota2-gestao-lideranca.onrender.com/api/:splat"

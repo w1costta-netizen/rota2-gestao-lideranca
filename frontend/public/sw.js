@@ -1,4 +1,4 @@
-const CACHE = 'rota2-v12';
+const CACHE = 'rota2-v11';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
 // Instala e pré-cacheia apenas assets imutáveis (sem index.html)
@@ -59,45 +59,18 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// Exibe notificação push.
-//
-// Sempre exibe alguma coisa, mesmo que a leitura do conteúdo falhe. Antes,
-// qualquer erro aqui fazia a notificação simplesmente não aparecer, sem
-// nenhum sinal. No iOS isso é pior do que parece: o sistema exige que todo
-// push recebido vire uma notificação visível e pode cancelar a inscrição de
-// quem não cumpre — o aparelho continua mostrando a permissão como ativa e
-// nunca mais chega nada.
+// Exibe notificação push
 self.addEventListener('push', event => {
-  let dados = {};
-  try {
-    dados = event.data ? event.data.json() : {};
-  } catch {
-    try { dados = { body: event.data.text() }; } catch { dados = {}; }
-  }
-
-  const titulo = dados.title || 'Rota Líder';
-  const opcoes = {
-    body: dados.body || 'Você tem uma nova notificação.',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
-    data: { url: dados.url || '/', page: dados.page || 'dashboard' },
-  };
-  // `vibrate` não é suportado no iOS. Só é enviada onde o navegador declara
-  // suportar — e a própria checagem vai dentro de try, porque `Notification`
-  // pode nem existir no service worker do Safari: seria o mesmo tipo de erro
-  // silencioso que este bloco existe para evitar.
-  try {
-    if (typeof Notification !== 'undefined' && 'vibrate' in Notification.prototype) {
-      opcoes.vibrate = [200, 100, 200];
-    }
-  } catch { /* segue sem vibrar */ }
-
+  if (!event.data) return;
+  const { title, body, url, page } = event.data.json();
   event.waitUntil(
-    self.registration.showNotification(titulo, opcoes).catch(() =>
-      // Última tentativa sem nenhuma opção extra: melhor uma notificação
-      // sem enfeite do que nenhuma.
-      self.registration.showNotification(titulo, { body: opcoes.body })
-    )
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data: { url: url || '/', page: page || 'dashboard' },
+      vibrate: [200, 100, 200],
+    })
   );
 });
 
