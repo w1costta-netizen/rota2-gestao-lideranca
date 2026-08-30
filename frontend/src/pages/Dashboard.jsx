@@ -1,8 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Megaphone, CheckSquare, LayoutList, Tag, CalendarDays,
-  AlertTriangle, Clock, CheckCircle, TrendingUp, Users
+  Megaphone, CheckSquare, CalendarDays, ListChecks, StickyNote, Pin,
+  AlertTriangle, Clock, Users
 } from 'lucide-react';
+
+// As mesmas cores da tela de Anotações. Repetidas aqui de propósito: o
+// Dashboard só precisa do fundo para a bolinha, não do jogo completo de
+// contraste — importar a paleta inteira criaria uma dependência entre as
+// duas telas por causa de nove valores.
+const COR_ANOTACAO = {
+  preto:'#262626', cinza:'#616161', vermelho:'#C62828', laranja:'#E8681A',
+  amarelo:'#F5C518', verde:'#2E7D32', azul:'#1565C0', roxo:'#5E35B1', rosa:'#C2185B',
+};
 import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import { formatDate } from '../utils';
@@ -53,7 +62,8 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   const [stats, setStats]         = useState({});
   const [tarefas, setTarefas]     = useState([]);
   const [comunicados, setComunicados] = useState([]);
-  const [campanhas, setCampanhas] = useState([]);
+  const [listas, setListas]       = useState([]);
+  const [anotacoes, setAnotacoes] = useState([]);
   const [agenda, setAgenda]       = useState([]);
   const [loading, setLoading]     = useState(true);
 
@@ -63,13 +73,17 @@ export default function Dashboard({ setPage, profile: propProfile }) {
     Promise.all([
       api.get(`/tarefas?requester_id=${userId}${cq}`).catch(() => ({ data: [] })),
       api.get(`/comunicados?requester_id=${userId}${cq}`).catch(() => ({ data: [] })),
-      api.get(`/campanhas?requester_id=${userId}${cq}`).catch(() => ({ data: [] })),
+      // Listas e anotações são pessoais: não levam company, e cada pessoa
+      // só recebe as suas.
+      api.get(`/listas?requester_id=${userId}`).catch(() => ({ data: [] })),
+      api.get(`/anotacoes?requester_id=${userId}&arquivadas=0`).catch(() => ({ data: [] })),
       api.get(`/agenda?week_start=${week}${company ? `&company=${encodeURIComponent(company)}` : ''}&user_id=${userId}&sector=${encodeURIComponent(profile?.sector || '')}`).catch(() => ({ data: [] })),
       isAdmin && company ? api.get(`/admin/users?requester_id=${userId}${cq}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
-    ]).then(([t, c, camp, ag, users]) => {
+    ]).then(([t, c, li, an, ag, users]) => {
       setTarefas(t.data || []);
       setComunicados(c.data || []);
-      setCampanhas(camp.data || []);
+      setListas(li.data || []);
+      setAnotacoes(an.data || []);
       setAgenda(ag.data || []);
       setStats({ totalUsers: (users.data || []).length });
     }).finally(() => setLoading(false));
@@ -91,14 +105,11 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   const naoLidos = comunicados.filter(c => !c.lido);
   const urgentes  = comunicados.filter(c => c.prioridade === 'urgente' && !c.lido);
 
-  // Campanhas ativas (não arquivadas, com itens)
-  const campAtivasSemConcluir = campanhas.filter(c => {
-    const total   = c.campanha_itens?.length || 0;
-    const comFoto = new Set((c.campanha_evidencias || []).map(e => e.item_id));
-    const sinalizados = (c.campanha_itens || []).filter(i => i.sinalizacao).length;
-    const feitos  = comFoto.size + sinalizados;
-    return total > 0 && feitos < total;
-  });
+  // Itens ainda por fazer nas listas pessoais — é o número que diz se
+  // sobrou alguma coisa, e não quantas listas a pessoa criou.
+  const itensPendentes = listas.reduce(
+    (soma, l) => soma + (l.itens || []).filter(i => !i.concluido).length, 0
+  );
 
   // Agenda de hoje
   const agendaHoje = agenda.filter(i => i.day_of_week === todayKey);
@@ -166,9 +177,9 @@ export default function Dashboard({ setPage, profile: propProfile }) {
           ? <StatCard icon={Users} color="#10b981" bg="#10b98115"
               value={stats.totalUsers || 0} label="Usuários cadastrados"
               onClick={() => setPage('usersadmin')}/>
-          : <StatCard icon={Tag} color="#10b981" bg="#10b98115"
-              value={campAtivasSemConcluir.length} label="Flyers em conferência"
-              onClick={() => setPage('campanhas')}/>
+          : <StatCard icon={ListChecks} color="#10b981" bg="#10b98115"
+              value={itensPendentes} label="Itens nas listas"
+              onClick={() => setPage('listas')}/>
         }
       </div>
 
@@ -301,42 +312,73 @@ export default function Dashboard({ setPage, profile: propProfile }) {
           }
         </div>
 
-        {/* Campanhas em andamento */}
+        {/* Minhas listas */}
         <div className="card">
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
             <div style={{ fontWeight:700, fontSize:14, display:'flex', alignItems:'center', gap:8 }}>
-              <Tag size={15} color="#10b981"/> Conferência de Flyers
+              <ListChecks size={15} color="#10b981"/> Minhas listas
             </div>
-            <button className="btn-icon" style={{ fontSize:12, color:'var(--primary)' }} onClick={() => setPage('campanhas')}>
+            <button className="btn-icon" style={{ fontSize:12, color:'var(--primary)' }} onClick={() => setPage('listas')}>
               Ver tudo
             </button>
           </div>
-          {campanhas.length === 0
-            ? <p style={{ color:'var(--text-muted)', fontSize:13 }}>Nenhuma campanha ativa.</p>
+          {listas.length === 0
+            ? <p style={{ color:'var(--text-muted)', fontSize:13 }}>Nenhuma lista criada.</p>
             : <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-                {campanhas.slice(0,4).map(c => {
-                  const total    = c.campanha_itens?.length || 0;
-                  const comFoto  = new Set((c.campanha_evidencias || []).map(e => e.item_id));
-                  const sinalizados = (c.campanha_itens || []).filter(i => i.sinalizacao).length;
-                  const feitos   = comFoto.size + sinalizados;
-                  const pct      = total ? Math.round((feitos/total)*100) : 0;
-                  const ok       = total > 0 && feitos === total;
+                {listas.slice(0,4).map(l => {
+                  const itens    = l.itens || [];
+                  const feitos   = itens.filter(i => i.concluido).length;
+                  const pct      = itens.length ? Math.round((feitos/itens.length)*100) : 0;
+                  const completa = itens.length > 0 && feitos === itens.length;
                   return (
-                    <div key={c.id}>
+                    <div key={l.id} onClick={() => setPage('listas')} style={{ cursor:'pointer' }}>
                       <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:600, marginBottom:4 }}>
-                        <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'70%' }}>{c.titulo}</span>
-                        <span style={{ fontWeight:700, color: ok ? '#10b981' : 'var(--primary)', flexShrink:0 }}>
-                          {ok ? '✅ 100%' : `${feitos}/${total}`}
+                        <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth:'70%' }}>
+                          {l.emoji} {l.nome}
+                        </span>
+                        <span style={{ fontWeight:700, color: completa ? '#10b981' : 'var(--primary)', flexShrink:0 }}>
+                          {itens.length === 0 ? 'vazia' : completa ? '✅ 100%' : `${feitos}/${itens.length}`}
                         </span>
                       </div>
                       <div style={{ background:'var(--border)', borderRadius:6, height:7, overflow:'hidden' }}>
                         <div style={{ height:'100%', borderRadius:6, width:`${pct}%`,
-                          background: ok ? '#10b981' : 'linear-gradient(90deg, var(--primary), #f59e0b)',
+                          background: completa ? '#10b981' : 'linear-gradient(90deg, var(--primary), #f59e0b)',
                           transition:'width .4s' }}/>
                       </div>
                     </div>
                   );
                 })}
+              </div>
+          }
+        </div>
+
+        {/* Anotações */}
+        <div className="card">
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+            <div style={{ fontWeight:700, fontSize:14, display:'flex', alignItems:'center', gap:8 }}>
+              <StickyNote size={15} color="#8b5cf6"/> Anotações
+            </div>
+            <button className="btn-icon" style={{ fontSize:12, color:'var(--primary)' }} onClick={() => setPage('anotacoes')}>
+              Ver tudo
+            </button>
+          </div>
+          {anotacoes.length === 0
+            ? <p style={{ color:'var(--text-muted)', fontSize:13 }}>Nenhuma anotação ainda.</p>
+            : <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {anotacoes.slice(0,4).map(a => (
+                  <div key={a.id} onClick={() => setPage('anotacoes')}
+                    style={{ cursor:'pointer', display:'flex', alignItems:'center', gap:9 }}>
+                    {/* A bolinha repete a cor do cartão: é assim que a pessoa
+                        reconhece a anotação sem precisar ler o título. */}
+                    <span style={{ width:9, height:9, borderRadius:'50%', flexShrink:0,
+                      background: COR_ANOTACAO[a.cor] || 'var(--border)' }}/>
+                    <span style={{ fontSize:13, fontWeight:600, overflow:'hidden',
+                      textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {a.titulo || a.texto || 'Sem título'}
+                    </span>
+                    {a.fixada && <Pin size={12} style={{ color:'var(--text-muted)', flexShrink:0 }}/>}
+                  </div>
+                ))}
               </div>
           }
         </div>
