@@ -56,13 +56,13 @@ router.post('/schedule-reminder', async (req, res) => {
   for (const leader of pending) {
     if (!leader.email) continue;
 
-    const subject = `${urgency} Escala de ${monthName}/${year} precisa ser fechada — Rota 2.0`;
+    const subject = `${urgency} Escala de ${monthName}/${year} precisa ser fechada — Rota Líder`;
     const body = `
 Olá, ${leader.full_name || 'Líder'}!
 
 ${urgency}
 
-A escala do mês de ${monthName}/${year} para o setor <b>${leader.sector || ''}</b> ainda não foi fechada no sistema Rota 2.0.
+A escala do mês de ${monthName}/${year} para o setor <b>${leader.sector || ''}</b> ainda não foi fechada no sistema Rota Líder.
 
 📅 <b>Prazo: dia 26 de cada mês</b>
 
@@ -74,7 +74,7 @@ Após preencher todos os horários, clique no botão <b>"Fechar Escala"</b>.
 Esta atividade é registrada como disciplina operacional e consta no relatório de feedbacks da liderança.
 
 —
-Rota 2.0 · Sistema de Gestão de Liderança
+Rota Líder · Sistema de Gestão de Liderança
     `.trim();
 
     // Usa Supabase Admin para enviar e-mail

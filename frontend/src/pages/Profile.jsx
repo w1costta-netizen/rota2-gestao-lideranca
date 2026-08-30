@@ -312,14 +312,39 @@ export default function Profile() {
             <button className="btn btn-ghost" style={{ flexShrink:0, fontSize:12 }}
               onClick={async () => {
                 try {
-                  await api.post('/push/test', { user_id: session?.user?.id });
-                  toast('Notificação de teste enviada! Verifique seu dispositivo.');
+                  const r = await api.post('/push/test', { user_id: session?.user?.id });
+                  const { sent = 0, subscriptions = 0 } = r.data || {};
+                  // Dizer para quantos aparelhos foi ajuda a entender por que a
+                  // notificação chegou no PC mas não no celular, por exemplo.
+                  toast(
+                    subscriptions > 1
+                      ? `Enviado para ${sent} de ${subscriptions} aparelhos registrados. Se algum não recebeu, use "Limpar aparelhos" nesse aparelho.`
+                      : 'Notificação de teste enviada! Verifique seu dispositivo.'
+                  );
                 } catch (e) {
                   const msg = e?.response?.data?.error || e?.message || 'Erro desconhecido';
                   toast(msg, 'error');
                 }
               }}>
               <Bell size={13}/> Testar
+            </button>
+          )}
+          {pushStatus === 'granted' && (
+            <button className="btn btn-ghost" style={{ flexShrink:0, fontSize:12 }}
+              title="Apaga todos os aparelhos registrados e cadastra só este"
+              onClick={async () => {
+                if (!window.confirm('Isso apaga todos os aparelhos registrados para você e cadastra apenas este.\n\nUse quando a notificação chegar duplicada ou parar de chegar num aparelho.\n\nNos outros aparelhos, é só abrir o app para registrar de novo.')) return;
+                try {
+                  const r = await api.delete(`/push/meus-dispositivos?requester_id=${session?.user?.id}`);
+                  // Depois de limpar, registra este aparelho de novo — senão a
+                  // pessoa fica sem nenhuma notificação até o próximo login.
+                  await registerPush(session?.user?.id);
+                  toast(`${r.data?.removidos || 0} registro(s) removido(s). Este aparelho foi cadastrado de novo.`);
+                } catch (e) {
+                  toast(e?.response?.data?.error || 'Erro ao limpar aparelhos', 'error');
+                }
+              }}>
+              Limpar aparelhos
             </button>
           )}
         </div>

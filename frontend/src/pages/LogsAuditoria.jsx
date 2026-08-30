@@ -137,6 +137,7 @@ const ACAO_LABEL = {
   enviar_push: 'Falha ao enviar notificação',
   registrar_dispositivo_push: 'Registrou dispositivo de notificação',
   remover_dispositivo_push: 'Removeu dispositivo de notificação',
+  limpar_dispositivos_push: 'Limpou os aparelhos de notificação',
   erro_tela: 'Erro na tela',
   acao_tela: 'Ação na tela',
 

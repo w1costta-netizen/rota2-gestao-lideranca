@@ -46,6 +46,27 @@ router.delete('/subscribe', async (req, res) => {
   res.json({ ok: true });
 });
 
+// DELETE /api/push/meus-dispositivos?requester_id=
+// Remove todas as inscrições do usuário. Serve para limpar registros
+// duplicados ou de domínio antigo — depois o app registra o aparelho
+// atual de novo, do zero.
+router.delete('/meus-dispositivos', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(400).json({ error: 'requester_id obrigatório' });
+
+  const company = await companyDoUsuario(requester_id);
+  const { data: antes } = await supabase
+    .from('push_subscriptions').select('endpoint').eq('user_id', requester_id);
+
+  const { error } = await supabase.from('push_subscriptions').delete().eq('user_id', requester_id);
+  if (error) {
+    registrarLog('limpar_dispositivos_push', 'push_subscriptions', 'erro', { company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('limpar_dispositivos_push', 'push_subscriptions', 'sucesso', { company, user_id: requester_id, antes: { removidos: antes?.length || 0 } });
+  res.json({ ok: true, removidos: antes?.length || 0 });
+});
+
 // POST /api/push/test — envia push de teste para o próprio usuário
 router.post('/test', async (req, res) => {
   const { user_id } = req.body;
@@ -67,7 +88,7 @@ router.post('/test', async (req, res) => {
   }
 
   const sent = await sendPushToUsers([user_id], {
-    title: '🔔 Teste Rota 2.0',
+    title: '🔔 Teste Rota Líder',
     body: 'As notificações estão funcionando corretamente!',
     page: 'dashboard',
   });
