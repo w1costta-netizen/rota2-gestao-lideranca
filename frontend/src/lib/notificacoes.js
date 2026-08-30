@@ -193,7 +193,7 @@ export async function meusAparelhos(userId) {
 // enxergar essa versão, "o push não chegou" e "chegou mas o código velho
 // não sabia exibir" são indistinguíveis.
 // ─────────────────────────────────────────────────────────────
-export const VERSAO_ESPERADA = 'rota2-v21';
+export const VERSAO_ESPERADA = 'rota2-v22';
 
 const AVISO_REINSTALACAO = 'rota_push_precisa_registrar';
 

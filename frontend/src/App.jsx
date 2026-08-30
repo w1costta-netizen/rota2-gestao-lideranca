@@ -13,7 +13,37 @@ import AceiteTermos from './pages/AceiteTermos';
 import { VERSAO_ESPERADA } from './lib/notificacoes';
 
 // Lazy-load de todas as páginas — reduz o bundle inicial em ~70%
-const lazy = (fn) => React.lazy(fn);
+//
+// O tratamento de erro aqui não é zelo extra: é obrigatório.
+// Cada publicação gera arquivos com nomes novos e apaga os antigos. Quem
+// está com o app aberto nesse momento continua com a página velha na
+// memória, apontando para arquivos que não existem mais. Ao abrir um
+// módulo ainda não carregado, o pedido cai na regra "/* → index.html" da
+// hospedagem e volta HTML no lugar de código — e a tela quebrava com
+// "undefined is not an object". Recarregar busca o index novo e resolve.
+const CHAVE_RECARGA = 'rota_recarga_versao';
+
+const lazy = (fn) => React.lazy(() => fn().then(modulo => {
+  // Carregou: a marca de "já recarreguei" sai, senão uma publicação futura
+  // nesta mesma aba não teria direito à sua recarga.
+  try { sessionStorage.removeItem(CHAVE_RECARGA); } catch { /* nada */ }
+  return modulo;
+}).catch(erro => {
+  let jaTentou = false;
+  try { jaTentou = sessionStorage.getItem(CHAVE_RECARGA) === '1'; } catch { /* modo privado */ }
+
+  if (!jaTentou) {
+    try { sessionStorage.setItem(CHAVE_RECARGA, '1'); } catch { /* nada */ }
+    window.location.reload();
+    // Promessa que nunca resolve: a tela some no recarregamento. Rejeitar
+    // aqui faria o erro aparecer por um instante antes de a página trocar.
+    return new Promise(() => {});
+  }
+
+  // Já recarregou e continua falhando — aí é problema de verdade (rede caiu,
+  // arquivo corrompido). Deixa subir para o ErrorBoundary, que avisa direito.
+  throw erro;
+}));
 const Dashboard              = lazy(() => import('./pages/Dashboard'));
 const Leaders                = lazy(() => import('./pages/Leaders'));
 const Agenda                 = lazy(() => import('./pages/Agenda'));

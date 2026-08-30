@@ -1,4 +1,4 @@
-const CACHE = 'rota2-v21';
+const CACHE = 'rota2-v22';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
 // Onde fica o que o service worker precisa para se reinscrever sozinho.
@@ -47,7 +47,15 @@ self.addEventListener('fetch', e => {
       caches.match(e.request).then(cached => {
         if (cached) return cached;
         return fetch(e.request).then(res => {
-          if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+          // Arquivo de uma versão antiga, já apagado na publicação: a regra
+          // "/* → index.html" da hospedagem devolve HTML com status 200. Se
+          // isso for guardado, o erro fica preso no aparelho para sempre.
+          // Devolvemos 404 de verdade para o app tratar como falha e recarregar.
+          const tipo = res.headers.get('content-type') || '';
+          if (!res.ok || tipo.includes('text/html')) {
+            return new Response('', { status: 404, statusText: 'Arquivo de versão antiga' });
+          }
+          caches.open(CACHE).then(c => c.put(e.request, res.clone()));
           return res;
         });
       })
