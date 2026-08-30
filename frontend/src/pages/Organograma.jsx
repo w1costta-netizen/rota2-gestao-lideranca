@@ -6,7 +6,7 @@ import api from '../api';
 import { useToast } from '../components/Toast';
 import { reportError } from '../lib/reportError';
 
-const ACCESS_LABEL = { master:'Master', admin:'Admin', supervisor:'Supervisor', lider:'Líder', colaborador:'Colaborador' };
+const ACCESS_LABEL = { master:'Master', admin:'Admin', supervisor:'Supervisor', lider:'Líder', colaborador:'Colaborador', suporte:'Suporte' };
 
 function Avatar({ pessoa, size = 44 }) {
   const [err, setErr] = useState(false);

@@ -29,6 +29,10 @@ export const DEFAULT_PERMISSIONS = {
   supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'listas', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade'],
   lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'agenda', 'listas', 'atas', 'escala', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade'],
   colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural', 'campanhas', 'listas', 'atas', 'produtividade'],
+  // Suporte técnico (Help Desk): enxerga só os Logs de Auditoria, de todas as
+  // lojas, para investigar erros. De propósito NÃO tem acesso a tarefas,
+  // vendas, estoque, equipe nem qualquer dado de operação dos clientes.
+  suporte:      ['logs'],
 };
 
 // Módulos premium: exigem que a loja tenha contratado o módulo além da

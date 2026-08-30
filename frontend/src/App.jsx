@@ -172,6 +172,14 @@ function AppContent() {
     return () => stopAlarmEngine();
   }, [userId]);
 
+  // A conta de Suporte só tem acesso aos Logs — sem isso ela cairia no
+  // dashboard e veria "Acesso restrito" logo ao entrar. O perfil continua
+  // liberado para ela poder trocar a própria senha.
+  useEffect(() => {
+    if (profile?.access_level !== 'suporte') return;
+    if (page !== 'logs' && page !== 'profile') setPage('logs');
+  }, [profile?.access_level, page, setPage]);
+
   if (session === undefined) return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0D0D0D' }}>
       <div style={{ color:'var(--primary)', fontSize:18, fontWeight:700 }}>Carregando...</div>

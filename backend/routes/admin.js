@@ -58,8 +58,16 @@ router.post('/users', async (req, res) => {
 
   if (!full_name || !email || !password) return res.status(400).json({ error: 'full_name, email e password são obrigatórios' });
 
+  // Só o master cria conta de Suporte: ela enxerga os logs de TODAS as lojas.
+  // Sem esta trava, o admin de um cliente poderia criar uma e ver os erros
+  // (e os dados dentro deles) das outras empresas.
+  if (access_level === 'suporte' && me.access_level !== 'master') {
+    return res.status(403).json({ error: 'Apenas o master pode criar contas de Suporte.' });
+  }
+
   const targetCompany = reqCompany !== undefined ? (reqCompany || null) : me.company;
-  if (me.access_level === 'master' && !targetCompany) {
+  // A conta de Suporte não pertence a uma loja — ela atende todas.
+  if (me.access_level === 'master' && !targetCompany && access_level !== 'suporte') {
     return res.status(400).json({ error: 'Selecione a loja do usuário.' });
   }
 
@@ -112,6 +120,13 @@ router.put('/users/:id', async (req, res) => {
   const { data: antes } = await supabase.from('profiles')
     .select('full_name, role, sector, access_level, active, permissions, phone, email')
     .eq('id', req.params.id).single();
+
+  // Mesma trava da criação: só o master mexe em conta de Suporte, seja para
+  // promover alguém ou para alterar uma conta de Suporte já existente.
+  const mexendoComSuporte = access_level === 'suporte' || antes?.access_level === 'suporte';
+  if (mexendoComSuporte && me.access_level !== 'master') {
+    return res.status(403).json({ error: 'Apenas o master pode gerenciar contas de Suporte.' });
+  }
 
   // Atualiza e-mail e/ou senha no Supabase Auth se fornecido
   const authUpdates = {};

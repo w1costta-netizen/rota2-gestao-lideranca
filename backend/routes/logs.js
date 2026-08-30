@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
   const { requester_id, company: queryCompany, acao, tabela, status, q, user_id, data_ini, data_fim } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!me || !['admin', 'master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
+  if (!me || !['admin', 'master', 'suporte'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
 
   let query = supabase
     .from('audit_logs')
@@ -51,8 +51,10 @@ router.get('/', async (req, res) => {
     .order('created_at', { ascending: false })
     .limit(500);
 
-  if (me.access_level === 'master') {
-    // Master vê todas as empresas, ou filtra por uma específica via query
+  // Master e Suporte veem todas as lojas (ou filtram uma via query). O suporte
+  // precisa disso para investigar erros de qualquer cliente — e é o único
+  // módulo que ele acessa, justamente para não enxergar dado de operação.
+  if (['master', 'suporte'].includes(me.access_level)) {
     if (queryCompany) query = query.eq('company', queryCompany);
   } else {
     // Admin vê a própria empresa + empresas extras liberadas para esta conta

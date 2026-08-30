@@ -29,6 +29,7 @@ const ACCESS_LEVELS = [
   { value: 'supervisor',  label: 'Supervisor',   desc: 'Vê escalas de todos os setores' },
   { value: 'lider',       label: 'Líder',        desc: 'Gerencia apenas seu setor' },
   { value: 'colaborador', label: 'Colaborador',  desc: 'Acesso mínimo — customize as permissões' },
+  { value: 'suporte',     label: 'Suporte',      desc: 'Só os Logs de Auditoria, de todas as lojas — não vê dados de operação' },
 ];
 
 const BADGE = {
@@ -36,6 +37,7 @@ const BADGE = {
   supervisor:  { bg:'#f59e0b15', color:'#fbbf24', border:'#f59e0b30', label:'Supervisor' },
   lider:       { bg:'#10b98115', color:'#34d399', border:'#10b98130', label:'Líder' },
   colaborador: { bg:'#64748b15', color:'#94a3b8', border:'#64748b30', label:'Colaborador' },
+  suporte:     { bg:'#06b6d415', color:'#22d3ee', border:'#06b6d430', label:'Suporte' },
 };
 
 function Badge({ level }) {
@@ -437,7 +439,10 @@ export default function UsersAdmin({ userId, profile }) {
       <div className="form-group">
         <label className="form-label">Nível de acesso</label>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-          {ACCESS_LEVELS.map(a => (
+          {/* Suporte só aparece para o master — é a conta que enxerga os logs
+              de todas as lojas, então o admin de um cliente não pode criá-la
+              (o backend também recusa, esta é a trava visual). */}
+          {ACCESS_LEVELS.filter(a => a.value !== 'suporte' || isMaster).map(a => (
             <label key={a.value} title={a.desc}
               style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4,
                 cursor:'pointer', padding:'10px 8px', borderRadius:8, textAlign:'center',

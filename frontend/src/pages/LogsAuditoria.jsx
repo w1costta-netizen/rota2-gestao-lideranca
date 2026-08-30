@@ -145,7 +145,9 @@ function formatData(iso) {
 
 export default function LogsAuditoria({ userId, profile }) {
   const toast = useToast();
-  const isMaster = profile?.access_level === 'master';
+  // O suporte (Help Desk) enxerga os logs de todas as lojas, igual ao master —
+  // é o único módulo a que ele tem acesso, para investigar erros dos clientes.
+  const isMaster = ['master', 'suporte'].includes(profile?.access_level);
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
