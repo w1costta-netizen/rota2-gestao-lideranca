@@ -126,6 +126,75 @@ router.post('/', async (req, res) => {
   res.json(nova);
 });
 
+// PUT /api/atas/:id — edita uma ata já criada (só quem criou ou admin/master)
+//
+// ASSINATURAS SÃO APAGADAS quando a ata é editada. Uma assinatura vale para
+// o texto que a pessoa leu; mantê-la depois de o conteúdo mudar faria o
+// documento afirmar que alguém concordou com algo que nunca viu. Todos
+// assinam de novo — é o que preserva o sentido da assinatura.
+router.put('/:id', async (req, res) => {
+  const me = await getRequester(req.body.requester_id);
+  if (!me) return res.status(401).json({ error: 'requester_id inválido' });
+
+  const { data: profileFull } = await supabase.from('profiles').select('access_level').eq('id', me.id).single();
+  const { data: ata } = await supabase.from('atas_reuniao').select('criado_por, company, titulo').eq('id', req.params.id).single();
+  if (!ata || ata.company !== me.company) return res.status(404).json({ error: 'Ata não encontrada' });
+
+  const podeEditar = ata.criado_por === me.id || ['admin', 'master'].includes(profileFull?.access_level);
+  if (!podeEditar) return res.status(403).json({ error: 'Só quem criou a ata ou um gestor pode editar' });
+
+  const { titulo, data, hora_inicio, hora_fim, local, participantes, pauta, decisoes, acoes, proxima_reuniao } = req.body;
+  if (!titulo?.trim() || !data) return res.status(400).json({ error: 'titulo e data são obrigatórios' });
+
+  const { data: nova, error } = await supabase.from('atas_reuniao').update({
+    titulo: titulo.trim(),
+    data,
+    hora_inicio: hora_inicio || null,
+    hora_fim: hora_fim || null,
+    local: local || null,
+    participantes: Array.isArray(participantes) ? participantes : [],
+    pauta: Array.isArray(pauta) ? pauta : [],
+    decisoes: Array.isArray(decisoes) ? decisoes : [],
+    acoes: Array.isArray(acoes) ? acoes : [],
+    proxima_reuniao: proxima_reuniao || null,
+    editado_em: new Date().toISOString(),
+    editado_por: me.id,
+  }).eq('id', req.params.id).select().single();
+
+  if (error) {
+    logError({ company: me.company, user_id: me.id, acao: 'editar_ata', tabela: 'atas_reuniao', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+
+  const { count: assinaturasAntes } = await supabase
+    .from('ata_assinaturas').select('user_id', { count: 'exact', head: true }).eq('ata_id', req.params.id);
+
+  if (assinaturasAntes) {
+    await supabase.from('ata_assinaturas').delete().eq('ata_id', req.params.id);
+  }
+
+  logAction({
+    company: me.company, user_id: me.id, acao: 'editar_ata', tabela: 'atas_reuniao',
+    antes: { titulo: ata.titulo },
+    depois: { titulo: nova.titulo, assinaturas_invalidadas: assinaturasAntes || 0 },
+  });
+
+  // Quem já tinha assinado precisa saber que a assinatura caiu — senão a ata
+  // fica esperando por uma assinatura que ninguém sabe que sumiu.
+  const avisar = (nova.participantes || []).filter(id => id !== me.id);
+  if (avisar.length) {
+    enviarPush(
+      avisar,
+      assinaturasAntes ? '🖋️ Ata alterada — assine de novo' : '📝 Ata de reunião alterada',
+      nova.titulo,
+      'ata',
+      { company: me.company, rota: req.originalUrl },
+    );
+  }
+
+  res.json({ ...nova, assinaturas_invalidadas: assinaturasAntes || 0 });
+});
+
 // DELETE /api/atas/:id?requester_id= — apaga a ata (só quem criou ou admin/master)
 router.delete('/:id', async (req, res) => {
   const me = await getRequester(req.query.requester_id);

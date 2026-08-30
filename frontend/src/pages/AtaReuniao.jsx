@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, X, FileDown, PenTool, ClipboardList, Search } from 'lucide-react';
+import { Plus, X, FileDown, PenTool, ClipboardList, Search, Pencil } from 'lucide-react';
 import Avatar from '../components/Avatar';
 import jsPDF from 'jspdf';
 import api from '../api';
@@ -165,6 +165,8 @@ function BlocoPauta({ pauta, indice, aoMudar, aoRemover }) {
 }
 
 const formVazio = () => ({
+  // id vazio = ata nova. Preenchido = está editando uma que já existe.
+  id: null,
   titulo: '', data: new Date().toISOString().slice(0, 10),
   hora_inicio: '', hora_fim: '', local: '',
   participantes: [], pautas: [], decisoes: [], acoes: [], proxima_reuniao: '',
@@ -214,6 +216,10 @@ export default function AtaReuniao({ userId, profile }) {
   // garante que nada se perca se o celular descarregar a página.
   useEffect(() => {
     if (!userId) return;
+    // Editando uma ata que já existe, o rascunho não é guardado: ele serve
+    // para não perder o que ainda não foi salvo em lugar nenhum. Guardar
+    // aqui faria a edição reaparecer depois como se fosse uma ata nova.
+    if (form.id) return;
     try {
       const temAlgo = form.titulo?.trim() || form.local?.trim() || form.participantes.length
         || form.pautas.length || form.decisoes.length || form.acoes.length;
@@ -288,27 +294,86 @@ export default function AtaReuniao({ userId, profile }) {
     setForm(f => ({ ...f, pautas: [...f.pautas, { titulo: novaPautaTitulo.trim(), subtemas: [], decisoes: [], acoes: [] }] }));
     setNovaPautaTitulo('');
   };
+  // Editar: só quem criou a ata ou um gestor. Mesma regra de quem pode
+  // apagar — quem pode remover o documento inteiro também pode corrigi-lo.
+  const podeEditarAta = !!detalhe && (
+    detalhe.criado_por === userId || ['admin', 'master'].includes(profile?.access_level)
+  );
+
+  const editarAta = () => {
+    const assinadas = detalhe.assinaturas?.length || 0;
+    if (assinadas && !window.confirm(
+      `${assinadas} pessoa(s) já assinaram esta ata.\n\n` +
+      'Editar apaga essas assinaturas e todos precisarão assinar de novo — ' +
+      'uma assinatura vale para o texto que a pessoa leu.\n\nContinuar?'
+    )) return;
+
+    // Carrega a ata no formulário, com os participantes no formato que a
+    // tela usa (objeto com nome), não só os identificadores.
+    setForm({
+      id: detalhe.id,
+      titulo: detalhe.titulo || '',
+      data: detalhe.data || new Date().toISOString().slice(0, 10),
+      hora_inicio: detalhe.hora_inicio || '',
+      hora_fim: detalhe.hora_fim || '',
+      local: detalhe.local || '',
+      participantes: (detalhe.participantes_detalhe || []).map(p => ({ id: p.id, full_name: p.full_name })),
+      pautas: (detalhe.pauta || []).map(p => ({
+        titulo: p.titulo,
+        subtemas: p.subtemas || [],
+        decisoes: p.decisoes || [],
+        acoes: p.acoes || [],
+      })),
+      decisoes: detalhe.decisoes || [],
+      acoes: detalhe.acoes || [],
+      proxima_reuniao: detalhe.proxima_reuniao || '',
+    });
+    setRascunhoRecuperado(false);
+    setAba('nova');
+  };
+
+  const cancelarEdicao = () => {
+    const id = form.id;
+    setForm(formVazio());
+    setRascunhoRecuperado(false);
+    if (id) abrirDetalhe(id); else setAba('lista');
+  };
+
   const criarAta = async () => {
     if (!form.titulo.trim()) return toast('Digite o título da reunião', 'error');
     setSalvando(true);
     try {
-      const r = await api.post('/atas', {
+      const corpo = {
         requester_id: userId,
         titulo: form.titulo, data: form.data, hora_inicio: form.hora_inicio, hora_fim: form.hora_fim,
         local: form.local, participantes: form.participantes.map(p => p.id),
-        pauta: form.pautas, decisoes: [], acoes: [],
+        pauta: form.pautas,
+        // Decisões e ações vivem dentro de cada assunto. Na edição, o que a
+        // ata antiga tinha solto é preservado — apagar seria perder parte do
+        // registro só porque o formato mudou.
+        decisoes: form.decisoes || [], acoes: form.acoes || [],
         proxima_reuniao: form.proxima_reuniao || null,
-      });
-      toast('Ata criada!');
+      };
+
+      const editando = !!form.id;
+      const r = editando
+        ? await api.put(`/atas/${form.id}`, corpo)
+        : await api.post('/atas', corpo);
+
+      const invalidadas = r.data?.assinaturas_invalidadas || 0;
+      toast(editando
+        ? (invalidadas ? `Ata atualizada. ${invalidadas} assinatura(s) precisam ser refeitas.` : 'Ata atualizada!')
+        : 'Ata criada!');
+
       // O rascunho só sai DEPOIS de a ata ser gravada com sucesso. Limpar
       // antes significaria perder tudo se o envio falhasse.
       try { localStorage.removeItem(chaveRascunho(userId)); } catch { /* nada */ }
       setRascunhoRecuperado(false);
       setForm(formVazio());
       await loadAtas();
-      abrirDetalhe(r.data.id);
+      abrirDetalhe(editando ? form.id : r.data.id);
     } catch (e) {
-      toast(e.response?.data?.error || 'Erro ao criar ata', 'error');
+      toast(e.response?.data?.error || 'Erro ao salvar a ata', 'error');
     }
     setSalvando(false);
   };
@@ -573,7 +638,12 @@ export default function AtaReuniao({ userId, profile }) {
           <p className="page-subtitle">Gestão do Tempo e Produtividade</p>
         </div>
         {aba !== 'nova' && (
-          <button className="btn btn-primary btn-sm" onClick={() => setAba('nova')}>
+          <button className="btn btn-primary btn-sm" onClick={() => {
+            // Se havia uma edição aberta, "Nova ata" começa de fato do zero —
+            // senão a pessoa editaria a ata antiga achando que criava outra.
+            if (form.id) setForm(formVazio());
+            setAba('nova');
+          }}>
             <Plus size={14}/> Nova ata
           </button>
         )}
@@ -589,7 +659,7 @@ export default function AtaReuniao({ userId, profile }) {
           padding: '9px 16px', fontSize: 13, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer',
           color: aba === 'nova' ? 'var(--primary)' : 'var(--text-muted)',
           borderBottom: aba === 'nova' ? '2px solid var(--primary)' : '2px solid transparent',
-        }}>Nova ata</button>
+        }}>{form.id ? 'Editando ata' : 'Nova ata'}</button>
       </div>
 
       {aba === 'lista' && (
@@ -620,6 +690,16 @@ export default function AtaReuniao({ userId, profile }) {
 
       {aba === 'nova' && (
         <div>
+          {form.id && (
+            <div className="card" style={{ marginBottom: 12, borderLeft: '4px solid #f59e0b', borderRadius: '0 12px 12px 0' }}>
+              <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+                <strong>Editando uma ata já registrada.</strong> Ao salvar, as assinaturas
+                existentes são apagadas e os participantes precisam assinar de novo — uma
+                assinatura vale para o texto que a pessoa leu.
+              </div>
+            </div>
+          )}
+
           {rascunhoRecuperado && (
             <div className="card" style={{ marginBottom: 12, display:'flex', alignItems:'center',
                                            justifyContent:'space-between', gap:12, flexWrap:'wrap',
@@ -785,8 +865,14 @@ export default function AtaReuniao({ userId, profile }) {
             <input className="input" type="date" value={form.proxima_reuniao} onChange={e => setForm(f => ({ ...f, proxima_reuniao: e.target.value }))}/>
           </div>
 
+          {form.id && (
+            <button className="btn btn-ghost" style={{ width: '100%', padding: 12, fontSize: 13 }} onClick={cancelarEdicao} disabled={salvando}>
+              Cancelar edição
+            </button>
+          )}
+
           <button className="btn btn-primary" style={{ width: '100%', padding: 14, fontSize: 14 }} onClick={criarAta} disabled={salvando}>
-            {salvando ? 'Criando...' : 'Criar ata'}
+            {salvando ? 'Salvando...' : (form.id ? 'Salvar alterações' : 'Criar ata')}
           </button>
         </div>
       )}
@@ -804,10 +890,25 @@ export default function AtaReuniao({ userId, profile }) {
                     {formatDateBR(detalhe.data)} · {detalhe.hora_inicio || '—'} às {detalhe.hora_fim || '—'} · {detalhe.local || '—'}
                   </p>
                 </div>
-                <button className="btn btn-primary btn-sm" onClick={gerarPDF}>
-                  <FileDown size={14}/> Gerar PDF
-                </button>
+                <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+                  {podeEditarAta && (
+                    <button className="btn btn-sm" onClick={editarAta}>
+                      <Pencil size={14}/> Editar
+                    </button>
+                  )}
+                  <button className="btn btn-primary btn-sm" onClick={gerarPDF}>
+                    <FileDown size={14}/> Gerar PDF
+                  </button>
+                </div>
               </div>
+
+              {detalhe.editado_em && (
+                <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
+                  ✏️ Editada em {new Date(detalhe.editado_em).toLocaleString('pt-BR')} — as assinaturas
+                  anteriores foram invalidadas e precisam ser refeitas.
+                </div>
+              )}
+
               <div style={{ marginTop: 12, fontSize: 13 }}>
                 <strong>Participantes: </strong>
                 {detalhe.participantes_detalhe.map(p => p.full_name).join(', ') || '—'}
