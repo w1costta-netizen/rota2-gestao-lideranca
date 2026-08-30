@@ -1,4 +1,4 @@
-const CACHE = 'rota2-v13';
+const CACHE = 'rota2-v14';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
 // Instala e pré-cacheia apenas assets imutáveis (sem index.html)
@@ -64,14 +64,41 @@ self.addEventListener('fetch', e => {
 // distinguir entre o push não ter chegado ao aparelho, o conteúdo não ter
 // sido lido, ou a notificação não ter sido exibida. As três falhas são
 // idênticas vistas do servidor.
-function relatar(rastreio, fase, detalhe) {
-  if (!rastreio) return Promise.resolve();
-  return fetch('/api/push/recebido', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rastreio, fase, detalhe: detalhe || {}, versao: CACHE }),
-  }).catch(() => {});
+async function relatar(rastreio, fase, detalhe) {
+  if (!rastreio) return;
+  // Identifica QUAL aparelho está relatando. Sem isto, quando o push chega
+  // num aparelho e não no outro, os dois casos ficam indistinguíveis: só se
+  // vê "um relato" sem saber de quem. O endereço completo é secreto, então
+  // vai só o serviço de destino e o final, o bastante para diferenciar.
+  let aparelho = 'desconhecido';
+  try {
+    const sub = await self.registration.pushManager.getSubscription();
+    const url = (sub && sub.endpoint) || '';
+    const servico = url.includes('apple') ? 'iPhone/iPad'
+      : url.includes('googleapis') ? 'Chrome/Android'
+      : url.includes('mozilla') ? 'Firefox'
+      : url ? 'outro' : 'sem inscrição';
+    aparelho = servico + (url ? ' …' + url.slice(-8) : '');
+  } catch { /* segue sem identificar */ }
+
+  try {
+    await fetch('/api/push/recebido', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rastreio, fase, detalhe: { aparelho, ...(detalhe || {}) }, versao: CACHE }),
+    });
+  } catch { /* relatar nunca pode atrapalhar a notificação */ }
 }
+
+// Responde qual versão está ativa. É o que diz se o aparelho realmente
+// trocou o código: o iOS costuma segurar o service worker antigo, e um
+// aparelho rodando código velho parece exatamente igual a um aparelho que
+// não está recebendo push.
+self.addEventListener('message', event => {
+  if (event.data && event.data.type === 'VERSAO' && event.ports && event.ports[0]) {
+    event.ports[0].postMessage({ versao: CACHE });
+  }
+});
 
 // Exibe notificação push
 self.addEventListener('push', event => {

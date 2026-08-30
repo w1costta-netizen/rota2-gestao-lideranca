@@ -77,6 +77,27 @@ export default function Profile() {
     }
   }
 
+  // Pergunta ao service worker qual versão está ativa NESTE aparelho. O iOS
+  // costuma segurar o código antigo, e um aparelho rodando versão velha
+  // parece exatamente igual a um que não está recebendo push.
+  const [versaoSW, setVersaoSW] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.ready.then(reg => {
+      const alvo = reg.active;
+      if (!alvo) return;
+      const canal = new MessageChannel();
+      const relogio = setTimeout(() => { if (vivo) setVersaoSW('sem resposta'); }, 3000);
+      canal.port1.onmessage = e => {
+        clearTimeout(relogio);
+        if (vivo) setVersaoSW(e.data?.versao || 'sem resposta');
+      };
+      alvo.postMessage({ type: 'VERSAO' }, [canal.port2]);
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+
   useEffect(() => {
     if (pushStatus === 'granted') carregarAparelhosPush();
   }, [pushStatus, session?.user?.id]);
@@ -320,6 +341,11 @@ export default function Profile() {
                   {aparelhosPush.length === 0
                     ? '⚠️ Nenhum aparelho registrado — recarregue esta página.'
                     : `Aparelhos: ${aparelhosPush.map(a => a.tipo).join(', ')}`}
+                </div>
+              )}
+              {versaoSW && (
+                <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:2 }}>
+                  Versão neste aparelho: <strong>{versaoSW}</strong>
                 </div>
               )}
             </div>
