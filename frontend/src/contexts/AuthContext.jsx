@@ -74,6 +74,13 @@ export function AuthProvider({ children }) {
       localStorage.removeItem('current_page');
       localStorage.removeItem('master_viewing_store');
     } catch { /* aba anônima */ }
+
+    // Desfaz a inscrição de notificação deste aparelho. Sem isto, quem sai
+    // continua recebendo push nesta máquina — e com o chat isso significa a
+    // prévia de mensagem privada aparecendo para quem usar o aparelho
+    // depois, o que em loja é o computador compartilhado.
+    await removerInscricaoDesteAparelho();
+
     await supabase.auth.signOut();
   }
 

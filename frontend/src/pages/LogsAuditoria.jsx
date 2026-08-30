@@ -72,6 +72,9 @@ const ACAO_LABEL = {
   excluir_relato_diario: 'Excluiu relato do Diário',
   listar_diario: 'Consultou o Diário de Bordo',
   criar_categoria_diario: 'Criou categoria no Diário',
+
+  // Conversas
+  enviar_mensagem: 'Enviou mensagem',
   excluir_categoria_diario: 'Removeu categoria do Diário',
   listar_anotacoes: 'Carregou as anotações',
 

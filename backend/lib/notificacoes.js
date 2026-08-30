@@ -47,6 +47,7 @@ const PAGINA_POR_TIPO = {
   mural:      'mural',
   comunicado: 'comunicados',
   ata:        'atas',
+  chat:       'chat',
   loja:       'dashboard',
   geral:      'dashboard',
 };

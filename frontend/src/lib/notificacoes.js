@@ -148,6 +148,30 @@ export async function enviarTeste(userId) {
   return data;
 }
 
+// Desfaz a inscrição DESTE aparelho. Chamada ao sair da conta.
+//
+// Em loja o computador é compartilhado: sem isto, quem saiu continuaria
+// recebendo notificação naquela máquina — inclusive a prévia de mensagem
+// privada, na tela de quem ficou depois.
+export async function removerInscricaoDesteAparelho() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    const registro = await navigator.serviceWorker.ready;
+    const inscricao = await registro.pushManager.getSubscription();
+    if (!inscricao) return;
+
+    // Some do banco (para o servidor parar de enviar) e do navegador (para
+    // o aparelho parar de aceitar). Só um dos dois deixaria brecha.
+    await api.delete('/notificacoes/inscricao', { data: { endpoint: inscricao.endpoint } }).catch(() => {});
+    await inscricao.unsubscribe().catch(() => {});
+
+    // A configuração guardada traz o id de quem estava logado: sair sem
+    // apagá-la deixaria o service worker se reinscrevendo por essa pessoa.
+    const deposito = await caches.open(DEPOSITO_PUSH);
+    await deposito.delete(CONFIG_PUSH);
+  } catch { /* sair da conta nunca pode falhar por causa disto */ }
+}
+
 // Onde a pessoa está registrada para receber. Falha aqui é silenciosa: é
 // informação de apoio e não pode atrapalhar a tela de perfil.
 export async function meusAparelhos(userId) {

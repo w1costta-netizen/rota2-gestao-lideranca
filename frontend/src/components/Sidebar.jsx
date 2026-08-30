@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, PenTool } from 'lucide-react';
+import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, MessageCircle, PenTool } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission } from '../lib/permissions';
 import { useTheme } from '../contexts/ThemeContext';
@@ -32,6 +32,7 @@ const NAV_GROUPS = [
       { id: 'comunicados', label: 'Comunicados', icon: Megaphone,   perm: 'comunicados' },
       { id: 'mural',       label: 'Mural',       icon: LayoutList,  perm: 'mural' },
       { id: 'diario',      label: 'Diário de Bordo', icon: BookOpen, perm: 'diario' },
+      { id: 'chat',        label: 'Conversas',   icon: MessageCircle, perm: 'chat' },
     ],
   },
   {

@@ -44,6 +44,23 @@ router.post('/inscrever', async (req, res) => {
   res.json({ ok: true, servico: servicoDoEndereco(inscricao.endpoint) });
 });
 
+// DELETE /api/notificacoes/inscricao  { endpoint }
+//
+// Chamado ao sair da conta. Em loja o computador é compartilhado: sem isto,
+// quem saiu continuaria recebendo push naquela máquina — inclusive a prévia
+// de mensagem privada, na tela de quem ficou.
+//
+// Não exige identificação: quem conhece o endereço da inscrição é o próprio
+// aparelho, e o pior que alguém faria com ele é parar de receber notificação.
+router.delete('/inscricao', async (req, res) => {
+  const { endpoint } = req.body || {};
+  if (!endpoint) return res.status(400).json({ error: 'endpoint obrigatório' });
+
+  const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 // GET /api/notificacoes/meus-aparelhos?requester_id=
 // Mostra onde a pessoa está registrada para receber. Serve para explicar o
 // caso clássico de a notificação chegar no computador e não no celular:

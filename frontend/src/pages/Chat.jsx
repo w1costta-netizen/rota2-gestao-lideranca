@@ -1,0 +1,363 @@
+import React, { useEffect, useRef, useState } from 'react';
+import { Send, Plus, Search, X, ArrowLeft, MessageCircle } from 'lucide-react';
+import api from '../api';
+import { useToast } from '../components/Toast';
+import Avatar from '../components/Avatar';
+
+// ─────────────────────────────────────────────────────────────
+// Conversas — chat entre duas pessoas da mesma loja.
+//
+// A tela busca mensagens novas a cada poucos segundos enquanto está aberta,
+// em vez de manter conexão permanente. Conexão permanente exigiria abrir o
+// banco direto para o navegador, que é o tipo de mudança que já causou
+// vazamento entre lojas neste app. Alguns segundos ninguém percebe numa
+// conversa de trabalho; o risco, sim.
+// ─────────────────────────────────────────────────────────────
+const INTERVALO_MENSAGENS = 4000;   // conversa aberta
+const INTERVALO_LISTA     = 15000;  // lista de conversas
+
+function horaCurta(iso) {
+  return new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+function diaCurto(iso) {
+  const d = new Date(iso);
+  const hoje = new Date();
+  const ontem = new Date(); ontem.setDate(hoje.getDate() - 1);
+  const mesmoDia = (a, b) => a.toDateString() === b.toDateString();
+  if (mesmoDia(d, hoje))  return 'Hoje';
+  if (mesmoDia(d, ontem)) return 'Ontem';
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+export default function Chat({ userId }) {
+  const toast = useToast();
+  const [conversas, setConversas] = useState([]);
+  const [aberta, setAberta] = useState(null);
+  const [mensagens, setMensagens] = useState([]);
+  const [texto, setTexto] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [carregando, setCarregando] = useState(true);
+  const [escolhendo, setEscolhendo] = useState(false);
+  const [contatos, setContatos] = useState([]);
+  const [buscaContato, setBuscaContato] = useState('');
+
+  const fimRef = useRef(null);
+  const abertaRef = useRef(null);
+  abertaRef.current = aberta;
+
+  const carregarConversas = async () => {
+    try {
+      const r = await api.get(`/chat/conversas?requester_id=${userId}`);
+      setConversas(r.data || []);
+    } catch { /* silencioso: é atualização de fundo */ }
+    setCarregando(false);
+  };
+
+  useEffect(() => {
+    if (!userId) return;
+    carregarConversas();
+    const t = setInterval(carregarConversas, INTERVALO_LISTA);
+    return () => clearInterval(t);
+  }, [userId]);
+
+  // Busca só o que chegou depois da última mensagem já exibida — é o que
+  // deixa a atualização barata o bastante para rodar a cada 4 segundos.
+  const buscarNovas = async (conversaId, desde) => {
+    try {
+      const p = new URLSearchParams({ requester_id: userId });
+      if (desde) p.set('depois', desde);
+      const r = await api.get(`/chat/conversas/${conversaId}/mensagens?${p.toString()}`);
+      const novas = r.data || [];
+      if (!novas.length) return;
+      setMensagens(atuais => {
+        const jaTem = new Set(atuais.map(m => m.id));
+        return [...atuais, ...novas.filter(m => !jaTem.has(m.id))];
+      });
+    } catch { /* silencioso */ }
+  };
+
+  const abrir = async (conversa) => {
+    setAberta(conversa);
+    setMensagens([]);
+    try {
+      const r = await api.get(`/chat/conversas/${conversa.id}/mensagens?requester_id=${userId}`);
+      setMensagens(r.data || []);
+      await api.post(`/chat/conversas/${conversa.id}/lida`, { requester_id: userId });
+      // Zera na tela sem esperar o próximo ciclo da lista.
+      setConversas(lista => lista.map(c => c.id === conversa.id ? { ...c, nao_lidas: 0 } : c));
+    } catch {
+      toast('Não foi possível abrir a conversa.', 'error');
+    }
+  };
+
+  useEffect(() => {
+    if (!aberta) return;
+    const t = setInterval(() => {
+      const atual = abertaRef.current;
+      if (!atual) return;
+      setMensagens(atuais => {
+        const ultima = atuais.length ? atuais[atuais.length - 1].created_at : null;
+        buscarNovas(atual.id, ultima);
+        return atuais;
+      });
+    }, INTERVALO_MENSAGENS);
+    return () => clearInterval(t);
+  }, [aberta?.id]);
+
+  // Sempre que chega mensagem, desce para o fim — senão a nova fica
+  // escondida abaixo e a pessoa acha que nada aconteceu.
+  useEffect(() => { fimRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensagens.length]);
+
+  const enviar = async () => {
+    const conteudo = texto.trim();
+    if (!conteudo || !aberta || enviando) return;
+    setEnviando(true);
+    setTexto('');
+    try {
+      const r = await api.post('/chat/mensagens', {
+        requester_id: userId, conversa_id: aberta.id, texto: conteudo,
+      });
+      setMensagens(m => [...m, r.data]);
+      setConversas(lista => lista.map(c => c.id === aberta.id
+        ? { ...c, ultima_texto: conteudo.slice(0, 140), ultima_em: r.data.created_at, ultima_minha: true }
+        : c));
+    } catch (e) {
+      setTexto(conteudo); // devolve o que a pessoa escreveu, para não perder
+      toast(e?.response?.data?.error || 'Não foi possível enviar.', 'error');
+    }
+    setEnviando(false);
+  };
+
+  const abrirEscolha = async () => {
+    setEscolhendo(true);
+    setBuscaContato('');
+    try {
+      const r = await api.get(`/chat/contatos?requester_id=${userId}`);
+      setContatos(r.data || []);
+    } catch {
+      toast('Não foi possível carregar os contatos.', 'error');
+    }
+  };
+
+  const conversarCom = async (pessoa) => {
+    try {
+      const r = await api.post('/chat/conversas', { requester_id: userId, com_id: pessoa.id });
+      setEscolhendo(false);
+      await carregarConversas();
+      abrir({ ...r.data, outro: r.data.outro || pessoa });
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Não foi possível abrir a conversa.', 'error');
+    }
+  };
+
+  const termoContato = buscaContato.trim().toLowerCase();
+  const contatosVisiveis = termoContato
+    ? contatos.filter(c => (c.full_name || '').toLowerCase().includes(termoContato))
+    : contatos;
+
+  // No celular a tela mostra uma coisa de cada vez: lista OU conversa.
+  const noCelular = typeof window !== 'undefined' && window.innerWidth < 768;
+  const mostrarLista = !noCelular || !aberta;
+  const mostrarConversa = !noCelular || !!aberta;
+
+  return (
+    <div>
+      <div style={{ marginBottom:14 }}>
+        <h1 style={{ fontSize:22, fontWeight:700, display:'flex', alignItems:'center', gap:9 }}>
+          <MessageCircle size={20} style={{ color:'var(--primary)' }}/> Conversas
+        </h1>
+        <p style={{ color:'var(--text-muted)', fontSize:13, marginTop:2 }}>
+          Converse com quem é da sua loja, sem sair do app.
+        </p>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns: noCelular ? '1fr' : '300px 1fr', gap:16, alignItems:'start' }}>
+
+        {mostrarLista && (
+          <div className="card" style={{ padding:0, overflow:'hidden' }}>
+            <div style={{ padding:'12px 14px', borderBottom:'1px solid var(--border)' }}>
+              <button className="btn btn-primary" style={{ width:'100%' }} onClick={abrirEscolha}>
+                <Plus size={15}/> Nova conversa
+              </button>
+            </div>
+            {carregando ? (
+              <div style={{ padding:28, textAlign:'center', color:'var(--text-muted)', fontSize:13 }}>Carregando...</div>
+            ) : conversas.length === 0 ? (
+              <div style={{ padding:28, textAlign:'center', color:'var(--text-muted)', fontSize:13 }}>
+                Nenhuma conversa ainda.
+              </div>
+            ) : (
+              <div style={{ maxHeight:'62vh', overflowY:'auto' }}>
+                {conversas.map(c => (
+                  <button key={c.id} onClick={() => abrir(c)}
+                    style={{ width:'100%', textAlign:'left', display:'flex', gap:10, alignItems:'center',
+                             padding:'11px 14px', cursor:'pointer', border:'none',
+                             borderBottom:'1px solid var(--border)',
+                             background: aberta?.id === c.id ? 'var(--surface-1)' : 'transparent' }}>
+                    <Avatar url={c.outro?.avatar_url} name={c.outro?.full_name} size={36}/>
+                    <div style={{ minWidth:0, flex:1 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
+                        <span style={{ fontSize:13.5, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {c.outro?.full_name || 'Alguém'}
+                        </span>
+                        {c.ultima_em && (
+                          <span style={{ fontSize:11, color:'var(--text-muted)', flexShrink:0 }}>{diaCurto(c.ultima_em)}</span>
+                        )}
+                      </div>
+                      <div style={{ display:'flex', justifyContent:'space-between', gap:8, alignItems:'center', marginTop:2 }}>
+                        <span style={{ fontSize:12, color:'var(--text-muted)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {c.ultima_texto ? `${c.ultima_minha ? 'Você: ' : ''}${c.ultima_texto}` : 'Sem mensagens'}
+                        </span>
+                        {c.nao_lidas > 0 && (
+                          <span style={{ background:'var(--primary)', color:'#fff', borderRadius:99,
+                                         fontSize:10.5, fontWeight:700, padding:'2px 7px', flexShrink:0 }}>
+                            {c.nao_lidas}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {mostrarConversa && (
+          <div className="card" style={{ padding:0, display:'flex', flexDirection:'column', height:'70vh' }}>
+            {!aberta ? (
+              <div style={{ margin:'auto', textAlign:'center', color:'var(--text-muted)', padding:24 }}>
+                <MessageCircle size={30} style={{ opacity:.4, marginBottom:10 }}/>
+                <div style={{ fontSize:13.5 }}>Escolha uma conversa ou comece uma nova.</div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px',
+                              borderBottom:'1px solid var(--border)', flexShrink:0 }}>
+                  {noCelular && (
+                    <button onClick={() => setAberta(null)} aria-label="Voltar para a lista"
+                      style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text)', padding:6, margin:-6 }}>
+                      <ArrowLeft size={18}/>
+                    </button>
+                  )}
+                  <Avatar url={aberta.outro?.avatar_url} name={aberta.outro?.full_name} size={34}/>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:14, fontWeight:600 }}>{aberta.outro?.full_name || 'Alguém'}</div>
+                    {aberta.outro?.role && (
+                      <div style={{ fontSize:11.5, color:'var(--text-muted)' }}>{aberta.outro.role}</div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ flex:1, overflowY:'auto', padding:'14px', display:'flex', flexDirection:'column', gap:8 }}>
+                  {mensagens.length === 0 && (
+                    <div style={{ margin:'auto', color:'var(--text-muted)', fontSize:13 }}>
+                      Nenhuma mensagem ainda. Escreva a primeira.
+                    </div>
+                  )}
+                  {mensagens.map((m, i) => {
+                    const minha = m.de_id === userId;
+                    const anterior = mensagens[i - 1];
+                    const novoDia = !anterior || diaCurto(anterior.created_at) !== diaCurto(m.created_at);
+                    return (
+                      <React.Fragment key={m.id}>
+                        {novoDia && (
+                          <div style={{ textAlign:'center', fontSize:11, color:'var(--text-muted)', margin:'6px 0' }}>
+                            {diaCurto(m.created_at)}
+                          </div>
+                        )}
+                        <div style={{ display:'flex', justifyContent: minha ? 'flex-end' : 'flex-start' }}>
+                          <div style={{ maxWidth:'78%', padding:'8px 12px', borderRadius:14,
+                                        background: minha ? 'var(--primary)' : 'var(--surface-1)',
+                                        color: minha ? '#fff' : 'var(--text)',
+                                        borderBottomRightRadius: minha ? 4 : 14,
+                                        borderBottomLeftRadius: minha ? 14 : 4 }}>
+                            <div style={{ fontSize:13.5, lineHeight:1.5, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
+                              {m.texto}
+                            </div>
+                            <div style={{ fontSize:10, marginTop:3, textAlign:'right',
+                                          color: minha ? 'rgba(255,255,255,.75)' : 'var(--text-muted)' }}>
+                              {horaCurta(m.created_at)}
+                            </div>
+                          </div>
+                        </div>
+                      </React.Fragment>
+                    );
+                  })}
+                  <div ref={fimRef}/>
+                </div>
+
+                <div style={{ display:'flex', gap:8, padding:'11px 14px', borderTop:'1px solid var(--border)', flexShrink:0 }}>
+                  <textarea
+                    value={texto} rows={1}
+                    onChange={e => setTexto(e.target.value)}
+                    onKeyDown={e => {
+                      // Enter envia; Shift+Enter quebra linha. No celular o
+                      // teclado manda quebra de linha, então o botão continua
+                      // sendo o caminho principal.
+                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
+                    }}
+                    placeholder="Escreva uma mensagem"
+                    style={{ flex:1, resize:'none', padding:'9px 12px', borderRadius:'var(--radius)',
+                             border:'1px solid var(--border)', background:'var(--surface)',
+                             color:'var(--text)', fontSize:13.5, fontFamily:'inherit', maxHeight:100 }}/>
+                  <button className="btn btn-primary" onClick={enviar} disabled={!texto.trim() || enviando}
+                    aria-label="Enviar mensagem" style={{ flexShrink:0 }}>
+                    <Send size={16}/>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {escolhendo && (
+        <div onClick={() => setEscolhendo(false)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000,
+                   display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div onClick={e => e.stopPropagation()} className="card" style={{ width:'100%', maxWidth:420, padding:0, overflow:'hidden' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'14px 16px 10px' }}>
+              <h2 style={{ fontSize:16, fontWeight:700 }}>Nova conversa</h2>
+              <button onClick={() => setEscolhendo(false)} aria-label="Fechar"
+                style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:6, margin:-6 }}>
+                <X size={18}/>
+              </button>
+            </div>
+            <div style={{ padding:'0 16px 12px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, background:'var(--surface-1)',
+                            borderRadius:'var(--radius)', padding:'8px 11px' }}>
+                <Search size={14} style={{ color:'var(--text-muted)', flexShrink:0 }}/>
+                <input value={buscaContato} onChange={e => setBuscaContato(e.target.value)} autoFocus
+                  placeholder="Buscar pessoa"
+                  style={{ border:'none', background:'none', outline:'none', width:'100%', fontSize:13, color:'var(--text)' }}/>
+              </div>
+            </div>
+            <div style={{ maxHeight:'46vh', overflowY:'auto', borderTop:'1px solid var(--border)' }}>
+              {contatosVisiveis.length === 0 ? (
+                <div style={{ padding:26, textAlign:'center', color:'var(--text-muted)', fontSize:13 }}>
+                  Ninguém encontrado.
+                </div>
+              ) : contatosVisiveis.map(p => (
+                <button key={p.id} onClick={() => conversarCom(p)}
+                  style={{ width:'100%', textAlign:'left', display:'flex', gap:10, alignItems:'center',
+                           padding:'10px 16px', cursor:'pointer', border:'none', background:'transparent',
+                           borderBottom:'1px solid var(--border)' }}>
+                  <Avatar url={p.avatar_url} name={p.full_name} size={32}/>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:13.5, fontWeight:600 }}>{p.full_name}</div>
+                    {(p.role || p.sector) && (
+                      <div style={{ fontSize:11.5, color:'var(--text-muted)' }}>
+                        {[p.role, p.sector].filter(Boolean).join(' · ')}
+                      </div>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

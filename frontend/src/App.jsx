@@ -20,6 +20,7 @@ const Agenda                 = lazy(() => import('./pages/Agenda'));
 const Listas                 = lazy(() => import('./pages/Listas'));
 const Anotacoes              = lazy(() => import('./pages/Anotacoes'));
 const DiarioBordo            = lazy(() => import('./pages/DiarioBordo'));
+const Chat                   = lazy(() => import('./pages/Chat'));
 const AtaReuniao             = lazy(() => import('./pages/AtaReuniao'));
 const Scale                  = lazy(() => import('./pages/Scale'));
 const Profile                = lazy(() => import('./pages/Profile'));
@@ -278,6 +279,7 @@ function AppContent() {
     tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
     mural:        () => has('mural')      ? <Mural userId={userId} profile={effectiveProfile} />                    : <AccessDenied />,
     diario:       () => has('diario')     ? <DiarioBordo userId={userId} profile={effectiveProfile} />              : <AccessDenied />,
+    chat:         () => has('chat')       ? <Chat userId={userId} />                                                : <AccessDenied />,
     campanhas:    () => has('campanhas')  ? <Campanhas userId={userId} profile={effectiveProfile} />                : <AccessDenied />,
     relatorios:        () => has('relatorios')        ? <RelatoriosFotograficos userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     conferencia_secao: () => has('conferencia_secao') ? <ConferenciaSecao userId={userId} profile={effectiveProfile} />      : <AccessDenied />,
