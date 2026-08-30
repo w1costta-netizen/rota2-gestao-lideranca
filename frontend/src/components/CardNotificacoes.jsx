@@ -3,7 +3,7 @@ import { Bell, BellOff, Smartphone, RefreshCw } from 'lucide-react';
 import { useToast } from './Toast';
 import {
   situacaoAtual, ativarNotificacoes, enviarTeste, ehIOS,
-  versaoAtiva, atualizarAplicativo, VERSAO_ESPERADA,
+  versaoAtiva, atualizarAplicativo, consumirAvisoDeReinstalacao, VERSAO_ESPERADA,
 } from '../lib/notificacoes';
 
 // ─────────────────────────────────────────────────────────────
@@ -20,7 +20,12 @@ export default function CardNotificacoes({ userId }) {
   const [ocupado, setOcupado]   = useState(false);
   const [versao, setVersao]     = useState(null);
 
-  useEffect(() => { versaoAtiva().then(setVersao); }, []);
+  useEffect(() => {
+    versaoAtiva().then(setVersao);
+    if (consumirAvisoDeReinstalacao()) {
+      toast('O app foi reinstalado neste aparelho. Toque em "Registrar aparelho" para voltar a receber notificações.');
+    }
+  }, []);
 
   const desatualizado = versao !== null && versao !== VERSAO_ESPERADA;
 

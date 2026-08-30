@@ -115,6 +115,19 @@ export async function enviarTeste(userId) {
 // ─────────────────────────────────────────────────────────────
 export const VERSAO_ESPERADA = 'rota2-v18';
 
+const AVISO_REINSTALACAO = 'rota_push_precisa_registrar';
+
+// Consumido uma única vez: o recado só faz sentido logo após a reinstalação.
+export function consumirAvisoDeReinstalacao() {
+  try {
+    if (localStorage.getItem(AVISO_REINSTALACAO) !== '1') return false;
+    localStorage.removeItem(AVISO_REINSTALACAO);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function versaoAtiva() {
   if (!('serviceWorker' in navigator)) return null;
   try {
@@ -135,17 +148,44 @@ export async function versaoAtiva() {
   }
 }
 
-// Busca a versão nova e a coloca no ar. O service worker já usa skipWaiting
-// e clients.claim, então assim que a nova chega ela assume na hora.
+// Coloca a versão nova no ar. Tenta o caminho normal e, se ele não resolver,
+// recorre a apagar o registro e começar do zero.
+//
+// Devolve como terminou, para a tela poder avisar quando a inscrição precisa
+// ser refeita — apagar o registro leva a inscrição junto, e sem avisar a
+// pessoa ficaria achando que está tudo certo enquanto nada chega.
 export async function atualizarAplicativo() {
   const registro = await navigator.serviceWorker.ready;
-  await registro.update();
 
-  // Dá tempo de instalar e assumir antes de recarregar; sem esta espera a
-  // página voltaria com o service worker antigo ainda no comando.
+  try { await registro.update(); } catch { /* tenta o resto mesmo assim */ }
+
+  // Espera instalar e assumir. Sem isso a página voltaria com o service
+  // worker antigo ainda no comando.
   for (let i = 0; i < 10; i++) {
     await new Promise(r => setTimeout(r, 500));
-    if ((await versaoAtiva()) === VERSAO_ESPERADA) break;
+    if ((await versaoAtiva()) === VERSAO_ESPERADA) {
+      window.location.reload();
+      return { via: 'atualizacao' };
+    }
   }
+
+  // O caminho normal falhou. Apagar o registro força o navegador a buscar
+  // tudo de novo na próxima abertura — é o que destrava aparelho preso numa
+  // versão antiga, e no iOS isso acontece com frequência.
+  try {
+    const registros = await navigator.serviceWorker.getRegistrations();
+    await Promise.all(registros.map(r => r.unregister()));
+    if ('caches' in window) {
+      const chaves = await caches.keys();
+      await Promise.all(chaves.map(k => caches.delete(k)));
+    }
+  } catch { /* segue para o recarregamento de qualquer forma */ }
+
+  // A página recarrega antes de conseguir mostrar qualquer aviso, então o
+  // recado fica guardado para a tela exibir do outro lado. Sem ele a pessoa
+  // acharia que está tudo certo enquanto a inscrição não existe mais.
+  try { localStorage.setItem(AVISO_REINSTALACAO, '1'); } catch { /* aba anônima */ }
+
   window.location.reload();
+  return { via: 'reinstalacao' };
 }

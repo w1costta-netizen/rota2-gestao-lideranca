@@ -85,9 +85,16 @@ router.post('/teste', async (req, res) => {
     return res.status(404).json({ error: 'Nenhum aparelho registrado. Ative as notificações primeiro.' });
   }
 
+  const TITULO   = 'Teste Rota Líder';
+  const MENSAGEM = 'Se você está vendo isso, as notificações funcionam.';
+
+  // Vai nos dois formatos de nome de propósito. O aparelho pode estar com um
+  // service worker antigo, que lê `title`/`body`; sem isso ele exibiria a
+  // notificação escrita "undefined" — foi o que aconteceu no primeiro teste.
+  // O service worker atual lê `titulo`/`mensagem` e ignora o resto.
   const conteudo = JSON.stringify({
-    titulo: 'Teste Rota Líder',
-    mensagem: 'Se você está vendo isso, as notificações funcionam.',
+    titulo: TITULO, mensagem: MENSAGEM,
+    title: TITULO,  body: MENSAGEM,
   });
 
   const aparelhos = [];
