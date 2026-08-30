@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, BellOff, Smartphone, RefreshCw } from 'lucide-react';
+import { Bell, BellOff, Smartphone, RefreshCw, HelpCircle, ChevronDown } from 'lucide-react';
 import { useToast } from './Toast';
 import {
   situacaoAtual, ativarNotificacoes, enviarTeste, ehIOS,
@@ -19,6 +19,7 @@ export default function CardNotificacoes({ userId }) {
   const [situacao, setSituacao] = useState(() => situacaoAtual());
   const [ocupado, setOcupado]   = useState(false);
   const [versao, setVersao]     = useState(null);
+  const [ajuda, setAjuda]       = useState(false);
 
   useEffect(() => {
     versaoAtiva().then(setVersao);
@@ -84,8 +85,38 @@ export default function CardNotificacoes({ userId }) {
 
   const ativo = situacao.estado === 'permitido';
 
+  // ─────────────────────────────────────────────────────────────
+  // Orientação para quem tem a notificação ativada e mesmo assim não
+  // recebe. A ordem não é aleatória: é a ordem em que essas causas
+  // realmente aparecem. As duas primeiras são configurações do próprio
+  // celular que não dão nenhum sinal de que estão agindo — a notificação
+  // simplesmente não chega, e a pessoa conclui que o app está quebrado.
+  // ─────────────────────────────────────────────────────────────
+  const VERIFICACOES = ehIOS() ? [
+    ['Bateria amarela na barra de cima',
+     'É o Modo de Baixo Consumo. Ele segura as notificações para poupar bateria. Coloque para carregar até passar de 20%.'],
+    ['Ícone de lua ou cama na barra de cima',
+     'É um Foco ativo (Sono, Não Perturbe, Trabalho). Ele silencia notificações. Desligue, ou libere o Rota Líder dentro do Foco.'],
+    ['Ajustes › Notificações › Rota Líder',
+     'Confira: "Permitir Notificações" ligado, "Avisos" marcado e entrega "Imediata" — se estiver em "Resumo Agendado", os avisos só chegam no horário do resumo.'],
+    ['O app precisa estar na tela de início',
+     'No iPhone, notificação só funciona no app instalado e aberto pelo ícone. Pelo Safari não funciona.'],
+    ['Versão do app neste aparelho',
+     'Se aparecer o aviso de desatualizado aqui em cima, toque em "Atualizar app". É essa parte que exibe as notificações.'],
+  ] : [
+    ['Economia de bateria',
+     'Modo de economia costuma segurar notificações. Desative para o navegador ou coloque para carregar.'],
+    ['Permissão no navegador',
+     'Clique no cadeado ao lado do endereço e confirme que as notificações estão permitidas para este site.'],
+    ['Não Perturbe / Assistente de Foco',
+     'No Windows e no Android, esse modo silencia os avisos sem dar nenhum sinal.'],
+    ['Versão do app neste aparelho',
+     'Se aparecer o aviso de desatualizado aqui em cima, toque em "Atualizar app". É essa parte que exibe as notificações.'],
+  ];
+
   return (
-    <div className="card" style={{ marginBottom: 20, display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap' }}>
+    <div className="card" style={{ marginBottom: 20 }}>
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:16, flexWrap:'wrap' }}>
       <div style={{ display:'flex', alignItems:'center', gap:12, minWidth:0 }}>
         {situacao.estado === 'precisa_instalar'
           ? <Smartphone size={20} style={{ color:'var(--accent)', flexShrink:0 }}/>
@@ -145,6 +176,44 @@ export default function CardNotificacoes({ userId }) {
           </>
         )}
       </div>
+    </div>
+
+    {ativo && (
+      <div style={{ marginTop:14, borderTop:'1px solid var(--border)', paddingTop:12 }}>
+        <button
+          onClick={() => setAjuda(v => !v)}
+          style={{ background:'none', border:'none', padding:0, cursor:'pointer',
+                   color:'var(--accent)', fontSize:12.5, fontWeight:600,
+                   display:'flex', alignItems:'center', gap:6 }}>
+          <HelpCircle size={14}/>
+          Não está recebendo as notificações?
+          <ChevronDown size={14} style={{ transform: ajuda ? 'rotate(180deg)' : 'none', transition:'transform .15s' }}/>
+        </button>
+
+        {ajuda && (
+          <div style={{ marginTop:10 }}>
+            <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:10 }}>
+              Confira nesta ordem — as duas primeiras são as causas mais comuns, e são
+              ajustes do próprio aparelho que não dão nenhum sinal de que estão agindo.
+            </div>
+            <ol style={{ margin:0, paddingLeft:18, display:'flex', flexDirection:'column', gap:8 }}>
+              {VERIFICACOES.map(([titulo, texto]) => (
+                <li key={titulo} style={{ fontSize:12.5 }}>
+                  <strong>{titulo}</strong>
+                  <div style={{ color:'var(--text-muted)', marginTop:2 }}>{texto}</div>
+                </li>
+              ))}
+            </ol>
+            <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:12,
+                          background:'var(--bg-subtle, rgba(0,0,0,.04))', padding:'8px 10px', borderRadius:8 }}>
+              Se percorreu tudo e continua sem receber, toque em <strong>Testar</strong> e
+              envie ao suporte o que aparecer na mensagem — ela traz a versão do aparelho
+              e o resultado de cada envio, que é o que permite achar a causa.
+            </div>
+          </div>
+        )}
+      </div>
+    )}
     </div>
   );
 }
