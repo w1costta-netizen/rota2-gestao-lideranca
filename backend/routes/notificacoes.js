@@ -44,6 +44,30 @@ router.post('/inscrever', async (req, res) => {
   res.json({ ok: true, servico: servicoDoEndereco(inscricao.endpoint) });
 });
 
+// GET /api/notificacoes/meus-aparelhos?requester_id=
+// Mostra onde a pessoa está registrada para receber. Serve para explicar o
+// caso clássico de a notificação chegar no computador e não no celular:
+// sem isso, ela não tem como saber que o celular nunca chegou a se
+// cadastrar, e conclui que o app não funciona.
+router.get('/meus-aparelhos', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(400).json({ error: 'requester_id obrigatório' });
+
+  const { data, error } = await supabase
+    .from('push_subscriptions').select('endpoint, created_at')
+    .eq('user_id', requester_id).order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+
+  // O endereço completo fica de fora de propósito: quem o tem consegue
+  // enviar notificação para aquele aparelho.
+  res.json({
+    aparelhos: (data || []).map(a => ({
+      tipo: servicoDoEndereco(a.endpoint),
+      registrado_em: a.created_at,
+    })),
+  });
+});
+
 // POST /api/notificacoes/recebido  { usuario, versao }
 // O aparelho avisa que um push chegou nele. É o que separa duas coisas
 // idênticas vistas do servidor: o push não chegar ao aparelho, e chegar mas

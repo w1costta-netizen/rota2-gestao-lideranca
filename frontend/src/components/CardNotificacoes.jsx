@@ -3,7 +3,7 @@ import { Bell, BellOff, Smartphone, RefreshCw, HelpCircle, ChevronDown } from 'l
 import { useToast } from './Toast';
 import {
   situacaoAtual, ativarNotificacoes, enviarTeste, ehIOS,
-  versaoAtiva, atualizarAplicativo, consumirAvisoDeReinstalacao, VERSAO_ESPERADA,
+  versaoAtiva, atualizarAplicativo, consumirAvisoDeReinstalacao, meusAparelhos, VERSAO_ESPERADA,
 } from '../lib/notificacoes';
 
 // ─────────────────────────────────────────────────────────────
@@ -21,12 +21,17 @@ export default function CardNotificacoes({ userId }) {
   const [versao, setVersao]     = useState(null);
   const [ajuda, setAjuda]       = useState(false);
 
+  const [aparelhos, setAparelhos] = useState(null);
+
+  const carregarAparelhos = () => { meusAparelhos(userId).then(setAparelhos); };
+
   useEffect(() => {
     versaoAtiva().then(setVersao);
+    carregarAparelhos();
     if (consumirAvisoDeReinstalacao()) {
       toast('O app foi reinstalado neste aparelho. Toque em "Registrar aparelho" para voltar a receber notificações.');
     }
-  }, []);
+  }, [userId]);
 
   const desatualizado = versao !== null && versao !== VERSAO_ESPERADA;
 
@@ -44,6 +49,7 @@ export default function CardNotificacoes({ userId }) {
     setOcupado(true);
     const r = await ativarNotificacoes(userId);
     setSituacao(situacaoAtual());
+    carregarAparelhos();
     setOcupado(false);
 
     if (r.ok) {
@@ -77,6 +83,8 @@ export default function CardNotificacoes({ userId }) {
         ? `[${atual}] `
         : `[ESTE APARELHO ESTÁ DESATUALIZADO: ${atual || 'não foi possível verificar'}] `;
       toast(prefixo + (lista || 'Nenhum aparelho registrado.'), r.aceitos ? 'success' : 'error');
+      // O teste apaga aparelhos que não existem mais, então a lista muda.
+      carregarAparelhos();
     } catch (e) {
       toast(e?.response?.data?.error || 'Erro ao enviar o teste', 'error');
     }
@@ -142,6 +150,13 @@ export default function CardNotificacoes({ userId }) {
               sem_suporte:      'Este navegador não trabalha com notificações.',
             }[situacao.estado] || 'Toque para ativar os avisos neste aparelho.'}
           </div>
+          {ativo && aparelhos && (
+            <div style={{ fontSize:11, marginTop:4, color: aparelhos.length ? 'var(--text-muted)' : 'var(--danger)' }}>
+              {aparelhos.length
+                ? `Registrado em: ${aparelhos.map(a => a.tipo).join(', ')}`
+                : '⚠️ Este aparelho não está registrado no servidor. Toque em "Registrar aparelho".'}
+            </div>
+          )}
           {versao && (
             <div style={{ fontSize:11, marginTop:4, color: desatualizado ? 'var(--danger)' : 'var(--text-muted)' }}>
               {desatualizado

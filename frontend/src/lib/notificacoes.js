@@ -148,6 +148,18 @@ export async function enviarTeste(userId) {
   return data;
 }
 
+// Onde a pessoa está registrada para receber. Falha aqui é silenciosa: é
+// informação de apoio e não pode atrapalhar a tela de perfil.
+export async function meusAparelhos(userId) {
+  if (!userId) return null;
+  try {
+    const { data } = await api.get(`/notificacoes/meus-aparelhos?requester_id=${userId}`);
+    return data?.aparelhos || [];
+  } catch {
+    return null;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // Versão do service worker ativa neste aparelho.
 //
