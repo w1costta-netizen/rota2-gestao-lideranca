@@ -127,6 +127,89 @@ router.post('/:id/lido', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Comentários do mural ─────────────────────────────────────────────
+// Qualquer pessoa da empresa pode comentar; editar e apagar, só o autor
+// (ou um gestor, para poder moderar conteúdo impróprio).
+
+// GET /api/mural/:id/comentarios?requester_id=
+router.get('/:id/comentarios', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const { data, error } = await supabase
+    .from('mural_comentarios')
+    .select('*, author:user_id(full_name, avatar_url)')
+    .eq('mural_id', req.params.id)
+    .order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+// POST /api/mural/:id/comentarios
+router.post('/:id/comentarios', async (req, res) => {
+  const { requester_id, text } = req.body;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  if (!text?.trim()) return res.status(400).json({ error: 'text obrigatório' });
+  const me = await getProfile(requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  // Só comenta em card da própria empresa
+  const { data: card } = await supabase.from('mural').select('company, title').eq('id', req.params.id).single();
+  if (!card) return res.status(404).json({ error: 'Card não encontrado' });
+  if (me.access_level !== 'master' && card.company !== me.company) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+
+  const { data, error } = await supabase.from('mural_comentarios')
+    .insert({ mural_id: req.params.id, user_id: requester_id, text: text.trim() })
+    .select('*, author:user_id(full_name, avatar_url)').single();
+  if (error) {
+    registrarLog('comentar_mural', 'mural_comentarios', 'erro', { company: card.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('comentar_mural', 'mural_comentarios', 'sucesso', { company: card.company, user_id: requester_id, depois: { card: card.title } });
+  res.json(data);
+});
+
+// PUT /api/mural/comentarios/:cid — só o autor edita
+router.put('/comentarios/:cid', async (req, res) => {
+  const { requester_id, text } = req.body;
+  if (!text?.trim()) return res.status(400).json({ error: 'text obrigatório' });
+  const { data: c } = await supabase.from('mural_comentarios').select('user_id').eq('id', req.params.cid).single();
+  if (!c) return res.status(404).json({ error: 'Comentário não encontrado' });
+  if (c.user_id !== requester_id) return res.status(403).json({ error: 'Só o autor pode editar' });
+
+  const { data, error } = await supabase.from('mural_comentarios')
+    .update({ text: text.trim(), updated_at: new Date().toISOString() })
+    .eq('id', req.params.cid)
+    .select('*, author:user_id(full_name, avatar_url)').single();
+  if (error) {
+    registrarLog('editar_comentario_mural', 'mural_comentarios', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('editar_comentario_mural', 'mural_comentarios', 'sucesso', { user_id: requester_id, depois: { id: req.params.cid } });
+  res.json(data);
+});
+
+// DELETE /api/mural/comentarios/:cid — o autor ou um gestor (moderação)
+router.delete('/comentarios/:cid', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const me = await getProfile(requester_id);
+  const { data: c } = await supabase.from('mural_comentarios').select('user_id').eq('id', req.params.cid).single();
+  if (!c) return res.status(404).json({ error: 'Comentário não encontrado' });
+  if (c.user_id !== requester_id && !isManager(me)) {
+    return res.status(403).json({ error: 'Só o autor ou um gestor pode apagar' });
+  }
+
+  const { error } = await supabase.from('mural_comentarios').delete().eq('id', req.params.cid);
+  if (error) {
+    registrarLog('excluir_comentario_mural', 'mural_comentarios', 'erro', { company: me?.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('excluir_comentario_mural', 'mural_comentarios', 'sucesso', { company: me?.company, user_id: requester_id, antes: { id: req.params.cid } });
+  res.json({ ok: true });
+});
+
 // GET /api/mural/:id/leituras — quem visualizou e quem não (admin/supervisor/master)
 router.get('/:id/leituras', async (req, res) => {
   const { requester_id } = req.query;

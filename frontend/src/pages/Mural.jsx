@@ -4,6 +4,7 @@ import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import ReacaoBar from '../components/ReacaoBar';
+import Comentarios from '../components/Comentarios';
 
 const CATEGORIES = [
   { key: 'meta',     label: '🎯 Metas',      color: '#6366f1' },
@@ -211,6 +212,11 @@ export default function Mural({ userId, profile }) {
                 onToggle={toggleReacao}
                 stopPropagation
               />
+
+              {/* Comentários — o clique não pode abrir/fechar o card */}
+              <div onClick={e => e.stopPropagation()}>
+                <Comentarios recurso="mural" itemId={m.id} userId={userId} podeModerar={canManage} />
+              </div>
 
               {/* Painel de visualizações — só quem gerencia */}
               {canManage && (

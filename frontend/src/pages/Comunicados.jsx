@@ -4,6 +4,7 @@ import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import ReacaoBar from '../components/ReacaoBar';
+import Comentarios from '../components/Comentarios';
 
 const EMPTY = { title: '', body: '', priority: 'normal' };
 
@@ -220,6 +221,11 @@ export default function Comunicados({ userId, profile }) {
                   onToggle={toggleReacao}
                   stopPropagation
                 />
+
+                {/* Comentários — o clique não pode abrir/fechar o comunicado */}
+                <div onClick={e => e.stopPropagation()}>
+                  <Comentarios recurso="comunicados" itemId={c.id} userId={userId} podeModerar={canManage} />
+                </div>
 
                 {/* Painel de leituras — só quem gerencia (admin/supervisor/master), como o backend já exige */}
                 {canManage && (

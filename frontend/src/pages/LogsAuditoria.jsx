@@ -105,6 +105,12 @@ const ACAO_LABEL = {
   excluir_comentario_tarefa: 'Excluiu comentário de tarefa',
   marcar_comunicado_lido: 'Marcou comunicado como lido',
   marcar_mural_lido: 'Marcou item do mural como lido',
+  comentar_mural: 'Comentou no mural',
+  editar_comentario_mural: 'Editou comentário do mural',
+  excluir_comentario_mural: 'Excluiu comentário do mural',
+  comentar_comunicado: 'Comentou em comunicado',
+  editar_comentario_comunicado: 'Editou comentário de comunicado',
+  excluir_comentario_comunicado: 'Excluiu comentário de comunicado',
   reagir: 'Reagiu a um item',
   remover_reacao: 'Removeu reação',
 
