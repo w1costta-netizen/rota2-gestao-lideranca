@@ -65,6 +65,12 @@ const ACAO_LABEL = {
   criar_anotacao: 'Criou anotação',
   editar_anotacao: 'Editou anotação',
   excluir_anotacao: 'Excluiu anotação',
+
+  // Diário de Bordo
+  criar_relato_diario: 'Registrou no Diário de Bordo',
+  editar_relato_diario: 'Editou relato do Diário',
+  excluir_relato_diario: 'Excluiu relato do Diário',
+  listar_diario: 'Consultou o Diário de Bordo',
   listar_anotacoes: 'Carregou as anotações',
 
   // Estoque e conferência
