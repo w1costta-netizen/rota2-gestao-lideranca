@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { enviarPush } = require('../lib/notificacoes');
 
 const DAY_OFFSET = { segunda:0, terca:1, quarta:2, quinta:3, sexta:4, sabado:5, domingo:6 };
 
@@ -46,6 +47,12 @@ router.post('/check', async (req, res) => {
     if (nowMins < alarmMins || nowMins >= alarmMins + 2) continue;
 
     tarefasFired.push(t.id);
+
+    // O lembrete precisa chegar mesmo com o app fechado — é justamente aí
+    // que ele serve. Quem está com a tela aberta recebe pelo `pending`
+    // abaixo; o push cobre todo o resto do tempo.
+    enviarPush(t.assigned_to, '⏰ Lembrete de tarefa', (t.title || '').slice(0, 80), 'tarefa',
+      { rota: req.originalUrl });
 
     if (t.assigned_to === user_id) {
       pending.push({ type: 'tarefa', id: t.id, title: t.title });
@@ -95,6 +102,9 @@ router.post('/check', async (req, res) => {
         return false;
       })
       .map(p => p.id);
+
+    enviarPush(affectedIds, '📅 Lembrete de agenda', `${a.title} às ${a.time}`, 'agenda',
+      { rota: req.originalUrl });
 
     if (affectedIds.includes(user_id)) {
       pending.push({ type: 'agenda', id: a.id, title: a.title, time: a.time });

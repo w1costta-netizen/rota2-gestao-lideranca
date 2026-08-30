@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
@@ -92,6 +93,13 @@ router.post('/', async (req, res) => {
   }
   logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_tarefa', tabela: 'tarefas', depois: { id: data.id, title: data.title, assigned_to: finalAssignee } });
 
+  // Avisa quem recebeu a tarefa. Sem await: notificação nunca pode segurar
+  // a resposta de uma ação do usuário. Não avisa quem criou para si mesmo.
+  if (data.assigned_to && data.assigned_to !== requester_id) {
+    enviarPush(data.assigned_to, '📋 Nova tarefa para você', data.title, 'tarefa',
+      { company: targetCompany, rota: req.originalUrl });
+  }
+
   res.json(data);
 });
 
@@ -161,6 +169,16 @@ router.put('/:id', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: task?.company, user_id: requester_id, acao: 'editar_tarefa', tabela: 'tarefas', antes: { title: task?.title }, depois: updates });
+
+  // Avisa quem pediu a tarefa que ela foi concluída — sem isso a pessoa
+  // precisa ficar voltando na tela para saber. Vai DEPOIS da gravação dar
+  // certo: avisar antes anunciaria uma conclusão que pode não ter
+  // acontecido. Não avisa quem concluiu a própria tarefa.
+  if (status === 'concluida' && task?.created_by && task.created_by !== requester_id) {
+    enviarPush(task.created_by, '✅ Tarefa concluída', task.title || '', 'tarefa',
+      { company: task.company, rota: req.originalUrl });
+  }
+
   res.json(data);
 });
 
@@ -193,6 +211,18 @@ router.post('/:id/comentarios', async (req, res) => {
 
   const { data: task } = await supabase.from('tarefas').select('assigned_to, title, created_by, company').eq('id', req.params.id).single();
   registrarLog('comentar_tarefa', 'tarefa_comentarios', 'sucesso', { company: task?.company, user_id: requester_id, depois: { tarefa: task?.title } });
+
+  // Avisa quem recebeu e quem criou a tarefa. A função central já descarta
+  // repetidos, então quando as duas pessoas são a mesma vai um aviso só.
+  // Quem comentou não recebe aviso do próprio comentário.
+  enviarPush(
+    [task?.assigned_to, task?.created_by].filter(id => id && id !== requester_id),
+    `💬 ${data.author?.full_name || 'Alguém'} comentou na tarefa`,
+    `${task?.title || ''}: ${text.trim().slice(0, 60)}`,
+    'tarefa',
+    { company: task?.company, rota: req.originalUrl },
+  );
+
   res.json(data);
 });
 
