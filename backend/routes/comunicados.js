@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { sendPushToTargets } = require('../lib/push');
+const { sendPushToTargets, sendPushToUsers } = require('../lib/push');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
@@ -168,7 +168,7 @@ router.post('/:id/comentarios', async (req, res) => {
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
   // Só comenta em comunicado da própria empresa
-  const { data: com } = await supabase.from('comunicados').select('company, title').eq('id', req.params.id).single();
+  const { data: com } = await supabase.from('comunicados').select('company, title, created_by').eq('id', req.params.id).single();
   if (!com) return res.status(404).json({ error: 'Comunicado não encontrado' });
   if (me.access_level !== 'master' && com.company !== me.company) {
     return res.status(403).json({ error: 'Acesso negado' });
@@ -182,6 +182,17 @@ router.post('/:id/comentarios', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   registrarLog('comentar_comunicado', 'comunicado_comentarios', 'sucesso', { company: com.company, user_id: requester_id, depois: { comunicado: com.title } });
+
+  // Avisa quem publicou o comunicado — sem isso ele só descobre o comentário
+  // se voltar na tela por acaso. Não notifica quem comentou no próprio.
+  if (com.created_by && com.created_by !== requester_id) {
+    sendPushToUsers([com.created_by], {
+      title: `💬 ${me.full_name || 'Alguém'} comentou no seu comunicado`,
+      body: `${com.title}: ${text.trim().slice(0, 60)}`,
+      page: 'comunicados',
+    }).catch(() => {});
+  }
+
   res.json(data);
 });
 

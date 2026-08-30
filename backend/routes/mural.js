@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
+const { sendPushToUsers } = require('../lib/push');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -153,7 +154,7 @@ router.post('/:id/comentarios', async (req, res) => {
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
   // Só comenta em card da própria empresa
-  const { data: card } = await supabase.from('mural').select('company, title').eq('id', req.params.id).single();
+  const { data: card } = await supabase.from('mural').select('company, title, created_by').eq('id', req.params.id).single();
   if (!card) return res.status(404).json({ error: 'Card não encontrado' });
   if (me.access_level !== 'master' && card.company !== me.company) {
     return res.status(403).json({ error: 'Acesso negado' });
@@ -167,6 +168,17 @@ router.post('/:id/comentarios', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   registrarLog('comentar_mural', 'mural_comentarios', 'sucesso', { company: card.company, user_id: requester_id, depois: { card: card.title } });
+
+  // Avisa quem publicou o card — sem isso ele só descobre o comentário se
+  // voltar na tela por acaso. Não notifica quem comentou no próprio card.
+  if (card.created_by && card.created_by !== requester_id) {
+    sendPushToUsers([card.created_by], {
+      title: `💬 ${me.full_name || 'Alguém'} comentou no mural`,
+      body: `${card.title}: ${text.trim().slice(0, 60)}`,
+      page: 'mural',
+    }).catch(() => {});
+  }
+
   res.json(data);
 });
 
