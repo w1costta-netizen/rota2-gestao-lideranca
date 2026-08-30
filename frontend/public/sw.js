@@ -1,4 +1,4 @@
-const CACHE = 'rota2-v16';
+const CACHE = 'rota2-v17';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
 // Instala e pré-cacheia apenas assets imutáveis (sem index.html)
@@ -69,6 +69,19 @@ self.addEventListener('fetch', e => {
 // aqui que termine sem exibir: nem sem conteúdo, nem com conteúdo
 // ilegível, nem se o navegador recusar as opções.
 // ─────────────────────────────────────────────────────────────
+// Diz à tela qual versão está ativa NESTE aparelho.
+//
+// É o que separa dois problemas idênticos por fora: o push não chegar, e o
+// aparelho estar rodando um service worker antigo que não sabe exibi-lo. O
+// iOS segura o service worker antigo por bastante tempo em app instalado.
+// Versão velha simplesmente não responde a esta mensagem — o silêncio já é
+// o diagnóstico.
+self.addEventListener('message', event => {
+  if (event.data && event.data.tipo === 'VERSAO' && event.ports && event.ports[0]) {
+    event.ports[0].postMessage({ versao: CACHE });
+  }
+});
+
 self.addEventListener('push', event => {
   event.waitUntil((async () => {
     let dados = {};

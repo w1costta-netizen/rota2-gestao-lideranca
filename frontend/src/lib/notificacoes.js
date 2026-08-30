@@ -103,3 +103,49 @@ export async function enviarTeste(userId) {
   const { data } = await api.post('/notificacoes/teste', { user_id: userId });
   return data;
 }
+
+// ─────────────────────────────────────────────────────────────
+// Versão do service worker ativa neste aparelho.
+//
+// Quem exibe a notificação é o service worker, e ele tem ciclo de vida
+// próprio: a tela pode estar atualizada enquanto ele continua sendo o
+// antigo. O iOS segura o antigo por bastante tempo em app instalado. Sem
+// enxergar essa versão, "o push não chegou" e "chegou mas o código velho
+// não sabia exibir" são indistinguíveis.
+// ─────────────────────────────────────────────────────────────
+export const VERSAO_ESPERADA = 'rota2-v17';
+
+export async function versaoAtiva() {
+  if (!('serviceWorker' in navigator)) return null;
+  try {
+    const registro = await navigator.serviceWorker.ready;
+    if (!registro.active) return 'nenhum ativo';
+    return await new Promise(resolve => {
+      const canal = new MessageChannel();
+      // Versão antiga não responde a esta mensagem — o silêncio é a resposta.
+      const prazo = setTimeout(() => resolve('versão antiga'), 2500);
+      canal.port1.onmessage = e => {
+        clearTimeout(prazo);
+        resolve(e.data?.versao || 'versão antiga');
+      };
+      registro.active.postMessage({ tipo: 'VERSAO' }, [canal.port2]);
+    });
+  } catch {
+    return null;
+  }
+}
+
+// Busca a versão nova e a coloca no ar. O service worker já usa skipWaiting
+// e clients.claim, então assim que a nova chega ela assume na hora.
+export async function atualizarAplicativo() {
+  const registro = await navigator.serviceWorker.ready;
+  await registro.update();
+
+  // Dá tempo de instalar e assumir antes de recarregar; sem esta espera a
+  // página voltaria com o service worker antigo ainda no comando.
+  for (let i = 0; i < 10; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    if ((await versaoAtiva()) === VERSAO_ESPERADA) break;
+  }
+  window.location.reload();
+}

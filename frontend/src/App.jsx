@@ -152,9 +152,12 @@ function AppContent() {
           }
         });
       });
+      // Procura versão nova a cada abertura. O iOS costuma manter o service
+      // worker antigo por muito tempo em app instalado na tela de início, e
+      // como é ele quem exibe as notificações, o aparelho fica recebendo
+      // push sem mostrar nada — sem nenhum sinal de que está desatualizado.
+      reg.update().catch(() => {});
     }).catch(() => {});
-    // O ouvinte de NAVIGATE saiu junto com o push: quem enviava essa
-    // mensagem era o clique na notificação, e mais nada.
   }, []);
 
   // Engine de alarme — inicia quando o usuário faz login

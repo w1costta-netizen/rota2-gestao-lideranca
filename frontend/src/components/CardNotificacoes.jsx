@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
-import { Bell, BellOff, Smartphone } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Bell, BellOff, Smartphone, RefreshCw } from 'lucide-react';
 import { useToast } from './Toast';
-import { situacaoAtual, ativarNotificacoes, enviarTeste, ehIOS } from '../lib/notificacoes';
+import {
+  situacaoAtual, ativarNotificacoes, enviarTeste, ehIOS,
+  versaoAtiva, atualizarAplicativo, VERSAO_ESPERADA,
+} from '../lib/notificacoes';
 
 // ─────────────────────────────────────────────────────────────
 // NOTIFICAÇÕES — ETAPA 1
@@ -15,6 +18,21 @@ export default function CardNotificacoes({ userId }) {
   const toast = useToast();
   const [situacao, setSituacao] = useState(() => situacaoAtual());
   const [ocupado, setOcupado]   = useState(false);
+  const [versao, setVersao]     = useState(null);
+
+  useEffect(() => { versaoAtiva().then(setVersao); }, []);
+
+  const desatualizado = versao !== null && versao !== VERSAO_ESPERADA;
+
+  const atualizar = async () => {
+    setOcupado(true);
+    try {
+      await atualizarAplicativo();
+    } catch {
+      setOcupado(false);
+      toast('Não foi possível atualizar. Feche o app por completo e abra de novo.', 'error');
+    }
+  };
 
   const ativar = async () => {
     setOcupado(true);
@@ -81,10 +99,22 @@ export default function CardNotificacoes({ userId }) {
               sem_suporte:      'Este navegador não trabalha com notificações.',
             }[situacao.estado] || 'Toque para ativar os avisos neste aparelho.'}
           </div>
+          {versao && (
+            <div style={{ fontSize:11, marginTop:4, color: desatualizado ? 'var(--danger)' : 'var(--text-muted)' }}>
+              {desatualizado
+                ? `⚠️ Este aparelho está com uma versão antiga (${versao}). Quem exibe a notificação é essa parte do app — enquanto ela não atualizar, nada aparece.`
+                : `Versão neste aparelho: ${versao}`}
+            </div>
+          )}
         </div>
       </div>
 
-      <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+      <div style={{ display:'flex', gap:8, flexShrink:0, flexWrap:'wrap' }}>
+        {desatualizado && (
+          <button className="btn btn-primary" onClick={atualizar} disabled={ocupado}>
+            <RefreshCw size={14}/> {ocupado ? 'Atualizando...' : 'Atualizar app'}
+          </button>
+        )}
         {situacao.estado === 'pode_ativar' && (
           <button className="btn btn-primary" onClick={ativar} disabled={ocupado}>
             <Bell size={14}/> {ocupado ? 'Ativando...' : 'Ativar'}
