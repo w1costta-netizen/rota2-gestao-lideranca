@@ -2,7 +2,6 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
-const { sendPushToUsers, sendPushToTargets } = require('../lib/push');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -64,13 +63,6 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_mural', tabela: 'mural', depois: { id: data.id, title: data.title } });
-
-  // Avisa a equipe do novo card. O Comunicado já fazia isso; o Mural não,
-  // então quem não abrisse a tela por conta própria nunca ficava sabendo.
-  sendPushToTargets({
-    targetType: 'geral', company: targetCompany,
-    payload: { title: `📌 Novo no mural: ${data.title}`, body: content.trim().slice(0, 100), page: 'mural', tipo: 'mural' },
-  }).catch(() => {});
 
   res.json(data);
 });
@@ -176,16 +168,6 @@ router.post('/:id/comentarios', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   registrarLog('comentar_mural', 'mural_comentarios', 'sucesso', { company: card.company, user_id: requester_id, depois: { card: card.title } });
-
-  // Avisa quem publicou o card — sem isso ele só descobre o comentário se
-  // voltar na tela por acaso. Não notifica quem comentou no próprio card.
-  if (card.created_by && card.created_by !== requester_id) {
-    sendPushToUsers([card.created_by], {
-      title: `💬 ${me.full_name || 'Alguém'} comentou no mural`,
-      body: `${card.title}: ${text.trim().slice(0, 60)}`,
-      page: 'mural',
-    }).catch(() => {});
-  }
 
   res.json(data);
 });

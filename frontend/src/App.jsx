@@ -153,12 +153,8 @@ function AppContent() {
         });
       });
     }).catch(() => {});
-
-    const handler = (e) => {
-      if (e.data?.type === 'NAVIGATE') setPage(e.data.page || 'dashboard');
-    };
-    navigator.serviceWorker.addEventListener('message', handler);
-    return () => navigator.serviceWorker.removeEventListener('message', handler);
+    // O ouvinte de NAVIGATE saiu junto com o push: quem enviava essa
+    // mensagem era o clique na notificação, e mais nada.
   }, []);
 
   // Engine de alarme — inicia quando o usuário faz login

@@ -1,7 +1,6 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { sendPushToTargets } = require('../lib/push');
 const { logAction, logError } = require('../lib/auditLog');
 
 async function getProfile(id) {
@@ -85,15 +84,6 @@ router.post('/', async (req, res) => {
   }
   logAction({ company, user_id: created_by, acao: 'criar_agenda', tabela: 'agenda_items', depois: { id: data.id, title: data.title, target_type, target_value } });
 
-  // Dispara push em background (não bloqueia a resposta)
-  const dayLabel = { segunda:'Segunda',terca:'Terça',quarta:'Quarta',quinta:'Quinta',sexta:'Sexta',sabado:'Sábado',domingo:'Domingo' };
-  const pushPayload = {
-    title: '📅 Agenda atualizada',
-    body: `${title}${time ? ' às ' + time : ''} — ${dayLabel[day_of_week] || day_of_week}`,
-    page: 'agenda',
-  };
-  if (company) sendPushToTargets({ targetType: target_type, targetValue: target_value, company, payload: pushPayload }).catch(() => {});
-
   res.status(201).json(data);
 });
 
@@ -118,14 +108,6 @@ router.put('/:id', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company, user_id: updated_by, acao: 'editar_agenda', tabela: 'agenda_items', depois: { title, target_type, target_value } });
-
-  const dayLabel = { segunda:'Segunda',terca:'Terça',quarta:'Quarta',quinta:'Quinta',sexta:'Sexta',sabado:'Sábado',domingo:'Domingo' };
-  const pushPayload = {
-    title: '📅 Agenda alterada',
-    body: `${title}${time ? ' às ' + time : ''} — ${dayLabel[day_of_week] || day_of_week}`,
-    page: 'agenda',
-  };
-  if (company) sendPushToTargets({ targetType: target_type, targetValue: target_value, company, payload: pushPayload }).catch(() => {});
 
   res.json(data);
 });

@@ -2,7 +2,6 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
-const { sendPushToUsers } = require('../lib/push');
 
 async function getRequester(requester_id) {
   if (!requester_id) return null;
@@ -114,11 +113,6 @@ router.post('/', async (req, res) => {
   // a assinatura ficava dependendo de alguém lembrar de cobrar pessoalmente.
   const convidados = (nova.participantes || []).filter(id => id !== me.id);
   if (convidados.length) {
-    sendPushToUsers(convidados, {
-      title: '🖋️ Ata de reunião para assinar',
-      body: nova.titulo,
-      page: 'atas',
-    }).catch(() => {});
   }
 
   res.json(nova);
@@ -167,11 +161,6 @@ router.post('/:id/comentarios', async (req, res) => {
   const avisar = [...new Set([...(ataFull?.participantes || []), ataFull?.criado_por])]
     .filter(id => id && id !== me.id);
   if (avisar.length) {
-    sendPushToUsers(avisar, {
-      title: `💬 ${me.full_name || 'Alguém'} comentou na ata`,
-      body: `${ataFull?.titulo || ''}: ${req.body.texto.trim().slice(0, 60)}`,
-      page: 'atas',
-    }).catch(() => {});
   }
 
   res.json({ ...data, autor_nome: me.full_name });

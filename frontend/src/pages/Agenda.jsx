@@ -5,7 +5,6 @@ import api from '../api';
 import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 import { getWeekStart, addDays, formatDate } from '../utils';
-import { registerPush } from '../lib/push';
 
 const DAYS = ['segunda','terca','quarta','quinta','sexta','sabado','domingo'];
 const DAY_LABELS = { segunda:'Segunda', terca:'Terça', quarta:'Quarta', quinta:'Quinta', sexta:'Sexta', sabado:'Sábado', domingo:'Domingo' };
@@ -54,12 +53,6 @@ export default function Agenda({ userId, profile }) {
     window.addEventListener('resize', fn);
     return () => window.removeEventListener('resize', fn);
   }, []);
-
-  useEffect(() => {
-    // Alguns navegadores embutidos (ex.: WebView do WhatsApp/Instagram) não
-    // implementam a API Notification — evita crash nesses ambientes.
-    if (userId && typeof Notification !== 'undefined' && Notification.permission !== 'denied') registerPush(userId);
-  }, [userId]);
 
   const company = profile?.company || '';
 

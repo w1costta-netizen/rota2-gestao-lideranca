@@ -1,4 +1,4 @@
-const CACHE = 'rota2-v11';
+const CACHE = 'rota2-v15';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
 // Instala e pré-cacheia apenas assets imutáveis (sem index.html)
@@ -59,38 +59,6 @@ self.addEventListener('fetch', e => {
   );
 });
 
-// Exibe notificação push
-self.addEventListener('push', event => {
-  if (!event.data) return;
-  const { title, body, url, page } = event.data.json();
-  event.waitUntil(
-    self.registration.showNotification(title, {
-      body,
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
-      data: { url: url || '/', page: page || 'dashboard' },
-      vibrate: [200, 100, 200],
-    })
-  );
-});
-
-// Clique na notificação → abre/foca o app E navega para dashboard
-self.addEventListener('notificationclick', event => {
-  event.notification.close();
-  const targetPage = event.notification.data?.page || 'dashboard';
-  const targetUrl  = event.notification.data?.url  || '/';
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
-      // Se o app já está aberto, foca e envia mensagem para navegar
-      const existing = list.find(c => c.url.startsWith(self.location.origin));
-      if (existing) {
-        existing.focus();
-        existing.postMessage({ type: 'NAVIGATE', page: targetPage });
-        return;
-      }
-      // Se não está aberto, abre e a URL já carrega o app (vai para dashboard por padrão)
-      return clients.openWindow(targetUrl);
-    })
-  );
-});
+// O push foi removido daqui por inteiro para ser reconstruído do zero.
+// Este service worker cuida só do cache que faz o app abrir offline e
+// instalar como aplicativo — nada disso depende de notificação.

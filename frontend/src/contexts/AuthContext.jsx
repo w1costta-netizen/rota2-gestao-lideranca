@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { autoRegisterPush } from '../lib/push';
 import api from '../api';
 
 // O padrão precisa ser um objeto, não null: quando sai uma versão nova e o
@@ -46,7 +45,6 @@ export function AuthProvider({ children }) {
       }
     }
     setProfile(data);
-    autoRegisterPush(userId).catch(() => {});
   }
 
   async function signOut() {

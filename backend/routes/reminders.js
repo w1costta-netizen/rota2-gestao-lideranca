@@ -1,7 +1,6 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { sendPushToUsers } = require('../lib/push');
 
 const DAY_OFFSET = { segunda:0, terca:1, quarta:2, quinta:3, sexta:4, sabado:5, domingo:6 };
 
@@ -47,11 +46,6 @@ router.post('/check', async (req, res) => {
     if (nowMins < alarmMins || nowMins >= alarmMins + 2) continue;
 
     tarefasFired.push(t.id);
-    sendPushToUsers([t.assigned_to], {
-      title: '⏰ Lembrete de Tarefa',
-      body:  t.title.slice(0, 80),
-      page:  'tarefas',
-    }).catch(() => {});
 
     if (t.assigned_to === user_id) {
       pending.push({ type: 'tarefa', id: t.id, title: t.title });
@@ -101,12 +95,6 @@ router.post('/check', async (req, res) => {
         return false;
       })
       .map(p => p.id);
-
-    sendPushToUsers(affectedIds, {
-      title: '📅 Lembrete de Agenda',
-      body:  `${a.title} às ${a.time}`,
-      page:  'agenda',
-    }).catch(() => {});
 
     if (affectedIds.includes(user_id)) {
       pending.push({ type: 'agenda', id: a.id, title: a.title, time: a.time });

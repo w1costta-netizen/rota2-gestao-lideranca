@@ -2,7 +2,6 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
-const { sendPushToUsers } = require('../lib/push');
 
 async function requireMaster(req, res) {
   const id = req.body?.requester_id || req.query?.requester_id;
@@ -107,11 +106,6 @@ router.put('/:id/approve', async (req, res) => {
     await supabase.from('profiles').update({ active: true, access_level: 'admin' }).eq('id', data.created_by);
     // Avisa que o acesso foi liberado — antes ele precisava ficar tentando
     // entrar até funcionar, sem saber se tinha sido aprovado.
-    sendPushToUsers([data.created_by], {
-      title: '✅ Sua loja foi aprovada!',
-      body: `${data.name} está liberada. Já pode usar o Rota Líder.`,
-      page: 'dashboard',
-    }).catch(() => {});
   }
 
   res.json(data);

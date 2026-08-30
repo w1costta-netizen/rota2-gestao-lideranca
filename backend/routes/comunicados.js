@@ -1,7 +1,6 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { sendPushToTargets, sendPushToUsers } = require('../lib/push');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
@@ -65,18 +64,6 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_comunicado', tabela: 'comunicados', depois: { id: data.id, title: data.title, priority: data.priority } });
-
-  // Push notification para todos
-  try {
-    await sendPushToTargets({
-      targetType: 'geral',
-      company: targetCompany,
-      payload: {
-        title: priority === 'urgente' ? `🚨 ${title}` : `📢 ${title}`,
-        body: body.slice(0, 100),
-      },
-    });
-  } catch (e) { console.warn('Push comunicado:', e.message); }
 
   res.json(data);
 });
@@ -182,16 +169,6 @@ router.post('/:id/comentarios', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   registrarLog('comentar_comunicado', 'comunicado_comentarios', 'sucesso', { company: com.company, user_id: requester_id, depois: { comunicado: com.title } });
-
-  // Avisa quem publicou o comunicado — sem isso ele só descobre o comentário
-  // se voltar na tela por acaso. Não notifica quem comentou no próprio.
-  if (com.created_by && com.created_by !== requester_id) {
-    sendPushToUsers([com.created_by], {
-      title: `💬 ${me.full_name || 'Alguém'} comentou no seu comunicado`,
-      body: `${com.title}: ${text.trim().slice(0, 60)}`,
-      page: 'comunicados',
-    }).catch(() => {});
-  }
 
   res.json(data);
 });

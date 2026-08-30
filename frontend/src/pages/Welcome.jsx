@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import api from '../api';
-import { registerPush } from '../lib/push';
 
 const STEPS = [
   {
@@ -55,19 +54,10 @@ const STEPS = [
       { icon: '✅', text: 'Funciona como um site inteligente e seguro' },
     ],
   },
-  {
-    icon: '🔔',
-    title: 'Ative as notificações',
-    subtitle: 'Receba alertas em tempo real',
-    body: 'Quando o gestor publicar um comunicado ou atualizar a agenda, você recebe uma notificação — mesmo com o app fechado.',
-    pushStep: true,
-  },
 ];
 
 export default function Welcome({ userId, onFinish }) {
   const [step, setStep]           = useState(0);
-  const [pushDone, setPushDone]   = useState(false);
-  const [pushLoading, setPushLoading] = useState(false);
   const current = STEPS[step];
   const isLast  = step === STEPS.length - 1;
 
@@ -76,13 +66,6 @@ export default function Welcome({ userId, onFinish }) {
     localStorage.setItem(`welcome_done_${userId}`, '1');
     await api.post('/profile/first-access-done', { user_id: userId }).catch(() => {});
     onFinish();
-  };
-
-  const activatePush = async () => {
-    setPushLoading(true);
-    await registerPush(userId).catch(() => {});
-    setPushDone(typeof Notification !== 'undefined' && Notification.permission === 'granted');
-    setPushLoading(false);
   };
 
   return (
@@ -177,46 +160,10 @@ export default function Welcome({ userId, onFinish }) {
           </div>
         )}
 
-        {/* Push step (step 3) */}
-        {current.pushStep && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 8 }}>
-            {!pushDone ? (
-              <button
-                onClick={activatePush}
-                disabled={pushLoading}
-                style={{
-                  padding: '14px', borderRadius: 14, border: 'none',
-                  background: '#E8681A', color: '#fff',
-                  fontWeight: 700, fontSize: 15, cursor: 'pointer',
-                  opacity: pushLoading ? .7 : 1,
-                }}>
-                {pushLoading ? 'Ativando...' : '🔔 Ativar notificações'}
-              </button>
-            ) : (
-              <div style={{
-                padding: '14px', borderRadius: 14,
-                background: '#10b98120', border: '1px solid #10b981',
-                textAlign: 'center', color: '#10b981', fontWeight: 700,
-              }}>
-                ✅ Notificações ativadas!
-              </div>
-            )}
-            <button
-              onClick={finish}
-              style={{
-                padding: '12px', borderRadius: 14, border: '1px solid #333',
-                background: 'transparent', color: '#666',
-                fontSize: 13, cursor: 'pointer',
-              }}>
-              Pular por agora
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Navigation */}
-      {!current.pushStep && (
-        <div style={{ display: 'flex', gap: 12, marginTop: 28, width: '100%', maxWidth: 420 }}>
+      <div style={{ display: 'flex', gap: 12, marginTop: 28, width: '100%', maxWidth: 420 }}>
           {step > 0 && (
             <button onClick={() => setStep(s => s - 1)} style={{
               flex: 1, padding: '14px', borderRadius: 14,
@@ -226,15 +173,17 @@ export default function Welcome({ userId, onFinish }) {
               ← Voltar
             </button>
           )}
-          <button onClick={() => setStep(s => s + 1)} style={{
+          {/* A última etapa precisa concluir. Antes quem concluía era a
+              etapa de notificações; sem ela, sem isto o usuário ficaria
+              preso no fim do tutorial sem nenhum caminho de saída. */}
+          <button onClick={() => (isLast ? finish() : setStep(s => s + 1))} style={{
             flex: 2, padding: '14px', borderRadius: 14, border: 'none',
             background: '#E8681A', color: '#fff',
             fontWeight: 700, fontSize: 15, cursor: 'pointer',
           }}>
-            {step === 0 ? 'Começar →' : 'Próximo →'}
-          </button>
-        </div>
-      )}
+          {isLast ? 'Começar a usar →' : step === 0 ? 'Começar →' : 'Próximo →'}
+        </button>
+      </div>
     </div>
   );
 }

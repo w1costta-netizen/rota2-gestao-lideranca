@@ -16,7 +16,6 @@ app.use('/api/team',     require('./routes/team'));
 app.use('/api/schedule', require('./routes/schedule'));
 app.use('/api/alerts',   require('./routes/alerts'));
 app.use('/api/admin',    require('./routes/admin'));
-app.use('/api/push',         require('./routes/push'));
 app.use('/api/comunicados',  require('./routes/comunicados'));
 app.use('/api/tarefas',      require('./routes/tarefas'));
 app.use('/api/mural',        require('./routes/mural'));

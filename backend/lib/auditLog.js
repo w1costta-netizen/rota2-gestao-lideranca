@@ -1,78 +1,10 @@
 const supabase = require('../supabase');
 
-// ─────────────────────────────────────────────────────────────
-// Alerta de falha para quem cuida do sistema (master e suporte).
-//
-// Serve para descobrir problema de cliente novo sem depender dele
-// reclamar — muita gente desiste calado em vez de avisar.
-//
-// O anti-spam é a parte crítica: se algo quebrar em loop, sem
-// controle o celular receberia centenas de notificações e a pessoa
-// desligaria tudo, justamente quando o alerta mais importa.
-// ─────────────────────────────────────────────────────────────
-const JANELA_MESMO_ERRO_MS = 15 * 60 * 1000; // 15 min por tipo de erro
-const TETO_POR_HORA = 8;                     // teto geral, some o que for
-
-const ultimoAlertaPorAcao = new Map();
-let alertasNaHora = [];
-
-// Falhas esperadas do dia a dia — avisar sobre elas seria só ruído e
-// faria o alerta perder credibilidade.
-const NAO_ALERTAR = new Set([
-  'testar_notificacao',          // usuário testando sem notificação ligada
-  'registrar_dispositivo_push',  // navegador que bloqueou notificação
-  'listar_tarefas',
-  // OBRIGATÓRIO: o alerta é enviado por push, e o envio de push registra
-  // falha no log. Sem esta entrada, uma falha de envio dispararia um alerta
-  // que também falharia, registrando outra falha... em laço infinito.
-  'enviar_push',
-]);
-
-function podeAlertar(acao) {
-  const agora = Date.now();
-  if (NAO_ALERTAR.has(acao)) return false;
-
-  alertasNaHora = alertasNaHora.filter(t => agora - t < 60 * 60 * 1000);
-  if (alertasNaHora.length >= TETO_POR_HORA) return false;
-
-  const ultimo = ultimoAlertaPorAcao.get(acao) || 0;
-  if (agora - ultimo < JANELA_MESMO_ERRO_MS) return false;
-
-  ultimoAlertaPorAcao.set(acao, agora);
-  alertasNaHora.push(agora);
-  return true;
-}
-
-async function alertarResponsaveis({ acao, company, user_id, erro }) {
-  try {
-    if (!podeAlertar(acao)) return;
-
-    const { data: responsaveis } = await supabase
-      .from('profiles').select('id')
-      .in('access_level', ['master', 'suporte'])
-      .eq('active', true);
-    const ids = (responsaveis || []).map(r => r.id).filter(id => id !== user_id);
-    if (!ids.length) return;
-
-    let quem = '';
-    if (user_id) {
-      const { data: p } = await supabase.from('profiles').select('full_name').eq('id', user_id).maybeSingle();
-      quem = p?.full_name ? ` · ${p.full_name}` : '';
-    }
-
-    // require aqui dentro (e não no topo) para evitar dependência circular:
-    // as rotas de push importam este arquivo para registrar log.
-    const { sendPushToUsers } = require('./push');
-    await sendPushToUsers(ids, {
-      title: `⚠️ Falha no app${company ? ' · ' + company : ''}`,
-      body: `${acao}${quem}: ${String(erro || '').slice(0, 90)}`,
-      page: 'logs',
-    });
-  } catch (e) {
-    // Alerta nunca pode atrapalhar o log nem a ação do usuário.
-    console.error('[auditLog] falha ao alertar responsáveis:', e.message);
-  }
-}
+// O alerta de falha para master e suporte foi removido junto com o push:
+// ele só tinha esse canal de entrega. Quando o push voltar, o alerta pode
+// voltar com ele — o controle anti-spam era a parte essencial, porque uma
+// falha em laço encheria o celular de avisos e a pessoa desligaria tudo,
+// justamente quando o alerta mais importa.
 
 // ─────────────────────────────────────────────────────────────
 // Função central de log de auditoria.
@@ -103,11 +35,6 @@ async function registrarLog(acao, tabela, status, detalhes = {}) {
       erro_mensagem: ehErro ? String(erro?.message || erro || '').slice(0, 500) : null,
     });
 
-    // Avisa quem cuida do sistema. Sem await: o alerta não pode segurar a
-    // resposta da ação que o usuário está fazendo.
-    if (ehErro) {
-      alertarResponsaveis({ acao, company, user_id, erro: erro?.message || erro });
-    }
   } catch (e) {
     console.error('[auditLog] falha ao registrar:', e.message);
   }

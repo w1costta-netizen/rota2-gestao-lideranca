@@ -1,7 +1,6 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
-const { sendPushToUsers } = require('../lib/push');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
@@ -93,14 +92,6 @@ router.post('/', async (req, res) => {
   }
   logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_tarefa', tabela: 'tarefas', depois: { id: data.id, title: data.title, assigned_to: finalAssignee } });
 
-  if (data.assigned_to && data.assigned_to !== requester_id) {
-    sendPushToUsers([data.assigned_to], {
-      title: '📋 Nova tarefa atribuída',
-      body: title.trim().slice(0, 80),
-      page: 'tarefas',
-    }).catch(() => {});
-  }
-
   res.json(data);
 });
 
@@ -138,15 +129,6 @@ router.put('/:id', async (req, res) => {
       concluida: status === 'concluida',
       concluida_em: status === 'concluida' ? new Date().toISOString() : null,
     }).eq('id', task.pdca_context.acao_id).then(() => {}).catch(() => {});
-  }
-
-  // Notifica criador quando concluída
-  if (status === 'concluida' && task?.created_by && task.created_by !== requester_id) {
-    sendPushToUsers([task.created_by], {
-      title: '✅ Tarefa concluída',
-      body: (task.title || '').slice(0, 80),
-      page: 'tarefas',
-    }).catch(() => {});
   }
 
   // Recorrência: ao concluir, cria próxima instância automaticamente
@@ -211,14 +193,6 @@ router.post('/:id/comentarios', async (req, res) => {
 
   const { data: task } = await supabase.from('tarefas').select('assigned_to, title, created_by, company').eq('id', req.params.id).single();
   registrarLog('comentar_tarefa', 'tarefa_comentarios', 'sucesso', { company: task?.company, user_id: requester_id, depois: { tarefa: task?.title } });
-  const notify = [...new Set([task?.assigned_to, task?.created_by].filter(id => id && id !== requester_id))];
-  if (notify.length) {
-    sendPushToUsers(notify, {
-      title: '💬 Novo comentário na tarefa',
-      body: text.trim().slice(0, 80),
-      page: 'tarefas',
-    }).catch(() => {});
-  }
   res.json(data);
 });
 
