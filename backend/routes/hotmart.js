@@ -224,6 +224,12 @@ router.post('/ativar-conta', async (req, res) => {
       company,
       access_level: 'admin',
       active:       true,
+      // Explícito de propósito. Sem isto o tutorial de boas-vindas depende
+      // do valor padrão da coluna, que vive fora do código — e é nesse
+      // tutorial que a pessoa é convidada a ativar as notificações. Se
+      // falhasse, todo cliente que compra começaria sem notificação e sem
+      // nunca ter sido perguntado.
+      first_access: true,
       aceite_termos_em: new Date().toISOString(),
       aceite_privacidade_em: new Date().toISOString(),
       versao_termos: '1.0',
