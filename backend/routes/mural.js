@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { enviarPush, usuariosDaLoja } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
@@ -63,6 +64,18 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_mural', tabela: 'mural', depois: { id: data.id, title: data.title } });
+
+  // Avisa a loja do card novo. Sem isso, quem não abre a tela do mural por
+  // conta própria nunca fica sabendo que algo foi publicado.
+  usuariosDaLoja(targetCompany, requester_id).then(pessoas => {
+    enviarPush(
+      pessoas,
+      `📌 Novo no mural: ${data.title}`,
+      data.content.slice(0, 100),
+      'mural',
+      { company: targetCompany, rota: req.originalUrl },
+    );
+  }).catch(() => {});
 
   res.json(data);
 });
@@ -168,6 +181,18 @@ router.post('/:id/comentarios', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   registrarLog('comentar_mural', 'mural_comentarios', 'sucesso', { company: card.company, user_id: requester_id, depois: { card: card.title } });
+
+  // Avisa só quem publicou o card, não a loja inteira — comentário
+  // interessa a quem escreveu.
+  if (card.created_by && card.created_by !== requester_id) {
+    enviarPush(
+      card.created_by,
+      `💬 ${me.full_name || 'Alguém'} comentou no mural`,
+      `${card.title}: ${text.trim().slice(0, 60)}`,
+      'mural',
+      { company: card.company, rota: req.originalUrl },
+    );
+  }
 
   res.json(data);
 });

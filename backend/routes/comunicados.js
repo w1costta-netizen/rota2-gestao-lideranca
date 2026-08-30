@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
+const { enviarPush, usuariosDaLoja } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
@@ -64,6 +65,18 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: targetCompany, user_id: requester_id, acao: 'criar_comunicado', tabela: 'comunicados', depois: { id: data.id, title: data.title, priority: data.priority } });
+
+  // Comunicado vai para a loja inteira. A urgência aparece no título porque
+  // é a única parte que a pessoa lê na tela bloqueada.
+  usuariosDaLoja(targetCompany, requester_id).then(pessoas => {
+    enviarPush(
+      pessoas,
+      priority === 'urgente' ? `🚨 ${data.title}` : `📢 ${data.title}`,
+      data.body.slice(0, 100),
+      'comunicado',
+      { company: targetCompany, rota: req.originalUrl },
+    );
+  }).catch(() => {});
 
   res.json(data);
 });
@@ -169,6 +182,19 @@ router.post('/:id/comentarios', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   registrarLog('comentar_comunicado', 'comunicado_comentarios', 'sucesso', { company: com.company, user_id: requester_id, depois: { comunicado: com.title } });
+
+  // Avisa só quem publicou — não a loja inteira. Comentário interessa a
+  // quem escreveu o comunicado; avisar todo mundo a cada comentário faria
+  // as pessoas desligarem a notificação.
+  if (com.created_by && com.created_by !== requester_id) {
+    enviarPush(
+      com.created_by,
+      `💬 ${me.full_name || 'Alguém'} comentou no seu comunicado`,
+      `${com.title}: ${text.trim().slice(0, 60)}`,
+      'comunicado',
+      { company: com.company, rota: req.originalUrl },
+    );
+  }
 
   res.json(data);
 });

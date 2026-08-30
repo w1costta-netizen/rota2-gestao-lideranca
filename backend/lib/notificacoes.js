@@ -144,4 +144,24 @@ async function enviarPush(usuarios, titulo, mensagem, tipo = 'geral', opcoes = {
   return resultado;
 }
 
-module.exports = { enviarPush, servicoDoEndereco, configurado, CHAVE_PUBLICA };
+/**
+ * Todos os usuários ativos de uma loja, menos quem realizou a ação.
+ *
+ * Mural e comunicados avisam a loja inteira, e sem o `exceto` a pessoa
+ * receberia notificação do que ela mesma acabou de publicar.
+ *
+ * Nunca lança erro: é insumo de notificação, e falhar aqui não pode
+ * derrubar a publicação.
+ */
+async function usuariosDaLoja(company, exceto = null) {
+  if (!company) return [];
+  try {
+    const { data } = await supabase
+      .from('profiles').select('id').eq('company', company).eq('active', true);
+    return (data || []).map(p => p.id).filter(id => id !== exceto);
+  } catch {
+    return [];
+  }
+}
+
+module.exports = { enviarPush, usuariosDaLoja, servicoDoEndereco, configurado, CHAVE_PUBLICA };
