@@ -1,4 +1,4 @@
-const CACHE = 'rota2-v19';
+const CACHE = 'rota2-v20';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
 // Instala e pré-cacheia apenas assets imutáveis (sem index.html)
@@ -106,6 +106,21 @@ self.addEventListener('push', event => {
       });
     } catch {
       await self.registration.showNotification(titulo, { body: mensagem });
+    }
+
+    // Avisa o servidor que o push chegou até aqui. Vai DEPOIS de exibir, e
+    // com o erro engolido, porque relatar nunca pode atrapalhar a
+    // notificação. É o que separa "o push não chegou ao aparelho" de
+    // "chegou, mas o sistema não mostrou" — duas coisas idênticas vistas do
+    // servidor, e a duvida que travou este diagnóstico.
+    if (dados.usuario) {
+      try {
+        await fetch('/api/notificacoes/recebido', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ usuario: dados.usuario, versao: CACHE }),
+        });
+      } catch { /* sem rede: a notificação já foi exibida, que é o que importa */ }
     }
   })());
 });

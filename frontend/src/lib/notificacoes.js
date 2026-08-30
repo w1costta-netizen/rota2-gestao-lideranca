@@ -113,7 +113,7 @@ export async function enviarTeste(userId) {
 // enxergar essa versão, "o push não chegou" e "chegou mas o código velho
 // não sabia exibir" são indistinguíveis.
 // ─────────────────────────────────────────────────────────────
-export const VERSAO_ESPERADA = 'rota2-v19';
+export const VERSAO_ESPERADA = 'rota2-v20';
 
 const AVISO_REINSTALACAO = 'rota_push_precisa_registrar';
 

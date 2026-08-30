@@ -2,6 +2,7 @@ const express  = require('express');
 const router   = express.Router();
 const webpush  = require('web-push');
 const supabase = require('../supabase');
+const { registrarLog } = require('../lib/auditLog');
 
 // ─────────────────────────────────────────────────────────────
 // ETAPA 1 — o mínimo absoluto do push.
@@ -68,6 +69,28 @@ router.post('/inscrever', async (req, res) => {
   res.json({ ok: true, servico: servicoDoEndereco(inscricao.endpoint) });
 });
 
+// POST /api/notificacoes/recebido  { usuario, versao }
+// O aparelho avisa que um push chegou nele. É o que separa duas coisas
+// idênticas vistas do servidor: o push não chegar ao aparelho, e chegar mas
+// o sistema do aparelho não exibir. Quem chama é o service worker, que não
+// tem sessão — por isso sem autenticação; só grava se for um perfil real.
+router.post('/recebido', async (req, res) => {
+  const { usuario, versao } = req.body || {};
+  if (!usuario) return res.status(400).json({ error: 'usuario obrigatório' });
+
+  const { data: perfil } = await supabase
+    .from('profiles').select('company').eq('id', usuario).maybeSingle();
+  if (!perfil) return res.status(403).json({ error: 'Acesso negado' });
+
+  registrarLog('push_chegou_no_aparelho', 'push_subscriptions', 'sucesso', {
+    company: perfil.company,
+    user_id: usuario,
+    depois: { versao: versao || null },
+  });
+
+  res.json({ ok: true });
+});
+
 // POST /api/notificacoes/teste  { user_id }
 // Dispara um push fixo para todos os aparelhos do usuário e devolve o
 // resultado de cada um, separadamente. Sem esse detalhe é impossível saber
@@ -95,6 +118,10 @@ router.post('/teste', async (req, res) => {
   const conteudo = JSON.stringify({
     titulo: TITULO, mensagem: MENSAGEM,
     title: TITULO,  body: MENSAGEM,
+    // Volta no aviso que o aparelho manda ao receber. O conteúdo do push é
+    // criptografado ponta a ponta, então só o aparelho do próprio usuário
+    // consegue ler isto.
+    usuario: user_id,
   });
 
   const aparelhos = [];

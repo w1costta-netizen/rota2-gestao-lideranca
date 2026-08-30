@@ -7,6 +7,7 @@ import ExportMenu from '../components/ExportMenu';
 import { gerarPDF, gerarExcel } from '../lib/exportUtils';
 
 const ACAO_LABEL = {
+  push_chegou_no_aparelho: 'Push chegou no aparelho',
   criar_usuario: 'Criou usuário',
   editar_usuario: 'Editou usuário',
   desativar_usuario: 'Desativou usuário',
