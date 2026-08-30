@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import api from '../api';
+import { situacaoAtual, ativarNotificacoes } from '../lib/notificacoes';
 
 const STEPS = [
   {
@@ -54,12 +55,32 @@ const STEPS = [
       { icon: '✅', text: 'Funciona como um site inteligente e seguro' },
     ],
   },
+  {
+    icon: '🔔',
+    title: 'Ative as notificações',
+    subtitle: 'Fique sabendo na hora',
+    body: 'Quando publicarem um comunicado, alterarem a agenda ou passarem uma tarefa para você, o aviso chega mesmo com o app fechado.',
+    // Última etapa de propósito: é o pedido de permissão, e pedir isso antes
+    // de a pessoa entender o que o app faz costuma virar recusa — e recusa
+    // no iPhone só se desfaz nos Ajustes do aparelho.
+    etapaPush: true,
+  },
 ];
 
 export default function Welcome({ userId, onFinish }) {
   const [step, setStep]           = useState(0);
   const current = STEPS[step];
   const isLast  = step === STEPS.length - 1;
+
+  const [push, setPush]       = useState(() => situacaoAtual().estado);
+  const [ativando, setAtivando] = useState(false);
+
+  const ativarPush = async () => {
+    setAtivando(true);
+    await ativarNotificacoes(userId);
+    setPush(situacaoAtual().estado);
+    setAtivando(false);
+  };
 
   const finish = async () => {
     // Salva no localStorage imediatamente para não repetir mesmo se API falhar
@@ -157,6 +178,57 @@ export default function Welcome({ userId, onFinish }) {
                 <span style={{ fontSize: 14, color: '#ccc' }}>{f.text}</span>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Ativação das notificações (última etapa) */}
+        {current.etapaPush && (
+          <div style={{ marginTop: 4 }}>
+            {push === 'permitido' ? (
+              <div style={{
+                padding: '14px', borderRadius: 14,
+                background: '#10b98120', border: '1px solid #10b981',
+                textAlign: 'center', color: '#10b981', fontWeight: 700, fontSize: 14,
+              }}>
+                ✅ Notificações ativadas
+              </div>
+            ) : push === 'precisa_instalar' ? (
+              // No iPhone a notificação só existe no app instalado. Sem este
+              // aviso, o botão pediria uma permissão que o sistema nem
+              // oferece, e a pessoa concluiria que o app está com defeito.
+              <div style={{
+                padding: '14px', borderRadius: 14,
+                background: '#E8681A20', border: '1px solid #E8681A',
+                color: '#E8681A', fontSize: 13, lineHeight: 1.5,
+              }}>
+                📱 No iPhone, primeiro adicione o app à tela de início (passo anterior)
+                e abra por lá. Depois é só ativar aqui no Perfil.
+              </div>
+            ) : push === 'bloqueado' ? (
+              <div style={{
+                padding: '14px', borderRadius: 14,
+                background: '#33333380', border: '1px solid #444',
+                color: '#aaa', fontSize: 13, lineHeight: 1.5,
+              }}>
+                As notificações estão bloqueadas nos ajustes do aparelho. Você pode
+                liberar depois, no seu Perfil.
+              </div>
+            ) : (
+              <button
+                onClick={ativarPush}
+                disabled={ativando}
+                style={{
+                  width: '100%', padding: '14px', borderRadius: 14, border: 'none',
+                  background: '#E8681A', color: '#fff',
+                  fontWeight: 700, fontSize: 15, cursor: 'pointer',
+                  opacity: ativando ? .7 : 1,
+                }}>
+                {ativando ? 'Ativando...' : '🔔 Ativar notificações'}
+              </button>
+            )}
+            <div style={{ fontSize: 12, color: '#777', marginTop: 10, textAlign: 'center' }}>
+              Você pode ativar ou desativar depois, no seu Perfil.
+            </div>
           </div>
         )}
 
