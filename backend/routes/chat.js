@@ -309,8 +309,18 @@ router.delete('/mensagens/:id', async (req, res) => {
 
   // O arquivo sai do armazenamento de verdade. Sem isso ele continuaria
   // ocupando espaço para sempre — e o plano do banco tem 1GB no total.
+  //
+  // A falha aqui é registrada, e não engolida: apagar anexo é ação de
+  // privacidade, e uma remoção que falha em silêncio deixaria o arquivo no
+  // servidor enquanto todo mundo acredita que ele sumiu.
   if (msg.arquivo_path) {
-    await supabase.storage.from(BALDE).remove([msg.arquivo_path]).catch(() => {});
+    const { error: erroArquivo } = await supabase.storage.from(BALDE).remove([msg.arquivo_path]);
+    if (erroArquivo) {
+      registrarLog('apagar_mensagem', 'mensagens', 'erro', {
+        company: conversa.company, user_id: me.id, rota: req.originalUrl,
+        erro: `Mensagem apagada, mas o arquivo continua no armazenamento: ${erroArquivo.message}`,
+      });
+    }
   }
 
   const { error } = await supabase.from('mensagens').update({
