@@ -6,7 +6,13 @@ const { registrarLog } = require('../lib/auditLog');
 // Lista perfis por empresa (id, full_name, sector) — para seletores de setor
 router.get('/all', async (req, res) => {
   const { company } = req.query;
-  let query = supabase.from('profiles').select('id, full_name, sector, access_level').order('sector');
+  // `active`, `role` e `avatar_url` entram para quem monta lista de pessoas
+  // na tela: sem `active` daria para convidar alguém já desligado, e sem os
+  // outros dois a lista fica só com o nome, difícil de reconhecer.
+  // Campos a mais não quebram quem já usa esta rota.
+  let query = supabase.from('profiles')
+    .select('id, full_name, sector, role, avatar_url, active, access_level')
+    .order('sector');
   if (company) query = query.eq('company', company);
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });

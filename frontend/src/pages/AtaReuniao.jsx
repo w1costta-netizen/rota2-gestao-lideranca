@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, X, FileDown, PenTool, ClipboardList } from 'lucide-react';
+import { Plus, X, FileDown, PenTool, ClipboardList, Search } from 'lucide-react';
+import Avatar from '../components/Avatar';
 import jsPDF from 'jspdf';
 import api from '../api';
 import { useToast } from '../components/Toast';
@@ -24,7 +25,6 @@ export default function AtaReuniao({ userId, profile }) {
     hora_inicio: '', hora_fim: '', local: '',
     participantes: [], pautas: [], decisoes: [], acoes: [], proxima_reuniao: '',
   });
-  const [novoParticipante, setNovoParticipante] = useState('');
   const [novaPautaTitulo, setNovaPautaTitulo] = useState('');
   const [novaDecisao, setNovaDecisao] = useState('');
   const [novaAcao, setNovaAcao] = useState({ desc: '', resp: '', prazo: '' });
@@ -46,19 +46,53 @@ export default function AtaReuniao({ userId, profile }) {
     if (userId) loadAtas();
     if (profile?.company) {
       api.get(`/profile/all?company=${encodeURIComponent(profile.company)}`)
-        .then(r => setEquipe((r.data || []).filter(p => p.id !== userId)))
+        // Fora eu mesmo (quem cria já é participante) e quem está
+        // desligado: convidar alguém inativo para uma reunião não faz
+        // sentido, e ele nunca chegaria para assinar.
+        .then(r => setEquipe((r.data || []).filter(p => p.id !== userId && p.active !== false)))
         .catch(() => {});
     }
   }, [userId, profile?.company]);
 
-  const addParticipante = () => {
-    if (!novoParticipante) return;
-    const pessoa = equipe.find(p => p.id === novoParticipante);
-    if (!pessoa || form.participantes.some(p => p.id === pessoa.id)) return;
-    setForm(f => ({ ...f, participantes: [...f.participantes, pessoa] }));
-    setNovoParticipante('');
-  };
   const removeParticipante = (id) => setForm(f => ({ ...f, participantes: f.participantes.filter(p => p.id !== id) }));
+
+  // ─── Escolha dos participantes ───────────────────────────────
+  // Antes era uma lista suspensa que adicionava um por vez. Para reunião
+  // de equipe inteira isso significava dezenas de cliques, então virou
+  // lista com marcação, busca e seleção em massa.
+  const [buscaPessoa, setBuscaPessoa] = useState('');
+  const [setorFiltro, setSetorFiltro] = useState('');
+
+  const setores = [...new Set(equipe.map(p => p.sector).filter(Boolean))].sort();
+
+  const termoPessoa = buscaPessoa.trim().toLowerCase();
+  const equipeVisivel = equipe.filter(p => {
+    if (setorFiltro && p.sector !== setorFiltro) return false;
+    if (!termoPessoa) return true;
+    return `${p.full_name || ''} ${p.role || ''} ${p.sector || ''}`.toLowerCase().includes(termoPessoa);
+  });
+
+  const estaSelecionado = id => form.participantes.some(p => p.id === id);
+
+  const alternarPessoa = (pessoa) => setForm(f => ({
+    ...f,
+    participantes: f.participantes.some(p => p.id === pessoa.id)
+      ? f.participantes.filter(p => p.id !== pessoa.id)
+      : [...f.participantes, pessoa],
+  }));
+
+  // Agem sobre quem está VISÍVEL. Combinado com o filtro de setor, é assim
+  // que se convida "todo o setor de Caixa" em dois toques.
+  const marcarVisiveis = () => setForm(f => {
+    const jaTem = new Set(f.participantes.map(p => p.id));
+    return { ...f, participantes: [...f.participantes, ...equipeVisivel.filter(p => !jaTem.has(p.id))] };
+  });
+  const desmarcarVisiveis = () => setForm(f => {
+    const visiveis = new Set(equipeVisivel.map(p => p.id));
+    return { ...f, participantes: f.participantes.filter(p => !visiveis.has(p.id)) };
+  });
+
+  const todosVisiveisMarcados = equipeVisivel.length > 0 && equipeVisivel.every(p => estaSelecionado(p.id));
 
   const addPauta = () => {
     if (!novaPautaTitulo.trim()) return;
@@ -344,14 +378,80 @@ export default function AtaReuniao({ userId, profile }) {
                 </span>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <select className="input" value={novoParticipante} onChange={e => setNovoParticipante(e.target.value)}>
-                <option value="">Selecione um membro da equipe...</option>
-                {equipe.filter(p => !form.participantes.some(sel => sel.id === p.id)).map(p => (
-                  <option key={p.id} value={p.id}>{p.full_name}</option>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:10 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, flex:'1 1 200px',
+                            background:'var(--surface-1)', borderRadius:'var(--radius)', padding:'7px 11px' }}>
+                <Search size={14} style={{ color:'var(--text-muted)', flexShrink:0 }}/>
+                <input value={buscaPessoa} onChange={e => setBuscaPessoa(e.target.value)}
+                  placeholder="Buscar por nome, cargo ou setor"
+                  style={{ border:'none', background:'none', outline:'none', width:'100%', fontSize:13, color:'var(--text)' }}/>
+                {buscaPessoa && (
+                  <X size={14} style={{ cursor:'pointer', color:'var(--text-muted)' }} onClick={() => setBuscaPessoa('')}/>
+                )}
+              </div>
+              <button className="btn btn-ghost" style={{ fontSize:12 }}
+                onClick={todosVisiveisMarcados ? desmarcarVisiveis : marcarVisiveis}
+                disabled={equipeVisivel.length === 0}>
+                {todosVisiveisMarcados ? 'Desmarcar todos' : 'Selecionar todos'}
+              </button>
+            </div>
+
+            {setores.length > 1 && (
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10 }}>
+                <button onClick={() => setSetorFiltro('')}
+                  style={{ padding:'4px 11px', borderRadius:99, fontSize:12, cursor:'pointer', fontWeight:600,
+                           border:'1px solid var(--border)',
+                           background: setorFiltro === '' ? 'var(--text)' : 'transparent',
+                           color: setorFiltro === '' ? 'var(--surface)' : 'var(--text-muted)' }}>
+                  Todos os setores
+                </button>
+                {setores.map(s => (
+                  <button key={s} onClick={() => setSetorFiltro(f => f === s ? '' : s)}
+                    style={{ padding:'4px 11px', borderRadius:99, fontSize:12, cursor:'pointer', fontWeight:600,
+                             border:'1px solid var(--border)',
+                             background: setorFiltro === s ? 'var(--primary)' : 'transparent',
+                             color: setorFiltro === s ? '#fff' : 'var(--text-muted)' }}>
+                    {s}
+                  </button>
                 ))}
-              </select>
-              <button className="btn" onClick={addParticipante}>+ Adicionar</button>
+              </div>
+            )}
+
+            <div style={{ border:'1px solid var(--border)', borderRadius:'var(--radius)',
+                          maxHeight:280, overflowY:'auto' }}>
+              {equipeVisivel.length === 0 ? (
+                <div style={{ padding:22, textAlign:'center', color:'var(--text-muted)', fontSize:13 }}>
+                  {equipe.length === 0 ? 'Nenhuma outra pessoa cadastrada na loja.' : 'Ninguém encontrado com esse filtro.'}
+                </div>
+              ) : equipeVisivel.map(p => {
+                const marcado = estaSelecionado(p.id);
+                return (
+                  <label key={p.id}
+                    style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', cursor:'pointer',
+                             borderBottom:'1px solid var(--border)',
+                             background: marcado ? 'var(--surface-1)' : 'transparent' }}>
+                    <input type="checkbox" checked={marcado} onChange={() => alternarPessoa(p)}
+                      style={{ width:16, height:16, flexShrink:0, cursor:'pointer', accentColor:'var(--primary)' }}/>
+                    <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={28}/>
+                    <span style={{ minWidth:0 }}>
+                      <span style={{ display:'block', fontSize:13.5, fontWeight:600, overflow:'hidden',
+                                     textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {p.full_name}
+                      </span>
+                      {(p.role || p.sector) && (
+                        <span style={{ display:'block', fontSize:11.5, color:'var(--text-muted)' }}>
+                          {[p.role, p.sector].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div style={{ fontSize:12, color:'var(--text-muted)', marginTop:8 }}>
+              {form.participantes.length} de {equipe.length} selecionado{form.participantes.length !== 1 ? 's' : ''}
+              {setorFiltro || termoPessoa ? ` · mostrando ${equipeVisivel.length}` : ''}
             </div>
           </div>
 
