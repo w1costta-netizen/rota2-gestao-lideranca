@@ -66,9 +66,16 @@ export default function CardNotificacoes({ userId }) {
       const lista = (r.aparelhos || []).map(a =>
         `${a.servico}: ${a.aceito ? 'aceito' : `falhou${a.codigo ? ` (${a.codigo})` : ''}`}`
       ).join(' · ');
-      // Mostrar o resultado por aparelho é o que explica o caso clássico de
-      // chegar no computador e não no celular.
-      toast(lista || 'Nenhum aparelho registrado.', r.aceitos ? 'success' : 'error');
+      // A versão vai junto de propósito. Quem exibe a notificação é o
+      // service worker DESTE aparelho, e saber se ele está atualizado é
+      // metade do diagnóstico — separado do resto da tela, esse dado passava
+      // despercebido justamente na hora em que era necessário.
+      const atual = await versaoAtiva();
+      setVersao(atual);
+      const prefixo = atual === VERSAO_ESPERADA
+        ? `[${atual}] `
+        : `[ESTE APARELHO ESTÁ DESATUALIZADO: ${atual || 'não foi possível verificar'}] `;
+      toast(prefixo + (lista || 'Nenhum aparelho registrado.'), r.aceitos ? 'success' : 'error');
     } catch (e) {
       toast(e?.response?.data?.error || 'Erro ao enviar o teste', 'error');
     }

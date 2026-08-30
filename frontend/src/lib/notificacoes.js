@@ -113,7 +113,7 @@ export async function enviarTeste(userId) {
 // enxergar essa versão, "o push não chegou" e "chegou mas o código velho
 // não sabia exibir" são indistinguíveis.
 // ─────────────────────────────────────────────────────────────
-export const VERSAO_ESPERADA = 'rota2-v18';
+export const VERSAO_ESPERADA = 'rota2-v19';
 
 const AVISO_REINSTALACAO = 'rota_push_precisa_registrar';
 
@@ -129,9 +129,15 @@ export function consumirAvisoDeReinstalacao() {
 }
 
 export async function versaoAtiva() {
-  if (!('serviceWorker' in navigator)) return null;
+  if (!('serviceWorker' in navigator)) return 'sem service worker';
   try {
-    const registro = await navigator.serviceWorker.ready;
+    // Sem prazo, `ready` pode nunca resolver e a tela ficaria sem informação
+    // nenhuma — que é o pior resultado possível aqui, porque parece "tudo
+    // certo" quando na verdade é "não sei dizer".
+    const registro = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, rejeita) => setTimeout(() => rejeita(new Error('demorou')), 4000)),
+    ]);
     if (!registro.active) return 'nenhum ativo';
     return await new Promise(resolve => {
       const canal = new MessageChannel();
@@ -144,7 +150,7 @@ export async function versaoAtiva() {
       registro.active.postMessage({ tipo: 'VERSAO' }, [canal.port2]);
     });
   } catch {
-    return null;
+    return 'não foi possível verificar';
   }
 }
 
