@@ -557,11 +557,10 @@ export default function AtaReuniao({ userId, profile }) {
         y += 2;
       }
 
-      // Assunto sem detalhamento não fica com um vazio inexplicável.
-      if (!p.subtemas?.length && !p.decisoes?.length && !p.acoes?.length) {
-        doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 125);
-        doc.text('Sem detalhamento.', 22, y); doc.setTextColor(...dark); y += 6;
-      }
+      // Assunto sem subtema, decisão ou ação simplesmente termina no título.
+      // Antes saía "Sem detalhamento." — a ata é um documento que circula, e
+      // anunciar a própria falta faz a reunião parecer malfeita. O espaço em
+      // branco diz a mesma coisa sem constranger ninguém.
       y += 3;
     });
 
