@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, MessageCircle, PenTool } from 'lucide-react';
+import { Lock, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, MessageCircle, PenTool } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { hasPermission } from '../lib/permissions';
+import { hasPermission, moduloNaoContratado } from '../lib/permissions';
 import { useTheme } from '../contexts/ThemeContext';
 import Avatar from './Avatar';
 
@@ -92,6 +92,12 @@ const NAV_GROUPS = [
   },
 ];
 
+// Cada item conhece a própria permissão: o renderItem recebe só o id, e
+// precisa dela para saber se desenha o cadeado.
+const NAV_PERM = Object.fromEntries(
+  [...NAV_SOLO, ...NAV_GROUPS.flatMap(g => g.items)].map(i => [i.id, i.perm])
+);
+
 // Ordem final na sidebar: solos intercalados com grupos na posição certa
 // dashboard → grupos → resto
 const SOLO_BEFORE = ['lojas', 'dashboard'];
@@ -114,7 +120,12 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
   // da loja", então o chat sumia do celular por dias e parecia defeito do
   // app. Quem toca nele no modo loja cai numa tela que explica e oferece a
   // saída — some a função, não o caminho para entendê-la.
-  const has  = (perm) => perm === null || hasPermission(profile, perm);
+  const has  = (perm) => perm === null || hasPermission(profile, perm)
+    // Módulo que a loja ainda não contratou continua no menu, com cadeado.
+    // Escondê-lo fazia o cliente concluir que o produto era menor do que o
+    // vendido, sem nunca perguntar.
+    || moduloNaoContratado(profile, perm);
+  const bloqueado = (perm) => moduloNaoContratado(profile, perm);
   const isActive = (id) => page === id;
 
   const renderItem = ({ id, label, icon: Icon }, indent = false) => (
@@ -130,6 +141,9 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
     >
       <Icon size={indent ? 15 : 18} style={indent ? { opacity: 0.85 } : {}}/>
       {!collapsed && <span style={indent ? { fontSize: 13 } : {}}>{label}</span>}
+      {!collapsed && bloqueado(NAV_PERM[id]) && (
+        <Lock size={12} style={{ marginLeft: 'auto', opacity: .55, flexShrink: 0 }}/>
+      )}
     </button>
   );
 

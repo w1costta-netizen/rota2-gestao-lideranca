@@ -95,3 +95,20 @@ export function hasPermission(profile, key) {
   }
   return true;
 }
+
+// Módulo que o cargo da pessoa teria, mas a loja ainda não contratou.
+//
+// É diferente de "não tem permissão": aqui a pessoa PODERIA usar, só falta a
+// loja assinar o módulo. Antes os dois casos terminavam igual — o item sumia
+// do menu — e o cliente que pagou entrava, não via Vendas nem Estoque e
+// concluía que o produto era menor do que foi vendido. Ninguém abre chamado
+// para reclamar de algo que não sabe que existe.
+//
+// Mostrar com cadeado resolve os dois lados: a pessoa entende que existe e
+// como ter, e vira oportunidade de venda em vez de decepção silenciosa.
+export function moduloNaoContratado(profile, key) {
+  if (!PREMIUM_MODULES.includes(key)) return false;
+  if (profile?.access_level === 'master') return false;
+  if (!getEffectivePermissions(profile).includes(key)) return false;
+  return !(profile?.modulos_premium || []).includes(key);
+}

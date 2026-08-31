@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { hasPermission } from './lib/permissions';
+import { hasPermission, moduloNaoContratado } from './lib/permissions';
 import { ToastProvider, useToast } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
 import { startAlarmEngine, stopAlarmEngine } from './lib/alarm';
@@ -74,6 +74,39 @@ const Organograma            = lazy(() => import('./pages/Organograma'));
 const PlanoAcao              = lazy(() => import('./pages/PlanoAcao'));
 const LogsAuditoria          = lazy(() => import('./pages/LogsAuditoria'));
 const Produtividade          = lazy(() => import('./pages/Produtividade'));
+
+// Módulo que existe, o cargo permite, mas a loja não assinou.
+//
+// Separado do "acesso restrito" de propósito: um diz "isto não é para
+// você", o outro diz "isto existe e a sua loja pode ter". Misturar os dois
+// custava uma venda e deixava o cliente achando que o produto era menor.
+function ModuloNaoContratado({ nome, podeContratar }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+      minHeight:'60vh', gap:12, color:'var(--text-muted)', textAlign:'center', padding:20 }}>
+      <span style={{ fontSize:40 }}>🔐</span>
+      <h2 style={{ fontSize:18, fontWeight:700, color:'var(--text)' }}>{nome} é um módulo adicional</h2>
+      <p style={{ fontSize:13, maxWidth:420, lineHeight:1.6 }}>
+        Ele não vem no plano padrão.{' '}
+        {podeContratar
+          ? 'Para liberar na sua loja, fale com a gente — a ativação é imediata, sem precisar refazer nada do que você já cadastrou.'
+          : 'Quem pode contratar é o responsável pela sua loja — vale comentar com ele se este módulo ajudaria no seu dia a dia.'}
+      </p>
+      {/* O convite para contratar só para quem decide. Colaborador não compra
+          módulo, e mandá-lo escrever para o suporte só gera mensagem que
+          ninguém pode resolver.
+          E-mail, não WhatsApp: link wa.me sem número abre o aplicativo sem
+          destinatário e não chega a ninguém. Trocar quando houver um número
+          de atendimento. */}
+      {podeContratar && (
+        <a href={`mailto:contato@rotalider.com.br?subject=${encodeURIComponent('Ativar módulo: ' + nome)}`}
+          className="btn btn-primary btn-sm" style={{ textDecoration:'none' }}>
+          Quero ativar este módulo
+        </a>
+      )}
+    </div>
+  );
+}
 
 function AccessDenied() {
   return (
@@ -292,6 +325,13 @@ function AppContent() {
   }
 
   const has = (key) => hasPermission(profile, key);
+  // Tela certa para cada motivo: quem não tem o módulo contratado vê o
+  // convite; quem não tem permissão de cargo vê o acesso restrito.
+  const negado = (key, nome) =>
+    moduloNaoContratado(profile, key)
+      ? <ModuloNaoContratado nome={nome}
+          podeContratar={['admin', 'master'].includes(profile?.access_level)} />
+      : <AccessDenied />;
 
   const pages = {
     dashboard:    () => has('dashboard')  ? <Dashboard setPage={setPage} profile={effectiveProfile} />            : <AccessDenied />,
@@ -310,15 +350,15 @@ function AppContent() {
     mural:        () => has('mural')      ? <Mural userId={userId} profile={effectiveProfile} />                    : <AccessDenied />,
     diario:       () => has('diario')     ? <DiarioBordo userId={userId} profile={effectiveProfile} />              : <AccessDenied />,
     chat:         () => has('chat')       ? <Chat userId={userId} />                                                : <AccessDenied />,
-    campanhas:    () => has('campanhas')  ? <Campanhas userId={userId} profile={effectiveProfile} />                : <AccessDenied />,
+    campanhas:    () => has('campanhas')  ? <Campanhas userId={userId} profile={effectiveProfile} />                : negado('campanhas', 'Conferência de Flyers'),
     relatorios:        () => has('relatorios')        ? <RelatoriosFotograficos userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
-    conferencia_secao: () => has('conferencia_secao') ? <ConferenciaSecao userId={userId} profile={effectiveProfile} />      : <AccessDenied />,
-    vendas_gestao:() => has('vendas_gestao') ? <GestaoVendas userId={userId} profile={effectiveProfile} />           : <AccessDenied />,
-    vendas_painel:() => has('vendas_painel') ? <PainelVendas userId={userId} profile={effectiveProfile} />           : <AccessDenied />,
+    conferencia_secao: () => has('conferencia_secao') ? <ConferenciaSecao userId={userId} profile={effectiveProfile} />      : negado('conferencia_secao', 'Conferência de Seção'),
+    vendas_gestao:() => has('vendas_gestao') ? <GestaoVendas userId={userId} profile={effectiveProfile} />           : negado('vendas_gestao', 'Gestão de Vendas'),
+    vendas_painel:() => has('vendas_painel') ? <PainelVendas userId={userId} profile={effectiveProfile} />           : negado('vendas_painel', 'Painel de Vendas'),
     usersadmin:   () => has('usuarios')      ? <UsersAdmin userId={userId} profile={effectiveProfile} />             : <AccessDenied />,
     lojas:        () => has('lojas')         ? <MasterDashboard userId={userId} viewingStore={viewingStore} onSelectStore={(name) => { setViewingStoreAndSave(name); setPage('dashboard'); }} /> : <AccessDenied />,
-    estoque:          () => has('estoque')          ? <Estoque profile={effectiveProfile} />           : <AccessDenied />,
-    importador_estoque: () => has('importador_estoque') ? <ImportadorEstoque profile={effectiveProfile} /> : <AccessDenied />,
+    estoque:          () => has('estoque')          ? <Estoque profile={effectiveProfile} />           : negado('estoque', 'Estoque'),
+    importador_estoque: () => has('importador_estoque') ? <ImportadorEstoque profile={effectiveProfile} /> : negado('importador_estoque', 'Importador de Estoque'),
     organograma:        () => has('organograma')        ? <Organograma userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     pdca:               () => has('pdca')               ? <PlanoAcao userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
     produtividade:      () => has('produtividade')       ? <Produtividade userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
