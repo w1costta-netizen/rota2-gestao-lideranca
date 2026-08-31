@@ -114,6 +114,14 @@ export default function Register({ onGoLogin }) {
         <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center' }} onClick={onGoLogin}>
           Ir para o Login
         </button>
+        {/* Muita gente cai aqui sem nunca ter comprado — link repassado,
+            endereço digitado à mão. Mandar só para o login devolve a pessoa
+            para outra porta fechada. */}
+        <a href="/planos.html"
+          style={{ display:'inline-block', marginTop:14, fontSize:12.5,
+                   color:'var(--primary)', fontWeight:600, textDecoration:'underline' }}>
+          Ainda não é assinante? Ver planos
+        </a>
       </div>
     </div>
   );

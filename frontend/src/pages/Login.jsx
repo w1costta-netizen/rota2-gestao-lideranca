@@ -102,8 +102,34 @@ export default function Login({ onGoRegister }) {
         </div>
       )}
 
+      {/* Quem chega aqui sem ter comprado — por indicação, por um print no
+          grupo, procurando o nome — encontrava só "acesso por convite" e ia
+          embora sem descobrir nem o preço. Não é falha de segurança: criar
+          conta sem compra continua impossível. É venda perdida, e este é o
+          único lugar em que dá para recuperá-la. */}
+      {!showReset && (
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 10 }}>
+            Ainda não tem uma conta?
+          </div>
+          {/* btn-secondary, não btn puro: a moldura do botão vem do estilo
+              do elemento <button>, e isto aqui é um link. Com "btn" sozinho
+              saía como texto solto, sem parecer clicável. */}
+          <a href="/vendas.html"
+            className="btn btn-secondary"
+            style={{ width: '100%', justifyContent: 'center', textDecoration: 'none' }}>
+            Conhecer o Rota Líder
+          </a>
+          <a href="/planos.html"
+            style={{ display: 'inline-block', marginTop: 10, fontSize: 12.5,
+                     color: 'var(--primary)', fontWeight: 600, textDecoration: 'underline' }}>
+            Ver planos e assinar
+          </a>
+        </div>
+      )}
+
       <div className="auth-footer" style={{ fontSize:12, color:'var(--text-muted)', textAlign:'center' }}>
-        Acesso apenas por convite do administrador.<br />
+        A equipe entra por convite do administrador da loja.<br />
         <a href="/termos-de-uso-rotalider.html" target="_blank" rel="noopener noreferrer"
           style={{ color:'var(--primary)', textDecoration:'underline', marginTop:6, display:'inline-block' }}>
           Termos de Uso
