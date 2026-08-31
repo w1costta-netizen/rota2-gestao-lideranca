@@ -465,8 +465,17 @@ export default function AtaReuniao({ userId, profile }) {
     // Escreve respeitando a largura e avança pelo NÚMERO REAL de linhas.
     // Antes o avanço era fixo: com muitos participantes o texto ocupava três
     // linhas e o título seguinte caía por cima.
+    // O jsPDF só conhece os caracteres da fonte embutida (tabela WinAnsi).
+    // Ao topar com um de fora — um ✓ usado como marcador, um emoji colado
+    // pelo usuário — ele troca a LINHA INTEIRA para UTF-16, e o leitor
+    // desenha cada letra separada por um byte nulo: o texto sai espaçado,
+    // com quase o dobro da largura, estourando a margem enquanto a conta da
+    // quebra de linha achava que cabia. Acentos e ç são WinAnsi e passam.
+    const limpo = (t) => String(t ?? '')
+      .replace(/[^ -ÿ–—‘’“”•…€™]/g, '');
+
     function escreve(texto, x = 14, largura = 182, alturaLinha = 5, folgaDepois = 0) {
-      const linhas = doc.splitTextToSize(String(texto ?? ''), largura);
+      const linhas = doc.splitTextToSize(limpo(texto), largura);
       checkPage(linhas.length * alturaLinha + 6);
       doc.text(linhas, x, y);
       y += linhas.length * alturaLinha + folgaDepois;
@@ -510,7 +519,7 @@ export default function AtaReuniao({ userId, profile }) {
     pautas.forEach((p, i) => {
       checkPage(22);
       doc.setFont('helvetica', 'bold'); doc.setFontSize(11);
-      const tituloLinhas = doc.splitTextToSize(`${i + 1}. ${p.titulo}`, 178);
+      const tituloLinhas = doc.splitTextToSize(limpo(`${i + 1}. ${p.titulo}`), 178);
       doc.text(tituloLinhas, 14, y); y += tituloLinhas.length * 5 + 3;
       doc.setFontSize(10);
 
@@ -522,14 +531,14 @@ export default function AtaReuniao({ userId, profile }) {
         doc.setFontSize(10); doc.setFont('helvetica', 'normal'); doc.setTextColor(...dark);
         itens.forEach(t => {
           checkPage(9);
-          const linhas = doc.splitTextToSize(`${prefixo} ${t}`, 170);
+          const linhas = doc.splitTextToSize(limpo(`${prefixo} ${t}`), 170);
           doc.text(linhas, 22, y); y += linhas.length * 5;
         });
         y += 3;
       };
 
       subLista('SUBTEMAS', p.subtemas, '•');
-      subLista('DECISÕES', p.decisoes, '✓');
+      subLista('DECISÕES', p.decisoes, '•');
 
       if (p.acoes?.length) {
         checkPage(12);
@@ -539,10 +548,10 @@ export default function AtaReuniao({ userId, profile }) {
         p.acoes.forEach(a => {
           checkPage(14);
           doc.setFont('helvetica', 'bold');
-          const linhas = doc.splitTextToSize(`• ${a.desc}`, 170);
+          const linhas = doc.splitTextToSize(limpo(`• ${a.desc}`), 170);
           doc.text(linhas, 22, y); y += linhas.length * 5;
           doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 125);
-          doc.text(`Responsável: ${a.resp || '—'}   ·   Prazo: ${a.prazo || 'sem prazo'}`, 26, y);
+          doc.text(limpo(`Responsável: ${a.resp || '—'}   ·   Prazo: ${a.prazo || 'sem prazo'}`), 26, y);
           doc.setTextColor(...dark); y += 6;
         });
         y += 2;
@@ -563,7 +572,7 @@ export default function AtaReuniao({ userId, profile }) {
       sectionTitle('Decisões gerais');
       detalhe.decisoes.forEach(d => {
         checkPage(10);
-        const linhas = doc.splitTextToSize(`✓ ${d}`, 178);
+        const linhas = doc.splitTextToSize(limpo(`• ${d}`), 178);
         doc.text(linhas, 14, y); y += linhas.length * 5 + 2;
       });
     }
@@ -573,9 +582,9 @@ export default function AtaReuniao({ userId, profile }) {
       sectionTitle('Ações gerais');
       detalhe.acoes.forEach(a => {
         checkPage(15);
-        doc.setFont('helvetica', 'bold'); doc.text(`• ${a.desc}`, 14, y); y += 5;
+        doc.setFont('helvetica', 'bold'); doc.text(limpo(`• ${a.desc}`), 14, y); y += 5;
         doc.setFont('helvetica', 'normal'); doc.setTextColor(120, 120, 125);
-        doc.text(`Responsável: ${a.resp || '—'}   ·   Prazo: ${a.prazo || 'sem prazo'}`, 18, y);
+        doc.text(limpo(`Responsável: ${a.resp || '—'}   ·   Prazo: ${a.prazo || 'sem prazo'}`), 18, y);
         doc.setTextColor(...dark); y += 8;
       });
     }
@@ -585,9 +594,9 @@ export default function AtaReuniao({ userId, profile }) {
       sectionTitle('Comentários dos participantes');
       detalhe.comentarios.forEach(c => {
         checkPage(15);
-        doc.setFont('helvetica', 'bold'); doc.text(`${c.autor_nome}:`, 14, y); y += 5;
+        doc.setFont('helvetica', 'bold'); doc.text(limpo(`${c.autor_nome}:`), 14, y); y += 5;
         doc.setFont('helvetica', 'normal');
-        const lines = doc.splitTextToSize(c.texto, 176);
+        const lines = doc.splitTextToSize(limpo(c.texto), 176);
         doc.text(lines, 18, y); y += lines.length * 5 + 4;
       });
     }
