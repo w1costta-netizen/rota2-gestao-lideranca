@@ -400,7 +400,6 @@ function AppContent() {
         sidebarRef={isMobile ? undefined : sidebarRef}
         mobileOpen={mobileMenuOpen}
         isMobile={isMobile}
-        visualizandoOutraLoja={visualizandoOutraLoja}
       />
 
       {/* Divisor arrastável — só no desktop */}

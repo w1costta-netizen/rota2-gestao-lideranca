@@ -97,7 +97,7 @@ const NAV_GROUPS = [
 const SOLO_BEFORE = ['lojas', 'dashboard'];
 const SOLO_AFTER  = [];
 
-export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, isMobile, visualizandoOutraLoja }) {
+export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, isMobile }) {
   const { profile, signOut } = useAuth();
   const { theme, toggle } = useTheme();
   const collapsed = !isMobile && width !== undefined && width < 100;
@@ -108,13 +108,13 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
 
   const toggleGroup = (id) => setOpenGroups(prev => ({ ...prev, [id]: !prev[id] }));
 
-  const has  = (perm) => {
-    // Conversas some enquanto o master visualiza a loja de outro cliente:
-    // conversa pertence à pessoa, não à loja, e deixar o item no menu fazia
-    // a tela prometer algo que ela não podia mostrar ali.
-    if (perm === 'chat' && visualizandoOutraLoja) return false;
-    return perm === null || hasPermission(profile, perm);
-  };
+  // Conversas continua no menu mesmo enquanto o master visualiza a loja de
+  // outro cliente. Já tirei o item daqui uma vez e o resultado foi pior:
+  // o modo visualização fica gravado no aparelho até alguém tocar em "Sair
+  // da loja", então o chat sumia do celular por dias e parecia defeito do
+  // app. Quem toca nele no modo loja cai numa tela que explica e oferece a
+  // saída — some a função, não o caminho para entendê-la.
+  const has  = (perm) => perm === null || hasPermission(profile, perm);
   const isActive = (id) => page === id;
 
   const renderItem = ({ id, label, icon: Icon }, indent = false) => (
