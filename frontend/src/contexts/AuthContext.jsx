@@ -87,12 +87,32 @@ export function AuthProvider({ children }) {
       new Promise(resolve => setTimeout(resolve, 5000)),
     ]);
 
-    await supabase.auth.signOut();
+    // O signOut do Supabase fala com o servidor para invalidar a sessão, e
+    // por isso PODE REJEITAR: rede instável, servidor fora, sessão já
+    // expirada do outro lado. O botão chama esta função direto, então a
+    // exceção subia sem tratamento e a tela não reagia — a pessoa clicava em
+    // Sair e continuava logada, sem nenhuma explicação. Foi o que aconteceu
+    // no PC, onde o travamento do service worker não se aplica.
+    try {
+      await supabase.auth.signOut();
+    } catch { /* o que importa é sair daqui; o servidor se acerta depois */ }
 
     // Some com o que ficou na memória da página. Sem isto, sair e entrar com
     // outra pessoa no mesmo aparelho podia reaproveitar estado da anterior.
     setSession(null);
     setProfile(null);
+
+    // Garantia final, sem depender de rede: apaga o cartão de acesso que o
+    // Supabase guarda no navegador e reinicia o app na tela de entrada.
+    // Qualquer falha acima deixaria a pessoa presa dentro da conta; daqui
+    // não tem como não sair.
+    try {
+      Object.keys(localStorage)
+        .filter(k => k.startsWith('sb-') && k.endsWith('-auth-token'))
+        .forEach(k => localStorage.removeItem(k));
+    } catch { /* aba anônima */ }
+
+    window.location.replace('/');
   }
 
   return (
