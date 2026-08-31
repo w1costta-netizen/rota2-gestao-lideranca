@@ -283,7 +283,7 @@ export default function Chat({ userId }) {
 
   const termoContato = buscaContato.trim().toLowerCase();
   const contatosVisiveis = termoContato
-    ? contatos.filter(c => (c.full_name || '').toLowerCase().includes(termoContato))
+    ? contatos.filter(c => (`${c.full_name || ''} ${c.company || ''}`).toLowerCase().includes(termoContato))
     : contatos;
 
   // No celular a tela mostra uma coisa de cada vez: lista OU conversa.
@@ -573,7 +573,14 @@ export default function Chat({ userId }) {
                   <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={32}/>
                   <div style={{ minWidth:0 }}>
                     <div style={{ fontSize:13.5, fontWeight:600 }}>{p.full_name}</div>
-                    {(p.role || p.sector) && (
+                    {/* Quem é de outra loja aparece com o nome dela. Sem isso
+                        seria fácil escrever para a pessoa errada achando que
+                        é alguém da própria equipe. */}
+                    {p.de_outra_loja ? (
+                      <div style={{ fontSize:11.5, color:'var(--primary)', fontWeight:600 }}>
+                        {p.company}{p.role ? ` · ${p.role}` : ''}
+                      </div>
+                    ) : (p.role || p.sector) && (
                       <div style={{ fontSize:11.5, color:'var(--text-muted)' }}>
                         {[p.role, p.sector].filter(Boolean).join(' · ')}
                       </div>

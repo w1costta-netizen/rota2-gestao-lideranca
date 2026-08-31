@@ -55,7 +55,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 async function getPerfil(id) {
   if (!UUID.test(String(id || ''))) return null;
   const { data } = await supabase
-    .from('profiles').select('id, company, full_name, avatar_url, active').eq('id', id).maybeSingle();
+    .from('profiles').select('id, company, full_name, avatar_url, active, access_level').eq('id', id).maybeSingle();
   return data || null;
 }
 
@@ -97,7 +97,26 @@ router.get('/contatos', async (req, res) => {
     .neq('id', me.id)
     .order('full_name');
   if (error) return res.status(500).json({ error: 'Erro ao carregar os contatos.' });
-  res.json(data || []);
+
+  // O master também fala com o responsável de cada loja cliente. É o canal
+  // de suporte: sem ele, quem contrata o sistema não tem como ser atendido
+  // por dentro do próprio app.
+  //
+  // A abertura é estreita de propósito e vale SÓ para o master: apenas os
+  // responsáveis (admin) das outras lojas, nunca a equipe inteira delas. E
+  // é de mão única — a lista de contatos de cada loja continua sendo só a
+  // gente dela, então ninguém de uma loja enxerga alguém de outra por aqui.
+  let deOutrasLojas = [];
+  if (me.access_level === 'master') {
+    const { data: donos } = await supabase
+      .from('profiles').select('id, full_name, avatar_url, role, sector, company')
+      .eq('access_level', 'admin').eq('active', true)
+      .neq('company', me.company)
+      .order('full_name');
+    deOutrasLojas = (donos || []).map(d => ({ ...d, de_outra_loja: true }));
+  }
+
+  res.json([...(data || []), ...deOutrasLojas]);
 });
 
 // GET /api/chat/conversas?requester_id= — a lista, com a última mensagem
@@ -132,9 +151,18 @@ router.post('/conversas', async (req, res) => {
 
   const outro = await getPerfil(com_id);
   if (!outro || !outro.active) return res.status(404).json({ error: 'Pessoa não encontrada' });
-  if (outro.company !== me.company) {
+  // Regra que sustenta a privacidade entre clientes: conversa só dentro da
+  // mesma loja. A única exceção é o master falando com outra loja — o canal
+  // de suporte. Continua valendo para todo o resto, inclusive para impedir
+  // que alguém de uma loja procure alguém de outra.
+  const suporte = me.access_level === 'master' || outro.access_level === 'master';
+  if (outro.company !== me.company && !suporte) {
     return res.status(403).json({ error: 'Só é possível conversar com alguém da mesma loja.' });
   }
+
+  // A conversa fica registrada na loja do cliente, não na do master: é lá
+  // que o atendimento aconteceu, e é lá que faz sentido procurar depois.
+  const lojaDaConversa = me.access_level === 'master' ? (outro.company || me.company) : me.company;
 
   const [a, b] = parOrdenado(me.id, outro.id);
   const { data: existente } = await supabase
@@ -142,7 +170,7 @@ router.post('/conversas', async (req, res) => {
   if (existente) return res.json({ ...comoVista(existente, me.id), outro });
 
   const { data: nova, error } = await supabase
-    .from('conversas').insert({ company: me.company, usuario_a: a, usuario_b: b }).select().single();
+    .from('conversas').insert({ company: lojaDaConversa, usuario_a: a, usuario_b: b }).select().single();
   if (error) return res.status(500).json({ error: 'Erro ao abrir a conversa.' });
   res.json({ ...comoVista(nova, me.id), outro });
 });

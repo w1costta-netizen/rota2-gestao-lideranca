@@ -86,26 +86,6 @@ function AccessDenied() {
   );
 }
 
-// Conversa pertence à pessoa, não à loja. Visualizando a loja de outro
-// cliente, o chat continuava sendo o do master — a tela dizia "Visualizando:
-// Fulano" e mostrava conversas de outra loja embaixo. Nada vazava (o
-// servidor sempre recusou conversa entre empresas diferentes), mas a tela
-// mentia. Aqui ela passa a dizer a verdade.
-function ChatIndisponivelNaLoja({ loja, sair }) {
-  return (
-    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-      minHeight:'60vh', gap:12, color:'var(--text-muted)', textAlign:'center', padding:20 }}>
-      <span style={{ fontSize:40 }}>💬</span>
-      <h2 style={{ fontSize:18, fontWeight:700, color:'var(--text)' }}>Conversas ficam com você, não com a loja</h2>
-      <p style={{ fontSize:13, maxWidth:420, lineHeight:1.6 }}>
-        Você está visualizando <strong>{loja}</strong>. As conversas são pessoais e
-        privadas de cada loja — nem as suas aparecem aqui, nem as de lá.
-      </p>
-      <button className="btn btn-primary btn-sm" onClick={sair}>Sair da loja para ver minhas conversas</button>
-    </div>
-  );
-}
-
 const SIDEBAR_MIN = 60;
 const SIDEBAR_MAX = 400;
 const SIDEBAR_DEFAULT = 240;
@@ -284,7 +264,6 @@ function AppContent() {
     ? { ...profile, company: viewingStore, access_level: 'admin' }
     : profile;
   const userSector = effectiveProfile?.sector || '';
-  const visualizandoOutraLoja = !!(isMaster && viewingStore);
 
   // Termos de uso: exige aceite se ainda não aceitou
   if (profile && !profile.aceite_termos_em) {
@@ -330,10 +309,7 @@ function AppContent() {
     tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
     mural:        () => has('mural')      ? <Mural userId={userId} profile={effectiveProfile} />                    : <AccessDenied />,
     diario:       () => has('diario')     ? <DiarioBordo userId={userId} profile={effectiveProfile} />              : <AccessDenied />,
-    chat:         () => !has('chat') ? <AccessDenied />
-                        : visualizandoOutraLoja
-                          ? <ChatIndisponivelNaLoja loja={viewingStore} sair={() => { setViewingStoreAndSave(''); setPage('chat'); }} />
-                          : <Chat userId={userId} />,
+    chat:         () => has('chat')       ? <Chat userId={userId} />                                                : <AccessDenied />,
     campanhas:    () => has('campanhas')  ? <Campanhas userId={userId} profile={effectiveProfile} />                : <AccessDenied />,
     relatorios:        () => has('relatorios')        ? <RelatoriosFotograficos userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     conferencia_secao: () => has('conferencia_secao') ? <ConferenciaSecao userId={userId} profile={effectiveProfile} />      : <AccessDenied />,
