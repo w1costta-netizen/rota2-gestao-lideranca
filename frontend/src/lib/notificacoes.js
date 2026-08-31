@@ -153,16 +153,36 @@ export async function enviarTeste(userId) {
 // Em loja o computador é compartilhado: sem isto, quem saiu continuaria
 // recebendo notificação naquela máquina — inclusive a prévia de mensagem
 // privada, na tela de quem ficou depois.
+// Espera no máximo `ms` e desiste. Existe porque nem toda espera termina em
+// erro: algumas simplesmente não terminam, e um `catch` não pega isso.
+function comLimite(promessa, ms) {
+  return Promise.race([
+    promessa,
+    new Promise(resolve => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 export async function removerInscricaoDesteAparelho() {
   if (!('serviceWorker' in navigator)) return;
   try {
-    const registro = await navigator.serviceWorker.ready;
+    // navigator.serviceWorker.ready NUNCA resolve se não houver service
+    // worker registrado — não rejeita, fica pendurado para sempre. Em janela
+    // anônima, ou em quem nunca ativou notificação, isso travava o botão de
+    // sair da conta. Descoberto quando o logout parou de responder.
+    const registro = await comLimite(navigator.serviceWorker.ready, 2000);
+    if (!registro) return;
     const inscricao = await registro.pushManager.getSubscription();
     if (!inscricao) return;
 
     // Some do banco (para o servidor parar de enviar) e do navegador (para
     // o aparelho parar de aceitar). Só um dos dois deixaria brecha.
-    await api.delete('/notificacoes/inscricao', { data: { endpoint: inscricao.endpoint } }).catch(() => {});
+    // Limite curto próprio: o padrão do app é 90 segundos, tempo demais para
+    // segurar alguém que só quer sair. Se o servidor estiver lento, some do
+    // navegador agora e o registro no banco cai no próximo login.
+    await api.delete('/notificacoes/inscricao', {
+      data: { endpoint: inscricao.endpoint },
+      timeout: 4000,
+    }).catch(() => {});
     await inscricao.unsubscribe().catch(() => {});
 
     // A configuração guardada traz o id de quem estava logado: sair sem

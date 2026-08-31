@@ -79,9 +79,20 @@ export function AuthProvider({ children }) {
     // continua recebendo push nesta máquina — e com o chat isso significa a
     // prévia de mensagem privada aparecendo para quem usar o aparelho
     // depois, o que em loja é o computador compartilhado.
-    await removerInscricaoDesteAparelho();
+    // Cinturão e suspensório: mesmo com os limites internos, a saída não
+    // fica refém desta limpeza. Sair da conta é o pedido da pessoa; a
+    // notificação é arrumação nossa.
+    await Promise.race([
+      removerInscricaoDesteAparelho(),
+      new Promise(resolve => setTimeout(resolve, 5000)),
+    ]);
 
     await supabase.auth.signOut();
+
+    // Some com o que ficou na memória da página. Sem isto, sair e entrar com
+    // outra pessoa no mesmo aparelho podia reaproveitar estado da anterior.
+    setSession(null);
+    setProfile(null);
   }
 
   return (
