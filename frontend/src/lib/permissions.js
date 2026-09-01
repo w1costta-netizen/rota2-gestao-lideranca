@@ -73,8 +73,24 @@ function modulosDepoisDe(versao) {
   return novos;
 }
 
+// Dono de grupo: o cliente que contratou para uma rede e administra as
+// lojas dele. Ganha a tela de Lojas — limitada ao grupo dele pelo servidor,
+// que é onde a separação entre clientes é decidida de verdade. Esconder o
+// item do menu não protege nada; filtrar a consulta protege.
+export function ehDonoDeGrupo(profile) {
+  return !!profile?.grupo && ['admin', 'master'].includes(profile?.access_level)
+    && profile?.access_level !== 'master';
+}
+
 export function getEffectivePermissions(profile) {
   if (profile?.access_level === 'master') return DEFAULT_PERMISSIONS.master;
+
+  if (ehDonoDeGrupo(profile)) {
+    const base = profile?.permissions?.length
+      ? profile.permissions
+      : (DEFAULT_PERMISSIONS[profile?.access_level] || DEFAULT_PERMISSIONS.admin);
+    return base.includes('lojas') ? base : [...base, 'lojas'];
+  }
 
   if (profile?.permissions?.length) {
     const padrao = DEFAULT_PERMISSIONS[profile?.access_level] || DEFAULT_PERMISSIONS.lider;

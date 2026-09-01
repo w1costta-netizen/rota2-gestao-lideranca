@@ -12,15 +12,44 @@ async function requireMaster(req, res) {
   return data;
 }
 
-// GET /api/stores — lista todas as lojas (master)
+// Quem manda na tela de Lojas: o master (dono do sistema) e o dono de grupo
+// (o cliente que contratou para uma rede e administra as lojas DELE).
+//
+// O grupo é a unica coisa que separa os dois. Master tem `grupo` nulo e vê
+// tudo; dono de grupo só enxerga as lojas marcadas com o mesmo grupo dele.
+// Toda consulta desta tela passa por aqui — é o ponto único onde esse
+// alcance é decidido, para não existir uma rota que esqueça o filtro.
+async function requireDonoDeLojas(req, res) {
+  const id = req.body?.requester_id || req.query?.requester_id;
+  if (!id) { res.status(401).json({ error: 'requester_id obrigatório' }); return null; }
+  const { data } = await supabase
+    .from('profiles').select('id, access_level, company, grupo').eq('id', id).maybeSingle();
+  if (!data) { res.status(403).json({ error: 'Acesso negado' }); return null; }
+
+  const ehMaster = data.access_level === 'master';
+  const ehDonoDeGrupo = !!data.grupo && ['admin', 'master'].includes(data.access_level);
+  if (!ehMaster && !ehDonoDeGrupo) { res.status(403).json({ error: 'Acesso negado' }); return null; }
+
+  return { ...data, ehMaster, ehDonoDeGrupo: ehDonoDeGrupo && !ehMaster };
+}
+
+// GET /api/stores — as lojas que a pessoa pode administrar
+//
+// Master: todas. Dono de grupo: só as do grupo dele. É a consulta que
+// sustenta a separação entre clientes — uma rede não pode nem suspeitar de
+// quais outras lojas existem no sistema.
 router.get('/', async (req, res) => {
-  const me = await requireMaster(req, res);
+  const me = await requireDonoDeLojas(req, res);
   if (!me) return;
 
-  const { data: stores, error } = await supabase
+  let consulta = supabase
     .from('stores')
     .select('*')
     .order('created_at', { ascending: false });
+
+  if (me.ehDonoDeGrupo) consulta = consulta.eq('grupo', me.grupo);
+
+  const { data: stores, error } = await consulta;
   if (error) return res.status(500).json({ error: error.message });
 
   // Enriquecer com contagem de usuários por loja
@@ -44,21 +73,48 @@ router.get('/', async (req, res) => {
   res.json(result);
 });
 
-// POST /api/stores/master — master cria loja já ativa
+// POST /api/stores/master — cria loja pela tela de Lojas
+//
+// Master cria já ativa: é o dono do sistema, não precisa da autorização de
+// ninguém. Dono de grupo cria PENDENTE, e a loja cai na fila de aprovação
+// do master — cada loja nova de uma rede é uma negociação comercial, e
+// liberar sozinho seria assinar uma vez e usar em dez lojas.
 router.post('/master', async (req, res) => {
-  const me = await requireMaster(req, res);
+  const me = await requireDonoDeLojas(req, res);
   if (!me) return;
   const { name, city } = req.body;
   if (!name) return res.status(400).json({ error: 'name obrigatório' });
 
   const { data, error } = await supabase.from('stores').insert({
-    name, city: city || null, active: true, approved_by: req.body.requester_id,
+    name,
+    city: city || null,
+    active: me.ehMaster,
+    grupo: me.ehDonoDeGrupo ? me.grupo : (req.body.grupo || null),
+    created_by: req.body.requester_id,
+    approved_by: me.ehMaster ? req.body.requester_id : null,
   }).select().single();
   if (error) {
     registrarLog('criar_loja', 'stores', 'erro', { company: name, user_id: req.body.requester_id, rota: req.originalUrl, erro: error.message });
     return res.status(500).json({ error: error.message });
   }
-  registrarLog('criar_loja', 'stores', 'sucesso', { company: data.name, user_id: req.body.requester_id, depois: { id: data.id, name: data.name, city: data.city } });
+  registrarLog('criar_loja', 'stores', 'sucesso', {
+    company: data.name, user_id: req.body.requester_id,
+    depois: { id: data.id, name: data.name, city: data.city, grupo: data.grupo, ativa: data.active },
+  });
+
+  // Pedido de loja de uma rede é venda: o master precisa saber na hora, não
+  // quando abrir a tela por acaso.
+  if (me.ehDonoDeGrupo) {
+    const { data: masters } = await supabase
+      .from('profiles').select('id').eq('access_level', 'master').eq('active', true);
+    const ids = (masters || []).map(m => m.id);
+    if (ids.length) {
+      enviarPush(ids, '🏪 Pedido de loja nova',
+        `${data.name} — grupo ${data.grupo}. Aguardando sua aprovação.`,
+        'loja', { company: data.grupo, rota: req.originalUrl });
+    }
+  }
+
   res.json(data);
 });
 
@@ -220,12 +276,24 @@ router.put('/:id/modulos', async (req, res) => {
   res.json(data);
 });
 
-// GET /api/stores/users?company= — master vê usuários de uma loja
+// GET /api/stores/users?company= — quem administra vê os usuários de uma loja
 router.get('/users', async (req, res) => {
-  const me = await requireMaster(req, res);
+  const me = await requireDonoDeLojas(req, res);
   if (!me) return;
   const { company } = req.query;
   if (!company) return res.status(400).json({ error: 'company obrigatório' });
+
+  // Dono de grupo só lê a equipe das lojas DELE. Sem esta conferência,
+  // bastaria digitar o nome da loja de outro cliente na barra de endereço
+  // para ver a equipe inteira dela — a lista da tela estaria filtrada, mas
+  // a porta continuaria destrancada.
+  if (me.ehDonoDeGrupo) {
+    const { data: loja } = await supabase
+      .from('stores').select('grupo').eq('name', company).maybeSingle();
+    if (!loja || loja.grupo !== me.grupo) {
+      return res.status(403).json({ error: 'Esta loja não é do seu grupo' });
+    }
+  }
 
   const { data, error } = await supabase
     .from('profiles')

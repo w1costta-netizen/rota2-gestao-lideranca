@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
-import { hasPermission, moduloNaoContratado } from './lib/permissions';
+import { hasPermission, moduloNaoContratado, ehDonoDeGrupo } from './lib/permissions';
 import { ToastProvider, useToast } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
 import { startAlarmEngine, stopAlarmEngine } from './lib/alarm';
@@ -286,6 +286,10 @@ function AppContent() {
   );
 
   const isMaster = profile?.access_level === 'master';
+  // Dono de grupo também troca de loja — dentro do grupo dele. O servidor é
+  // quem limita quais lojas existem para ele; aqui é só a permissão de usar
+  // o mecanismo.
+  const podeTrocarDeLoja = isMaster || ehDonoDeGrupo(profile);
 
   const setViewingStoreAndSave = (name) => {
     setViewingStore(name);
@@ -293,7 +297,7 @@ function AppContent() {
   };
 
   // Perfil efetivo: master visualiza dados como se fosse admin da loja selecionada
-  const effectiveProfile = isMaster && viewingStore
+  const effectiveProfile = podeTrocarDeLoja && viewingStore
     ? { ...profile, company: viewingStore, access_level: 'admin' }
     : profile;
   const userSector = effectiveProfile?.sector || '';
@@ -356,7 +360,7 @@ function AppContent() {
     vendas_gestao:() => has('vendas_gestao') ? <GestaoVendas userId={userId} profile={effectiveProfile} />           : negado('vendas_gestao', 'Gestão de Vendas'),
     vendas_painel:() => has('vendas_painel') ? <PainelVendas userId={userId} profile={effectiveProfile} />           : negado('vendas_painel', 'Painel de Vendas'),
     usersadmin:   () => has('usuarios')      ? <UsersAdmin userId={userId} profile={effectiveProfile} />             : <AccessDenied />,
-    lojas:        () => has('lojas')         ? <MasterDashboard userId={userId} viewingStore={viewingStore} onSelectStore={(name) => { setViewingStoreAndSave(name); setPage('dashboard'); }} /> : <AccessDenied />,
+    lojas:        () => has('lojas')         ? <MasterDashboard userId={userId} viewingStore={viewingStore} ehMaster={isMaster} onSelectStore={(name) => { setViewingStoreAndSave(name); setPage('dashboard'); }} /> : <AccessDenied />,
     estoque:          () => has('estoque')          ? <Estoque profile={effectiveProfile} />           : negado('estoque', 'Estoque'),
     importador_estoque: () => has('importador_estoque') ? <ImportadorEstoque profile={effectiveProfile} /> : negado('importador_estoque', 'Importador de Estoque'),
     organograma:        () => has('organograma')        ? <Organograma userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
@@ -466,7 +470,7 @@ function AppContent() {
         style={isMobile ? { marginLeft: 0 } : { marginLeft: sidebarW }}
       >
         {/* Banner de visualização de loja — só para master */}
-        {isMaster && viewingStore && (
+        {podeTrocarDeLoja && viewingStore && (
           <div style={{
             background: 'var(--primary)', color: '#fff',
             padding: '10px 20px', display: 'flex', alignItems: 'center',

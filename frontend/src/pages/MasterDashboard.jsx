@@ -19,7 +19,12 @@ function Modal({ title, onClose, children }) {
   );
 }
 
-export default function MasterDashboard({ userId, viewingStore, onSelectStore }) {
+// ehMaster separa o dono do sistema do dono de grupo (o cliente que
+// contratou para uma rede). O dono de grupo administra as lojas DELE, mas
+// não aprova loja, não desativa e não mexe em módulo contratado — isso é
+// comercial, e é do master. O servidor recusa essas rotas para ele de
+// qualquer forma; esconder aqui evita oferecer um botão que sempre falha.
+export default function MasterDashboard({ userId, viewingStore, onSelectStore, ehMaster = true }) {
   const [stores,       setStores]       = useState([]);
   const [loading,      setLoading]      = useState(true);
   const [expanded,     setExpanded]     = useState(null);
@@ -176,7 +181,7 @@ Isso não tem volta.`)) return;
       </div>
 
       {/* Pendentes */}
-      {pending.length > 0 && (
+      {ehMaster && pending.length > 0 && (
         <div className="card" style={{ marginBottom: 20, borderColor: '#F59E0B50' }}>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, color: '#F59E0B', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Clock size={16}/> Aguardando aprovação ({pending.length})
@@ -211,7 +216,7 @@ Isso não tem volta.`)) return;
 
       {/* Desativadas: já foram aprovadas um dia, então não voltam para a
           fila de aprovação. Ficam aqui para reativar ou apagar de vez. */}
-      {desativadas.length > 0 && (
+      {ehMaster && desativadas.length > 0 && (
         <div className="card" style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 14, color: 'var(--text-muted)',
                         display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -297,10 +302,12 @@ Isso não tem volta.`)) return;
                       Entrar
                     </button>
                   )}
-                  <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); disable(s); }}
-                    style={{ color: 'var(--danger)', fontSize: 11 }}>
-                    Desativar
-                  </button>
+                  {ehMaster && (
+                    <button className="btn btn-ghost btn-sm" onClick={e => { e.stopPropagation(); disable(s); }}
+                      style={{ color: 'var(--danger)', fontSize: 11 }}>
+                      Desativar
+                    </button>
+                  )}
                   {expanded === s.id ? <ChevronUp size={16} color="var(--text-muted)"/> : <ChevronDown size={16} color="var(--text-muted)"/>}
                 </div>
               </div>
@@ -308,6 +315,11 @@ Isso não tem volta.`)) return;
               {/* Usuários da loja expandida */}
               {expanded === s.id && (
                 <div style={{ padding: '0 20px 16px', background: 'var(--surface-2)' }}>
+                  {/* Contratar módulo é decisão comercial: só o dono do
+                      sistema. Para o dono de grupo o bloco nem aparece — o
+                      servidor recusaria de qualquer jeito, e um botão que
+                      sempre falha é pior do que botão nenhum. */}
+                  {ehMaster && (
                   <div style={{ padding: '14px 0', borderBottom: '1px solid var(--border)', marginBottom: 14 }}>
                     <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Sparkles size={14} color="var(--primary)"/> Módulos premium contratados
@@ -334,6 +346,7 @@ Isso não tem volta.`)) return;
                       })}
                     </div>
                   </div>
+                  )}
                   {loadingUsers === s.id ? (
                     <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Carregando usuários...</div>
                   ) : (storeUsers[s.id] || []).length === 0 ? (
