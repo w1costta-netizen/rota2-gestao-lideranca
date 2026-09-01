@@ -89,14 +89,24 @@ async function minhaConversa(conversaId, euId) {
 router.get('/contatos', async (req, res) => {
   const me = await getPerfil(req.query.requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
-  if (!me.company) return res.json([]);
+  const ehMaster = me.access_level === 'master';
 
-  const { data, error } = await supabase
-    .from('profiles').select('id, full_name, avatar_url, role, sector')
-    .eq('company', me.company).eq('active', true)
-    .neq('id', me.id)
-    .order('full_name');
-  if (error) return res.status(500).json({ error: 'Erro ao carregar os contatos.' });
+  // O master NÃO pertence a loja nenhuma — é o dono do sistema, não da
+  // operação de ninguém. Sem loja, ele simplesmente não tem colegas; o que
+  // ele tem é o canal de suporte, montado logo abaixo. Antes a função saía
+  // aqui quando não havia loja, e o master ficava sem nenhum contato.
+  if (!me.company && !ehMaster) return res.json([]);
+
+  let daMinhaLoja = [];
+  if (me.company) {
+    const { data, error } = await supabase
+      .from('profiles').select('id, full_name, avatar_url, role, sector')
+      .eq('company', me.company).eq('active', true)
+      .neq('id', me.id)
+      .order('full_name');
+    if (error) return res.status(500).json({ error: 'Erro ao carregar os contatos.' });
+    daMinhaLoja = data || [];
+  }
 
   // O master também fala com o responsável de cada loja cliente. É o canal
   // de suporte: sem ele, quem contrata o sistema não tem como ser atendido
@@ -107,16 +117,21 @@ router.get('/contatos', async (req, res) => {
   // é de mão única — a lista de contatos de cada loja continua sendo só a
   // gente dela, então ninguém de uma loja enxerga alguém de outra por aqui.
   let deOutrasLojas = [];
-  if (me.access_level === 'master') {
-    const { data: donos } = await supabase
+  if (ehMaster) {
+    let consulta = supabase
       .from('profiles').select('id, full_name, avatar_url, role, sector, company')
       .eq('access_level', 'admin').eq('active', true)
-      .neq('company', me.company)
+      .neq('id', me.id)
       .order('full_name');
+    // O .neq só entra quando há loja: comparar uma coluna com nulo em SQL
+    // não dá "diferente", dá indefinido — e a lista voltaria vazia
+    // justamente para o master sem loja, que é quem mais precisa dela.
+    if (me.company) consulta = consulta.neq('company', me.company);
+    const { data: donos } = await consulta;
     deOutrasLojas = (donos || []).map(d => ({ ...d, de_outra_loja: true }));
   }
 
-  res.json([...(data || []), ...deOutrasLojas]);
+  res.json([...daMinhaLoja, ...deOutrasLojas]);
 });
 
 // GET /api/chat/conversas?requester_id= — a lista, com a última mensagem
