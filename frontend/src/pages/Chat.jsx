@@ -3,6 +3,7 @@ import { Send, Plus, Search, X, ArrowLeft, MessageCircle, Paperclip, Mic, Trash2
 import api from '../api';
 import { useToast } from '../components/Toast';
 import Avatar from '../components/Avatar';
+import { comprimirImagem } from '../lib/imagem';
 
 // ─────────────────────────────────────────────────────────────
 // Conversas — chat entre duas pessoas da mesma loja.
@@ -53,6 +54,7 @@ export default function Chat({ userId }) {
   abertaRef.current = aberta;
 
   const arquivoRef = useRef(null);
+  const textoRef = useRef(null);
   const [enviandoAnexo, setEnviandoAnexo] = useState(false);
   const [gravando, setGravando] = useState(false);
   const [segundos, setSegundos] = useState(0);
@@ -90,11 +92,45 @@ export default function Chat({ userId }) {
     setEnviandoAnexo(false);
   };
 
+  // Foto vai reduzida; qualquer outro arquivo vai como está.
+  //
+  // Antes a foto subia no tamanho original — 4 a 8 MB vindos da galeria de
+  // um celular. Isso deixava o envio lento, gastava dado de quem está na
+  // rua e podia estourar o limite de 20 MB. Reduzir também tira o pico de
+  // memória que derrubava o app em aparelho simples.
+  const prepararEEnviar = async (f, nome) => {
+    if (!f.type?.startsWith('image/')) {
+      return enviarArquivo(f, nome, 'arquivo');
+    }
+    try {
+      const menor = await comprimirImagem(f, 1600, 1600, 0.8);
+      return enviarArquivo(menor, nome.replace(/\.[^.]+$/, '') + '.jpg', 'imagem');
+    } catch {
+      // Formato que este aparelho não decodifica: manda como veio, que é
+      // melhor do que não mandar. O servidor ainda barra acima de 20 MB.
+      return enviarArquivo(f, nome, 'imagem');
+    }
+  };
+
   const escolherArquivo = (e) => {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    enviarArquivo(f, f.name, f.type?.startsWith('image/') ? 'imagem' : 'arquivo');
+    prepararEEnviar(f, f.name);
+  };
+
+  // Colar imagem direto na caixa de mensagem: print de tela, foto copiada
+  // de outro aplicativo. No computador é como as pessoas já esperam
+  // trabalhar, e sem isto a única saída era salvar o arquivo antes.
+  const colarNaMensagem = (e) => {
+    const itens = Array.from(e.clipboardData?.items || []);
+    const imagem = itens.find(i => i.type?.startsWith('image/'));
+    if (!imagem) return;              // texto normal segue o caminho de sempre
+    const f = imagem.getAsFile();
+    if (!f) return;
+    e.preventDefault();
+    const ext = (f.type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+    prepararEEnviar(f, f.name || `imagem-colada.${ext}`);
   };
 
   const gravar = async () => {
@@ -244,6 +280,9 @@ export default function Chat({ userId }) {
     if (!conteudo || !aberta || enviando) return;
     setEnviando(true);
     setTexto('');
+    // A altura é ajustada por código enquanto se digita; sem devolvê-la ao
+    // normal, a caixa ficaria alta e vazia depois de enviar.
+    if (textoRef.current) textoRef.current.style.height = 'auto';
     try {
       const r = await api.post('/chat/mensagens', {
         requester_id: userId, conversa_id: aberta.id, texto: conteudo,
@@ -502,19 +541,28 @@ export default function Chat({ userId }) {
                              padding:9, flexShrink:0 }}>
                     <Paperclip size={19}/>
                   </button>
+                  {/* Enter NÃO envia: quebra linha.
+                      A mensagem sai só pelo botão. Enviar no Enter fazia
+                      recado sair pela metade — corretor do teclado, toque
+                      errado, ou a pessoa organizando o texto em linhas. Numa
+                      conversa de trabalho, mensagem incompleta enviada por
+                      acidente não tem como voltar atrás.
+                      Como agora o texto cresce em linhas, o campo acompanha
+                      até um limite e depois rola por dentro. */}
                   <textarea
+                    ref={textoRef}
                     value={texto} rows={1}
-                    onChange={e => setTexto(e.target.value)}
-                    onKeyDown={e => {
-                      // Enter envia; Shift+Enter quebra linha. No celular o
-                      // teclado manda quebra de linha, então o botão continua
-                      // sendo o caminho principal.
-                      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviar(); }
+                    onChange={e => {
+                      setTexto(e.target.value);
+                      e.target.style.height = 'auto';
+                      e.target.style.height = Math.min(e.target.scrollHeight, 100) + 'px';
                     }}
+                    onPaste={colarNaMensagem}
                     placeholder="Escreva uma mensagem"
                     style={{ flex:1, resize:'none', padding:'9px 12px', borderRadius:'var(--radius)',
                              border:'1px solid var(--border)', background:'var(--surface)',
-                             color:'var(--text)', fontSize:13.5, fontFamily:'inherit', maxHeight:100 }}/>
+                             color:'var(--text)', fontSize:13.5, fontFamily:'inherit',
+                             maxHeight:100, overflowY:'auto' }}/>
                   {/* Sem texto escrito, o botão grava áudio — como no
                       WhatsApp. Com texto, ele envia. */}
                   {texto.trim() ? (
