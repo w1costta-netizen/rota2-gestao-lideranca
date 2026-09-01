@@ -179,6 +179,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
   const [obs, setObs]                 = useState('');
   const [fotoPreview, setFotoPreview] = useState(null); // { file, url }
   const [uploading, setUploading]     = useState(false);
+  const [preparando, setPreparando]   = useState(false);
   const [gerandoPDF, setGerandoPDF]   = useState(false);
 
   const load = () => {
@@ -415,34 +416,84 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
   };
 
   // Comprime imagem antes do upload para evitar erro de memória em celulares
-  const comprimirImagem = (file, maxW = 1000, maxH = 1000, quality = 0.75) =>
-    new Promise((resolve, reject) => {
+  // Reduz o tamanho da imagem liberando a original assim que possível.
+  //
+  // Uma foto de 12 megapixels ocupa ~48 MB abertos na memória. Em celular
+  // simples isso derruba a aba do navegador — e quem estava validando um
+  // flyer concluía que "só funciona pela câmera", porque a foto da câmera
+  // às vezes vem menor que a da galeria.
+  //
+  // createImageBitmap quando existe: permite fechar a imagem original na
+  // hora (close()), em vez de esperar o navegador recolher sozinho. Onde
+  // não existe, cai no caminho antigo, que continua funcionando.
+  const calcularTamanho = (w, h, maxW, maxH) => {
+    if (w <= maxW && h <= maxH) return [w, h];
+    const ratio = Math.min(maxW / w, maxH / h);
+    return [Math.round(w * ratio), Math.round(h * ratio)];
+  };
+
+  const paraJpeg = (canvas, quality) =>
+    new Promise((resolve, reject) =>
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Falha ao comprimir imagem')), 'image/jpeg', quality));
+
+  const comprimirImagem = async (file, maxW = 1000, maxH = 1000, quality = 0.75) => {
+    if (typeof createImageBitmap === 'function') {
+      let bitmap;
+      try {
+        bitmap = await createImageBitmap(file);
+        const [w, h] = calcularTamanho(bitmap.width, bitmap.height, maxW, maxH);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, w, h);
+        bitmap.close();       // devolve a memória da original agora
+        bitmap = null;
+        return await paraJpeg(canvas, quality);
+      } catch (e) {
+        if (bitmap) { try { bitmap.close(); } catch { /* nada */ } }
+        // Formato que o navegador não decodifica por aqui (HEIC em alguns
+        // aparelhos): tenta o caminho antigo antes de desistir.
+      }
+    }
+
+    return new Promise((resolve, reject) => {
       const img = new window.Image();
       const url = URL.createObjectURL(file);
       img.onload = () => {
         URL.revokeObjectURL(url);
-        let { width: w, height: h } = img;
-        if (w > maxW || h > maxH) {
-          const ratio = Math.min(maxW / w, maxH / h);
-          w = Math.round(w * ratio);
-          h = Math.round(h * ratio);
-        }
+        const [w, h] = calcularTamanho(img.width, img.height, maxW, maxH);
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Falha ao comprimir imagem')), 'image/jpeg', quality);
+        img.src = '';         // solta a original antes de gerar o arquivo
+        paraJpeg(canvas, quality).then(resolve, reject);
       };
       img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Falha ao carregar imagem')); };
       img.src = url;
     });
+  };
 
-  // Passo 1: usuário escolhe a foto → mostra preview no modal
-  const handleFotoSelecionada = (e) => {
+  // Passo 1: escolhe a foto → COMPRIME e só então mostra a prévia.
+  //
+  // A ordem importa. Antes a prévia exibia a imagem original e a compressão
+  // só acontecia ao confirmar — ou seja, o aparelho abria a foto inteira
+  // duas vezes. Em celular com pouca memória isso derrubava a aba, e o
+  // efeito prático era a galeria "não funcionar" enquanto a câmera
+  // funcionava, porque a foto da câmera costuma vir menor.
+  const handleFotoSelecionada = async (e) => {
     const file = e.target.files?.[0];
+    e.target.value = '';   // permite escolher a MESMA foto de novo depois
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    setFotoPreview({ file, url });
-    e.target.value = '';
+
+    setPreparando(true);
+    try {
+      const blob = await comprimirImagem(file);
+      // A partir daqui a original não é mais usada em lugar nenhum.
+      setFotoPreview({ file: blob, url: URL.createObjectURL(blob) });
+    } catch {
+      toast('Não foi possível abrir esta foto. Tente outra, ou tire uma pela câmera.', 'error');
+    } finally {
+      setPreparando(false);
+    }
   };
 
   // Passo 2: usuário clica Confirmar → comprime e envia
@@ -450,7 +501,9 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
     if (!fotoPreview?.file || !fotoModal) return;
     setUploading(true);
     try {
-      const blob = await comprimirImagem(fotoPreview.file);
+      // Já veio comprimida do passo anterior — comprimir de novo era o
+      // segundo carregamento da imagem inteira na memória.
+      const blob = fotoPreview.file;
       const path = `${campanha.id}/${fotoModal.id}_${Date.now()}.jpg`;
       const { error: upErr } = await supabase.storage.from('evidencias').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
       if (upErr) throw upErr;
@@ -847,12 +900,12 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <button className="btn btn-primary" style={{ justifyContent: 'center', padding: '12px' }}
-                  onClick={() => fileRef.current?.click()}>
-                  <Camera size={16} /> Tirar foto com a câmera
+                  onClick={() => fileRef.current?.click()} disabled={preparando}>
+                  <Camera size={16} /> {preparando ? 'Preparando foto...' : 'Tirar foto com a câmera'}
                 </button>
                 <button className="btn btn-ghost" style={{ justifyContent: 'center', padding: '12px' }}
-                  onClick={() => galeriaRef.current?.click()}>
-                  <Upload size={16} /> Escolher da galeria
+                  onClick={() => galeriaRef.current?.click()} disabled={preparando}>
+                  <Upload size={16} /> {preparando ? 'Preparando foto...' : 'Escolher da galeria'}
                 </button>
                 <button className="btn btn-ghost" style={{ justifyContent: 'center' }} onClick={fecharFotoModal}>Cancelar</button>
               </div>
