@@ -57,11 +57,32 @@ router.get('/last-editor', async (req, res) => {
   res.json(data || null);
 });
 
+// Consultar a escala dos outros é livre; alterar, não.
+//
+// A tela agora deixa qualquer pessoa abrir a escala de qualquer setor, o
+// que expõe os identificadores dos outros. Sem esta conferência bastaria
+// repetir a chamada trocando o user_id para alterar a escala alheia — a
+// trava da tela é conforto, esta é a que tranca.
+//
+// Quem pode alterar: a própria pessoa, ou supervisor/admin/master, que já
+// respondiam pela escala do time antes desta tela existir.
+async function podeAlterar(requester_id, dono_id) {
+  if (!requester_id) return false;
+  if (requester_id === dono_id) return true;
+  const { data } = await supabase
+    .from('profiles').select('access_level').eq('id', requester_id).maybeSingle();
+  return ['supervisor', 'admin', 'master'].includes(data?.access_level);
+}
+
 // POST /api/schedule/save
 router.post('/save', async (req, res) => {
-  const { user_id, team_member_id, work_date, status, entrada, intervalo, retorno_intervalo, saida } = req.body;
+  const { requester_id, user_id, team_member_id, work_date, status, entrada, intervalo, retorno_intervalo, saida } = req.body;
   if (!user_id || !team_member_id || !work_date)
     return res.status(400).json({ error: 'user_id, team_member_id e work_date são obrigatórios' });
+
+  if (!(await podeAlterar(requester_id, user_id))) {
+    return res.status(403).json({ error: 'Você pode consultar esta escala, mas não alterá-la.' });
+  }
 
   // Busca dados do perfil para preencher company/sector nos entries
   const { data: prof } = await supabase
@@ -129,6 +150,9 @@ router.get('/submission', async (req, res) => {
 
 // POST /api/schedule/submit
 router.post('/submit', async (req, res) => {
+  if (!(await podeAlterar(req.body?.requester_id, req.body?.user_id))) {
+    return res.status(403).json({ error: 'Você pode consultar esta escala, mas não fechá-la.' });
+  }
   const { user_id, year, month } = req.body;
   if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
 
@@ -152,6 +176,9 @@ router.post('/submit', async (req, res) => {
 
 // DELETE /api/schedule/submission
 router.delete('/submission', async (req, res) => {
+  if (!(await podeAlterar(req.query?.requester_id, req.query?.user_id))) {
+    return res.status(403).json({ error: 'Você pode consultar esta escala, mas não reabri-la.' });
+  }
   const { user_id, year, month } = req.query;
   if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
 

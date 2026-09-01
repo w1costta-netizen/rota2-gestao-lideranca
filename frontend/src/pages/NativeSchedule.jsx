@@ -326,31 +326,41 @@ export default function NativeSchedule({ userId, profile }) {
 
   const isElevated = ELEVATED_LEVELS.includes(profile?.access_level);
   const [allSectors,      setAllSectors]      = useState([]);
-  const [selectedSector,  setSelectedSector]  = useState('');
+  // Escolhe-se a PESSOA, não o setor.
+  //
+  // Antes o seletor listava setores e o código resolvia para "o primeiro
+  // perfil daquele setor" — e /profile/all ordena só por setor, então quem
+  // era o primeiro dentro do setor era indefinido e podia até mudar entre
+  // duas consultas. Resultado: a escala de quem não fosse esse primeiro
+  // simplesmente não aparecia para mais ninguém. Foi o que aconteceu com a
+  // escala de setembro da frente de caixa. A tela sempre carregou o time de
+  // UMA pessoa (/team?user_id=); nomear essa pessoa acaba com o sorteio.
+  const [selectedPersonId, setSelectedPersonId] = useState('');
   const [allProfiles,     setAllProfiles]     = useState([]);
   const [lastEditor,      setLastEditor]      = useState(null);
 
   useEffect(() => {
-    if (!isElevated) return;
+    // Todo mundo carrega a lista: consultar a escala de qualquer setor é
+    // liberado para todos. Alterar continua restrito — ver somenteLeitura.
     const company = encodeURIComponent(profile?.company || '');
     api.get(`/profile/all?company=${company}`).then(r => setAllProfiles(r.data)).catch(() => {});
     api.get(`/admin/sectors?company=${company}`)
       .then(r => setAllSectors(r.data.map(s => s.sector_name)))
       .catch(() => {});
-  }, [isElevated, profile?.company]);
+  }, [profile?.company]);
 
-  // Para supervisores: usa setor selecionado; se vazio, usa setor do próprio perfil
-  const activeSector = selectedSector || (isElevated ? (profile?.sector || '') : '');
-
-  // Resolve o perfil (e portanto o user_id) do setor sendo visualizado
-  const sectorProfile = activeSector
-    ? allProfiles.find(p => p.sector?.toLowerCase() === activeSector.toLowerCase())
+  // Perfil escolhido no seletor. Vazio = eu mesmo.
+  const pessoaVista = selectedPersonId
+    ? allProfiles.find(p => p.id === selectedPersonId)
     : null;
 
-  // user_id efetivo: do setor visualizado (supervisor) ou do próprio usuário
-  const effectiveUserId = sectorProfile?.id || userId;
+  const effectiveUserId = pessoaVista?.id || userId;
+  const viewedProfile   = pessoaVista || profile;
 
-  const viewedProfile = sectorProfile || profile;
+  // Consultar a escala de outra pessoa é livre; alterar, não. Quem é
+  // supervisor, admin ou master continua podendo editar qualquer uma —
+  // é quem já respondia por isso antes desta tela existir.
+  const somenteLeitura = !!pessoaVista && pessoaVista.id !== userId && !isElevated;
 
   const weeks   = buildWeeks(year, month);
   const allDates = Array.from({ length: daysInMonth(year, month) }, (_, i) => fmtDate(year, month, i + 1));
@@ -411,12 +421,14 @@ export default function NativeSchedule({ userId, profile }) {
 
   const saveCell = async ({ copyToDays = [], ...payload }) => {
     if (!openCell) return;
+    if (somenteLeitura) return;
     setCellSaving(true);
     const dates = [openCell.date, ...copyToDays];
     try {
       const results = await Promise.all(
         dates.map(date =>
           api.post('/schedule/save', {
+            requester_id: userId,
             user_id: effectiveUserId,
             team_member_id: openCell.memberId,
             work_date: date,
@@ -449,9 +461,10 @@ export default function NativeSchedule({ userId, profile }) {
   };
 
   const submitSchedule = async () => {
+    if (somenteLeitura) return;
     setSubmitting(true);
     try {
-      const res = await api.post('/schedule/submit', { user_id: effectiveUserId, year, month });
+      const res = await api.post('/schedule/submit', { requester_id: userId, user_id: effectiveUserId, year, month });
       setSubmission(res.data);
       toast('Escala fechada com sucesso!');
     } catch {
@@ -462,8 +475,9 @@ export default function NativeSchedule({ userId, profile }) {
   };
 
   const reopenSchedule = async () => {
+    if (somenteLeitura) return;
     try {
-      await api.delete(`/schedule/submission?user_id=${effectiveUserId}&year=${year}&month=${month}`);
+      await api.delete(`/schedule/submission?requester_id=${userId}&user_id=${effectiveUserId}&year=${year}&month=${month}`);
       setSubmission(null);
       toast('Escala reaberta para edição.');
     } catch {
@@ -474,6 +488,7 @@ export default function NativeSchedule({ userId, profile }) {
   // Copiar horários do mês anterior (por dia-da-semana) para o mês atual vazio
   const [copying, setCopying] = useState(false);
   const copyFromPreviousMonth = async () => {
+    if (somenteLeitura) return;
     const prevMonth = month === 1 ? 12 : month - 1;
     const prevYear  = month === 1 ? year - 1 : year;
     setCopying(true);
@@ -501,6 +516,7 @@ export default function NativeSchedule({ userId, profile }) {
           const tmpl = dowMap[m.id]?.[dow];
           if (!tmpl) return;
           saves.push(api.post('/schedule/save', {
+            requester_id: userId,
             user_id: effectiveUserId,
             team_member_id: m.id,
             work_date: date,
@@ -565,7 +581,8 @@ export default function NativeSchedule({ userId, profile }) {
     const isD26   = parseInt(date.split('-')[2]) === 26;
     const bg      = isToday ? '#eff6ff' : isD26 ? '#faf5ff' : isSun ? '#fafafa' : '#fff';
     const open    = () => {
-      if (submission) return; // escala fechada, não permite editar
+      if (submission) return;   // escala fechada, não permite editar
+      if (somenteLeitura) return; // escala de outra pessoa: só consulta
       setOpenCell({ memberId:m.id, date, dow:getDOW(date) });
     };
 
@@ -649,19 +666,30 @@ export default function NativeSchedule({ userId, profile }) {
           <span style={{ fontWeight:800, fontSize:13, color:'#0f172a', whiteSpace:'nowrap' }}>Escala Mensal</span>
           <span style={{ color:'#e2e8f0' }}>|</span>
 
-          {isElevated ? (
-            <select
-              value={selectedSector}
-              onChange={e => { setSelectedSector(e.target.value); setMembers([]); setEntries([]); setSubmission(null); }}
-              style={{ fontSize:10, padding:'2px 5px', borderRadius:4, border:'1px solid #0e7490', background:'#f0fdff', color:'#0e7490', fontWeight:700, maxWidth:200, cursor:'pointer' }}
-            >
-              <option value="">Meu setor ({profile?.sector||'—'})</option>
-              {allSectors.filter(s => s !== profile?.sector).map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-          ) : (
-            <span style={{ fontSize:10, color:'#475569', whiteSpace:'nowrap' }}><b>{viewedProfile?.sector||'—'}</b> · {viewedProfile?.full_name||'—'}</span>
+          {/* Agrupado por setor para achar a pessoa rápido numa loja com
+              dezenas de nomes. Quem monta a escala é sempre uma pessoa, e
+              é ela que se escolhe aqui. */}
+          <select
+            value={selectedPersonId}
+            onChange={e => { setSelectedPersonId(e.target.value); setMembers([]); setEntries([]); setSubmission(null); }}
+            style={{ fontSize:10, padding:'2px 5px', borderRadius:4, border:'1px solid #0e7490', background:'#f0fdff', color:'#0e7490', fontWeight:700, maxWidth:230, cursor:'pointer' }}
+          >
+            <option value="">Minha escala ({profile?.full_name || '—'})</option>
+            {allSectors.map(setor => {
+              const doSetor = allProfiles.filter(p => p.sector === setor && p.active !== false && p.id !== userId);
+              if (!doSetor.length) return null;
+              return (
+                <optgroup key={setor} label={setor}>
+                  {doSetor.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+                </optgroup>
+              );
+            })}
+          </select>
+          {somenteLeitura && (
+            <span style={{ fontSize:9, fontWeight:800, color:'#b45309', background:'#fef3c7',
+                           border:'1px solid #fcd34d', borderRadius:4, padding:'2px 6px', whiteSpace:'nowrap' }}>
+              Somente leitura
+            </span>
           )}
           <span style={{ color:'#e2e8f0' }}>|</span>
 
