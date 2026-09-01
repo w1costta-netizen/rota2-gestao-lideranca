@@ -440,7 +440,20 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
     if (typeof createImageBitmap === 'function') {
       let bitmap;
       try {
-        bitmap = await createImageBitmap(file);
+        // Arquivo grande: pede ao navegador para JÁ decodificar reduzido.
+        // Sem isto, mesmo comprimindo antes da prévia, o aparelho abre a
+        // foto inteira uma vez — e é esse pico que derruba celular com
+        // pouca memória (relato real: erro de memória e o app voltando
+        // sozinho para a tela inicial ao salvar a foto de um flyer).
+        //
+        // O limite por tamanho de arquivo evita ampliar foto pequena: um
+        // JPEG acima de 3 MB é, na prática, sempre mais largo que maxW.
+        // Onde o navegador ignora estas opções, ele devolve no tamanho
+        // original e o passo seguinte reduz como antes.
+        const grande = file.size > 3 * 1024 * 1024;
+        bitmap = grande
+          ? await createImageBitmap(file, { resizeWidth: maxW, resizeQuality: 'medium' })
+          : await createImageBitmap(file);
         const [w, h] = calcularTamanho(bitmap.width, bitmap.height, maxW, maxH);
         const canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
