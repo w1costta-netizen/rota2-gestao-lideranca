@@ -7,19 +7,25 @@ const STEPS = [
     icon: '🧭',
     title: 'Bem-vindo ao Rota Líder',
     subtitle: 'Gestão, Liderança e Produtividade',
-    body: 'Sua ferramenta exclusiva de comunicação e gestão. Tudo que você precisa para o dia a dia, direto no celular.',
+    body: 'Tudo o que a liderança precisa em um lugar só — no computador e no celular.',
+    // Só o que TODO cliente recebe no plano. "Caixas" estava aqui e é módulo
+    // adicional: a primeira tela do app prometia algo que o cliente novo não
+    // tem. Mesmo erro do "acesso completo" que as páginas de venda traziam.
     highlights: [
-      { icon: '📅', text: 'Agenda semanal atualizada em tempo real' },
-      { icon: '📢', text: 'Comunicados e avisos importantes' },
-      { icon: '📋', text: 'Sua escala sempre disponível' },
-      { icon: '💳', text: 'Análise de desempenho de caixas' },
+      { icon: '✅', text: 'Tarefas com prazo e responsável' },
+      { icon: '📢', text: 'Comunicados com controle de quem leu' },
+      { icon: '📋', text: 'Escala e agenda da equipe' },
+      { icon: '🖋️', text: 'Atas de reunião assinadas' },
+      { icon: '💬', text: 'Conversas e Diário de Bordo' },
     ],
   },
   {
     icon: '📱',
     title: 'Leve na tela inicial',
     subtitle: 'Como um app nativo, sem ocupar espaço',
-    body: null,
+    // O motivo importa mais que o passo a passo: sem ele a pessoa pula a
+    // tela, e depois reclama que a notificação não chega no iPhone.
+    body: 'No iPhone, as notificações só funcionam com o app na tela de início. Vale fazer agora — leva 20 segundos.',
     tutorial: [
       {
         os: '🍎 iPhone (Safari)',
@@ -46,13 +52,18 @@ const STEPS = [
     title: 'Seguro e leve',
     subtitle: 'Sem impacto no seu celular',
     body: null,
+    // "Não acessa fotos, contatos ou câmera" saiu daqui: era FALSO. O app usa
+    // câmera e galeria em Flyers, Tour 4x4, anexo do chat e foto de perfil —
+    // sempre com permissão, mas afirmar o contrário é o tipo de frase que
+    // destrói a confiança no dia em que o cliente percebe.
+    // O tamanho também saiu: eram "menos de 500KB" contra 514KB medidos, e o
+    // número só cresce. Promessa que envelhece mal não vale a pena.
     facts: [
-      { icon: '✅', text: 'Ocupa menos de 500KB — menos que uma foto' },
-      { icon: '✅', text: 'Não instala arquivos no celular' },
-      { icon: '✅', text: 'Não consome dados em segundo plano' },
-      { icon: '✅', text: 'Não acessa fotos, contatos ou câmera' },
+      { icon: '✅', text: 'Não instala nada no celular — abre como um site' },
+      { icon: '✅', text: 'Ocupa pouquíssimo espaço' },
+      { icon: '📷', text: 'Usa a câmera e as fotos só quando você anexa alguma' },
+      { icon: '🔒', text: 'Não lê seus contatos nem suas mensagens' },
       { icon: '✅', text: 'Para remover: apague o ícone da tela' },
-      { icon: '✅', text: 'Funciona como um site inteligente e seguro' },
     ],
   },
   {
@@ -184,6 +195,22 @@ export default function Welcome({ userId, onFinish }) {
         {/* Ativação das notificações (última etapa) */}
         {current.etapaPush && (
           <div style={{ marginTop: 4 }}>
+            {/* As duas causas que fazem a notificação sumir com tudo
+                configurado certo. Levaram dias para serem descobertas num
+                diagnóstico real, e nenhuma delas dá qualquer sinal na tela:
+                a permissão continua aparecendo como ativa. Escrito aqui, a
+                pessoa confere sozinha antes de abrir chamado. */}
+            <div style={{
+              marginBottom: 12, padding: '12px 14px', borderRadius: 12,
+              background: '#33333360', border: '1px solid #444',
+              color: '#bbb', fontSize: 12.5, lineHeight: 1.55,
+            }}>
+              <strong style={{ color: '#ddd' }}>Se um dia parar de chegar</strong>, confira
+              no celular antes de tudo: <strong style={{ color: '#ddd' }}>Não Perturbe</strong> ou
+              modo <strong style={{ color: '#ddd' }}>Sono</strong> ligado, e{' '}
+              <strong style={{ color: '#ddd' }}>Economia de bateria</strong> ativada. Qualquer
+              um dos dois segura a notificação sem avisar — e aqui continua marcado como ativo.
+            </div>
             {push === 'permitido' ? (
               <div style={{
                 padding: '14px', borderRadius: 14,
