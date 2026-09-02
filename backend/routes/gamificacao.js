@@ -135,7 +135,7 @@ router.post('/campanhas', async (req, res) => {
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
   if (!podeCriar(me)) return res.status(403).json({ error: 'Só quem administra a loja cria campanhas.' });
 
-  const { nome, descricao, premio, inicio, fim, metricas } = req.body || {};
+  const { nome, descricao, premio, inicio, fim, metricas, tema } = req.body || {};
   if (!nome?.trim() || !inicio || !fim) {
     return res.status(400).json({ error: 'Nome, início e fim são obrigatórios.' });
   }
@@ -155,6 +155,9 @@ router.post('/campanhas', async (req, res) => {
     premio: premio?.trim() || null,
     inicio, fim,
     metricas: limpas,
+    // Lista fechada: tema desconhecido vira clássico. A tela também protege,
+    // mas quem grava é o servidor.
+    tema: ['classico', 'reinos', 'copa', 'corrida'].includes(tema) ? tema : 'classico',
     criado_por: me.id,
   }).select().single();
 

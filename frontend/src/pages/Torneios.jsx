@@ -3,6 +3,7 @@ import { Trophy, Plus, X, Users, User, Medal } from 'lucide-react';
 import api from '../api';
 import Avatar from '../components/Avatar';
 import { useToast } from '../components/Toast';
+import { TEMAS, temaDe } from '../lib/temasTorneio';
 
 // ─────────────────────────────────────────────────────────────
 // Torneios entre setores e entre pessoas.
@@ -37,7 +38,7 @@ export default function Torneios({ userId, profile }) {
 
   const [criando, setCriando]   = useState(false);
   const [catalogo, setCatalogo] = useState([]);
-  const [form, setForm] = useState({ nome: '', premio: '', inicio: hoje(), fim: '', metricas: {} });
+  const [form, setForm] = useState({ nome: '', premio: '', inicio: hoje(), fim: '', metricas: {}, tema: 'classico' });
   const [salvando, setSalvando] = useState(false);
 
   const carregar = async () => {
@@ -84,11 +85,11 @@ export default function Torneios({ userId, profile }) {
     try {
       await api.post('/gamificacao/campanhas', {
         requester_id: userId, nome: form.nome, premio: form.premio,
-        inicio: form.inicio, fim: form.fim, metricas,
+        inicio: form.inicio, fim: form.fim, metricas, tema: form.tema,
       });
       toast('Torneio criado!');
       setCriando(false);
-      setForm({ nome: '', premio: '', inicio: hoje(), fim: '', metricas: {} });
+      setForm({ nome: '', premio: '', inicio: hoje(), fim: '', metricas: {}, tema: 'classico' });
       carregar();
     } catch (e) {
       toast(e?.response?.data?.error || 'Erro ao criar o torneio.', 'error');
@@ -107,10 +108,12 @@ export default function Torneios({ userId, profile }) {
     }
   };
 
-  const MEDALHA = ['#F5C518', '#B9C2CC', '#CD7F32'];
+
 
   // ── Placar de uma campanha ──────────────────────────────────
   if (aberta) {
+    const T = temaDe(aberta.tema);
+    const MEDALHA = T.medalhas;
     const minhaPos = placar?.individual?.findIndex(p => p.id === userId) ?? -1;
     const eu = minhaPos >= 0 ? placar.individual[minhaPos] : null;
     const topo = placar?.individual?.slice(0, 3) || [];
@@ -120,7 +123,9 @@ export default function Torneios({ userId, profile }) {
       <div>
         <div className="page-header">
           <div>
-            <div className="page-title">{aberta.nome}</div>
+            <div className="page-title" style={{ display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:26 }}>{T.emblema}</span> {aberta.nome}
+            </div>
             <div className="page-subtitle">
               {formatarData(aberta.inicio)} a {formatarData(aberta.fim)}
               {aberta.premio ? ` · Prêmio: ${aberta.premio}` : ''}
@@ -140,12 +145,12 @@ export default function Torneios({ userId, profile }) {
         )}
 
         <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 18 }}>
-          {[['setores', 'Setores', Users], ['individual', 'Individual', User]].map(([k, r, Ic]) => (
+          {[['setores', T.grupos, Users], ['individual', 'Individual', User]].map(([k, r, Ic]) => (
             <button key={k} onClick={() => setAba(k)} style={{
               padding: '9px 16px', fontSize: 13, fontWeight: 700, background: 'none', border: 'none',
               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
-              color: aba === k ? 'var(--primary)' : 'var(--text-muted)',
-              borderBottom: aba === k ? '2px solid var(--primary)' : '2px solid transparent',
+              color: aba === k ? T.cores.principal : 'var(--text-muted)',
+              borderBottom: aba === k ? `2px solid ${T.cores.principal}` : '2px solid transparent',
             }}><Ic size={14}/> {r}</button>
           ))}
         </div>
@@ -173,12 +178,12 @@ export default function Torneios({ userId, profile }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 14 }}>{s.setor}</div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                      {s.pessoas} pessoa{s.pessoas !== 1 ? 's' : ''} · {s.pontos} pontos no total
+                      {s.pessoas} pessoa{s.pessoas !== 1 ? 's' : ''} · {s.pontos} {T.pontos} no total
                     </div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontWeight: 800, fontSize: 18 }}>{s.media}</div>
-                    <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>por pessoa</div>
+                    <div style={{ fontSize: 10.5, color: 'var(--text-muted)' }}>{T.pontos} por pessoa</div>
                   </div>
                 </div>
               ))}
@@ -217,8 +222,8 @@ export default function Torneios({ userId, profile }) {
                 deixa a pessoa saber onde está sem expor os outros. */}
             {!verTodos && eu && minhaPos > 2 && (
               <div className="card" style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 12,
-                                             borderLeft: '4px solid var(--primary)', borderRadius: '0 12px 12px 0' }}>
-                <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--primary)' }}>{minhaPos + 1}º</span>
+                                             borderLeft: `4px solid ${T.cores.principal}`, borderRadius: '0 12px 12px 0' }}>
+                <span style={{ fontWeight: 800, fontSize: 14, color: T.cores.principal }}>{minhaPos + 1}º</span>
                 <Avatar avatarUrl={eu.avatar_url} name={eu.nome} size={30}/>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: 13.5 }}>Sua posição</div>
@@ -273,7 +278,7 @@ export default function Torneios({ userId, profile }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {campanhas.map(c => (
             <div key={c.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <Trophy size={20} color={c.ativa ? 'var(--primary)' : 'var(--text-muted)'} style={{ flexShrink: 0 }}/>
+              <span style={{ fontSize: 22, flexShrink: 0, opacity: c.ativa ? 1 : .45 }}>{temaDe(c.tema).emblema}</span>
               <div style={{ flex: 1, minWidth: 180, cursor: 'pointer' }} onClick={() => abrir(c)}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>
                   {c.nome}
@@ -305,6 +310,38 @@ export default function Torneios({ userId, profile }) {
               <button className="btn-icon" onClick={() => setCriando(false)}><X size={16}/></button>
             </div>
             <div className="modal-body">
+              {/* O tema vem primeiro: escolhido antes do nome, ele sugere o
+                  nome. "A Guerra das Casas" nasce do tema, não do contrário. */}
+              <div className="form-group">
+                <label className="form-label">Tema</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8 }}>
+                  {Object.entries(TEMAS).map(([chave, t]) => {
+                    const escolhido = form.tema === chave;
+                    return (
+                      <button key={chave} type="button"
+                        onClick={() => setForm(f => ({ ...f, tema: chave }))}
+                        style={{
+                          textAlign: 'left', cursor: 'pointer', padding: '10px 12px', borderRadius: 10,
+                          background: escolhido ? t.cores.fundo : 'var(--surface-2)',
+                          border: `1.5px solid ${escolhido ? t.cores.borda : 'var(--border)'}`,
+                        }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
+                          <span style={{ fontSize: 17 }}>{t.emblema}</span>
+                          <span style={{ fontWeight: 700, fontSize: 13,
+                                         color: escolhido ? t.cores.principal : 'var(--text)' }}>{t.nome}</span>
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+                          {t.descricao}
+                        </div>
+                        <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 4 }}>
+                          Setor vira <strong>{t.grupo}</strong> · ponto vira <strong>{t.pontos}</strong>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="form-group">
                 <label className="form-label">Nome</label>
                 <input className="input" value={form.nome} maxLength={60}
