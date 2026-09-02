@@ -63,6 +63,8 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   const [stats, setStats]         = useState({});
   const [naoLidasChat, setNaoLidasChat] = useState(0);
   const [conversas, setConversas] = useState([]);
+  const [nivel, setNivel] = useState(null);
+  const [subiuPara, setSubiuPara] = useState(null);
   const [tarefas, setTarefas]     = useState([]);
   const [comunicados, setComunicados] = useState([]);
   const [listas, setListas]       = useState([]);
@@ -97,6 +99,32 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       setConversas(Array.isArray(convs.data) ? convs.data : []);
     }).finally(() => setLoading(false));
   }, [userId, company]);
+
+  // O nível vem numa busca própria, fora do Promise.all: ele varre o
+  // histórico inteiro da pessoa e pode demorar mais que o resto. Junto,
+  // seguraria o painel todo por causa de um cartão.
+  useEffect(() => {
+    if (!userId) return;
+    api.get(`/gamificacao/nivel?requester_id=${userId}`)
+      .then(r => {
+        setNivel(r.data);
+        // Comemoração ao subir. A marca fica no aparelho: guardar no banco
+        // exigiria uma coluna nova, e repetir um parabéns é bem menos ruim
+        // do que a pessoa nunca receber nenhum.
+        try {
+          const chave = `rota_nivel_${userId}`;
+          const anterior = localStorage.getItem(chave);
+          if (anterior && anterior !== r.data.nivel.chave) {
+            const ordem = r.data.escada.map(n => n.chave);
+            if (ordem.indexOf(r.data.nivel.chave) > ordem.indexOf(anterior)) {
+              setSubiuPara(r.data.nivel);
+            }
+          }
+          localStorage.setItem(chave, r.data.nivel.chave);
+        } catch { /* aba anônima */ }
+      })
+      .catch(() => {});
+  }, [userId]);
 
   const todayIdx = new Date().getDay(); // 0=dom
   const dayNames = ['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
@@ -140,6 +168,47 @@ export default function Dashboard({ setPage, profile: propProfile }) {
           </div>
         </div>
       </div>
+
+      {/* Nível: progresso permanente, independente de campanha. Fica no
+          alto porque é o que a pessoa vê primeiro ao abrir o app — e é o
+          que dá sentido a usar o sistema em mês sem torneio nenhum. */}
+      {nivel && (
+        <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 30, flexShrink: 0 }}>{nivel.nivel.emblema}</span>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 800, fontSize: 15, color: nivel.nivel.cor }}>{nivel.nivel.nome}</span>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{nivel.pontos} pontos</span>
+            </div>
+            <div style={{ height: 7, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden', margin: '7px 0 4px' }}>
+              <div style={{ width: `${nivel.progresso}%`, height: '100%', background: nivel.nivel.cor, transition: 'width .4s' }}/>
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
+              {nivel.proximo
+                ? `Faltam ${nivel.faltam} pontos para ${nivel.proximo.nome} ${nivel.proximo.emblema}`
+                : 'Nível máximo alcançado'}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comemoração de nível novo. Aparece uma vez, e some no toque —
+          parabéns que não sai da frente vira estorvo. */}
+      {subiuPara && (
+        <div onClick={() => setSubiuPara(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 70, background: 'rgba(0,0,0,.55)',
+                   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div className="card" style={{ maxWidth: 340, textAlign: 'center', padding: '28px 22px' }}>
+            <div style={{ fontSize: 54, marginBottom: 8 }}>{subiuPara.emblema}</div>
+            <div style={{ fontWeight: 800, fontSize: 19, marginBottom: 6 }}>Você subiu para {subiuPara.nome}!</div>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 18 }}>
+              Isso não é sorte nem um dia bom: é o que você construiu usando o app
+              com constância. O nível fica — não zera quando um torneio acaba.
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={() => setSubiuPara(null)}>Continuar</button>
+          </div>
+        </div>
+      )}
 
       {/* Sem loja escolhida, os blocos que dependem dela vêm vazios. Dizer
           isso aqui é melhor do que bloquear a tela: as listas e as

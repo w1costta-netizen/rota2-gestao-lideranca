@@ -655,4 +655,91 @@ router.get('/campanhas/:id/extrato', async (req, res) => {
   });
 });
 
+// ─── Nível: progresso permanente ────────────────────────────────────
+//
+// Mecânica DIFERENTE do torneio, não uma variação dele. Torneio tem fim e
+// alguém perde; nível não acaba e ninguém perde. É o que segura quem nunca
+// vai ganhar de ninguém — que é a maioria — e o que mantém sentido nos
+// períodos sem campanha nenhuma rodando.
+//
+// PESO FIXO 1 em tudo, de propósito. Se o nível usasse os pesos de cada
+// campanha, quem trabalhou num mês de "Operação peso 5" subiria mais rápido
+// que quem fez o mesmo noutro mês — e o progresso pessoal deixaria de ser
+// comparável ao longo do tempo, que é justamente o que ele deveria medir.
+//
+// Pontos de nível nunca zeram: campanha acaba, nível acumula.
+const NIVEIS = [
+  { chave: 'bronze',   nome: 'Bronze',   emblema: '🥉', minimo: 0,     cor: '#CD7F32' },
+  { chave: 'prata',    nome: 'Prata',    emblema: '🥈', minimo: 500,   cor: '#B9C2CC' },
+  { chave: 'ouro',     nome: 'Ouro',     emblema: '🥇', minimo: 1500,  cor: '#F5C518' },
+  { chave: 'platina',  nome: 'Platina',  emblema: '💎', minimo: 4000,  cor: '#4FD1C5' },
+  { chave: 'diamante', nome: 'Diamante', emblema: '👑', minimo: 10000, cor: '#8B5CF6' },
+  { chave: 'lenda',    nome: 'Lenda',    emblema: '⭐', minimo: 25000, cor: '#E8681A' },
+];
+
+// A primeira subida precisa vir rápido, senão a pessoa nunca sente o
+// mecanismo funcionando. As últimas precisam demorar, senão perdem valor.
+
+// GET /api/gamificacao/nivel?requester_id=&user_id=
+router.get('/nivel', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const alvoId = req.query.user_id || me.id;
+  if (alvoId !== me.id && !podeCriar(me)) {
+    return res.status(403).json({ error: 'Você só pode ver o seu próprio nível.' });
+  }
+
+  // Desde sempre. A data antiga existe só porque as consultas pedem um
+  // início; não há corte de histórico.
+  const DESDE = '2000-01-01';
+  const ATE = new Date().toISOString().slice(0, 10);
+
+  const { data: registros } = await supabase
+    .from('audit_logs').select('acao, created_at')
+    .eq('company', me.company).eq('status', 'sucesso').eq('user_id', alvoId)
+    .in('acao', Object.keys(ACOES))
+    .limit(50000);
+
+  // O mesmo teto por dia do torneio. Sem ele, o nível seria só contagem
+  // bruta e subir viraria questão de uma tarde ocupada.
+  const balde = {};
+  const dias = new Set();
+  (registros || []).forEach(r => {
+    const dia = diaDe(r.created_at);
+    balde[`${r.acao}|${dia}`] = (balde[`${r.acao}|${dia}`] || 0) + 1;
+    dias.add(dia);
+  });
+
+  let pontos = 0;
+  Object.entries(balde).forEach(([k, vezes]) => {
+    const [acao] = k.split('|');
+    const regra = ACOES[acao];
+    pontos += Math.min(vezes, regra.tetoDia) * regra.base;
+  });
+  pontos += dias.size * PONTOS_POR_DIA_ATIVO;
+
+  for (const regra of Object.values(QUALIDADE)) {
+    const contados = await regra.contar([alvoId], DESDE, ATE);
+    pontos += (contados[alvoId] || 0) * regra.base;
+  }
+
+  const atual = [...NIVEIS].reverse().find(n => pontos >= n.minimo) || NIVEIS[0];
+  const proximo = NIVEIS.find(n => n.minimo > pontos) || null;
+
+  res.json({
+    pontos,
+    diasAtivos: dias.size,
+    nivel: atual,
+    proximo,
+    faltam: proximo ? proximo.minimo - pontos : 0,
+    // Progresso dentro da faixa atual, para a barra não começar sempre do
+    // zero a cada nível novo.
+    progresso: proximo
+      ? Math.round(((pontos - atual.minimo) / (proximo.minimo - atual.minimo)) * 100)
+      : 100,
+    escada: NIVEIS,
+  });
+});
+
 module.exports = router;
