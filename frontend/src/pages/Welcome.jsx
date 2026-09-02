@@ -1,10 +1,21 @@
 import React, { useState } from 'react';
+// Ícones desenhados, não emoji.
+//
+// Emoji é desenhado pelo sistema operacional: o mesmo caractere vira uma
+// coisa no Windows, outra no iPhone, outra no Android — e o app não controla
+// nenhuma delas. Estes são os mesmos do resto do produto, então a tela de
+// boas-vindas passa a parecer parte do app em vez de um aviso colado nele.
+import {
+  Compass, Smartphone, ShieldCheck, Bell,
+  CheckSquare, Megaphone, CalendarRange, PenTool, MessageCircle,
+  Download, Feather, Camera, Lock, Trash2, Check,
+} from 'lucide-react';
 import api from '../api';
 import { situacaoAtual, ativarNotificacoes } from '../lib/notificacoes';
 
 const STEPS = [
   {
-    icon: '🧭',
+    icon: Compass,
     title: 'Bem-vindo ao Rota Líder',
     subtitle: 'Gestão, Liderança e Produtividade',
     body: 'Tudo o que a liderança precisa em um lugar só — no computador e no celular.',
@@ -12,15 +23,15 @@ const STEPS = [
     // adicional: a primeira tela do app prometia algo que o cliente novo não
     // tem. Mesmo erro do "acesso completo" que as páginas de venda traziam.
     highlights: [
-      { icon: '✅', text: 'Tarefas com prazo e responsável' },
-      { icon: '📢', text: 'Comunicados com controle de quem leu' },
-      { icon: '📋', text: 'Escala e agenda da equipe' },
-      { icon: '🖋️', text: 'Atas de reunião assinadas' },
-      { icon: '💬', text: 'Conversas e Diário de Bordo' },
+      { icon: CheckSquare, text: 'Tarefas com prazo e responsável' },
+      { icon: Megaphone, text: 'Comunicados com controle de quem leu' },
+      { icon: CalendarRange, text: 'Escala e agenda da equipe' },
+      { icon: PenTool, text: 'Atas de reunião assinadas' },
+      { icon: MessageCircle, text: 'Conversas e Diário de Bordo' },
     ],
   },
   {
-    icon: '📱',
+    icon: Smartphone,
     title: 'Leve na tela inicial',
     subtitle: 'Como um app nativo, sem ocupar espaço',
     // O motivo importa mais que o passo a passo: sem ele a pessoa pula a
@@ -28,7 +39,7 @@ const STEPS = [
     body: 'No iPhone, as notificações só funcionam com o app na tela de início. Vale fazer agora — leva 20 segundos.',
     tutorial: [
       {
-        os: '🍎 iPhone (Safari)',
+        os: 'iPhone (Safari)',
         steps: [
           'Abra o link no Safari (não no Chrome)',
           'Toque no ícone de compartilhar ↑ na barra de baixo',
@@ -37,7 +48,7 @@ const STEPS = [
         ],
       },
       {
-        os: '🤖 Android (Chrome)',
+        os: 'Android (Chrome)',
         steps: [
           'Abra o link no Google Chrome',
           'Toque nos 3 pontinhos ⋮ no canto superior direito',
@@ -48,7 +59,7 @@ const STEPS = [
     ],
   },
   {
-    icon: '🔒',
+    icon: ShieldCheck,
     title: 'Seguro e leve',
     subtitle: 'Sem impacto no seu celular',
     body: null,
@@ -63,15 +74,15 @@ const STEPS = [
       // justamente para adicionar à tela de início. Uma tela desmentindo a
       // outra é pior do que não dizer nada. O que é verdade: o ícone vai
       // para a tela de início, mas não vem de loja de aplicativos.
-      { icon: '📲', text: 'O ícone fica na tela de início, sem baixar da loja de apps' },
-      { icon: '✅', text: 'Ocupa pouquíssimo espaço — bem menos que um aplicativo comum' },
-      { icon: '📷', text: 'Usa a câmera e as fotos só quando você anexa alguma' },
-      { icon: '🔒', text: 'Não lê seus contatos nem suas mensagens' },
-      { icon: '✅', text: 'Para remover: apague o ícone da tela' },
+      { icon: Download, text: 'O ícone fica na tela de início, sem baixar da loja de apps' },
+      { icon: Feather, text: 'Ocupa pouquíssimo espaço — bem menos que um aplicativo comum' },
+      { icon: Camera, text: 'Usa a câmera e as fotos só quando você anexa alguma' },
+      { icon: Lock, text: 'Não lê seus contatos nem suas mensagens' },
+      { icon: Trash2, text: 'Para remover: apague o ícone da tela' },
     ],
   },
   {
-    icon: '🔔',
+    icon: Bell,
     title: 'Ative as notificações',
     subtitle: 'Fique sabendo na hora',
     body: 'Quando publicarem um comunicado, alterarem a agenda ou passarem uma tarefa para você, o aviso chega mesmo com o app fechado.',
@@ -128,9 +139,16 @@ export default function Welcome({ userId, onFinish }) {
         border: '1px solid #2a2a2a',
         boxShadow: '0 24px 60px rgba(0,0,0,.6)',
       }}>
-        {/* Icon */}
-        <div style={{ fontSize: 56, textAlign: 'center', marginBottom: 16 }}>
-          {current.icon}
+        {/* Ícone do passo, dentro de um círculo — sem o círculo o traço fino
+            some no fundo escuro. */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: '50%',
+            background: 'rgba(232,104,26,.12)', border: '1px solid rgba(232,104,26,.35)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <current.icon size={32} color="#E8681A" strokeWidth={1.8}/>
+          </div>
         </div>
 
         <h1 style={{ fontSize: 22, fontWeight: 800, color: '#fff', textAlign: 'center', marginBottom: 6 }}>
@@ -155,7 +173,7 @@ export default function Welcome({ userId, onFinish }) {
                 display: 'flex', alignItems: 'center', gap: 14,
                 background: '#242424', borderRadius: 12, padding: '12px 16px',
               }}>
-                <span style={{ fontSize: 22 }}>{h.icon}</span>
+                <h.icon size={19} color="#E8681A" strokeWidth={1.9} style={{ flexShrink: 0 }}/>
                 <span style={{ fontSize: 14, color: '#ddd', fontWeight: 500 }}>{h.text}</span>
               </div>
             ))}
@@ -189,7 +207,7 @@ export default function Welcome({ userId, onFinish }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {current.facts.map((f, i) => (
               <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                <span style={{ fontSize: 16 }}>{f.icon}</span>
+                <f.icon size={17} color="#E8681A" strokeWidth={1.9} style={{ flexShrink: 0 }}/>
                 <span style={{ fontSize: 14, color: '#ccc' }}>{f.text}</span>
               </div>
             ))}
@@ -219,9 +237,10 @@ export default function Welcome({ userId, onFinish }) {
               <div style={{
                 padding: '14px', borderRadius: 14,
                 background: '#10b98120', border: '1px solid #10b981',
-                textAlign: 'center', color: '#10b981', fontWeight: 700, fontSize: 14,
+                color: '#10b981', fontWeight: 700, fontSize: 14,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}>
-                ✅ Notificações ativadas
+                <Check size={16} strokeWidth={2.6}/> Notificações ativadas
               </div>
             ) : push === 'precisa_instalar' ? (
               // No iPhone a notificação só existe no app instalado. Sem este
@@ -232,7 +251,7 @@ export default function Welcome({ userId, onFinish }) {
                 background: '#E8681A20', border: '1px solid #E8681A',
                 color: '#E8681A', fontSize: 13, lineHeight: 1.5,
               }}>
-                📱 No iPhone, primeiro adicione o app à tela de início (passo anterior)
+                No iPhone, primeiro adicione o app à tela de início (passo anterior)
                 e abra por lá. Depois é só ativar aqui no Perfil.
               </div>
             ) : push === 'bloqueado' ? (
@@ -253,8 +272,11 @@ export default function Welcome({ userId, onFinish }) {
                   background: '#E8681A', color: '#fff',
                   fontWeight: 700, fontSize: 15, cursor: 'pointer',
                   opacity: ativando ? .7 : 1,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
                 }}>
-                {ativando ? 'Ativando...' : '🔔 Ativar notificações'}
+                {ativando ? 'Ativando...' : (
+                  <><Bell size={17} strokeWidth={2.2}/> Ativar notificações</>
+                )}
               </button>
             )}
             <div style={{ fontSize: 12, color: '#777', marginTop: 10, textAlign: 'center' }}>
