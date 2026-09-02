@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trophy, Plus, X, Users, User, Medal, HelpCircle, CalendarCheck, Lightbulb, UserPlus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
+import { Trophy, Plus, X, Users, User, Medal, HelpCircle, CalendarCheck, Lightbulb, UserPlus, Pencil, Trash2, AlertTriangle, FileSearch } from 'lucide-react';
 import api from '../api';
 import Avatar from '../components/Avatar';
 import { useToast } from '../components/Toast';
@@ -29,6 +29,120 @@ const formatarData = (d) => d ? d.split('-').reverse().join('/') : '—';
 // placar e outro para a lista de torneios. Definido dentro de um deles, o
 // modal só existia naquele: clicar em "Como pontuar" de dentro do placar
 // não abria nada, que foi exatamente o defeito relatado.
+// Extrato de pontos — o contraditório do torneio.
+//
+// Alguém VAI dizer "eu fiz e não contou". Sem esta tela a conversa termina
+// no "acho que sim", que é a forma mais rápida de um placar perder a
+// credibilidade. Aqui a pessoa vê o que registrou, o que virou ponto, o que
+// não virou e a razão — e a discussão vira conferência.
+function ModalExtrato({ userId, campanhaId, pessoaId, aoFechar, toast }) {
+  const [dados, setDados] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await api.get(
+          `/gamificacao/campanhas/${campanhaId}/extrato?requester_id=${userId}&user_id=${pessoaId}`);
+        setDados(r.data);
+      } catch (e) {
+        toast(e?.response?.data?.error || 'Não foi possível carregar o extrato.', 'error');
+        aoFechar();
+      }
+    })();
+  }, []);
+
+  const Linha = ({ titulo, detalhe, pontos, aviso }) => (
+    <div style={{ padding: '9px 0', borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13 }}>{titulo}</span>
+        <span style={{ fontWeight: 800, fontSize: 14, flexShrink: 0,
+                       color: pontos ? 'var(--text)' : 'var(--text-muted)' }}>{pontos}</span>
+      </div>
+      {detalhe && (
+        <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>{detalhe}</div>
+      )}
+      {aviso && (
+        <div style={{ fontSize: 11.5, color: '#f59e0b', marginTop: 3 }}>{aviso}</div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="modal-overlay" onClick={ev => ev.target === ev.currentTarget && aoFechar()}>
+      <div className="modal" style={{ maxWidth: 580 }}>
+        <div className="modal-header">
+          <span className="modal-title">Extrato de pontos</span>
+          <button className="btn-icon" onClick={aoFechar}><X size={16}/></button>
+        </div>
+        <div className="modal-body">
+          {!dados ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Carregando o extrato...</p>
+          ) : (
+            <>
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontWeight: 800, fontSize: 15 }}>{dados.pessoa.nome}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                  {dados.pessoa.setor || '—'} · {formatarData(dados.periodo.inicio)} a {formatarData(dados.periodo.fim)}
+                </div>
+              </div>
+
+              {dados.pontosConstancia > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4 }}>Constância</div>
+                  <Linha
+                    titulo={`${dados.diasAtivos} dia(s) com atividade`}
+                    detalhe={`${dados.pontosPorDiaAtivo} pontos por dia, multiplicados pelo peso`}
+                    pontos={dados.pontosConstancia}/>
+                </div>
+              )}
+
+              {dados.qualidade.length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4 }}>Qualidade</div>
+                  {dados.qualidade.map(q => (
+                    <Linha key={q.nome} titulo={q.nome}
+                      detalhe={`${q.qtd}× · ${q.base} pontos cada`}
+                      pontos={q.pontos}
+                      aviso={q.qtd === 0 ? 'Nada aqui no período — esta conta só cumprindo o prazo.' : null}/>
+                  ))}
+                </div>
+              )}
+
+              {dados.linhas.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.6 }}>
+                  Nenhuma ação que pontua foi registrada neste período. Ações como editar
+                  ou apagar não pontuam — só criar, concluir, conferir e participar.
+                </p>
+              ) : (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4 }}>Ações registradas</div>
+                  {dados.linhas.map(l => (
+                    <Linha key={l.acao} titulo={l.nome}
+                      detalhe={`${l.vezes}× em ${l.dias} dia(s) · ${l.contadas} contaram · ${l.base} pontos × peso ${l.peso || 0} (${l.familiaNome})`}
+                      pontos={l.pontos}
+                      aviso={l.observacao}/>
+                  ))}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            paddingTop: 12, borderTop: '2px solid var(--border)' }}>
+                <span style={{ fontWeight: 800, fontSize: 14 }}>Total</span>
+                <span style={{ fontWeight: 800, fontSize: 20 }}>{dados.total}</span>
+              </div>
+
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 12, lineHeight: 1.6 }}>
+                Só entram ações registradas dentro do período do torneio, e só das famílias
+                que este torneio usa. Editar e apagar não pontuam.
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Montagem das equipes.
 //
 // Equipe pertence à LOJA, não à campanha: monta uma vez e vale para todos os
@@ -334,6 +448,7 @@ export default function Torneios({ userId, profile }) {
   const [regras, setRegras] = useState(null);
   const [verRegras, setVerRegras] = useState(false);
   const [verEquipes, setVerEquipes] = useState(false);
+  const [extratoDe, setExtratoDe] = useState(null);
 
   const carregar = async () => {
     try {
@@ -524,10 +639,14 @@ export default function Torneios({ userId, profile }) {
               {lista.length === 0
                 ? <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Ninguém pontuou ainda.</p>
                 : lista.map((p, i) => (
-                  <div key={p.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0',
-                    borderBottom: i < lista.length - 1 ? '1px solid var(--border)' : 'none',
-                  }}>
+                  <div key={p.id}
+                    onClick={() => (ehGestor || p.id === userId) && setExtratoDe(p.id)}
+                    title={(ehGestor || p.id === userId) ? 'Ver de onde vieram estes pontos' : undefined}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0',
+                      cursor: (ehGestor || p.id === userId) ? 'pointer' : 'default',
+                      borderBottom: i < lista.length - 1 ? '1px solid var(--border)' : 'none',
+                    }}>
                     <span style={{
                       width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -565,6 +684,9 @@ export default function Torneios({ userId, profile }) {
                   <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{eu.setor || '—'}</div>
                 </div>
                 <div style={{ fontWeight: 800, fontSize: 16 }}>{eu.pontos}</div>
+                <button className="btn btn-sm" onClick={() => setExtratoDe(userId)}>
+                  <FileSearch size={13}/> Extrato
+                </button>
               </div>
             )}
 
@@ -604,6 +726,10 @@ export default function Torneios({ userId, profile }) {
         )}
 
         {verRegras && <ModalRegras regras={regras} aoFechar={() => setVerRegras(false)}/>}
+        {extratoDe && (
+          <ModalExtrato userId={userId} campanhaId={aberta.id} pessoaId={extratoDe}
+            toast={toast} aoFechar={() => setExtratoDe(null)}/>
+        )}
       </div>
     );
   }

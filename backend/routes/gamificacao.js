@@ -541,4 +541,118 @@ router.get('/campanhas/:id/placar', async (req, res) => {
   res.json({ campanha, individual, setores, familias, usandoEquipes, foraDeEquipe });
 });
 
+// GET /api/gamificacao/campanhas/:id/extrato?requester_id=&user_id=
+//
+// O contraditorio do torneio. Alguem VAI dizer "eu fiz e nao contou" — e
+// sem isto a conversa termina no "acho que sim", que e a pior forma de
+// perder a confianca num placar.
+//
+// Mostra tudo o que a pessoa registrou no periodo: o que virou ponto, o que
+// nao virou e a razao. Sem razao escrita, corte de limite parece o app
+// engolindo ponto.
+//
+// Cada pessoa ve o proprio extrato; admin e master veem o de qualquer um —
+// e e o gestor quem precisa dele para responder a reclamacao.
+router.get('/campanhas/:id/extrato', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const alvoId = req.query.user_id || me.id;
+  if (alvoId !== me.id && !podeCriar(me)) {
+    return res.status(403).json({ error: 'Você só pode ver o seu próprio extrato.' });
+  }
+
+  const { data: campanha } = await supabase
+    .from('campanhas_gamificacao').select('*').eq('id', req.params.id).maybeSingle();
+  if (!campanha || campanha.company !== me.company) {
+    return res.status(404).json({ error: 'Campanha não encontrada' });
+  }
+
+  const { data: pessoa } = await supabase
+    .from('profiles').select('id, full_name, sector, company, active').eq('id', alvoId).maybeSingle();
+  if (!pessoa || pessoa.company !== me.company) {
+    return res.status(404).json({ error: 'Pessoa não encontrada' });
+  }
+
+  const pesoDe = {};
+  (campanha.metricas || []).forEach(m => { pesoDe[m.chave] = m.peso; });
+
+  const { data: registros } = await supabase
+    .from('audit_logs').select('acao, created_at')
+    .eq('company', me.company).eq('status', 'sucesso').eq('user_id', alvoId)
+    .gte('created_at', campanha.inicio).lte('created_at', fimDoDia(campanha.fim))
+    .limit(20000);
+
+  // Agrupa por acao e por dia — é assim que o teto é aplicado, e mostrar do
+  // mesmo jeito deixa a conta conferível linha a linha.
+  const porAcaoDia = {};
+  const diasAtivos = new Set();
+  (registros || []).forEach(r => {
+    if (!ACOES[r.acao]) return;   // ação registrada que não pontua
+    const dia = diaDe(r.created_at);
+    const k = `${r.acao}|${dia}`;
+    porAcaoDia[k] = (porAcaoDia[k] || 0) + 1;
+    diasAtivos.add(dia);
+  });
+
+  const resumo = {};
+  Object.entries(porAcaoDia).forEach(([k, vezes]) => {
+    const [acao] = k.split('|');
+    const regra = ACOES[acao];
+    if (!resumo[acao]) {
+      resumo[acao] = {
+        acao, nome: regra.nome, familia: regra.familia, base: regra.base,
+        tetoDia: regra.tetoDia, vezes: 0, contadas: 0, cortadas: 0, dias: 0,
+      };
+    }
+    const contadas = Math.min(vezes, regra.tetoDia);
+    resumo[acao].vezes    += vezes;
+    resumo[acao].contadas += contadas;
+    resumo[acao].cortadas += vezes - contadas;
+    resumo[acao].dias     += 1;
+  });
+
+  const linhas = Object.values(resumo).map(r => {
+    const peso = pesoDe[r.familia] || 0;
+    const pontos = peso ? r.contadas * r.base * peso : 0;
+    let observacao = null;
+    if (!peso) {
+      observacao = `Não conta neste torneio: a família ${FAMILIAS[r.familia].nome} ficou de fora.`;
+    } else if (r.cortadas > 0) {
+      observacao = `${r.cortadas} não contaram: o limite é ${r.tetoDia} por dia.`;
+    }
+    return { ...r, peso, pontos, familiaNome: FAMILIAS[r.familia].nome, observacao };
+  }).sort((a, b) => b.pontos - a.pontos || b.vezes - a.vezes);
+
+  // Qualidade separada: aqui o motivo de não pontuar é o prazo, não o teto.
+  const qualidade = [];
+  if (pesoDe.qualidade) {
+    for (const regra of Object.values(QUALIDADE)) {
+      const contados = await regra.contar([alvoId], campanha.inicio, campanha.fim);
+      const qtd = contados[alvoId] || 0;
+      qualidade.push({
+        nome: regra.nome, base: regra.base, qtd,
+        pontos: qtd * regra.base * pesoDe.qualidade,
+      });
+    }
+  }
+
+  const pontosConstancia = pesoDe.constancia
+    ? diasAtivos.size * PONTOS_POR_DIA_ATIVO * pesoDe.constancia : 0;
+
+  const total = linhas.reduce((t, l) => t + l.pontos, 0)
+              + qualidade.reduce((t, q) => t + q.pontos, 0)
+              + pontosConstancia;
+
+  res.json({
+    pessoa: { id: pessoa.id, nome: pessoa.full_name, setor: pessoa.sector },
+    periodo: { inicio: campanha.inicio, fim: campanha.fim },
+    familiasAtivas: (campanha.metricas || []).map(m => ({ chave: m.chave, nome: FAMILIAS[m.chave]?.nome, peso: m.peso })),
+    diasAtivos: diasAtivos.size,
+    pontosPorDiaAtivo: PONTOS_POR_DIA_ATIVO,
+    pontosConstancia,
+    linhas, qualidade, total,
+  });
+});
+
 module.exports = router;
