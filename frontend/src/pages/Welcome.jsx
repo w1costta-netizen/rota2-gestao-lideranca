@@ -59,8 +59,12 @@ const STEPS = [
     // O tamanho também saiu: eram "menos de 500KB" contra 514KB medidos, e o
     // número só cresce. Promessa que envelhece mal não vale a pena.
     facts: [
-      { icon: '✅', text: 'Não instala nada no celular — abre como um site' },
-      { icon: '✅', text: 'Ocupa pouquíssimo espaço' },
+      // "Não instala nada no celular" contradizia a tela anterior, que pede
+      // justamente para adicionar à tela de início. Uma tela desmentindo a
+      // outra é pior do que não dizer nada. O que é verdade: o ícone vai
+      // para a tela de início, mas não vem de loja de aplicativos.
+      { icon: '📲', text: 'O ícone fica na tela de início, sem baixar da loja de apps' },
+      { icon: '✅', text: 'Ocupa pouquíssimo espaço — bem menos que um aplicativo comum' },
       { icon: '📷', text: 'Usa a câmera e as fotos só quando você anexa alguma' },
       { icon: '🔒', text: 'Não lê seus contatos nem suas mensagens' },
       { icon: '✅', text: 'Para remover: apague o ícone da tela' },
