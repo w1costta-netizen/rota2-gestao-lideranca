@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Megaphone, CheckSquare, CalendarDays, ListChecks, StickyNote, Pin,
-  AlertTriangle, Clock, Users
+  AlertTriangle, Clock, Users, MessageCircle
 } from 'lucide-react';
 
 // As mesmas cores da tela de Anotações. Repetidas aqui de propósito: o
@@ -14,6 +14,7 @@ const COR_ANOTACAO = {
 };
 import api from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import Avatar from '../components/Avatar';
 import { formatDate } from '../utils';
 
 // Uma tarefa só "cobra" como pendente depois que o dia e horário do prazo passarem
@@ -60,6 +61,8 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   const week     = getCurrentWeekStart();
 
   const [stats, setStats]         = useState({});
+  const [naoLidasChat, setNaoLidasChat] = useState(0);
+  const [conversas, setConversas] = useState([]);
   const [tarefas, setTarefas]     = useState([]);
   const [comunicados, setComunicados] = useState([]);
   const [listas, setListas]       = useState([]);
@@ -79,13 +82,19 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       api.get(`/anotacoes?requester_id=${userId}&arquivadas=0`).catch(() => ({ data: [] })),
       api.get(`/agenda?week_start=${week}${company ? `&company=${encodeURIComponent(company)}` : ''}&user_id=${userId}&sector=${encodeURIComponent(profile?.sector || '')}`).catch(() => ({ data: [] })),
       isAdmin && company ? api.get(`/admin/users?requester_id=${userId}${cq}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
-    ]).then(([t, c, li, an, ag, users]) => {
+      // Conversa é entre pessoas, não da loja: não leva company e funciona
+      // mesmo para quem está fora de uma (o dono do sistema, por exemplo).
+      api.get(`/chat/nao-lidas?requester_id=${userId}`).catch(() => ({ data: { total: 0 } })),
+      api.get(`/chat/conversas?requester_id=${userId}`).catch(() => ({ data: [] })),
+    ]).then(([t, c, li, an, ag, users, chat, convs]) => {
       setTarefas(t.data || []);
       setComunicados(c.data || []);
       setListas(li.data || []);
       setAnotacoes(an.data || []);
       setAgenda(ag.data || []);
       setStats({ totalUsers: (users.data || []).length });
+      setNaoLidasChat(chat.data?.total || 0);
+      setConversas(Array.isArray(convs.data) ? convs.data : []);
     }).finally(() => setLoading(false));
   }, [userId, company]);
 
@@ -191,6 +200,12 @@ export default function Dashboard({ setPage, profile: propProfile }) {
         <StatCard icon={Megaphone} color="#E8681A" bg="#E8681A15"
           value={naoLidos.length} label="Comunicados não lidos"
           onClick={() => setPage('comunicados')}/>
+        {/* Junto dos comunicados de propósito: os dois respondem à mesma
+            pergunta que a pessoa faz ao abrir o app — o que chegou para mim
+            e eu ainda não vi. */}
+        <StatCard icon={MessageCircle} color="#0ea5e9" bg="#0ea5e915"
+          value={naoLidasChat} label="Conversas não lidas"
+          onClick={() => setPage('chat')}/>
         {isAdmin
           ? <StatCard icon={Users} color="#10b981" bg="#10b98115"
               value={stats.totalUsers || 0} label="Usuários cadastrados"
@@ -366,6 +381,53 @@ export default function Dashboard({ setPage, profile: propProfile }) {
                     </div>
                   );
                 })}
+              </div>
+          }
+        </div>
+
+        {/* Conversas — acima de Anotações de propósito.
+            Mensagem é a única coisa do app que a pessoa precisa ver AGORA:
+            o push pode não ter chegado (aparelho no modo Sono, bateria
+            baixa, notificação recusada), e sem este bloco ela só descobre
+            entrando na tela. Não lidas em destaque, para achar de longe. */}
+        <div className="card">
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+            <div style={{ fontWeight:700, fontSize:14, display:'flex', alignItems:'center', gap:8 }}>
+              <MessageCircle size={15} color="#0ea5e9"/> Conversas
+              {naoLidasChat > 0 && (
+                <span style={{ background:'#0ea5e9', color:'#fff', borderRadius:99,
+                  fontSize:11, fontWeight:800, padding:'1px 7px' }}>{naoLidasChat}</span>
+              )}
+            </div>
+            <button className="btn-icon" style={{ fontSize:12, color:'var(--primary)' }} onClick={() => setPage('chat')}>
+              Ver tudo
+            </button>
+          </div>
+          {conversas.length === 0
+            ? <p style={{ color:'var(--text-muted)', fontSize:13 }}>Nenhuma conversa ainda.</p>
+            : <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {conversas.slice(0,4).map(c => (
+                  <div key={c.id} onClick={() => setPage('chat')}
+                    style={{ cursor:'pointer', display:'flex', alignItems:'center', gap:10 }}>
+                    <Avatar avatarUrl={c.outro?.avatar_url} name={c.outro?.full_name} size={30}/>
+                    <div style={{ minWidth:0, flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight: c.nao_lidas ? 800 : 600,
+                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {c.outro?.full_name || 'Conversa'}
+                      </div>
+                      <div style={{ fontSize:12, color:'var(--text-muted)',
+                        overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {c.ultima_minha ? 'Você: ' : ''}{c.ultima_texto || 'Sem mensagens'}
+                      </div>
+                    </div>
+                    {c.nao_lidas > 0 && (
+                      <span style={{ background:'#0ea5e9', color:'#fff', borderRadius:99,
+                        fontSize:10.5, fontWeight:800, padding:'1px 6px', flexShrink:0 }}>
+                        {c.nao_lidas}
+                      </span>
+                    )}
+                  </div>
+                ))}
               </div>
           }
         </div>
