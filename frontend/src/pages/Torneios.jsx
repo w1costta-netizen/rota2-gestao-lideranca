@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trophy, Plus, X, Users, User, Medal, HelpCircle, CalendarCheck, Lightbulb } from 'lucide-react';
+import { Trophy, Plus, X, Users, User, Medal, HelpCircle, CalendarCheck, Lightbulb, UserPlus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 import api from '../api';
 import Avatar from '../components/Avatar';
 import { useToast } from '../components/Toast';
@@ -29,6 +29,178 @@ const formatarData = (d) => d ? d.split('-').reverse().join('/') : '—';
 // placar e outro para a lista de torneios. Definido dentro de um deles, o
 // modal só existia naquele: clicar em "Como pontuar" de dentro do placar
 // não abria nada, que foi exatamente o defeito relatado.
+// Montagem das equipes.
+//
+// Equipe pertence à LOJA, não à campanha: monta uma vez e vale para todos os
+// torneios. Amarrar à campanha obrigaria a redistribuir a loja inteira a cada
+// torneio, e essa fricção mataria o recurso no segundo mês.
+function ModalEquipes({ userId, aoFechar, toast }) {
+  const [dados, setDados] = useState(null);
+  const [editando, setEditando] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+
+  const carregar = async () => {
+    try {
+      const r = await api.get(`/gamificacao/equipes?requester_id=${userId}`);
+      setDados(r.data);
+    } catch {
+      toast('Não foi possível carregar as equipes.', 'error');
+    }
+  };
+  useEffect(() => { carregar(); }, []);
+
+  // Quem já está em OUTRA equipe não aparece na lista: cada pessoa em uma
+  // equipe só, senão os pontos dela contariam duas vezes e o placar mentiria.
+  const disponiveis = () => {
+    if (!dados) return [];
+    const emOutras = new Set(
+      dados.equipes.filter(e => e.id !== editando?.id).flatMap(e => e.membros || [])
+    );
+    const todos = [...dados.semEquipe, ...dados.equipes.flatMap(e => e.membros_detalhe || [])];
+    const unicos = Object.values(Object.fromEntries(todos.map(x => [x.id, x])));
+    return unicos.filter(x => !emOutras.has(x.id))
+      .sort((a, b) => (a.full_name || '').localeCompare(b.full_name || ''));
+  };
+
+  const salvar = async () => {
+    if (!editando.nome.trim()) return toast('Dê um nome à equipe.', 'error');
+    setSalvando(true);
+    try {
+      const corpo = { requester_id: userId, nome: editando.nome, membros: editando.membros };
+      if (editando.id) await api.put(`/gamificacao/equipes/${editando.id}`, corpo);
+      else             await api.post('/gamificacao/equipes', corpo);
+      setEditando(null);
+      carregar();
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Não foi possível salvar.', 'error');
+    }
+    setSalvando(false);
+  };
+
+  const excluir = async (e) => {
+    if (!confirm(`Excluir a equipe "${e.nome}"? As pessoas voltam a ficar sem equipe.`)) return;
+    try {
+      await api.delete(`/gamificacao/equipes/${e.id}?requester_id=${userId}`);
+      carregar();
+    } catch {
+      toast('Não foi possível excluir.', 'error');
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={ev => ev.target === ev.currentTarget && aoFechar()}>
+      <div className="modal" style={{ maxWidth: 560 }}>
+        <div className="modal-header">
+          <span className="modal-title">
+            {editando ? (editando.id ? 'Editar equipe' : 'Nova equipe') : 'Equipes'}
+          </span>
+          <button className="btn-icon" onClick={() => editando ? setEditando(null) : aoFechar()}>
+            <X size={16}/>
+          </button>
+        </div>
+        <div className="modal-body">
+          {!dados ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Carregando...</p>
+          ) : editando ? (
+            <>
+              <div className="form-group">
+                <label className="form-label">Nome da equipe</label>
+                <input className="input" value={editando.nome} maxLength={40} autoFocus
+                  onChange={ev => setEditando(x => ({ ...x, nome: ev.target.value }))}
+                  placeholder="Ex: Casa do Norte"/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Quem faz parte ({editando.membros.length})</label>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+                  Quem já está em outra equipe não aparece aqui — cada pessoa pode
+                  estar em uma equipe só.
+                </div>
+                <div style={{ maxHeight: 260, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
+                  {disponiveis().map(pessoa => {
+                    const dentro = editando.membros.includes(pessoa.id);
+                    return (
+                      <label key={pessoa.id} style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px',
+                        borderBottom: '1px solid var(--border)', cursor: 'pointer',
+                      }}>
+                        <input type="checkbox" checked={dentro}
+                          onChange={() => setEditando(x => ({
+                            ...x,
+                            membros: dentro
+                              ? x.membros.filter(i => i !== pessoa.id)
+                              : [...x.membros, pessoa.id],
+                          }))}/>
+                        <Avatar avatarUrl={pessoa.avatar_url} name={pessoa.full_name} size={26}/>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{pessoa.full_name}</span>
+                          <span style={{ display: 'block', fontSize: 11, color: 'var(--text-muted)' }}>{pessoa.sector || '—'}</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}
+                onClick={salvar} disabled={salvando}>
+                {salvando ? 'Salvando...' : 'Salvar equipe'}
+              </button>
+            </>
+          ) : (
+            <>
+              {dados.semEquipe.length > 0 && (
+                <div className="card" style={{ marginBottom: 14, display: 'flex', gap: 10, alignItems: 'flex-start',
+                                               borderLeft: '4px solid #f59e0b', borderRadius: '0 12px 12px 0' }}>
+                  <AlertTriangle size={17} color="#f59e0b" style={{ flexShrink: 0, marginTop: 1 }}/>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                    <strong>{dados.semEquipe.length} pessoa(s) sem equipe.</strong> Elas continuam
+                    no ranking individual, mas não entram no de equipes.
+                  </div>
+                </div>
+              )}
+
+              {dados.equipes.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: 13, lineHeight: 1.6 }}>
+                  Nenhuma equipe montada. Enquanto não houver, o torneio disputa por
+                  setor — o que já funciona, mas não deixa você equilibrar os times.
+                </p>
+              ) : dados.equipes.map(e => (
+                <div key={e.id} style={{
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '11px 0',
+                  borderBottom: '1px solid var(--border)',
+                }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13.5 }}>{e.nome}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--text-muted)', overflow: 'hidden',
+                                  textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {(e.membros_detalhe || []).length} pessoa(s)
+                      {e.membros_detalhe?.length
+                        ? ' · ' + e.membros_detalhe.map(m => (m.full_name || '').split(' ')[0]).join(', ')
+                        : ''}
+                    </div>
+                  </div>
+                  <button className="btn-icon" title="Editar"
+                    onClick={() => setEditando({ id: e.id, nome: e.nome, membros: [...(e.membros || [])] })}>
+                    <Pencil size={15}/>
+                  </button>
+                  <button className="btn-icon" title="Excluir" style={{ color: 'var(--danger)' }}
+                    onClick={() => excluir(e)}>
+                    <Trash2 size={15}/>
+                  </button>
+                </div>
+              ))}
+
+              <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 14 }}
+                onClick={() => setEditando({ nome: '', membros: [] })}>
+                <UserPlus size={15}/> Nova equipe
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Como pontuar — a tela mais importante depois do placar. Quem não sabe
 // como subir não muda de comportamento, e o torneio vira decoração. As
 // regras vêm do servidor, geradas pelo mesmo código que calcula os pontos:
@@ -135,10 +307,15 @@ export default function Torneios({ userId, profile }) {
 
   const [criando, setCriando]   = useState(false);
   const [catalogo, setCatalogo] = useState([]);
-  const [form, setForm] = useState({ nome: '', premio: '', inicio: hoje(), fim: '', metricas: {}, tema: 'classico' });
+  const FORM_VAZIO = {
+    nome: '', inicio: hoje(), fim: '', metricas: {}, tema: 'classico',
+    premiosIndividual: ['', '', ''], premiosEquipes: ['', '', ''],
+  };
+  const [form, setForm] = useState(FORM_VAZIO);
   const [salvando, setSalvando] = useState(false);
   const [regras, setRegras] = useState(null);
   const [verRegras, setVerRegras] = useState(false);
+  const [verEquipes, setVerEquipes] = useState(false);
 
   const carregar = async () => {
     try {
@@ -183,12 +360,13 @@ export default function Torneios({ userId, profile }) {
     setSalvando(true);
     try {
       await api.post('/gamificacao/campanhas', {
-        requester_id: userId, nome: form.nome, premio: form.premio,
+        requester_id: userId, nome: form.nome,
         inicio: form.inicio, fim: form.fim, metricas, tema: form.tema,
+        premios: { individual: form.premiosIndividual, equipes: form.premiosEquipes },
       });
       toast('Torneio criado!');
       setCriando(false);
-      setForm({ nome: '', premio: '', inicio: hoje(), fim: '', metricas: {}, tema: 'classico' });
+      setForm(FORM_VAZIO);
       carregar();
     } catch (e) {
       toast(e?.response?.data?.error || 'Erro ao criar o torneio.', 'error');
@@ -224,6 +402,9 @@ export default function Torneios({ userId, profile }) {
   if (aberta) {
     const T = temaDe(aberta.tema);
     const MEDALHA = T.medalhas;
+    // Prêmio da colocação, quando houver. Aparecer ao lado do lugar é o
+    // que transforma o placar em disputa: número sozinho não motiva.
+    const premioDe = (lista, i) => (aberta.premios?.[lista] || [])[i] || null;
     const minhaPos = placar?.individual?.findIndex(p => p.id === userId) ?? -1;
     const eu = minhaPos >= 0 ? placar.individual[minhaPos] : null;
     const topo = placar?.individual?.slice(0, 3) || [];
@@ -249,6 +430,17 @@ export default function Torneios({ userId, profile }) {
             <button className="btn btn-sm" onClick={() => setAberta(null)}>← Voltar</button>
           </div>
         </div>
+
+        {placar?.foraDeEquipe > 0 && (
+          <div className="card" style={{ marginBottom: 12, display: 'flex', gap: 10, alignItems: 'flex-start',
+                                         borderLeft: '4px solid #f59e0b', borderRadius: '0 12px 12px 0' }}>
+            <AlertTriangle size={17} color="#f59e0b" style={{ flexShrink: 0, marginTop: 1 }}/>
+            <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+              <strong>{placar.foraDeEquipe} pessoa(s) fora de qualquer equipe.</strong> Elas
+              contam no ranking individual, mas não no de equipes.
+            </div>
+          </div>
+        )}
 
         {placar?.familias?.length > 0 && (
           <div className="card" style={{ marginBottom: 16 }}>
@@ -295,6 +487,11 @@ export default function Torneios({ userId, profile }) {
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       {s.pessoas} pessoa{s.pessoas !== 1 ? 's' : ''} · {s.pontos} {T.pontos} no total
                     </div>
+                    {premioDe('equipes', i) && (
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: T.cores.principal, marginTop: 3 }}>
+                        🎁 {premioDe('equipes', i)}
+                      </div>
+                    )}
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
                     <div style={{ fontWeight: 800, fontSize: 18 }}>{s.media}</div>
@@ -327,6 +524,11 @@ export default function Torneios({ userId, profile }) {
                         {p.nome}{p.id === userId ? ' (você)' : ''}
                       </div>
                       <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{p.setor || '—'}</div>
+                      {premioDe('individual', i) && (
+                        <div style={{ fontSize: 11.5, fontWeight: 700, color: T.cores.principal, marginTop: 2 }}>
+                          🎁 {premioDe('individual', i)}
+                        </div>
+                      )}
                     </div>
                     <div style={{ fontWeight: 800, fontSize: 16, flexShrink: 0 }}>{p.pontos}</div>
                   </div>
@@ -401,6 +603,11 @@ export default function Torneios({ userId, profile }) {
             <HelpCircle size={14}/> Como pontuar
           </button>
           {ehGestor && (
+            <button className="btn btn-sm" onClick={() => setVerEquipes(true)}>
+              <Users size={14}/> Equipes
+            </button>
+          )}
+          {ehGestor && (
             <button className="btn btn-primary btn-sm" onClick={abrirCriacao}>
               <Plus size={14}/> Novo torneio
             </button>
@@ -450,6 +657,8 @@ export default function Torneios({ userId, profile }) {
 
       {verRegras && <ModalRegras regras={regras} aoFechar={() => setVerRegras(false)}/>}
 
+      {verEquipes && <ModalEquipes userId={userId} toast={toast} aoFechar={() => setVerEquipes(false)}/>}
+
       {criando && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCriando(false)}>
           <div className="modal" style={{ maxWidth: 520 }}>
@@ -496,11 +705,33 @@ export default function Torneios({ userId, profile }) {
                   onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
                   placeholder="Ex: Desafio de Setembro"/>
               </div>
+              {/* Três colocações para cada disputa. O app anuncia e registra;
+                  quem entrega o prêmio é a loja — o sistema não toca em
+                  dinheiro, o que traria obrigação fiscal que você não quer. */}
               <div className="form-group">
-                <label className="form-label">Prêmio (opcional)</label>
-                <input className="input" value={form.premio} maxLength={80}
-                  onChange={e => setForm(f => ({ ...f, premio: e.target.value }))}
-                  placeholder="Ex: Folga extra para o setor campeão"/>
+                <label className="form-label">Prêmios — Individual</label>
+                {[0, 1, 2].map(i => (
+                  <input key={i} className="input" style={{ marginBottom: 6 }} maxLength={80}
+                    value={form.premiosIndividual[i]}
+                    onChange={e => setForm(f => {
+                      const v = [...f.premiosIndividual]; v[i] = e.target.value;
+                      return { ...f, premiosIndividual: v };
+                    })}
+                    placeholder={`${i + 1}º lugar${i === 0 ? ' — ex: folga extra' : ''}`}/>
+                ))}
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Prêmios — Equipes</label>
+                {[0, 1, 2].map(i => (
+                  <input key={i} className="input" style={{ marginBottom: 6 }} maxLength={80}
+                    value={form.premiosEquipes[i]}
+                    onChange={e => setForm(f => {
+                      const v = [...f.premiosEquipes]; v[i] = e.target.value;
+                      return { ...f, premiosEquipes: v };
+                    })}
+                    placeholder={`${i + 1}º lugar${i === 0 ? ' — ex: café da manhã para o time' : ''}`}/>
+                ))}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div className="form-group">

@@ -168,6 +168,127 @@ const podeCriar = (me) => ['admin', 'master'].includes(me.access_level);
 const FAMILIAS_VALIDAS = Object.keys(FAMILIAS);
 const TEMAS_VALIDOS = ['classico', 'reinos', 'copa', 'corrida'];
 
+// ─── Equipes do torneio ─────────────────────────────────────────────
+//
+// Equipe pertence a LOJA, nao a campanha: monta uma vez e vale para todos
+// os torneios, com edicao quando alguem muda de time. Amarrar a equipe a
+// campanha obrigaria a redistribuir 22 pessoas a cada torneio, e essa e
+// exatamente a friccao que faria o recurso parar de ser usado no segundo
+// mes.
+
+// GET /api/gamificacao/equipes?requester_id=
+router.get('/equipes', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuario nao encontrado' });
+  if (!me.company) return res.json({ equipes: [], semEquipe: [] });
+
+  const { data: equipes } = await supabase
+    .from('equipes_torneio').select('*').eq('company', me.company).order('nome');
+
+  const { data: pessoas } = await supabase
+    .from('profiles').select('id, full_name, sector, avatar_url')
+    .eq('company', me.company).eq('active', true).order('full_name');
+
+  // Quem ficou de fora aparece explicitamente: sem isso o gestor so
+  // descobre no meio do torneio que metade da loja nao esta competindo.
+  const alocados = new Set((equipes || []).flatMap(e => e.membros || []));
+  const semEquipe = (pessoas || []).filter(p => !alocados.has(p.id));
+
+  const porId = Object.fromEntries((pessoas || []).map(p => [p.id, p]));
+  res.json({
+    equipes: (equipes || []).map(e => ({
+      ...e,
+      membros_detalhe: (e.membros || []).map(id => porId[id]).filter(Boolean),
+    })),
+    semEquipe,
+  });
+});
+
+// POST /api/gamificacao/equipes  { requester_id, nome, membros }
+router.post('/equipes', async (req, res) => {
+  const me = await getPerfil(req.body?.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuario nao encontrado' });
+  if (!podeCriar(me)) return res.status(403).json({ error: 'So quem administra a loja monta equipes.' });
+
+  const { nome, membros } = req.body || {};
+  if (!nome?.trim()) return res.status(400).json({ error: 'De um nome a equipe.' });
+
+  const limpos = await validarMembros(me.company, membros, null);
+  if (limpos.erro) return res.status(400).json({ error: limpos.erro });
+
+  const { data, error } = await supabase.from('equipes_torneio').insert({
+    company: me.company, nome: nome.trim(), membros: limpos.ids, criado_por: me.id,
+  }).select().single();
+  if (error) return res.status(500).json({ error: 'Nao foi possivel criar a equipe.' });
+
+  logAction({ company: me.company, user_id: me.id, acao: 'criar_equipe_torneio', tabela: 'equipes_torneio', depois: { id: data.id, nome: data.nome } });
+  res.json(data);
+});
+
+// PUT /api/gamificacao/equipes/:id
+router.put('/equipes/:id', async (req, res) => {
+  const me = await getPerfil(req.body?.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuario nao encontrado' });
+  if (!podeCriar(me)) return res.status(403).json({ error: 'Acesso negado' });
+
+  const { data: atual } = await supabase
+    .from('equipes_torneio').select('company').eq('id', req.params.id).maybeSingle();
+  if (!atual || atual.company !== me.company) return res.status(404).json({ error: 'Equipe nao encontrada' });
+
+  const { nome, membros } = req.body || {};
+  if (!nome?.trim()) return res.status(400).json({ error: 'De um nome a equipe.' });
+
+  const limpos = await validarMembros(me.company, membros, req.params.id);
+  if (limpos.erro) return res.status(400).json({ error: limpos.erro });
+
+  const { data, error } = await supabase.from('equipes_torneio')
+    .update({ nome: nome.trim(), membros: limpos.ids })
+    .eq('id', req.params.id).select().single();
+  if (error) return res.status(500).json({ error: 'Nao foi possivel salvar.' });
+
+  logAction({ company: me.company, user_id: me.id, acao: 'editar_equipe_torneio', tabela: 'equipes_torneio', depois: { id: data.id, nome: data.nome } });
+  res.json(data);
+});
+
+// DELETE /api/gamificacao/equipes/:id?requester_id=
+router.delete('/equipes/:id', async (req, res) => {
+  const quem = req.body?.requester_id || req.query?.requester_id;
+  const me = await getPerfil(quem);
+  if (!me) return res.status(403).json({ error: 'Usuario nao encontrado' });
+  if (!podeCriar(me)) return res.status(403).json({ error: 'Acesso negado' });
+
+  const { data: atual } = await supabase
+    .from('equipes_torneio').select('company, nome').eq('id', req.params.id).maybeSingle();
+  if (!atual || atual.company !== me.company) return res.status(404).json({ error: 'Equipe nao encontrada' });
+
+  await supabase.from('equipes_torneio').delete().eq('id', req.params.id);
+  logAction({ company: me.company, user_id: me.id, acao: 'excluir_equipe_torneio', tabela: 'equipes_torneio', antes: { nome: atual.nome } });
+  res.json({ ok: true });
+});
+
+// Uma pessoa em UMA equipe so. Em duas, os pontos dela contariam duas vezes
+// e o placar mentiria - e ninguem descobriria olhando a tela.
+async function validarMembros(company, membros, ignorarEquipeId) {
+  const ids = [...new Set((Array.isArray(membros) ? membros : []).filter(Boolean))];
+  if (!ids.length) return { ids: [] };
+
+  const { data: validos } = await supabase
+    .from('profiles').select('id').eq('company', company).in('id', ids);
+  const doEstabelecimento = new Set((validos || []).map(p => p.id));
+  const forasteiro = ids.find(id => !doEstabelecimento.has(id));
+  if (forasteiro) return { erro: 'So e possivel incluir pessoas desta loja.' };
+
+  let consulta = supabase.from('equipes_torneio').select('id, nome, membros').eq('company', company);
+  if (ignorarEquipeId) consulta = consulta.neq('id', ignorarEquipeId);
+  const { data: outras } = await consulta;
+
+  for (const e of outras || []) {
+    const repetido = (e.membros || []).find(id => ids.includes(id));
+    if (repetido) return { erro: `Alguem que voce escolheu ja esta na equipe "${e.nome}".` };
+  }
+  return { ids };
+}
+
 // GET /api/gamificacao/regras
 //
 // As regras saem do MESMO objeto que calcula o placar. Escrever a
@@ -229,7 +350,7 @@ router.post('/campanhas', async (req, res) => {
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
   if (!podeCriar(me)) return res.status(403).json({ error: 'Só quem administra a loja cria torneios.' });
 
-  const { nome, descricao, premio, inicio, fim, metricas, tema } = req.body || {};
+  const { nome, descricao, premio, premios, inicio, fim, metricas, tema } = req.body || {};
   if (!nome?.trim() || !inicio || !fim) {
     return res.status(400).json({ error: 'Nome, início e fim são obrigatórios.' });
   }
@@ -248,6 +369,13 @@ router.post('/campanhas', async (req, res) => {
     nome: nome.trim(),
     descricao: descricao?.trim() || null,
     premio: premio?.trim() || null,
+    // Três colocações para cada disputa. Texto livre: prêmio é combinado da
+    // loja (folga, vale, brinde), não valor que o sistema controla — o app
+    // anuncia e registra, quem entrega é a loja.
+    premios: {
+      individual: (premios?.individual || []).slice(0, 3).map(t => String(t || '').trim().slice(0, 80)),
+      equipes:    (premios?.equipes    || []).slice(0, 3).map(t => String(t || '').trim().slice(0, 80)),
+    },
     inicio, fim,
     metricas: pesos,
     tema: TEMAS_VALIDOS.includes(tema) ? tema : 'classico',
@@ -366,24 +494,51 @@ router.get('/campanhas/:id/placar', async (req, res) => {
     }))
     .sort((a, b) => b.pontos - a.pontos);
 
-  // Setor grande contra setor pequeno: soma bruta já nasceria decidida.
-  // A média por pessoa é o que torna a disputa justa.
-  const porSetor = {};
-  individual.forEach(p => {
-    const s = p.setor || 'Sem setor';
-    if (!porSetor[s]) porSetor[s] = { setor: s, pontos: 0, pessoas: 0 };
-    porSetor[s].pontos += p.pontos;
-    porSetor[s].pessoas += 1;
-  });
-  const setores = Object.values(porSetor)
-    .map(s => ({ ...s, media: s.pessoas ? Math.round((s.pontos / s.pessoas) * 10) / 10 : 0 }))
-    .sort((a, b) => b.media - a.media);
+  // Equipes montadas à mão têm prioridade. Se a loja ainda não montou
+  // nenhuma, cai no setor — assim o torneio funciona desde o primeiro dia,
+  // e as equipes entram quando o gestor tiver montado.
+  const { data: equipesMontadas } = await supabase
+    .from('equipes_torneio').select('id, nome, membros').eq('company', me.company);
+
+  const usandoEquipes = (equipesMontadas || []).length > 0;
+  const pontoDe = Object.fromEntries(individual.map(p => [p.id, p.pontos]));
+
+  let setores;
+  if (usandoEquipes) {
+    setores = (equipesMontadas || []).map(e => {
+      const membros = (e.membros || []).filter(id => pontoDe[id] !== undefined);
+      const soma = membros.reduce((t, id) => t + pontoDe[id], 0);
+      return {
+        setor: e.nome, pontos: soma, pessoas: membros.length,
+        // Média por pessoa, não soma: com soma, equipe de 20 ganharia de
+        // uma de 3 antes de começar.
+        media: membros.length ? Math.round((soma / membros.length) * 10) / 10 : 0,
+      };
+    }).sort((a, b) => b.media - a.media);
+  } else {
+    const porSetor = {};
+    individual.forEach(p => {
+      const s = p.setor || 'Sem setor';
+      if (!porSetor[s]) porSetor[s] = { setor: s, pontos: 0, pessoas: 0 };
+      porSetor[s].pontos += p.pontos;
+      porSetor[s].pessoas += 1;
+    });
+    setores = Object.values(porSetor)
+      .map(s => ({ ...s, media: s.pessoas ? Math.round((s.pontos / s.pessoas) * 10) / 10 : 0 }))
+      .sort((a, b) => b.media - a.media);
+  }
+
+  // Quem ficou fora de toda equipe continua no ranking individual, mas some
+  // do de equipes. O número vai para a tela, para o gestor corrigir antes
+  // de descobrir no meio do torneio.
+  const alocados = new Set((equipesMontadas || []).flatMap(e => e.membros || []));
+  const foraDeEquipe = usandoEquipes ? individual.filter(p => !alocados.has(p.id)).length : 0;
 
   const familias = (campanha.metricas || [])
     .filter(m => FAMILIAS[m.chave])
     .map(m => ({ chave: m.chave, nome: FAMILIAS[m.chave].nome, peso: m.peso }));
 
-  res.json({ campanha, individual, setores, familias });
+  res.json({ campanha, individual, setores, familias, usandoEquipes, foraDeEquipe });
 });
 
 module.exports = router;
