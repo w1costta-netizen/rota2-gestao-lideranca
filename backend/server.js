@@ -37,6 +37,7 @@ app.use('/api/anotacoes',    require('./routes/anotacoes'));
 app.use('/api/diario',       require('./routes/diario'));
 app.use('/api/chat',         require('./routes/chat'));
 app.use('/api/atas',         require('./routes/atas'));
+app.use('/api/gamificacao',  require('./routes/gamificacao'));
 
 app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
 

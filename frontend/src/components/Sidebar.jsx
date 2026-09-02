@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, MessageCircle, PenTool } from 'lucide-react';
+import { Lock, Trophy, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, MessageCircle, PenTool } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission, moduloNaoContratado } from '../lib/permissions';
 import { useTheme } from '../contexts/ThemeContext';
@@ -47,6 +47,7 @@ const NAV_GROUPS = [
       { id: 'atas',    label: 'Ata de Reunião', icon: PenTool,     perm: 'atas' },
       { id: 'pdca',    label: 'Plano de Ação', icon: Target,       perm: 'pdca' },
       { id: 'produtividade', label: 'Treinamentos', icon: GraduationCap, perm: 'produtividade' },
+      { id: 'torneio', label: 'Torneios',    icon: Trophy,        perm: 'torneio' },
     ],
   },
   {

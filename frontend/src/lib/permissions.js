@@ -23,18 +23,19 @@ export const MODULES = [
   { key: 'conferencia_secao',   label: 'Conferência de Seção',   icon: '🔍', desc: 'Conferência e checklist de seções da loja' },
   { key: 'pdca',                label: 'Plano de Ação (PDCA)',   icon: '🎯', desc: 'Criar e acompanhar planos de ação PDCA' },
   { key: 'produtividade',       label: 'Gestão do Tempo e Produtividade', icon: '⏱️', desc: 'Treinamentos de produtividade e painel de acompanhamento do time' },
+  { key: 'torneio',              label: 'Torneios',               icon: '🏆', desc: 'Campanhas entre setores e pessoas, com placar automático' },
   { key: 'logs',                 label: 'Logs de Auditoria',      icon: '🛡️', desc: 'Histórico de ações administrativas e falhas do sistema' },
 ];
 
 export const DEFAULT_PERMISSIONS = {
-  master:       ['lojas', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'logs'],
-  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'logs'],
-  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade'],
-  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade'],
+  master:       ['lojas', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio', 'logs'],
+  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio', 'logs'],
+  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio'],
+  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio'],
   // Agenda e escala entram aqui porque são a agenda e a escala DA PRÓPRIA
   // pessoa — quem trabalha no dia precisa saber quando trabalha. Ver a
   // escala de outros setores ('escala_setores') continua fora.
-  colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'produtividade'],
+  colaborador:  ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'produtividade', 'torneio'],
   // Suporte técnico (Help Desk): enxerga só os Logs de Auditoria, de todas as
   // lojas, para investigar erros. De propósito NÃO tem acesso a tarefas,
   // vendas, estoque, equipe nem qualquer dado de operação dos clientes.
@@ -59,10 +60,11 @@ export const PREMIUM_MODULES = ['vendas_gestao', 'vendas_painel', 'estoque', 'im
 //
 // Ao criar um módulo novo: suba CATALOGO_VERSAO em 1 e registre a chave
 // dele em MODULOS_DA_VERSAO com esse número. Só isso.
-export const CATALOGO_VERSAO = 2;
+export const CATALOGO_VERSAO = 3;
 
 const MODULOS_DA_VERSAO = {
   2: ['chat', 'anotacoes', 'diario'],
+  3: ['torneio'],
 };
 
 function modulosDepoisDe(versao) {
