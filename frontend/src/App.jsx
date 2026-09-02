@@ -108,6 +108,31 @@ function ModuloNaoContratado({ nome, podeContratar }) {
   );
 }
 
+// Conta que não pertence a loja nenhuma — o dono do sistema — abrindo uma
+// tela que só existe dentro de uma loja.
+//
+// Tarefa tem responsável, ata tem participantes, evento tem convidados:
+// fora de uma loja não há para quem. A tela vinha vazia e sem explicação,
+// o que parecia defeito. Listas, Anotações e Conversas seguem funcionando
+// direto, porque são pessoais.
+function EscolhaUmaLoja({ irParaLojas, podeEscolher }) {
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+      minHeight:'60vh', gap:12, color:'var(--text-muted)', textAlign:'center', padding:20 }}>
+      <span style={{ fontSize:40 }}>🏬</span>
+      <h2 style={{ fontSize:18, fontWeight:700, color:'var(--text)' }}>Escolha uma loja para ver esta tela</h2>
+      <p style={{ fontSize:13, maxWidth:430, lineHeight:1.6 }}>
+        {podeEscolher
+          ? 'Sua conta é a dona do sistema e não faz parte de nenhuma loja. Entre em uma delas e o app funciona normalmente ali dentro — inclusive esta tela. Suas Listas, Anotações e Conversas continuam disponíveis sem escolher nada.'
+          : 'Seu cadastro ainda não está ligado a uma loja. Fale com o responsável para liberar seu acesso.'}
+      </p>
+      {podeEscolher && (
+        <button className="btn btn-primary btn-sm" onClick={irParaLojas}>Ir para Lojas</button>
+      )}
+    </div>
+  );
+}
+
 function AccessDenied() {
   return (
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
@@ -118,6 +143,12 @@ function AccessDenied() {
     </div>
   );
 }
+
+// Telas que não pertencem a uma loja: pessoais (listas, anotações),
+// de dono (lojas, usuários, logs) ou que já atravessam lojas (conversas).
+const PAGINAS_SEM_LOJA = new Set([
+  'lojas', 'profile', 'listas', 'anotacoes', 'chat', 'logs', 'usersadmin',
+]);
 
 const SIDEBAR_MIN = 60;
 const SIDEBAR_MAX = 400;
@@ -378,7 +409,14 @@ function AppContent() {
   // tela apagava tudo o que a pessoa tinha digitado numa ata, num relato ou
   // numa tarefa. Chamando a função, o que chega ao React é sempre o mesmo
   // componente, e o preenchimento sobrevive.
-  const paginaAtual = (pages[page] || pages.dashboard)();
+  // Sem loja é diferente de sem permissão: aqui a pessoa PODE ver, só falta
+  // dizer de onde. Quem está visualizando uma loja tem company preenchido
+  // pelo effectiveProfile, então não cai aqui.
+  const semLoja = !effectiveProfile?.company && !PAGINAS_SEM_LOJA.has(page);
+
+  const paginaAtual = semLoja
+    ? <EscolhaUmaLoja podeEscolher={has('lojas')} irParaLojas={() => setPage('lojas')} />
+    : (pages[page] || pages.dashboard)();
 
   const handleNavMobile = (p) => { setPage(p); setMobileMenuOpen(false); };
 
