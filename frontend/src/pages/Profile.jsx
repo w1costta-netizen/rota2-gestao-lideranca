@@ -201,6 +201,16 @@ export default function Profile() {
 
   const initials = form.full_name.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase() || '?';
   const nivel = profile?.access_level || 'lider';
+
+  // Quem compra o app é a primeira pessoa da loja: o cargo dele quase nunca
+  // está na lista pronta, e escolher "Outro" gravava literalmente a palavra
+  // "Outro". Quem administra passa a poder escrever o próprio cargo; para o
+  // resto da equipe a lista continua fechada, senão cada pessoa inventa um
+  // nome e o organograma vira bagunça.
+  const podeEscreverCargo = ['admin', 'master'].includes(nivel);
+  const cargoForaDaLista = !!form.role && !FUNCOES.includes(form.role);
+  const [escrevendoCargo, setEscrevendoCargo] = useState(false);
+  const cargoLivre = podeEscreverCargo && (escrevendoCargo || cargoForaDaLista);
   const avatarUrl = profile?.avatar_url;
 
   return (
@@ -408,10 +418,33 @@ export default function Profile() {
               </div>
               <div className="form-group" style={{ margin:0 }}>
                 <label className="form-label"><Briefcase size={13} style={{ marginRight:4 }}/>Função</label>
-                <select className="select" value={form.role} onChange={e => set('role', e.target.value)}>
+                <select className="select"
+                  value={cargoForaDaLista ? 'Outro' : form.role}
+                  onChange={e => {
+                    const v = e.target.value;
+                    if (v === 'Outro' && podeEscreverCargo) {
+                      setEscrevendoCargo(true);
+                      set('role', '');
+                    } else {
+                      setEscrevendoCargo(false);
+                      set('role', v);
+                    }
+                  }}>
                   <option value="">Selecione...</option>
-                  {FUNCOES.map(f => <option key={f} value={f}>{f}</option>)}
+                  {FUNCOES.map(f => (
+                    <option key={f} value={f}>
+                      {f === 'Outro' && podeEscreverCargo ? 'Outro (escrever)' : f}
+                    </option>
+                  ))}
                 </select>
+                {cargoLivre && (
+                  <input className="input" style={{ marginTop: 8 }}
+                    value={form.role}
+                    onChange={e => set('role', e.target.value)}
+                    placeholder="Escreva seu cargo. Ex: Sócio-proprietário"
+                    maxLength={60}
+                    autoFocus={escrevendoCargo} />
+                )}
               </div>
             </div>
 
