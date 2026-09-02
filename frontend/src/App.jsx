@@ -22,28 +22,67 @@ import { VERSAO_ESPERADA } from './lib/notificacoes';
 // hospedagem e volta HTML no lugar de código — e a tela quebrava com
 // "undefined is not an object". Recarregar busca o index novo e resolve.
 const CHAVE_RECARGA = 'rota_recarga_versao';
+// O depósito das notificações não é cache de arquivo: apagá-lo deixa o
+// service worker sem como se reinscrever sozinho. O mesmo nome usado no sw.js.
+const DEPOSITO_PUSH = 'rota-push';
 
-const lazy = (fn) => React.lazy(() => fn().then(modulo => {
-  // Carregou: a marca de "já recarreguei" sai, senão uma publicação futura
-  // nesta mesma aba não teria direito à sua recarga.
-  try { sessionStorage.removeItem(CHAVE_RECARGA); } catch { /* nada */ }
-  return modulo;
-}).catch(erro => {
-  let jaTentou = false;
-  try { jaTentou = sessionStorage.getItem(CHAVE_RECARGA) === '1'; } catch { /* modo privado */ }
+const espera = ms => new Promise(r => setTimeout(r, ms));
 
-  if (!jaTentou) {
-    try { sessionStorage.setItem(CHAVE_RECARGA, '1'); } catch { /* nada */ }
-    window.location.reload();
-    // Promessa que nunca resolve: a tela some no recarregamento. Rejeitar
-    // aqui faria o erro aparecer por um instante antes de a página trocar.
-    return new Promise(() => {});
+// Limpa o que o aparelho guardou dos arquivos, poupando o depósito de push.
+// Sem isso a recarga pode receber do próprio celular o index.html antigo —
+// com os nomes de arquivo que acabaram de deixar de existir — e falhar de
+// novo pelo mesmo motivo.
+async function limparCacheDeArquivos() {
+  try {
+    if (!('caches' in window)) return;
+    const chaves = await caches.keys();
+    await Promise.all(chaves.filter(k => k !== DEPOSITO_PUSH).map(k => caches.delete(k)));
+  } catch { /* sem cache, nada a limpar */ }
+}
+
+const lazy = (fn) => React.lazy(async () => {
+  const marcarSucesso = () => {
+    try { sessionStorage.removeItem(CHAVE_RECARGA); } catch { /* modo privado */ }
+  };
+
+  try {
+    const modulo = await fn();
+    marcarSucesso();
+    return modulo;
+  } catch {
+    // 1ª defesa: tentar de novo depois de um instante, SEM recarregar.
+    // Durante uma publicação a troca de arquivos leva alguns segundos, e
+    // muitas falhas são só uma corrida perdida por pouco.
+    try {
+      await espera(1500);
+      const modulo = await fn();
+      marcarSucesso();
+      return modulo;
+    } catch (erro) {
+      // 2ª defesa: recarregar, até duas vezes. Uma só não bastava — a
+      // recarga podia cair no mesmo instante da publicação e falhar de
+      // novo, e aí o erro ia para a cara do usuário. Aconteceu de verdade:
+      // um erro registrado às 10:23, um minuto depois da publicação
+      // das 10:22.
+      let tentativas = 0;
+      try { tentativas = parseInt(sessionStorage.getItem(CHAVE_RECARGA) || '0', 10) || 0; } catch { /* nada */ }
+
+      if (tentativas < 2) {
+        try { sessionStorage.setItem(CHAVE_RECARGA, String(tentativas + 1)); } catch { /* nada */ }
+        await limparCacheDeArquivos();
+        window.location.reload();
+        // Promessa que nunca resolve: a tela some no recarregamento.
+        // Rejeitar aqui mostraria o erro por um instante antes da troca.
+        return new Promise(() => {});
+      }
+
+      // Duas recargas e ainda falhando: aí é problema de verdade — rede
+      // caída, arquivo corrompido. Sobe para o ErrorBoundary, que avisa
+      // direito e registra no log.
+      throw erro;
+    }
   }
-
-  // Já recarregou e continua falhando — aí é problema de verdade (rede caiu,
-  // arquivo corrompido). Deixa subir para o ErrorBoundary, que avisa direito.
-  throw erro;
-}));
+});
 const Dashboard              = lazy(() => import('./pages/Dashboard'));
 const Leaders                = lazy(() => import('./pages/Leaders'));
 const Agenda                 = lazy(() => import('./pages/Agenda'));
@@ -511,7 +550,7 @@ function AppContent() {
               porque parecia ser a versão real do aparelho. */}
           <span>Nova versão disponível — {VERSAO_ESPERADA}</span>
           <button
-            onClick={() => { if ('caches' in window) { caches.keys().then(ks => Promise.all(ks.map(k => caches.delete(k)))).then(() => window.location.reload()); } else { window.location.reload(); } }}
+            onClick={() => { limparCacheDeArquivos().then(() => window.location.reload()); }}
             style={{ background: '#fff', color: 'var(--primary)', border: 'none',
               borderRadius: 8, padding: '4px 12px', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}
           >
