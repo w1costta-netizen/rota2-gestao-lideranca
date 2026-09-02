@@ -49,6 +49,32 @@ router.get('/users', async (req, res) => {
 });
 
 // POST /api/admin/users — cria usuário e perfil
+// O Supabase responde em inglês, e a mensagem ia crua para a tela do
+// cliente: "A user with this email address has already been registered".
+// Quem está cadastrando a equipe não tem obrigação de ler inglês, e uma
+// mensagem que não se entende vira chamado de suporte.
+//
+// Traduz só o que acontece de verdade; o resto continua passando, porque
+// mensagem estranha em inglês ainda é melhor do que erro genérico que
+// esconde a causa. O texto original vai inteiro para o log.
+function traduzErroDeConta(mensagem = '') {
+  const m = mensagem.toLowerCase();
+  if (m.includes('already been registered') || m.includes('already registered')) {
+    return 'Este e-mail já está cadastrado no Rota Líder. Se a pessoa já teve acesso '
+         + 'antes, use outro e-mail — ou fale com o suporte para reaproveitar a conta.';
+  }
+  if (m.includes('password') && m.includes('6')) {
+    return 'A senha provisória precisa ter pelo menos 6 caracteres.';
+  }
+  if (m.includes('invalid') && m.includes('email')) {
+    return 'E-mail inválido. Confira se não faltou algum caractere.';
+  }
+  if (m.includes('rate limit') || m.includes('too many')) {
+    return 'Muitas tentativas seguidas. Espere um minuto e tente de novo.';
+  }
+  return mensagem;
+}
+
 router.post('/users', async (req, res) => {
   const { requester_id, full_name, email, role, sector, access_level, password, phone, company: reqCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
@@ -79,7 +105,7 @@ router.post('/users', async (req, res) => {
   });
   if (authErr) {
     logError({ company: targetCompany, user_id: requester_id, acao: 'criar_usuario', tabela: 'profiles', rota: req.originalUrl, erro_mensagem: authErr.message });
-    return res.status(400).json({ error: authErr.message });
+    return res.status(400).json({ error: traduzErroDeConta(authErr.message) });
   }
 
   const newUserId = authData.user.id;
