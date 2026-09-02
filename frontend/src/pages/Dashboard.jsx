@@ -384,6 +384,37 @@ export default function Dashboard({ setPage, profile: propProfile }) {
         </div>
 
       </div>
+
+      {/* Cliente que precisa de uma segunda loja não tinha como pedir.
+          Quem administra uma loja não enxerga a tela de Lojas — ela é do
+          dono do sistema e de quem já contratou para uma rede — então
+          essa necessidade morria em silêncio, sem virar conversa.
+          Aparece só para quem decide (admin) e só para quem AINDA não
+          tem grupo: quem já tem cria as lojas dele sozinho. */}
+      {/* authProfile, não profile: quando o dono do sistema entra numa loja
+          ele é apresentado como admin dela, e cairia aqui — sendo convidado
+          a mandar e-mail para si mesmo. O cargo real resolve. */}
+      {authProfile?.access_level === 'admin' && !authProfile?.grupo && (
+        <div className="card" style={{ marginTop: 18, display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>
+              Sua empresa tem mais de uma loja?
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
+              Dá para administrar todas por aqui, cada uma com a sua equipe — e você
+              acompanhando de um lugar só.
+            </div>
+          </div>
+          <a href={`mailto:contato@rotalider.com.br?subject=${encodeURIComponent('Quero abrir mais lojas')}&body=${encodeURIComponent(`Loja: ${profile?.company || ''}
+Quantas lojas: 
+Cidades: 
+`)}`}
+            className="btn btn-primary btn-sm" style={{ textDecoration: 'none', flexShrink: 0 }}>
+            Quero abrir mais lojas
+          </a>
+        </div>
+      )}
     </div>
   );
 }
