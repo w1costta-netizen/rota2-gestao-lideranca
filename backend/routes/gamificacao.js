@@ -7,83 +7,78 @@ const { logAction, logError } = require('../lib/auditLog');
 // Torneios entre setores e entre pessoas.
 //
 // REGRA CENTRAL: o placar NÃO é gravado. É calculado na hora, a partir do
-// que o app já registra quando o trabalho acontece. Isso resolve de uma vez
-// os três problemas que costumam matar gamificação:
+// que o app já registra quando o trabalho acontece. Isso resolve os três
+// motivos que costumam matar gamificação:
 //
 //  1. Ninguém digita ponto. Placar que depende de alguém alimentar planilha
 //     dura até essa pessoa ficar ocupada numa semana.
-//  2. Mudar o peso de uma métrica recalcula o passado inteiro, em vez de
-//     deixar um histórico com duas regras diferentes misturadas.
-//  3. Se a ideia não pegar, apagar a tabela de campanhas apaga tudo — não
-//     fica lixo de pontuação espalhado pelo banco.
+//  2. Mudar o peso de uma família recalcula o passado inteiro, em vez de
+//     deixar um histórico com duas regras misturadas.
+//  3. Se a ideia não pegar, apagar a tabela de campanhas apaga tudo — sem
+//     deixar pontuação espalhada pelo banco.
 //
-// As métricas foram escolhidas por serem difíceis de fingir: forjar dá o
-// mesmo trabalho que fazer. Pontuar "tarefa concluída" sem olhar o prazo,
-// por exemplo, ensinaria a fechar tarefa sem fazer — e o placar melhoraria
-// enquanto a operação piora.
+// O OBJETIVO É HÁBITO, NÃO VOLUME. Quem faz 50 coisas numa terça não pode
+// ganhar de quem faz 3 coisas todos os dias — o segundo é exatamente quem
+// o torneio quer premiar. Daí as duas travas: teto por dia em cada ação, e
+// uma família inteira que pontua DIAS DISTINTOS de uso. Ninguém falsifica
+// vinte dias diferentes numa tarde.
 // ─────────────────────────────────────────────────────────────
 
-const METRICAS = {
-  escala_no_prazo: {
-    nome: 'Escala enviada até o dia 26',
-    // Uma pontuação por mês fechado dentro do período.
-    async contar(ids, inicio, fim) {
-      const { data } = await supabase
-        .from('schedule_submissions').select('user_id, submitted_at')
-        .in('user_id', ids).gte('submitted_at', inicio).lte('submitted_at', fimDoDia(fim));
-      return contagem(data, r => new Date(r.submitted_at).getDate() <= 26);
-    },
-  },
+// Ações que pontuam, vindas do registro de auditoria — que já grava mais de
+// cem ações do app com quem fez e quando. Ação nova entra no jogo só
+// acrescentando a chave aqui; não precisa de consulta nova.
+//
+// NAVEGAÇÃO NÃO PONTUA de propósito. Premiar quem abre tela ensina a abrir
+// tela, e não há como separar quem analisou de quem passou o dedo. O que
+// mede a mesma intenção é a constância.
+const ACOES = {
+  // Planejamento próprio — vale mais porque mede iniciativa, não obediência
+  criar_agenda:            { familia: 'planejamento', base: 4, tetoDia: 3 },
+  criar_tarefa:            { familia: 'planejamento', base: 4, tetoDia: 3 },
+  criar_plano_pdca:        { familia: 'planejamento', base: 5, tetoDia: 2 },
+  criar_acao_pdca:         { familia: 'planejamento', base: 2, tetoDia: 5 },
+  criar_lista:             { familia: 'planejamento', base: 2, tetoDia: 2 },
+  adicionar_item_lista:    { familia: 'planejamento', base: 1, tetoDia: 5 },
+  criar_anotacao:          { familia: 'planejamento', base: 1, tetoDia: 3 },
 
-  comunicado_lido_no_dia: {
-    nome: 'Comunicado lido no mesmo dia',
-    async contar(ids, inicio, fim) {
-      const { data } = await supabase
-        .from('comunicados_lidos').select('user_id, read_at, comunicados(created_at)')
-        .in('user_id', ids).gte('read_at', inicio).lte('read_at', fimDoDia(fim));
-      return contagem(data, r =>
-        r.comunicados?.created_at && mesmoDia(r.read_at, r.comunicados.created_at));
-    },
-  },
+  // Operação — o trabalho da loja registrado no app
+  finalizar_conferencia:   { familia: 'operacao', base: 8, tetoDia: 2 },
+  criar_ata:               { familia: 'operacao', base: 6, tetoDia: 2 },
+  criar_conferencia:       { familia: 'operacao', base: 4, tetoDia: 2 },
+  criar_relato_diario:     { familia: 'operacao', base: 4, tetoDia: 3 },
+  salvar_caixas:           { familia: 'operacao', base: 3, tetoDia: 3 },
+  criar_comunicado:        { familia: 'operacao', base: 3, tetoDia: 3 },
+  criar_mural:             { familia: 'operacao', base: 3, tetoDia: 3 },
+  coletar_item_conferencia:{ familia: 'operacao', base: 2, tetoDia: 20 },
+  sinalizar_item_flyer:    { familia: 'operacao', base: 2, tetoDia: 20 },
+  adicionar_foto_flyer:    { familia: 'operacao', base: 2, tetoDia: 15 },
+  adicionar_foto_tour:     { familia: 'operacao', base: 2, tetoDia: 15 },
+  salvar_escala:           { familia: 'operacao', base: 1, tetoDia: 5 },
 
-  tarefa_no_prazo: {
-    nome: 'Tarefa concluída dentro do prazo',
-    async contar(ids, inicio, fim) {
-      const { data } = await supabase
-        .from('tarefas').select('assigned_to, due_date, concluida_em')
-        .in('assigned_to', ids).eq('concluida', true)
-        .gte('concluida_em', inicio).lte('concluida_em', fimDoDia(fim));
-      // Sem prazo definido não há mérito de prazo: não pontua, para não
-      // premiar quem cria tarefa sem data e fecha na hora.
-      return contagem(data, r => r.due_date && diaDe(r.concluida_em) <= r.due_date, 'assigned_to');
-    },
-  },
+  // Participação — peso baixo de propósito: comentar é bom, mas não é o que
+  // muda a operação, e é o mais fácil de inflar
+  concluir_treinamento_produtividade: { familia: 'participacao', base: 10, tetoDia: 2 },
+  comentar_tarefa:         { familia: 'participacao', base: 2, tetoDia: 5 },
+  comentar_comunicado:     { familia: 'participacao', base: 2, tetoDia: 5 },
+  comentar_mural:          { familia: 'participacao', base: 2, tetoDia: 5 },
+  comentar_ata:            { familia: 'participacao', base: 2, tetoDia: 5 },
+  reagir:                  { familia: 'participacao', base: 1, tetoDia: 8 },
+  enviar_mensagem:         { familia: 'participacao', base: 1, tetoDia: 10 },
+  marcar_comunicado_lido:  { familia: 'participacao', base: 1, tetoDia: 5 },
+  marcar_mural_lido:       { familia: 'participacao', base: 1, tetoDia: 5 },
+};
 
-  diario_do_dia: {
-    nome: 'Diário de bordo preenchido no dia',
-    async contar(ids, inicio, fim) {
-      const { data } = await supabase
-        .from('diario_bordo').select('user_id, data, created_at')
-        .in('user_id', ids).gte('data', inicio).lte('data', fim);
-      // Relato lançado no próprio dia. Escrito três dias depois vira
-      // memória, não registro — e é o registro que muda a operação.
-      return contagem(data, r => diaDe(r.created_at) === r.data);
-    },
-  },
+// Vale por cada dia distinto em que a pessoa fez qualquer coisa da lista.
+// É a métrica mais resistente a fraude que existe aqui, e a que mede o que
+// o torneio realmente quer: aparecer todo dia.
+const PONTOS_POR_DIA_ATIVO = 5;
 
-  ata_assinada: {
-    nome: 'Ata assinada em até 48h',
-    async contar(ids, inicio, fim) {
-      const { data } = await supabase
-        .from('ata_assinaturas').select('user_id, assinado_em, atas_reuniao(created_at)')
-        .in('user_id', ids).gte('assinado_em', inicio).lte('assinado_em', fimDoDia(fim));
-      return contagem(data, r => {
-        const criada = r.atas_reuniao?.created_at;
-        if (!criada) return false;
-        return (new Date(r.assinado_em) - new Date(criada)) <= 48 * 3600 * 1000;
-      });
-    },
-  },
+const FAMILIAS = {
+  constancia:   { nome: 'Constância',   descricao: 'Cada dia em que a pessoa usou o app de verdade' },
+  planejamento: { nome: 'Planejamento', descricao: 'O que a pessoa organiza para si: agenda, tarefas, listas, plano de ação' },
+  qualidade:    { nome: 'Qualidade',    descricao: 'Prazo cumprido: tarefa, escala, ata, comunicado e diário no dia' },
+  operacao:     { nome: 'Operação',     descricao: 'Conferência de seção, flyer, Tour 4x4, escala, caixas e comunicados' },
+  participacao: { nome: 'Participação', descricao: 'Comentar, reagir, conversar e concluir treinamentos' },
 };
 
 const diaDe    = (iso) => new Date(iso).toISOString().slice(0, 10);
@@ -101,6 +96,66 @@ function contagem(linhas, vale, campo = 'user_id') {
   return por;
 }
 
+// Qualidade fica fora do registro de auditoria porque "no prazo" não é uma
+// ação: é a comparação entre duas datas. São as de maior valor — medem
+// fazer BEM, não apenas fazer — e as mais difíceis de forjar, porque fingir
+// dá o mesmo trabalho que cumprir.
+const QUALIDADE = {
+  escala_no_prazo: {
+    nome: 'Escala enviada até o dia 26', base: 10,
+    async contar(ids, inicio, fim) {
+      const { data } = await supabase
+        .from('schedule_submissions').select('user_id, submitted_at')
+        .in('user_id', ids).gte('submitted_at', inicio).lte('submitted_at', fimDoDia(fim));
+      return contagem(data, r => new Date(r.submitted_at).getDate() <= 26);
+    },
+  },
+  tarefa_no_prazo: {
+    nome: 'Tarefa concluída dentro do prazo', base: 5,
+    async contar(ids, inicio, fim) {
+      const { data } = await supabase
+        .from('tarefas').select('assigned_to, due_date, concluida_em')
+        .in('assigned_to', ids).eq('concluida', true)
+        .gte('concluida_em', inicio).lte('concluida_em', fimDoDia(fim));
+      // Sem prazo definido não há mérito de prazo: não pontua, senão
+      // premiaria quem cria tarefa sem data e fecha na hora.
+      return contagem(data, r => r.due_date && diaDe(r.concluida_em) <= r.due_date, 'assigned_to');
+    },
+  },
+  ata_assinada: {
+    nome: 'Ata assinada em até 48h', base: 5,
+    async contar(ids, inicio, fim) {
+      const { data } = await supabase
+        .from('ata_assinaturas').select('user_id, assinado_em, atas_reuniao(created_at)')
+        .in('user_id', ids).gte('assinado_em', inicio).lte('assinado_em', fimDoDia(fim));
+      return contagem(data, r => {
+        const criada = r.atas_reuniao?.created_at;
+        if (!criada) return false;
+        return (new Date(r.assinado_em) - new Date(criada)) <= 48 * 3600 * 1000;
+      });
+    },
+  },
+  diario_do_dia: {
+    nome: 'Diário de bordo preenchido no dia', base: 4,
+    async contar(ids, inicio, fim) {
+      const { data } = await supabase
+        .from('diario_bordo').select('user_id, data, created_at')
+        .in('user_id', ids).gte('data', inicio).lte('data', fim);
+      return contagem(data, r => diaDe(r.created_at) === r.data);
+    },
+  },
+  comunicado_lido_no_dia: {
+    nome: 'Comunicado lido no mesmo dia', base: 3,
+    async contar(ids, inicio, fim) {
+      const { data } = await supabase
+        .from('comunicados_lidos').select('user_id, read_at, comunicados(created_at)')
+        .in('user_id', ids).gte('read_at', inicio).lte('read_at', fimDoDia(fim));
+      return contagem(data, r =>
+        r.comunicados?.created_at && mesmoDia(r.read_at, r.comunicados.created_at));
+    },
+  },
+};
+
 async function getPerfil(id) {
   if (!id) return null;
   const { data } = await supabase
@@ -110,10 +165,12 @@ async function getPerfil(id) {
 }
 
 const podeCriar = (me) => ['admin', 'master'].includes(me.access_level);
+const FAMILIAS_VALIDAS = Object.keys(FAMILIAS);
+const TEMAS_VALIDOS = ['classico', 'reinos', 'copa', 'corrida'];
 
-// GET /api/gamificacao/metricas — o catálogo, para a tela de criar campanha
-router.get('/metricas', (_req, res) => {
-  res.json(Object.entries(METRICAS).map(([chave, m]) => ({ chave, nome: m.nome })));
+// GET /api/gamificacao/familias — o catálogo, para a tela de criar torneio
+router.get('/familias', (_req, res) => {
+  res.json(FAMILIAS_VALIDAS.map(chave => ({ chave, ...FAMILIAS[chave] })));
 });
 
 // GET /api/gamificacao/campanhas?requester_id=
@@ -133,7 +190,7 @@ router.get('/campanhas', async (req, res) => {
 router.post('/campanhas', async (req, res) => {
   const me = await getPerfil(req.body?.requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
-  if (!podeCriar(me)) return res.status(403).json({ error: 'Só quem administra a loja cria campanhas.' });
+  if (!podeCriar(me)) return res.status(403).json({ error: 'Só quem administra a loja cria torneios.' });
 
   const { nome, descricao, premio, inicio, fim, metricas, tema } = req.body || {};
   if (!nome?.trim() || !inicio || !fim) {
@@ -141,12 +198,13 @@ router.post('/campanhas', async (req, res) => {
   }
   if (fim < inicio) return res.status(400).json({ error: 'O fim não pode ser antes do início.' });
 
-  // Só entram métricas que existem, e com peso dentro de um limite. Sem
-  // isto, um peso absurdo faria uma única métrica decidir o torneio todo.
-  const limpas = (Array.isArray(metricas) ? metricas : [])
-    .filter(m => METRICAS[m?.chave])
-    .map(m => ({ chave: m.chave, peso: Math.min(Math.max(Number(m.peso) || 1, 1), 100) }));
-  if (!limpas.length) return res.status(400).json({ error: 'Escolha pelo menos uma métrica.' });
+  // `metricas` guarda o PESO DE CADA FAMÍLIA. Peso limitado entre 1 e 5:
+  // sem limite, um número absurdo faria uma família decidir o torneio
+  // inteiro e as outras viravam enfeite.
+  const pesos = (Array.isArray(metricas) ? metricas : [])
+    .filter(m => FAMILIAS_VALIDAS.includes(m?.chave))
+    .map(m => ({ chave: m.chave, peso: Math.min(Math.max(Number(m.peso) || 1, 1), 5) }));
+  if (!pesos.length) return res.status(400).json({ error: 'Escolha pelo menos uma família de pontos.' });
 
   const { data, error } = await supabase.from('campanhas_gamificacao').insert({
     company: me.company,
@@ -154,10 +212,8 @@ router.post('/campanhas', async (req, res) => {
     descricao: descricao?.trim() || null,
     premio: premio?.trim() || null,
     inicio, fim,
-    metricas: limpas,
-    // Lista fechada: tema desconhecido vira clássico. A tela também protege,
-    // mas quem grava é o servidor.
-    tema: ['classico', 'reinos', 'copa', 'corrida'].includes(tema) ? tema : 'classico',
+    metricas: pesos,
+    tema: TEMAS_VALIDOS.includes(tema) ? tema : 'classico',
     criado_por: me.id,
   }).select().single();
 
@@ -185,9 +241,6 @@ router.put('/campanhas/:id/encerrar', async (req, res) => {
 });
 
 // GET /api/gamificacao/campanhas/:id/placar?requester_id=
-//
-// Dois placares do MESMO evento: por pessoa e por setor. Ter os dois não
-// dobra o trabalho — muda só como a mesma pontuação é somada.
 router.get('/campanhas/:id/placar', async (req, res) => {
   const me = await getPerfil(req.query.requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -203,23 +256,77 @@ router.get('/campanhas/:id/placar', async (req, res) => {
     .eq('company', me.company).eq('active', true);
 
   const ids = (pessoas || []).map(p => p.id);
-  if (!ids.length) return res.json({ campanha, individual: [], setores: [], detalhe: [] });
+  if (!ids.length) return res.json({ campanha, individual: [], setores: [], familias: [] });
 
-  // Uma consulta por métrica, não uma por pessoa.
+  const pesoDe = {};
+  (campanha.metricas || []).forEach(m => { pesoDe[m.chave] = m.peso; });
+
+  // Pontos por pessoa E por família: a tela mostra de onde veio cada ponto.
+  // Placar que não se explica não muda comportamento — a pessoa precisa
+  // saber o que fazer para subir.
   const pontos = {};
-  const detalhe = [];
-  for (const regra of campanha.metricas || []) {
-    const m = METRICAS[regra.chave];
-    if (!m) continue;
-    const contados = await m.contar(ids, campanha.inicio, campanha.fim);
-    detalhe.push({ chave: regra.chave, nome: m.nome, peso: regra.peso });
-    Object.entries(contados).forEach(([id, qtd]) => {
-      pontos[id] = (pontos[id] || 0) + qtd * regra.peso;
+  const somar = (id, familia, valor) => {
+    if (!pontos[id]) pontos[id] = {};
+    pontos[id][familia] = (pontos[id][familia] || 0) + valor;
+  };
+
+  // ── Famílias vindas do registro de auditoria ──────────────────
+  const precisaLog = ['constancia', 'planejamento', 'operacao', 'participacao'].some(f => pesoDe[f]);
+  if (precisaLog) {
+    const { data: registros } = await supabase
+      .from('audit_logs')
+      .select('user_id, acao, created_at')
+      .eq('company', me.company).eq('status', 'sucesso')
+      .in('user_id', ids)
+      .in('acao', Object.keys(ACOES))
+      .gte('created_at', campanha.inicio).lte('created_at', fimDoDia(campanha.fim))
+      .limit(50000);
+
+    // Teto por dia: agrupa por pessoa + ação + dia ANTES de somar. É o que
+    // impede alguém de criar 50 tarefas numa tarde e ganhar o torneio.
+    const balde = {};
+    const diasAtivos = {};
+    (registros || []).forEach(r => {
+      const dia = diaDe(r.created_at);
+      const k = `${r.user_id}|${r.acao}|${dia}`;
+      balde[k] = (balde[k] || 0) + 1;
+      if (!diasAtivos[r.user_id]) diasAtivos[r.user_id] = new Set();
+      diasAtivos[r.user_id].add(dia);
     });
+
+    Object.entries(balde).forEach(([k, vezes]) => {
+      const [userId, acao] = k.split('|');
+      const regra = ACOES[acao];
+      const peso = pesoDe[regra.familia];
+      if (!peso) return;
+      somar(userId, regra.familia, Math.min(vezes, regra.tetoDia) * regra.base * peso);
+    });
+
+    if (pesoDe.constancia) {
+      Object.entries(diasAtivos).forEach(([userId, dias]) => {
+        somar(userId, 'constancia', dias.size * PONTOS_POR_DIA_ATIVO * pesoDe.constancia);
+      });
+    }
   }
 
+  // ── Qualidade: as cinco que medem prazo ───────────────────────
+  if (pesoDe.qualidade) {
+    for (const regra of Object.values(QUALIDADE)) {
+      const contados = await regra.contar(ids, campanha.inicio, campanha.fim);
+      Object.entries(contados).forEach(([id, qtd]) => {
+        somar(id, 'qualidade', qtd * regra.base * pesoDe.qualidade);
+      });
+    }
+  }
+
+  const total = (id) => Object.values(pontos[id] || {}).reduce((s, v) => s + v, 0);
+
   const individual = (pessoas || [])
-    .map(p => ({ id: p.id, nome: p.full_name, setor: p.sector, avatar_url: p.avatar_url, pontos: pontos[p.id] || 0 }))
+    .map(p => ({
+      id: p.id, nome: p.full_name, setor: p.sector, avatar_url: p.avatar_url,
+      pontos: total(p.id),
+      porFamilia: pontos[p.id] || {},
+    }))
     .sort((a, b) => b.pontos - a.pontos);
 
   // Setor grande contra setor pequeno: soma bruta já nasceria decidida.
@@ -235,7 +342,11 @@ router.get('/campanhas/:id/placar', async (req, res) => {
     .map(s => ({ ...s, media: s.pessoas ? Math.round((s.pontos / s.pessoas) * 10) / 10 : 0 }))
     .sort((a, b) => b.media - a.media);
 
-  res.json({ campanha, individual, setores, detalhe });
+  const familias = (campanha.metricas || [])
+    .filter(m => FAMILIAS[m.chave])
+    .map(m => ({ chave: m.chave, nome: FAMILIAS[m.chave].nome, peso: m.peso }));
+
+  res.json({ campanha, individual, setores, familias });
 });
 
 module.exports = router;

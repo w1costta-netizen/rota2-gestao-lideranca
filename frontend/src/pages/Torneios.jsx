@@ -67,7 +67,7 @@ export default function Torneios({ userId, profile }) {
     setCriando(true);
     if (!catalogo.length) {
       try {
-        const r = await api.get('/gamificacao/metricas');
+        const r = await api.get('/gamificacao/familias');
         setCatalogo(r.data || []);
       } catch { /* a tela avisa ao salvar */ }
     }
@@ -79,7 +79,7 @@ export default function Torneios({ userId, profile }) {
       .map(([chave, peso]) => ({ chave, peso }));
     if (!form.nome.trim()) return toast('Dê um nome ao torneio.', 'error');
     if (!form.fim) return toast('Defina a data de encerramento.', 'error');
-    if (!metricas.length) return toast('Escolha pelo menos uma métrica.', 'error');
+    if (!metricas.length) return toast('Escolha pelo menos uma família de pontos.', 'error');
 
     setSalvando(true);
     try {
@@ -135,11 +135,11 @@ export default function Torneios({ userId, profile }) {
           <button className="btn btn-sm" onClick={() => setAberta(null)}>← Voltar</button>
         </div>
 
-        {placar?.detalhe?.length > 0 && (
+        {placar?.familias?.length > 0 && (
           <div className="card" style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-              <strong style={{ color: 'var(--text)' }}>O que conta ponto:</strong>{' '}
-              {placar.detalhe.map(d => `${d.nome} (${d.peso})`).join(' · ')}
+              <strong style={{ color: 'var(--text)' }}>Famílias que contam:</strong>{' '}
+              {(placar.familias || []).map(d => `${d.nome} (peso ${d.peso})`).join(' · ')}
             </div>
           </div>
         )}
@@ -370,18 +370,21 @@ export default function Torneios({ userId, profile }) {
               <div className="form-group">
                 <label className="form-label">O que conta ponto</label>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
-                  Marque o que vale e quanto pesa. Comece com poucas — muitas métricas
-                  ao mesmo tempo confundem, e ninguém sabe o que fazer para subir.
+                  Marque as famílias que valem e o peso de cada uma (1 a 5). O peso
+                  multiplica: Operação com peso 2 faz cada ação dela valer o dobro.
                 </div>
                 {catalogo.map(m => {
                   const peso = form.metricas[m.chave] || 0;
                   return (
                     <div key={m.chave} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
                       <input type="checkbox" checked={peso > 0}
-                        onChange={e => setForm(f => ({ ...f, metricas: { ...f.metricas, [m.chave]: e.target.checked ? 10 : 0 } }))}/>
-                      <span style={{ flex: 1, fontSize: 13 }}>{m.nome}</span>
+                        onChange={e => setForm(f => ({ ...f, metricas: { ...f.metricas, [m.chave]: e.target.checked ? 2 : 0 } }))}/>
+                      <span style={{ flex: 1, minWidth: 0 }}>
+                        <span style={{ display:'block', fontSize: 13, fontWeight: 600 }}>{m.nome}</span>
+                        <span style={{ display:'block', fontSize: 11, color:'var(--text-muted)', lineHeight:1.4 }}>{m.descricao}</span>
+                      </span>
                       {peso > 0 && (
-                        <input className="input" type="number" min={1} max={100} value={peso}
+                        <input className="input" type="number" min={1} max={5} value={peso}
                           style={{ width: 74 }}
                           onChange={e => setForm(f => ({ ...f, metricas: { ...f.metricas, [m.chave]: Number(e.target.value) } }))}/>
                       )}
