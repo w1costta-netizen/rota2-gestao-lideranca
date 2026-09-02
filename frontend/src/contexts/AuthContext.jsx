@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import api from '../api';
 import { registrarSeJaPermitido, removerInscricaoDesteAparelho } from '../lib/notificacoes';
+import { reportError } from '../lib/reportError';
 
 // O padrão precisa ser um objeto, não null: quando sai uma versão nova e o
 // navegador fica com pedaços do código antigo e novo misturados, o contexto
@@ -15,6 +16,7 @@ const AuthCtx = createContext({
   signOut: async () => {},
   loadProfile: async () => {},
   contaDesativada: false,
+  motivoPerfil: null,
 });
 
 export function AuthProvider({ children }) {
@@ -26,6 +28,10 @@ export function AuthProvider({ children }) {
   // como "Acesso restrito" por um instante e depois liberava sozinho.
   const [profile, setProfile] = useState(undefined);
   const [contaDesativada, setContaDesativada] = useState(false);
+  // Por que o perfil não veio. A tela de erro mostrava sempre o mesmo texto
+  // para causas diferentes — falta de rede, perfil inexistente, permissão do
+  // banco — e sem essa distinção não há como investigar sem adivinhar.
+  const [motivoPerfil, setMotivoPerfil] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -44,8 +50,20 @@ export function AuthProvider({ children }) {
 
   async function loadProfile(userId) {
     let carregado = null;
+    let motivo = null;
     try {
-      const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).single();
+
+      if (error) {
+        // PGRST116 = a consulta não achou nenhuma linha. Distingue "cadastro
+        // não existe" de "o banco recusou a leitura", que pedem soluções
+        // completamente diferentes.
+        motivo = error.code === 'PGRST116'
+          ? 'cadastro não encontrado'
+          : `${error.code || 'erro'}: ${error.message || 'sem detalhe'}`;
+      } else if (!data) {
+        motivo = 'cadastro não encontrado';
+      }
 
       // Cadastro desativado não entra.
       //
@@ -70,8 +88,16 @@ export function AuthProvider({ children }) {
         }
       }
       carregado = data || null;
-    } catch {
+    } catch (e) {
       carregado = null;
+      motivo = motivo || `falha de rede: ${e?.message || 'sem detalhe'}`;
+    }
+
+    setMotivoPerfil(carregado ? null : motivo);
+    // Vai para o log de auditoria: sem isto, o problema só existe na tela de
+    // quem esbarrou nele, e some quando a pessoa fecha o app.
+    if (!carregado) {
+      reportError({ userId, acao: 'carregar_perfil', tabela: 'profiles', erro: new Error(motivo || 'sem motivo') });
     }
     // Sempre termina com um valor definido, mesmo em falha: deixar como
     // `undefined` prenderia o app na tela de carregamento para sempre.
@@ -133,7 +159,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthCtx.Provider value={{ session, profile, signOut, loadProfile, contaDesativada }}>
+    <AuthCtx.Provider value={{ session, profile, signOut, loadProfile, contaDesativada, motivoPerfil }}>
       {children}
     </AuthCtx.Provider>
   );

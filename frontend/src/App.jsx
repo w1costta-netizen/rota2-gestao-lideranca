@@ -170,7 +170,7 @@ function useIsMobile() {
 }
 
 function AppContent() {
-  const { session, profile, signOut, loadProfile, contaDesativada } = useAuth();
+  const { session, profile, signOut, loadProfile, contaDesativada, motivoPerfil } = useAuth();
   const toast = useToast();
   // Restaura a última página visitada — evita voltar pro dashboard quando o
   // celular descarrega o app da memória (ao trocar de aplicativo, abrir a
@@ -317,8 +317,16 @@ function AppContent() {
       <span style={{ fontSize:38 }}>⚠️</span>
       <h2 style={{ color:'#fff', fontSize:18, fontWeight:700 }}>Não foi possível carregar seu perfil</h2>
       <p style={{ color:'#999', fontSize:13.5, maxWidth:340, lineHeight:1.6 }}>
-        Verifique sua conexão e tente de novo. Se continuar assim, fale com o suporte.
+        {motivoPerfil === 'cadastro não encontrado'
+          ? 'Sua conta existe, mas não está ligada a nenhum cadastro no Rota Líder. Quem administra a loja precisa criar o seu acesso.'
+          : 'Verifique sua conexão e tente de novo. Se continuar assim, fale com o suporte.'}
       </p>
+      {/* O motivo técnico fica visível de propósito: sem ele, todo relato
+          chega como "aparece uma tela de erro" e a investigação começa no
+          escuro. Pequeno e discreto — quem não precisa, não lê. */}
+      {motivoPerfil && (
+        <p style={{ color:'#666', fontSize:11, maxWidth:340 }}>Detalhe: {motivoPerfil}</p>
+      )}
       <div style={{ display:'flex', gap:10, marginTop:4 }}>
         <button className="btn btn-primary" onClick={() => loadProfile(session.user.id)}>Tentar de novo</button>
         <button className="btn btn-ghost" onClick={signOut}>Sair</button>
