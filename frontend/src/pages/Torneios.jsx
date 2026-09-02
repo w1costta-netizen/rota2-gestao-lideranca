@@ -229,12 +229,30 @@ function ModalRegras({ regras, aoFechar }) {
                     </div>
                   </div>
 
-                  <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 18, color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 14, color: 'var(--text-muted)' }}>
                     Cada ação vale um <strong style={{ color: 'var(--text)' }}>valor base</strong>, e o{' '}
-                    <strong style={{ color: 'var(--text)' }}>peso da família</strong> multiplica esse valor —
-                    o peso de cada torneio aparece no topo do placar. Algumas ações têm{' '}
-                    <strong style={{ color: 'var(--text)' }}>limite por dia</strong>: repetir além do limite
-                    não soma mais nada naquele dia.
+                    <strong style={{ color: 'var(--text)' }}>peso da família</strong> multiplica esse valor.
+                    O peso de cada torneio aparece no topo do placar.
+                  </div>
+
+                  {/* O limite diário precisa de exemplo. Explicado só com a
+                      regra ("repetir além do limite não soma"), nem quem
+                      desenhou o recurso entendeu de primeira — e quem trabalha
+                      na loja teria menos chance ainda. */}
+                  <div className="card" style={{ marginBottom: 18, background: 'var(--surface-2)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>
+                      O que significa "no máximo 3 por dia"
+                    </div>
+                    <div style={{ fontSize: 12.5, lineHeight: 1.7, color: 'var(--text-muted)' }}>
+                      É quantas vezes aquela ação pode dar ponto no mesmo dia.<br/>
+                      Se criar tarefa vale 4 pontos, com limite de 3 por dia:<br/>
+                      · criou 2 tarefas hoje → 8 pontos<br/>
+                      · criou 30 tarefas hoje → contam 3 → 12 pontos<br/>
+                      Amanhã o limite zera e valem mais 3.
+                      <br/><br/>
+                      <strong style={{ color: 'var(--text)' }}>Por que existe:</strong> assim ninguém
+                      ganha o torneio numa tarde só. Para pontuar, é preciso voltar amanhã.
+                    </div>
                   </div>
 
                   <div className="card" style={{ marginBottom: 18, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
@@ -264,7 +282,7 @@ function ModalRegras({ regras, aoFechar }) {
                           <span style={{ flex: 1, minWidth: 0 }}>{a.nome}</span>
                           {a.tetoDia && (
                             <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
-                              até {a.tetoDia}×/dia
+                              no máximo {a.tetoDia} por dia
                             </span>
                           )}
                           <span style={{ fontWeight: 800, minWidth: 26, textAlign: 'right', flexShrink: 0 }}>
