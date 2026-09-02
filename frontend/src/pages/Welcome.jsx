@@ -15,6 +15,10 @@ import { situacaoAtual, ativarNotificacoes } from '../lib/notificacoes';
 
 const STEPS = [
   {
+    // A primeira tela mostra a marca, não um ícone genérico: é o primeiro
+    // contato da pessoa com o produto, e é aqui que ela reconhece de onde
+    // veio o ícone que vai ficar na tela do celular dela.
+    logo: true,
     icon: Compass,
     title: 'Bem-vindo ao Rota Líder',
     subtitle: 'Gestão, Liderança e Produtividade',
@@ -139,16 +143,24 @@ export default function Welcome({ userId, onFinish }) {
         border: '1px solid #2a2a2a',
         boxShadow: '0 24px 60px rgba(0,0,0,.6)',
       }}>
-        {/* Ícone do passo, dentro de um círculo — sem o círculo o traço fino
-            some no fundo escuro. */}
+        {/* Marca na primeira tela; nas demais, o ícone do passo dentro de um
+            círculo — sem o círculo o traço fino some no fundo escuro. */}
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 18 }}>
-          <div style={{
-            width: 72, height: 72, borderRadius: '50%',
-            background: 'rgba(232,104,26,.12)', border: '1px solid rgba(232,104,26,.35)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <current.icon size={32} color="#E8681A" strokeWidth={1.8}/>
-          </div>
+          {current.logo ? (
+            // O arquivo tem bastante margem vazia em volta do desenho, então
+            // 96px deixava a marca minúscula. 150 é o tamanho em que ela lê
+            // como marca, e não como enfeite.
+            <img src="/logo-icon.png" alt="Rota Líder"
+              style={{ width: 150, height: 150, objectFit: 'contain', marginBottom: -12, marginTop: -12 }}/>
+          ) : (
+            <div style={{
+              width: 72, height: 72, borderRadius: '50%',
+              background: 'rgba(232,104,26,.12)', border: '1px solid rgba(232,104,26,.35)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              <current.icon size={32} color="#E8681A" strokeWidth={1.8}/>
+            </div>
+          )}
         </div>
 
         <h1 style={{ fontSize: 22, fontWeight: 800, color: '#fff', textAlign: 'center', marginBottom: 6 }}>
