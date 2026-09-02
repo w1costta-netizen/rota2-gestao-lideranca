@@ -3,6 +3,7 @@ const router  = express.Router();
 const crypto  = require('crypto');
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
+const { enviarPush } = require('../lib/notificacoes');
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -149,12 +150,41 @@ async function enviarEmailAcesso(email, nome, token) {
     });
 
     if (error) {
+      // Este é o pior erro possível do sistema: a pessoa PAGOU, a Hotmart
+      // confirmou, e o acesso não chegou. Antes ficava só no console do
+      // servidor — ninguém olha console — e o webhook respondia "ok" mesmo
+      // assim. O cliente ficava sem produto e sem ninguém saber.
       console.error('[Resend] Erro ao enviar e-mail:', error);
+      await avisarFalhaDeAcesso(email, error?.message || JSON.stringify(error));
     } else {
       console.log('[Resend] E-mail enviado com sucesso. ID:', data?.id);
     }
   } catch (err) {
     console.error('[Resend] Exceção ao enviar e-mail:', err.message);
+    await avisarFalhaDeAcesso(email, err?.message || 'exceção sem mensagem');
+  }
+}
+
+// Registra no log e avisa quem pode agir. O link de acesso vai junto: com
+// ele dá para socorrer o cliente na hora, mandando por WhatsApp, sem
+// precisar recriar nada.
+async function avisarFalhaDeAcesso(email, motivo) {
+  try {
+    registrarLog('enviar_email_acesso', 'pending_signups', 'erro', {
+      rota: '/api/hotmart/webhook',
+      erro: `COMPRA SEM ACESSO ENTREGUE — ${email}: ${motivo}`,
+    });
+
+    const { data: donos } = await supabase
+      .from('profiles').select('id').eq('access_level', 'master').eq('active', true);
+    const ids = (donos || []).map(d => d.id);
+    if (ids.length) {
+      enviarPush(ids, '🚨 Compra sem acesso entregue',
+        `${email} pagou e o e-mail de acesso falhou. Precisa de socorro manual.`,
+        'geral', { rota: '/api/hotmart/webhook' });
+    }
+  } catch (e) {
+    console.error('[Hotmart] Falha ao avisar sobre e-mail não entregue:', e.message);
   }
 }
 
