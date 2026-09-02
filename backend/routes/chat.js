@@ -215,7 +215,7 @@ router.get('/conversas/:id/mensagens', async (req, res) => {
 
   let consulta = supabase
     .from('mensagens')
-    .select('id, de_id, texto, tipo, apagada, arquivo_path, arquivo_nome, arquivo_tamanho, duracao, created_at')
+    .select('id, de_id, texto, tipo, apagada, responde_a, arquivo_path, arquivo_nome, arquivo_tamanho, duracao, created_at')
     .eq('conversa_id', conversa.id);
 
   // Traz o que é novo E o que mudou. Sem a segunda parte, uma mensagem
@@ -233,7 +233,37 @@ router.get('/conversas/:id/mensagens', async (req, res) => {
     const { arquivo_path, ...resto } = m;
     return { ...resto, arquivo_url: arquivo_path ? await linkTemporario(arquivo_path) : null };
   }));
-  res.json(comLink);
+
+  // Reações e citações desta leva, em duas consultas — não uma por
+  // mensagem. Com 300 mensagens na tela, uma consulta por item colocaria
+  // 600 idas ao banco num servidor que já responde em 0,8s.
+  const ids = comLink.map(m => m.id);
+  let reacoes = [];
+  if (ids.length) {
+    const { data: r } = await supabase
+      .from('mensagem_reacoes').select('mensagem_id, user_id, emoji').in('mensagem_id', ids);
+    reacoes = r || [];
+  }
+
+  const citadasIds = [...new Set(comLink.map(m => m.responde_a).filter(Boolean))];
+  let citadas = {};
+  if (citadasIds.length) {
+    const { data: c } = await supabase
+      .from('mensagens').select('id, de_id, texto, tipo, apagada').in('id', citadasIds);
+    (c || []).forEach(m => {
+      // Mensagem apagada não reaparece pela citação: mostrar o texto aqui
+      // devolveria à tela exatamente o que a pessoa quis remover.
+      citadas[m.id] = m.apagada
+        ? { id: m.id, de_id: m.de_id, texto: null, apagada: true }
+        : { id: m.id, de_id: m.de_id, texto: m.texto, tipo: m.tipo, apagada: false };
+    });
+  }
+
+  res.json(comLink.map(m => ({
+    ...m,
+    reacoes: reacoes.filter(r => r.mensagem_id === m.id).map(r => ({ user_id: r.user_id, emoji: r.emoji })),
+    citada: m.responde_a ? (citadas[m.responde_a] || null) : null,
+  })));
 });
 
 // POST /api/chat/anexo  { requester_id, conversa_id, nome, tamanho }
@@ -288,12 +318,16 @@ router.post('/mensagens', async (req, res) => {
   const { data: msg, error } = await supabase.from('mensagens')
     .insert({
       conversa_id: conversa.id, de_id: me.id, texto: limpo, tipo: oTipo,
+      // Citação: só o vínculo. O texto exibido é lido da original na hora,
+      // então apagar a original faz a citação sumir junto, em vez de deixar
+      // na tela exatamente o que a pessoa quis apagar.
+      responde_a: req.body?.responde_a || null,
       arquivo_path: arquivo_path || null,
       arquivo_nome: arquivo_nome ? nomeSeguro(arquivo_nome) : null,
       arquivo_tamanho: arquivo_tamanho || null,
       duracao: duracao || null,
     })
-    .select('id, de_id, texto, tipo, apagada, arquivo_path, arquivo_nome, arquivo_tamanho, duracao, created_at').single();
+    .select('id, de_id, texto, tipo, apagada, responde_a, arquivo_path, arquivo_nome, arquivo_tamanho, duracao, created_at').single();
 
   if (error) {
     registrarLog('enviar_mensagem', 'mensagens', 'erro', { company: conversa.company, user_id: me.id, rota: req.originalUrl, erro: error.message });
@@ -336,6 +370,135 @@ router.post('/mensagens', async (req, res) => {
   // indisponível" na foto que acabou de mandar.
   const { arquivo_path: caminhoGravado, ...semCaminho } = msg;
   res.json({ ...semCaminho, arquivo_url: await linkTemporario(caminhoGravado) });
+});
+
+// POST /api/chat/encaminhar  { requester_id, mensagem_id, conversa_id }
+//
+// O servidor copia a mensagem original em vez de aceitar o conteúdo vindo
+// da tela. Isso importa por dois motivos: garante que a pessoa realmente
+// participa da conversa de onde está tirando a mensagem, e permite copiar
+// o ARQUIVO para a conversa de destino.
+//
+// Copiar o arquivo é obrigatório: cada anexo mora numa pasta com o id da
+// conversa, e a rota de envio recusa caminho de outra — trava que existe
+// para ninguém apontar uma mensagem para o anexo alheio. Reaproveitar o
+// caminho aqui furaria justamente essa proteção.
+router.post('/encaminhar', async (req, res) => {
+  const { requester_id, mensagem_id, conversa_id } = req.body || {};
+  const me = await getPerfil(requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const { data: original } = await supabase
+    .from('mensagens')
+    .select('id, conversa_id, texto, tipo, apagada, arquivo_path, arquivo_nome, arquivo_tamanho, duracao')
+    .eq('id', mensagem_id).maybeSingle();
+  if (!original || original.apagada) return res.status(404).json({ error: 'Mensagem não encontrada' });
+
+  // Participa da conversa de ORIGEM — senão bastaria o id de uma mensagem
+  // alheia para trazê-la para dentro de uma conversa própria.
+  if (!(await minhaConversa(original.conversa_id, me.id))) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+  const destino = await minhaConversa(conversa_id, me.id);
+  if (!destino) return res.status(404).json({ error: 'Conversa de destino não encontrada' });
+
+  let novoCaminho = null;
+  if (original.arquivo_path) {
+    novoCaminho = `${destino.id}/${Date.now()}-${nomeSeguro(original.arquivo_nome || 'arquivo')}`;
+    const { error: erroCopia } = await supabase.storage
+      .from(BALDE).copy(original.arquivo_path, novoCaminho);
+    if (erroCopia) {
+      registrarLog('encaminhar_mensagem', 'mensagens', 'erro', {
+        company: destino.company, user_id: me.id, rota: req.originalUrl, erro: erroCopia.message });
+      return res.status(500).json({ error: 'Não foi possível encaminhar o anexo.' });
+    }
+  }
+
+  const { data: nova, error } = await supabase.from('mensagens').insert({
+    conversa_id: destino.id,
+    de_id: me.id,
+    texto: original.texto || '',
+    tipo: original.tipo,
+    arquivo_path: novoCaminho,
+    arquivo_nome: original.arquivo_nome,
+    arquivo_tamanho: original.arquivo_tamanho,
+    duracao: original.duracao,
+  }).select('id, de_id, texto, tipo, apagada, responde_a, arquivo_nome, arquivo_tamanho, duracao, created_at').single();
+
+  if (error) {
+    registrarLog('encaminhar_mensagem', 'mensagens', 'erro', {
+      company: destino.company, user_id: me.id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: 'Não foi possível encaminhar.' });
+  }
+
+  const souA = destino.usuario_a === me.id;
+  const outroId = souA ? destino.usuario_b : destino.usuario_a;
+  const rotulo = { imagem: '📷 Foto', arquivo: '📎 Arquivo', audio: '🎤 Áudio' };
+  const resumo = (original.texto || '').trim() || rotulo[original.tipo] || '';
+
+  await supabase.from('conversas').update({
+    ultima_texto: resumo.slice(0, 140),
+    ultima_de: me.id,
+    ultima_em: nova.created_at,
+    ...(souA ? { nao_lidas_b: (destino.nao_lidas_b || 0) + 1 }
+             : { nao_lidas_a: (destino.nao_lidas_a || 0) + 1 }),
+  }).eq('id', destino.id);
+
+  registrarLog('encaminhar_mensagem', 'mensagens', 'sucesso', {
+    company: destino.company, user_id: me.id, depois: { conversa_id: destino.id },
+  });
+
+  enviarPush(outroId, `💬 ${me.full_name || 'Mensagem'}`, resumo.slice(0, 120), 'chat',
+    { company: destino.company, rota: req.originalUrl });
+
+  res.json({ ...nova, arquivo_url: await linkTemporario(novoCaminho) });
+});
+
+// POST /api/chat/mensagens/:id/reacao  { requester_id, emoji }
+//
+// Uma reação por pessoa em cada mensagem: reagir de novo troca o emoji,
+// mandar o mesmo remove. É a regra do WhatsApp, e a chave única no banco
+// garante isso mesmo se a tela se atrapalhar.
+//
+// Reagir NÃO manda push. Uma conversa animada viraria dezenas de avisos
+// por minuto, e é assim que a pessoa desliga a notificação do app inteiro.
+const EMOJIS_PERMITIDOS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+router.post('/mensagens/:id/reacao', async (req, res) => {
+  const me = await getPerfil(req.body?.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const { emoji } = req.body || {};
+  // Lista fechada: sem isto o campo aceitaria texto de qualquer tamanho, e
+  // uma "reação" viraria mensagem sem passar pelas regras de mensagem.
+  if (!EMOJIS_PERMITIDOS.includes(emoji)) {
+    return res.status(400).json({ error: 'Reação inválida.' });
+  }
+
+  const { data: msg } = await supabase
+    .from('mensagens').select('id, conversa_id').eq('id', req.params.id).maybeSingle();
+  if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada' });
+
+  // A mesma conferência de sempre: só reage quem participa da conversa.
+  const conversa = await minhaConversa(msg.conversa_id, me.id);
+  if (!conversa) return res.status(403).json({ error: 'Acesso negado' });
+
+  const { data: atual } = await supabase
+    .from('mensagem_reacoes').select('id, emoji')
+    .eq('mensagem_id', msg.id).eq('user_id', me.id).maybeSingle();
+
+  if (atual && atual.emoji === emoji) {
+    await supabase.from('mensagem_reacoes').delete().eq('id', atual.id);
+    return res.json({ emoji: null });
+  }
+  if (atual) {
+    await supabase.from('mensagem_reacoes').update({ emoji }).eq('id', atual.id);
+    return res.json({ emoji });
+  }
+  const { error } = await supabase
+    .from('mensagem_reacoes').insert({ mensagem_id: msg.id, user_id: me.id, emoji });
+  if (error) return res.status(500).json({ error: 'Não foi possível reagir.' });
+  res.json({ emoji });
 });
 
 // DELETE /api/chat/mensagens/:id?requester_id=

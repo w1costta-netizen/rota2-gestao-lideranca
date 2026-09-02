@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Plus, Search, X, ArrowLeft, MessageCircle, Paperclip, Mic, Trash2 } from 'lucide-react';
+import { Send, Plus, Search, X, ArrowLeft, MessageCircle, Paperclip, Mic, Trash2, CornerUpLeft, Share2, Copy } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
 import Avatar from '../components/Avatar';
@@ -55,6 +55,56 @@ export default function Chat({ userId }) {
 
   const arquivoRef = useRef(null);
   const textoRef = useRef(null);
+
+  // Ações sobre uma mensagem: o menu aberto, a que está sendo respondida e
+  // a que está sendo encaminhada. Três estados separados porque as três
+  // coisas podem acontecer em sequência sem se atrapalhar.
+  const [menuMsg, setMenuMsg]       = useState(null);
+  const [respondendo, setRespondendo] = useState(null);
+  const [encaminhando, setEncaminhando] = useState(null);
+
+  const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+  const reagir = async (m, emoji) => {
+    setMenuMsg(null);
+    try {
+      const r = await api.post(`/chat/mensagens/${m.id}/reacao`, { requester_id: userId, emoji });
+      // Atualiza na tela sem esperar a próxima busca: reação precisa
+      // responder na hora, senão a pessoa toca de novo achando que falhou.
+      setMensagens(lista => lista.map(x => {
+        if (x.id !== m.id) return x;
+        const semAMinha = (x.reacoes || []).filter(re => re.user_id !== userId);
+        return { ...x, reacoes: r.data.emoji ? [...semAMinha, { user_id: userId, emoji: r.data.emoji }] : semAMinha };
+      }));
+    } catch {
+      toast('Não foi possível reagir.', 'error');
+    }
+  };
+
+  const copiar = async (m) => {
+    setMenuMsg(null);
+    try {
+      await navigator.clipboard.writeText(m.texto || m.arquivo_nome || '');
+      toast('Copiado.');
+    } catch {
+      toast('Seu navegador não deixou copiar.', 'error');
+    }
+  };
+
+  const encaminharPara = async (conversaDestino) => {
+    const m = encaminhando;
+    setEncaminhando(null);
+    try {
+      await api.post('/chat/encaminhar', {
+        requester_id: userId, mensagem_id: m.id, conversa_id: conversaDestino.id,
+      });
+      toast(`Encaminhada para ${conversaDestino.outro?.full_name || 'a conversa'}.`);
+      carregarConversas();
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Não foi possível encaminhar.', 'error');
+    }
+  };
+
   const [enviandoAnexo, setEnviandoAnexo] = useState(false);
   const [gravando, setGravando] = useState(false);
   const [segundos, setSegundos] = useState(0);
@@ -286,7 +336,12 @@ export default function Chat({ userId }) {
     try {
       const r = await api.post('/chat/mensagens', {
         requester_id: userId, conversa_id: aberta.id, texto: conteudo,
+        responde_a: respondendo?.id || null,
       });
+      // A citação só é montada na próxima busca (o servidor a resolve na
+      // listagem); até lá a mensagem aparece sem ela, o que é preferível a
+      // montar na tela algo que pode não bater com o que ficou gravado.
+      setRespondendo(null);
       setMensagens(m => [...m, r.data]);
       setConversas(lista => lista.map(c => c.id === aberta.id
         ? { ...c, ultima_texto: conteudo.slice(0, 140), ultima_em: r.data.created_at, ultima_minha: true }
@@ -437,11 +492,31 @@ export default function Chat({ userId }) {
                           </div>
                         )}
                         <div style={{ display:'flex', justifyContent: minha ? 'flex-end' : 'flex-start' }}>
-                          <div style={{ maxWidth:'78%', padding:'8px 12px', borderRadius:14,
+                          <div
+                            onClick={() => !m.apagada && setMenuMsg(m)}
+                            style={{ maxWidth:'78%', padding:'8px 12px', borderRadius:14,
+                                        cursor: m.apagada ? 'default' : 'pointer',
                                         background: minha ? 'var(--primary)' : 'var(--surface-1)',
                                         color: minha ? '#fff' : 'var(--text)',
                                         borderBottomRightRadius: minha ? 4 : 14,
                                         borderBottomLeftRadius: minha ? 14 : 4 }}>
+                            {/* Citação: mostra de quem é e um trecho. Se a
+                                original foi apagada, some o texto — devolver
+                                aqui o que a pessoa removeu seria pior que
+                                não ter citação. */}
+                            {m.citada && (
+                              <div style={{ borderLeft:'3px solid currentColor', opacity:.75,
+                                            paddingLeft:8, marginBottom:6, fontSize:12.5 }}>
+                                <div style={{ fontWeight:700, marginBottom:1 }}>
+                                  {m.citada.de_id === userId ? 'Você' : (aberta?.outro?.full_name || 'Mensagem')}
+                                </div>
+                                <div style={{ overflow:'hidden', textOverflow:'ellipsis',
+                                              whiteSpace:'nowrap', maxWidth:220 }}>
+                                  {m.citada.apagada ? 'Mensagem apagada'
+                                    : (m.citada.texto || 'Anexo')}
+                                </div>
+                              </div>
+                            )}
                             {m.apagada ? (
                               // Vira aviso em vez de sumir: sumir sem
                               // rastro deixaria a conversa confusa para
@@ -453,18 +528,20 @@ export default function Chat({ userId }) {
                             ) : (<>
                             {m.tipo === 'imagem' && m.arquivo_url && (
                               <img src={m.arquivo_url} alt={m.arquivo_nome || 'Foto'}
-                                onClick={() => window.open(m.arquivo_url, '_blank')}
+                                onClick={e => { e.stopPropagation(); window.open(m.arquivo_url, '_blank'); }}
                                 style={{ maxWidth:'100%', borderRadius:10, display:'block', cursor:'pointer', marginBottom: m.texto ? 6 : 0 }}/>
                             )}
 
                             {m.tipo === 'audio' && m.arquivo_url && (
                               // O player do próprio navegador: no iPhone é o
                               // que garante que o áudio toque sem plugin.
-                              <audio controls src={m.arquivo_url} style={{ width:'100%', minWidth:200, marginBottom: m.texto ? 6 : 0 }}/>
+                              <audio controls src={m.arquivo_url} onClick={e => e.stopPropagation()}
+                                style={{ width:'100%', minWidth:200, marginBottom: m.texto ? 6 : 0 }}/>
                             )}
 
                             {m.tipo === 'arquivo' && m.arquivo_url && (
                               <a href={m.arquivo_url} target="_blank" rel="noreferrer"
+                                onClick={e => e.stopPropagation()}
                                 style={{ display:'flex', alignItems:'center', gap:8, textDecoration:'none',
                                          color:'inherit', marginBottom: m.texto ? 6 : 0 }}>
                                 <Paperclip size={16} style={{ flexShrink:0 }}/>
@@ -502,7 +579,7 @@ export default function Chat({ userId }) {
                               {/* Só quem escreveu apaga, e só o que ainda
                                   não foi apagado. */}
                               {minha && !m.apagada && (
-                                <button onClick={() => apagar(m)} aria-label="Apagar mensagem" title="Apagar mensagem"
+                                <button onClick={e => { e.stopPropagation(); apagar(m); }} aria-label="Apagar mensagem" title="Apagar mensagem"
                                   style={{ background:'none', border:'none', cursor:'pointer', padding:2, margin:-2,
                                            color:'inherit', opacity:.85, display:'flex' }}>
                                   <Trash2 size={12}/>
@@ -510,6 +587,24 @@ export default function Chat({ userId }) {
                               )}
                               <span>{horaCurta(m.created_at)}</span>
                             </div>
+
+                            {/* Reações agrupadas: o mesmo emoji some numa
+                                bolinha com a contagem, como no WhatsApp. */}
+                            {m.reacoes?.length > 0 && (
+                              <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginTop:4 }}>
+                                {[...new Set(m.reacoes.map(r => r.emoji))].map(e => {
+                                  const qtd = m.reacoes.filter(r => r.emoji === e).length;
+                                  return (
+                                    <span key={e} style={{
+                                      background: minha ? 'rgba(255,255,255,.18)' : 'var(--surface-2)',
+                                      borderRadius:99, padding:'1px 7px', fontSize:12, lineHeight:1.6,
+                                    }}>
+                                      {e}{qtd > 1 ? ` ${qtd}` : ''}
+                                    </span>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </React.Fragment>
@@ -517,6 +612,27 @@ export default function Chat({ userId }) {
                   })}
                   <div ref={fimRef}/>
                 </div>
+
+                {/* Respondendo a uma mensagem: a barra fica em cima do
+                    campo, como no WhatsApp, e some ao enviar ou no X. */}
+                {respondendo && (
+                  <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px',
+                                borderTop:'1px solid var(--border)', background:'var(--surface-2)', flexShrink:0 }}>
+                    <div style={{ borderLeft:'3px solid var(--primary)', paddingLeft:8, minWidth:0, flex:1 }}>
+                      <div style={{ fontSize:11.5, fontWeight:700, color:'var(--primary)' }}>
+                        Respondendo {respondendo.de_id === userId ? 'você mesmo' : aberta?.outro?.full_name || ''}
+                      </div>
+                      <div style={{ fontSize:12.5, color:'var(--text-muted)', overflow:'hidden',
+                                    textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        {respondendo.texto || 'Anexo'}
+                      </div>
+                    </div>
+                    <button onClick={() => setRespondendo(null)} aria-label="Cancelar resposta"
+                      style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:4 }}>
+                      <X size={16}/>
+                    </button>
+                  </div>
+                )}
 
                 {gravando ? (
                   <div style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 14px',
@@ -637,6 +753,85 @@ export default function Chat({ userId }) {
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Menu da mensagem — sobe de baixo, como no celular. Os emojis ficam
+          em cima e em linha: reagir é a ação mais usada e a que precisa de
+          menos toques. */}
+      {menuMsg && (
+        <div onClick={() => setMenuMsg(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:60,
+                   display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'var(--surface)', borderRadius:'18px 18px 0 0', width:'100%',
+                     maxWidth:460, padding:'14px 12px 18px',
+                     borderTop:'1px solid var(--border)' }}>
+            <div style={{ display:'flex', justifyContent:'space-around', paddingBottom:12,
+                          borderBottom:'1px solid var(--border)', marginBottom:8 }}>
+              {EMOJIS.map(e => (
+                <button key={e} onClick={() => reagir(menuMsg, e)}
+                  style={{ background:'none', border:'none', fontSize:26, cursor:'pointer',
+                           padding:'4px 6px', lineHeight:1 }}>
+                  {e}
+                </button>
+              ))}
+            </div>
+
+            {[
+              { icone: CornerUpLeft, texto: 'Responder',  fn: () => { setRespondendo(menuMsg); setMenuMsg(null); } },
+              { icone: Share2,       texto: 'Encaminhar', fn: () => { setEncaminhando(menuMsg); setMenuMsg(null); } },
+              { icone: Copy,         texto: 'Copiar',     fn: () => copiar(menuMsg) },
+            ].map(({ icone: Ic, texto, fn }) => (
+              <button key={texto} onClick={fn}
+                style={{ display:'flex', alignItems:'center', gap:12, width:'100%', background:'none',
+                         border:'none', cursor:'pointer', padding:'12px 10px', fontSize:14,
+                         color:'var(--text)', textAlign:'left' }}>
+                <Ic size={17} color="var(--text-muted)"/> {texto}
+              </button>
+            ))}
+
+            {/* Apagar continua só para quem escreveu — a mesma regra da
+                lixeira que já existia na bolha. */}
+            {menuMsg.de_id === userId && (
+              <button onClick={() => { const m = menuMsg; setMenuMsg(null); apagar(m); }}
+                style={{ display:'flex', alignItems:'center', gap:12, width:'100%', background:'none',
+                         border:'none', cursor:'pointer', padding:'12px 10px', fontSize:14,
+                         color:'var(--danger)', textAlign:'left' }}>
+                <Trash2 size={17}/> Apagar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Encaminhar: escolhe para qual conversa. Só as que já existem —
+          abrir conversa nova daqui misturaria duas decisões diferentes. */}
+      {encaminhando && (
+        <div onClick={() => setEncaminhando(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:60,
+                   display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'var(--surface)', borderRadius:16, width:'100%', maxWidth:420,
+                     maxHeight:'70vh', overflow:'auto', border:'1px solid var(--border)' }}>
+            <div style={{ padding:'14px 16px', borderBottom:'1px solid var(--border)',
+                          fontWeight:700, fontSize:14 }}>
+              Encaminhar para
+            </div>
+            {conversas.filter(c => c.id !== aberta?.id).length === 0 ? (
+              <div style={{ padding:24, textAlign:'center', color:'var(--text-muted)', fontSize:13 }}>
+                Você ainda não tem outra conversa aberta.
+              </div>
+            ) : conversas.filter(c => c.id !== aberta?.id).map(c => (
+              <button key={c.id} onClick={() => encaminharPara(c)}
+                style={{ width:'100%', textAlign:'left', display:'flex', gap:10, alignItems:'center',
+                         padding:'10px 16px', cursor:'pointer', border:'none', background:'transparent',
+                         borderBottom:'1px solid var(--border)' }}>
+                <Avatar avatarUrl={c.outro?.avatar_url} name={c.outro?.full_name} size={32}/>
+                <span style={{ fontSize:13.5, fontWeight:600 }}>{c.outro?.full_name || 'Conversa'}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}
