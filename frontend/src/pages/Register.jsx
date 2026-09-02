@@ -201,7 +201,7 @@ export default function Register({ onGoLogin }) {
         <div className="form-group">
           <label className="form-label">Senha</label>
           <div style={{ position:'relative' }}>
-            <input className="input" type={showPass ? 'text' : 'password'}
+            <input className="input" type={showPass ? 'text' : 'password'} spellCheck={false} autoCapitalize="none" autoCorrect="off"
               value={form.password} onChange={e => set('password', e.target.value)}
               placeholder="Mínimo 6 caracteres" style={{ paddingRight:40 }} />
             <button type="button" className="btn-icon"
@@ -215,7 +215,7 @@ export default function Register({ onGoLogin }) {
         <div className="form-group">
           <label className="form-label">Confirmar senha</label>
           <div style={{ position:'relative' }}>
-            <input className="input" type={showPass2 ? 'text' : 'password'}
+            <input className="input" type={showPass2 ? 'text' : 'password'} spellCheck={false} autoCapitalize="none" autoCorrect="off"
               value={form.password2} onChange={e => set('password2', e.target.value)}
               placeholder="Repita a senha" style={{ paddingRight:40 }} />
             <button type="button" className="btn-icon"

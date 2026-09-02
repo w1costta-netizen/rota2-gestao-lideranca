@@ -97,7 +97,7 @@ export default function Leaders() {
           <input
             className="input"
             style={{ paddingLeft: 34 }}
-            placeholder="Buscar por nome ou setor..."
+            placeholder="Buscar por nome ou setor..." spellCheck={false}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />

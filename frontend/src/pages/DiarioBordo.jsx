@@ -271,7 +271,7 @@ export default function DiarioBordo({ userId, profile }) {
           <div style={{ display:'flex', alignItems:'center', gap:8, flex:'1 1 220px',
                         background:'var(--surface-1)', borderRadius:'var(--radius)', padding:'7px 11px' }}>
             <Search size={14} style={{ color:'var(--text-muted)', flexShrink:0 }}/>
-            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar no relato ou por quem escreveu"
+            <input value={busca} onChange={e => setBusca(e.target.value)} placeholder="Buscar no relato ou por quem escreveu" spellCheck={false}
               style={{ border:'none', background:'none', outline:'none', width:'100%', fontSize:13, color:'var(--text)' }}/>
             {busca && <button onClick={() => setBusca('')} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:0 }}><X size={14}/></button>}
           </div>

@@ -55,13 +55,13 @@ export default function Login({ onGoRegister }) {
           <div className="auth-fields">
             <div className="form-group">
               <label className="form-label">E-mail</label>
-              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)}
+              <input className="input" type="email" value={email} onChange={e => setEmail(e.target.value)} spellCheck={false} autoCapitalize="none" autoCorrect="off"
                 placeholder="seu@email.com" onKeyDown={e => e.key === 'Enter' && login()} />
             </div>
             <div className="form-group">
               <label className="form-label">Senha</label>
               <div style={{ position: 'relative' }}>
-                <input className="input" type={showPass ? 'text' : 'password'} value={password}
+                <input className="input" type={showPass ? 'text' : 'password'} value={password} spellCheck={false} autoCapitalize="none" autoCorrect="off"
                   onChange={e => setPassword(e.target.value)} placeholder="Sua senha"
                   style={{ paddingRight: 40 }} onKeyDown={e => e.key === 'Enter' && login()} />
                 <button type="button" className="btn-icon" onClick={() => setShowPass(p => !p)}
@@ -93,7 +93,7 @@ export default function Login({ onGoRegister }) {
               <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 16 }}>Digite seu e-mail e enviaremos um link para redefinir sua senha.</p>
               <div className="form-group">
                 <label className="form-label">E-mail</label>
-                <input className="input" type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="seu@email.com" />
+                <input className="input" type="email" value={resetEmail} onChange={e => setResetEmail(e.target.value)} placeholder="seu@email.com" spellCheck={false} autoCapitalize="none" autoCorrect="off" />
               </div>
               <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={sendReset}>Enviar link de redefinição</button>
               <button className="auth-link" style={{ display: 'block', textAlign: 'center', marginTop: 12 }} onClick={() => setShowReset(false)}>Voltar ao login</button>

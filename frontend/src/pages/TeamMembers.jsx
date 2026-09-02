@@ -159,7 +159,7 @@ export default function TeamMembers({ userId, userSector }) {
 
       {/* Busca */}
       <div className="card" style={{ marginBottom: 16 }}>
-        <input className="input" placeholder="Buscar por nome ou matrícula..."
+        <input className="input" placeholder="Buscar por nome ou matrícula..." spellCheck={false}
           value={filter} onChange={e => setFilter(e.target.value)} />
       </div>
 

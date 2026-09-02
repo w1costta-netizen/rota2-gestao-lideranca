@@ -354,7 +354,7 @@ export default function LogsAuditoria({ userId, profile }) {
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
         <div style={{ position:'relative', flex:1, minWidth:200 }}>
           <Search size={14} style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:'var(--text-muted)' }}/>
-          <input className="input" style={{ paddingLeft:32 }} placeholder="Buscar por ação, tabela..."
+          <input className="input" style={{ paddingLeft:32 }} placeholder="Buscar por ação, tabela..." spellCheck={false}
             value={q} onChange={e => setQ(e.target.value)}/>
         </div>
         <select className="select" style={{ maxWidth:160 }} value={status} onChange={e => setStatus(e.target.value)}>

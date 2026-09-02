@@ -720,7 +720,7 @@ export default function Chat({ userId }) {
                             borderRadius:'var(--radius)', padding:'8px 11px' }}>
                 <Search size={14} style={{ color:'var(--text-muted)', flexShrink:0 }}/>
                 <input value={buscaContato} onChange={e => setBuscaContato(e.target.value)} autoFocus
-                  placeholder="Buscar pessoa"
+                  placeholder="Buscar pessoa" spellCheck={false}
                   style={{ border:'none', background:'none', outline:'none', width:'100%', fontSize:13, color:'var(--text)' }}/>
               </div>
             </div>

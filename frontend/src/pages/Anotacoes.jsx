@@ -210,7 +210,7 @@ export default function Anotacoes({ userId }) {
         <Search size={15} style={{ color:'var(--text-muted)', flexShrink:0 }}/>
         <input
           value={busca} onChange={e => setBusca(e.target.value)}
-          placeholder="Buscar nas anotações"
+          placeholder="Buscar nas anotações" spellCheck={false}
           style={{ border:'none', background:'none', outline:'none', width:'100%', fontSize:13, color:'var(--text)' }}/>
         {busca && (
           <button onClick={() => setBusca('')} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:0 }}>
