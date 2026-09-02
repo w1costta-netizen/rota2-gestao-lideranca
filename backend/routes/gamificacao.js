@@ -33,39 +33,39 @@ const { logAction, logError } = require('../lib/auditLog');
 // mede a mesma intenção é a constância.
 const ACOES = {
   // Planejamento próprio — vale mais porque mede iniciativa, não obediência
-  criar_agenda:            { familia: 'planejamento', base: 4, tetoDia: 3 },
-  criar_tarefa:            { familia: 'planejamento', base: 4, tetoDia: 3 },
-  criar_plano_pdca:        { familia: 'planejamento', base: 5, tetoDia: 2 },
-  criar_acao_pdca:         { familia: 'planejamento', base: 2, tetoDia: 5 },
-  criar_lista:             { familia: 'planejamento', base: 2, tetoDia: 2 },
-  adicionar_item_lista:    { familia: 'planejamento', base: 1, tetoDia: 5 },
-  criar_anotacao:          { familia: 'planejamento', base: 1, tetoDia: 3 },
+  criar_agenda:            { nome: 'Colocar um item na agenda', familia: 'planejamento', base: 4, tetoDia: 3 },
+  criar_tarefa:            { nome: 'Criar uma tarefa', familia: 'planejamento', base: 4, tetoDia: 3 },
+  criar_plano_pdca:        { nome: 'Criar um plano de ação', familia: 'planejamento', base: 5, tetoDia: 2 },
+  criar_acao_pdca:         { nome: 'Criar uma ação dentro do plano', familia: 'planejamento', base: 2, tetoDia: 5 },
+  criar_lista:             { nome: 'Criar uma lista', familia: 'planejamento', base: 2, tetoDia: 2 },
+  adicionar_item_lista:    { nome: 'Adicionar item numa lista', familia: 'planejamento', base: 1, tetoDia: 5 },
+  criar_anotacao:          { nome: 'Criar uma anotação', familia: 'planejamento', base: 1, tetoDia: 3 },
 
   // Operação — o trabalho da loja registrado no app
-  finalizar_conferencia:   { familia: 'operacao', base: 8, tetoDia: 2 },
-  criar_ata:               { familia: 'operacao', base: 6, tetoDia: 2 },
-  criar_conferencia:       { familia: 'operacao', base: 4, tetoDia: 2 },
-  criar_relato_diario:     { familia: 'operacao', base: 4, tetoDia: 3 },
-  salvar_caixas:           { familia: 'operacao', base: 3, tetoDia: 3 },
-  criar_comunicado:        { familia: 'operacao', base: 3, tetoDia: 3 },
-  criar_mural:             { familia: 'operacao', base: 3, tetoDia: 3 },
-  coletar_item_conferencia:{ familia: 'operacao', base: 2, tetoDia: 20 },
-  sinalizar_item_flyer:    { familia: 'operacao', base: 2, tetoDia: 20 },
-  adicionar_foto_flyer:    { familia: 'operacao', base: 2, tetoDia: 15 },
-  adicionar_foto_tour:     { familia: 'operacao', base: 2, tetoDia: 15 },
-  salvar_escala:           { familia: 'operacao', base: 1, tetoDia: 5 },
+  finalizar_conferencia:   { nome: 'Finalizar uma conferência de seção', familia: 'operacao', base: 8, tetoDia: 2 },
+  criar_ata:               { nome: 'Criar uma ata de reunião', familia: 'operacao', base: 6, tetoDia: 2 },
+  criar_conferencia:       { nome: 'Abrir uma conferência de seção', familia: 'operacao', base: 4, tetoDia: 2 },
+  criar_relato_diario:     { nome: 'Escrever no Diário de Bordo', familia: 'operacao', base: 4, tetoDia: 3 },
+  salvar_caixas:           { nome: 'Salvar análise de caixas', familia: 'operacao', base: 3, tetoDia: 3 },
+  criar_comunicado:        { nome: 'Publicar um comunicado', familia: 'operacao', base: 3, tetoDia: 3 },
+  criar_mural:             { nome: 'Publicar no mural', familia: 'operacao', base: 3, tetoDia: 3 },
+  coletar_item_conferencia:{ nome: 'Conferir um item de seção', familia: 'operacao', base: 2, tetoDia: 20 },
+  sinalizar_item_flyer:    { nome: 'Sinalizar um item de flyer', familia: 'operacao', base: 2, tetoDia: 20 },
+  adicionar_foto_flyer:    { nome: 'Adicionar foto num flyer', familia: 'operacao', base: 2, tetoDia: 15 },
+  adicionar_foto_tour:     { nome: 'Adicionar foto no Tour 4x4', familia: 'operacao', base: 2, tetoDia: 15 },
+  salvar_escala:           { nome: 'Trabalhar na escala', familia: 'operacao', base: 1, tetoDia: 5 },
 
   // Participação — peso baixo de propósito: comentar é bom, mas não é o que
   // muda a operação, e é o mais fácil de inflar
-  concluir_treinamento_produtividade: { familia: 'participacao', base: 10, tetoDia: 2 },
-  comentar_tarefa:         { familia: 'participacao', base: 2, tetoDia: 5 },
-  comentar_comunicado:     { familia: 'participacao', base: 2, tetoDia: 5 },
-  comentar_mural:          { familia: 'participacao', base: 2, tetoDia: 5 },
-  comentar_ata:            { familia: 'participacao', base: 2, tetoDia: 5 },
-  reagir:                  { familia: 'participacao', base: 1, tetoDia: 8 },
-  enviar_mensagem:         { familia: 'participacao', base: 1, tetoDia: 10 },
-  marcar_comunicado_lido:  { familia: 'participacao', base: 1, tetoDia: 5 },
-  marcar_mural_lido:       { familia: 'participacao', base: 1, tetoDia: 5 },
+  concluir_treinamento_produtividade: { nome: 'Concluir um treinamento', familia: 'participacao', base: 10, tetoDia: 2 },
+  comentar_tarefa:         { nome: 'Comentar numa tarefa', familia: 'participacao', base: 2, tetoDia: 5 },
+  comentar_comunicado:     { nome: 'Comentar num comunicado', familia: 'participacao', base: 2, tetoDia: 5 },
+  comentar_mural:          { nome: 'Comentar no mural', familia: 'participacao', base: 2, tetoDia: 5 },
+  comentar_ata:            { nome: 'Comentar numa ata', familia: 'participacao', base: 2, tetoDia: 5 },
+  reagir:                  { nome: 'Reagir a uma mensagem', familia: 'participacao', base: 1, tetoDia: 8 },
+  enviar_mensagem:         { nome: 'Enviar mensagem no chat', familia: 'participacao', base: 1, tetoDia: 10 },
+  marcar_comunicado_lido:  { nome: 'Ler um comunicado', familia: 'participacao', base: 1, tetoDia: 5 },
+  marcar_mural_lido:       { nome: 'Ler o mural', familia: 'participacao', base: 1, tetoDia: 5 },
 };
 
 // Vale por cada dia distinto em que a pessoa fez qualquer coisa da lista.
@@ -167,6 +167,43 @@ async function getPerfil(id) {
 const podeCriar = (me) => ['admin', 'master'].includes(me.access_level);
 const FAMILIAS_VALIDAS = Object.keys(FAMILIAS);
 const TEMAS_VALIDOS = ['classico', 'reinos', 'copa', 'corrida'];
+
+// GET /api/gamificacao/regras
+//
+// As regras saem do MESMO objeto que calcula o placar. Escrever a
+// explicacao a mao criaria duas verdades: bastaria mexer num peso e a tela
+// passaria a mentir sem ninguem perceber. Aqui, mudar a pontuacao muda a
+// explicacao no mesmo instante.
+//
+// E os TETOS aparecem abertos de proposito. Esconder limite nao evita
+// fraude - quem quer burlar descobre testando - e so prejudica quem esta
+// jogando limpo e gastaria esforco a toa.
+router.get('/regras', (_req, res) => {
+  const porFamilia = {};
+  FAMILIAS_VALIDAS.forEach(chave => {
+    porFamilia[chave] = { chave, ...FAMILIAS[chave], acoes: [] };
+  });
+
+  Object.entries(ACOES).forEach(([chave, a]) => {
+    porFamilia[a.familia].acoes.push({
+      chave, nome: a.nome, base: a.base, tetoDia: a.tetoDia,
+    });
+  });
+
+  Object.entries(QUALIDADE).forEach(([chave, q]) => {
+    porFamilia.qualidade.acoes.push({
+      chave, nome: q.nome, base: q.base, tetoDia: null,
+    });
+  });
+
+  // Do mais valioso para o menos, dentro de cada familia.
+  Object.values(porFamilia).forEach(f => f.acoes.sort((a, b) => b.base - a.base));
+
+  res.json({
+    pontosPorDiaAtivo: PONTOS_POR_DIA_ATIVO,
+    familias: Object.values(porFamilia),
+  });
+});
 
 // GET /api/gamificacao/familias — o catálogo, para a tela de criar torneio
 router.get('/familias', (_req, res) => {

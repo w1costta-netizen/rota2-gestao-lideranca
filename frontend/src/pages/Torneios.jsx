@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trophy, Plus, X, Users, User, Medal } from 'lucide-react';
+import { Trophy, Plus, X, Users, User, Medal, HelpCircle, CalendarCheck, Lightbulb } from 'lucide-react';
 import api from '../api';
 import Avatar from '../components/Avatar';
 import { useToast } from '../components/Toast';
@@ -40,6 +40,8 @@ export default function Torneios({ userId, profile }) {
   const [catalogo, setCatalogo] = useState([]);
   const [form, setForm] = useState({ nome: '', premio: '', inicio: hoje(), fim: '', metricas: {}, tema: 'classico' });
   const [salvando, setSalvando] = useState(false);
+  const [regras, setRegras] = useState(null);
+  const [verRegras, setVerRegras] = useState(false);
 
   const carregar = async () => {
     try {
@@ -97,6 +99,17 @@ export default function Torneios({ userId, profile }) {
     setSalvando(false);
   };
 
+  const abrirRegras = async () => {
+    setVerRegras(true);
+    if (regras) return;
+    try {
+      const r = await api.get('/gamificacao/regras');
+      setRegras(r.data);
+    } catch {
+      toast('Não foi possível carregar as regras.', 'error');
+    }
+  };
+
   const encerrar = async (c) => {
     if (!confirm(`Encerrar "${c.nome}"? O placar continua visível, mas para de contar pontos novos.`)) return;
     try {
@@ -132,7 +145,12 @@ export default function Torneios({ userId, profile }) {
               {!aberta.ativa ? ' · Encerrado' : ''}
             </div>
           </div>
-          <button className="btn btn-sm" onClick={() => setAberta(null)}>← Voltar</button>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+            <button className="btn btn-sm" onClick={abrirRegras}>
+              <HelpCircle size={14}/> Como pontuar
+            </button>
+            <button className="btn btn-sm" onClick={() => setAberta(null)}>← Voltar</button>
+          </div>
         </div>
 
         {placar?.familias?.length > 0 && (
@@ -233,6 +251,30 @@ export default function Torneios({ userId, profile }) {
               </div>
             )}
 
+            {/* De onde vieram os seus pontos. Sem isto a pessoa vê o número
+                e não sabe o que fazer para melhorar — e placar que não se
+                explica não muda comportamento. */}
+            {eu && eu.pontos > 0 && (
+              <div className="card" style={{ marginTop: 12 }}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10 }}>Seus pontos vieram de</div>
+                {(placar.familias || []).map(f => {
+                  const v = eu.porFamilia?.[f.chave] || 0;
+                  const pct = eu.pontos ? Math.round((v / eu.pontos) * 100) : 0;
+                  return (
+                    <div key={f.chave} style={{ marginBottom: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 3 }}>
+                        <span>{f.nome}</span>
+                        <span style={{ color: 'var(--text-muted)' }}>{v} pts</span>
+                      </div>
+                      <div style={{ height: 6, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: T.cores.principal }}/>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Lista completa só para quem administra: é informação de
                 gestão, não de vitrine. */}
             {ehGestor && placar.individual.length > 3 && (
@@ -255,11 +297,16 @@ export default function Torneios({ userId, profile }) {
           <div className="page-title">Torneios</div>
           <div className="page-subtitle">Gestão do Tempo e Produtividade</div>
         </div>
-        {ehGestor && (
-          <button className="btn btn-primary btn-sm" onClick={abrirCriacao}>
-            <Plus size={14}/> Novo torneio
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn btn-sm" onClick={abrirRegras}>
+            <HelpCircle size={14}/> Como pontuar
           </button>
-        )}
+          {ehGestor && (
+            <button className="btn btn-primary btn-sm" onClick={abrirCriacao}>
+              <Plus size={14}/> Novo torneio
+            </button>
+          )}
+        </div>
       </div>
 
       {carregando ? (
@@ -299,6 +346,97 @@ export default function Torneios({ userId, profile }) {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Como pontuar — a tela mais importante depois do placar. Quem não
+          sabe como subir não muda de comportamento, e o torneio vira
+          decoração. As regras vêm do servidor, geradas pelo mesmo código
+          que calcula os pontos: não há como a explicação divergir. */}
+      {verRegras && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setVerRegras(false)}>
+          <div className="modal" style={{ maxWidth: 620 }}>
+            <div className="modal-header">
+              <span className="modal-title">Como funciona a pontuação</span>
+              <button className="btn-icon" onClick={() => setVerRegras(false)}><X size={16}/></button>
+            </div>
+            <div className="modal-body">
+              {!regras ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Carregando as regras...</p>
+              ) : (
+                <>
+                  <div className="card" style={{ marginBottom: 16, borderLeft: '4px solid var(--primary)', borderRadius: '0 12px 12px 0' }}>
+                    <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+                      <Lightbulb size={17} color="var(--primary)" style={{ flexShrink: 0, marginTop: 1 }}/>
+                      <div style={{ fontSize: 13, lineHeight: 1.65 }}>
+                        <strong>A regra mais importante:</strong> vale mais aparecer todo dia
+                        do que fazer muita coisa num dia só. Quem faz três coisas por dia
+                        durante o mês passa com folga de quem faz cinquenta numa tarde.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 18, color: 'var(--text-muted)' }}>
+                    Cada ação vale um <strong style={{ color: 'var(--text)' }}>valor base</strong>, e o{' '}
+                    <strong style={{ color: 'var(--text)' }}>peso da família</strong> multiplica esse valor —
+                    o peso de cada torneio aparece no topo do placar. Algumas ações têm{' '}
+                    <strong style={{ color: 'var(--text)' }}>limite por dia</strong>: repetir além do limite
+                    não soma mais nada naquele dia.
+                  </div>
+
+                  <div className="card" style={{ marginBottom: 18, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <CalendarCheck size={17} color="var(--primary)" style={{ flexShrink: 0, marginTop: 1 }}/>
+                    <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                      <strong>Constância:</strong> cada dia em que você fizer qualquer coisa desta
+                      lista vale <strong>{regras.pontosPorDiaAtivo} pontos</strong>, multiplicados pelo peso.
+                      É o que mais rende ao longo de um mês.
+                    </div>
+                  </div>
+
+                  {regras.familias.map(f => (
+                    <div key={f.chave} style={{ marginBottom: 20 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 2 }}>{f.nome}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+                        {f.descricao}
+                      </div>
+                      {f.acoes.length === 0 ? (
+                        <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                          Pontua por dia usado, não por ação.
+                        </div>
+                      ) : f.acoes.map(a => (
+                        <div key={a.chave} style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0',
+                          borderBottom: '1px solid var(--border)', fontSize: 13,
+                        }}>
+                          <span style={{ flex: 1, minWidth: 0 }}>{a.nome}</span>
+                          {a.tetoDia && (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                              até {a.tetoDia}×/dia
+                            </span>
+                          )}
+                          <span style={{ fontWeight: 800, minWidth: 26, textAlign: 'right', flexShrink: 0 }}>
+                            {a.base}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+
+                  <div className="card" style={{ background: 'var(--surface-2)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Três coisas que valem saber</div>
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.75, color: 'var(--text-muted)' }}>
+                      <li><strong style={{ color: 'var(--text)' }}>Tarefa sem prazo não pontua</strong> na
+                        família Qualidade — só conta quem cumpre um prazo que existia.</li>
+                      <li><strong style={{ color: 'var(--text)' }}>Só abrir telas não pontua.</strong> O que
+                        conta é o que você faz e registra, não o que você olha.</li>
+                      <li><strong style={{ color: 'var(--text)' }}>Setor é comparado por média</strong>, não
+                        por soma — setor pequeno disputa de igual para igual com setor grande.</li>
+                    </ul>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
