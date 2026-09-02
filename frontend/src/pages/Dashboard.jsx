@@ -132,6 +132,24 @@ export default function Dashboard({ setPage, profile: propProfile }) {
         </div>
       </div>
 
+      {/* Sem loja escolhida, os blocos que dependem dela vêm vazios. Dizer
+          isso aqui é melhor do que bloquear a tela: as listas e as
+          anotações da pessoa continuam à mão, e ela entende o resto. */}
+      {!profile?.company && (
+        <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center',
+          justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
+          borderLeft: '4px solid var(--primary)', borderRadius: '0 12px 12px 0' }}>
+          <div style={{ fontSize: 13, lineHeight: 1.5 }}>
+            <strong>Você não está dentro de nenhuma loja.</strong> Suas listas e anotações
+            estão aqui; tarefas, comunicados e agenda aparecem ao entrar numa loja.
+          </div>
+          <button className="btn btn-primary btn-sm" style={{ flexShrink: 0 }}
+            onClick={() => setPage('lojas')}>
+            Escolher loja
+          </button>
+        </div>
+      )}
+
       {/* Alertas urgentes */}
       {urgentes.length > 0 && (
         <div style={{

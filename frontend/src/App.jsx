@@ -147,6 +147,11 @@ function AccessDenied() {
 // Telas que não pertencem a uma loja: pessoais (listas, anotações),
 // de dono (lojas, usuários, logs) ou que já atravessam lojas (conversas).
 const PAGINAS_SEM_LOJA = new Set([
+  // Dashboard é a tela DA PESSOA, não da loja: mostra as listas e as
+  // anotações dela, que existem independente de loja. Bloquear tirava o
+  // que funcionava junto com o que não se aplica — o próprio painel avisa
+  // que falta escolher uma loja e mostra o resto normalmente.
+  'dashboard',
   'lojas', 'profile', 'listas', 'anotacoes', 'chat', 'logs', 'usersadmin',
 ]);
 
