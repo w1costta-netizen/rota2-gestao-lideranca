@@ -41,10 +41,17 @@ async function chavesDaLoja(company) {
 
 const ehGestor = p => p && ['admin', 'supervisor', 'master'].includes(p.access_level);
 
+// Cadastro desativado não fala com o servidor.
+//
+// Desativar precisa cortar o acesso de verdade: sem isto, quem foi
+// desligado continuava lendo comunicados, tarefas e conversas da loja,
+// enquanto o gestor acreditava que já tinha resolvido. É essa crença que
+// tornava a falha perigosa.
 async function getPerfil(id) {
   const { data } = await supabase
-    .from('profiles').select('id, company, full_name, access_level').eq('id', id).maybeSingle();
-  return data || null;
+    .from('profiles').select('id, company, full_name, access_level, active').eq('id', id).maybeSingle();
+  if (!data || data.active === false) return null;
+  return data;
 }
 
 // GET /api/diario/categorias?requester_id= — as que esta loja acrescentou

@@ -4,10 +4,18 @@ const supabase = require('../supabase');
 const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
+// Cadastro desativado não fala com o servidor.
+//
+// Desativar precisa cortar o acesso de verdade: sem isto, quem foi
+// desligado continuava lendo comunicados, tarefas e conversas da loja,
+// enquanto o gestor acreditava que já tinha resolvido. É essa crença que
+// tornava a falha perigosa.
 async function getRequester(requester_id) {
   if (!requester_id) return null;
-  const { data } = await supabase.from('profiles').select('id, company, full_name').eq('id', requester_id).single();
-  return data || null;
+  const { data } = await supabase.from('profiles')
+    .select('id, company, full_name, active').eq('id', requester_id).maybeSingle();
+  if (!data || data.active === false) return null;
+  return data;
 }
 
 // GET /api/atas?requester_id= — lista as atas da empresa do usuário

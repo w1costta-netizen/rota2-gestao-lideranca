@@ -52,11 +52,18 @@ async function linkTemporario(path) {
 // conversa alheia. Mesma proteção já usada em tarefas.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Cadastro desativado não fala com o servidor.
+//
+// Desativar precisa cortar o acesso de verdade: sem isto, quem foi
+// desligado continuava lendo comunicados, tarefas e conversas da loja,
+// enquanto o gestor acreditava que já tinha resolvido. É essa crença que
+// tornava a falha perigosa.
 async function getPerfil(id) {
   if (!UUID.test(String(id || ''))) return null;
   const { data } = await supabase
     .from('profiles').select('id, company, full_name, avatar_url, active, access_level').eq('id', id).maybeSingle();
-  return data || null;
+  if (!data || data.active === false) return null;
+  return data;
 }
 
 // O par sempre em ordem: é o que garante uma única conversa entre duas

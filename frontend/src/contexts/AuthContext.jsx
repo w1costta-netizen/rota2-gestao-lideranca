@@ -14,6 +14,7 @@ const AuthCtx = createContext({
   profile: undefined, // idem — nunca `null` aqui, que significaria "não tem"
   signOut: async () => {},
   loadProfile: async () => {},
+  contaDesativada: false,
 });
 
 export function AuthProvider({ children }) {
@@ -24,6 +25,7 @@ export function AuthProvider({ children }) {
   // permissão antes de conhecer o usuário — sem ela, todo módulo aparecia
   // como "Acesso restrito" por um instante e depois liberava sozinho.
   const [profile, setProfile] = useState(undefined);
+  const [contaDesativada, setContaDesativada] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -44,6 +46,21 @@ export function AuthProvider({ children }) {
     let carregado = null;
     try {
       const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
+
+      // Cadastro desativado não entra.
+      //
+      // Desativar tirava a pessoa das listas — contatos, participantes,
+      // equipe — mas não barrava o acesso: quem foi desligado continuava
+      // entrando e lendo comunicados, tarefas, escala e conversas da loja.
+      // O gestor desativa acreditando que cortou o acesso, e é essa crença
+      // que tornava a falha perigosa.
+      if (data && data.active === false) {
+        setContaDesativada(true);
+        setProfile(null);
+        try { await supabase.auth.signOut(); } catch { /* sair local basta */ }
+        return null;
+      }
+
       if (data) {
         try {
           const res = await api.get(`/stores/my?requester_id=${userId}`);
@@ -116,7 +133,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthCtx.Provider value={{ session, profile, signOut, loadProfile }}>
+    <AuthCtx.Provider value={{ session, profile, signOut, loadProfile, contaDesativada }}>
       {children}
     </AuthCtx.Provider>
   );

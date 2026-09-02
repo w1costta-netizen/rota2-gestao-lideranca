@@ -165,7 +165,7 @@ function useIsMobile() {
 }
 
 function AppContent() {
-  const { session, profile, signOut, loadProfile } = useAuth();
+  const { session, profile, signOut, loadProfile, contaDesativada } = useAuth();
   const toast = useToast();
   // Restaura a última página visitada — evita voltar pro dashboard quando o
   // celular descarrega o app da memória (ao trocar de aplicativo, abrir a
@@ -291,6 +291,11 @@ function AppContent() {
     const hasToken = new URLSearchParams(window.location.search).get('token');
     return (
       <div className="auth-page">
+        {contaDesativada && (
+          <div className="auth-error" style={{ marginBottom: 12, textAlign: 'center' }}>
+            Seu acesso foi desativado. Fale com o responsável pela sua loja.
+          </div>
+        )}
         {(authPage === 'register' || hasToken)
           ? <Register onGoLogin={() => { window.history.replaceState({}, '', '/'); setAuthPage('login'); }} />
           : <Login onGoRegister={() => setAuthPage('register')} />}
