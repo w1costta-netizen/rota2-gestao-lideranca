@@ -53,12 +53,23 @@
 
 /* ── Tema escuro ─────────────────────────────────────── */
 [data-theme="dark"] {
-  --bg:            #1C1129;
-  --bg-dark:       #150D1F;
-  --surface:       #241633;
-  --surface-2:     #2C1C3D;
-  --border:        #3A2652;
-  --border-strong: #4D3569;
+  /* O degrau entre o fundo e o cartão era de 3,2 em L* — abaixo do mínimo
+     de 4 a 6 que o olho precisa para separar duas superfícies sem borda.
+     Resultado: tudo parecia uma coisa só, enquanto o modo claro (degrau
+     5,8) mostrava os cartões destacados.
+
+     Agora o fundo escureceu e o cartão clareou: degrau de 8,3. Maior que o
+     do modo claro de propósito — no escuro o olho precisa de mais diferença
+     para perceber a mesma separação.
+
+     Ao mexer aqui, medir em L* (CIELAB), não em hexadecimal: a distância
+     entre dois hexadecimais não corresponde ao que se enxerga. */
+  --bg:            #150C20;   /* L* 4,8 */
+  --bg-dark:       #100918;
+  --surface:       #2A1A3D;   /* L* 13,0 — degrau 8,3 sobre o fundo */
+  --surface-2:     #352348;   /* L* 17,6 — degrau 4,6 sobre o cartão */
+  --border:        #46305F;
+  --border-strong: #5A3F78;
   --text:          #F0EDF5;
   --text-on-dark:  #F0EDF5;
   --text-muted:    #9B92AE;
