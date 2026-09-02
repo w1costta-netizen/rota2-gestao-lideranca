@@ -25,6 +25,103 @@ import { TEMAS, temaDe } from '../lib/temasTorneio';
 const hoje = () => new Date().toISOString().slice(0, 10);
 const formatarData = (d) => d ? d.split('-').reverse().join('/') : '—';
 
+// Fica FORA do componente porque a tela tem DOIS retornos — um para o
+// placar e outro para a lista de torneios. Definido dentro de um deles, o
+// modal só existia naquele: clicar em "Como pontuar" de dentro do placar
+// não abria nada, que foi exatamente o defeito relatado.
+// Como pontuar — a tela mais importante depois do placar. Quem não sabe
+// como subir não muda de comportamento, e o torneio vira decoração. As
+// regras vêm do servidor, geradas pelo mesmo código que calcula os pontos:
+// não há como a explicação divergir do que o sistema realmente faz.
+function ModalRegras({ regras, aoFechar }) {
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && aoFechar()}>
+          <div className="modal" style={{ maxWidth: 620 }}>
+            <div className="modal-header">
+              <span className="modal-title">Como funciona a pontuação</span>
+              <button className="btn-icon" onClick={() => aoFechar()}><X size={16}/></button>
+            </div>
+            <div className="modal-body">
+              {!regras ? (
+                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Carregando as regras...</p>
+              ) : (
+                <>
+                  <div className="card" style={{ marginBottom: 16, borderLeft: '4px solid var(--primary)', borderRadius: '0 12px 12px 0' }}>
+                    <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
+                      <Lightbulb size={17} color="var(--primary)" style={{ flexShrink: 0, marginTop: 1 }}/>
+                      <div style={{ fontSize: 13, lineHeight: 1.65 }}>
+                        <strong>A regra mais importante:</strong> vale mais aparecer todo dia
+                        do que fazer muita coisa num dia só. Quem faz três coisas por dia
+                        durante o mês passa com folga de quem faz cinquenta numa tarde.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 18, color: 'var(--text-muted)' }}>
+                    Cada ação vale um <strong style={{ color: 'var(--text)' }}>valor base</strong>, e o{' '}
+                    <strong style={{ color: 'var(--text)' }}>peso da família</strong> multiplica esse valor —
+                    o peso de cada torneio aparece no topo do placar. Algumas ações têm{' '}
+                    <strong style={{ color: 'var(--text)' }}>limite por dia</strong>: repetir além do limite
+                    não soma mais nada naquele dia.
+                  </div>
+
+                  <div className="card" style={{ marginBottom: 18, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                    <CalendarCheck size={17} color="var(--primary)" style={{ flexShrink: 0, marginTop: 1 }}/>
+                    <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+                      <strong>Constância:</strong> cada dia em que você fizer qualquer coisa desta
+                      lista vale <strong>{regras.pontosPorDiaAtivo} pontos</strong>, multiplicados pelo peso.
+                      É o que mais rende ao longo de um mês.
+                    </div>
+                  </div>
+
+                  {regras.familias.map(f => (
+                    <div key={f.chave} style={{ marginBottom: 20 }}>
+                      <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 2 }}>{f.nome}</div>
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
+                        {f.descricao}
+                      </div>
+                      {f.acoes.length === 0 ? (
+                        <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
+                          Pontua por dia usado, não por ação.
+                        </div>
+                      ) : f.acoes.map(a => (
+                        <div key={a.chave} style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0',
+                          borderBottom: '1px solid var(--border)', fontSize: 13,
+                        }}>
+                          <span style={{ flex: 1, minWidth: 0 }}>{a.nome}</span>
+                          {a.tetoDia && (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
+                              até {a.tetoDia}×/dia
+                            </span>
+                          )}
+                          <span style={{ fontWeight: 800, minWidth: 26, textAlign: 'right', flexShrink: 0 }}>
+                            {a.base}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+
+                  <div className="card" style={{ background: 'var(--surface-2)' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Três coisas que valem saber</div>
+                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.75, color: 'var(--text-muted)' }}>
+                      <li><strong style={{ color: 'var(--text)' }}>Tarefa sem prazo não pontua</strong> na
+                        família Qualidade — só conta quem cumpre um prazo que existia.</li>
+                      <li><strong style={{ color: 'var(--text)' }}>Só abrir telas não pontua.</strong> O que
+                        conta é o que você faz e registra, não o que você olha.</li>
+                      <li><strong style={{ color: 'var(--text)' }}>Setor é comparado por média</strong>, não
+                        por soma — setor pequeno disputa de igual para igual com setor grande.</li>
+                    </ul>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+  );
+}
+
 export default function Torneios({ userId, profile }) {
   const toast = useToast();
   const ehGestor = ['admin', 'master'].includes(profile?.access_level);
@@ -285,6 +382,8 @@ export default function Torneios({ userId, profile }) {
             )}
           </>
         )}
+
+        {verRegras && <ModalRegras regras={regras} aoFechar={() => setVerRegras(false)}/>}
       </div>
     );
   }
@@ -349,96 +448,7 @@ export default function Torneios({ userId, profile }) {
         </div>
       )}
 
-      {/* Como pontuar — a tela mais importante depois do placar. Quem não
-          sabe como subir não muda de comportamento, e o torneio vira
-          decoração. As regras vêm do servidor, geradas pelo mesmo código
-          que calcula os pontos: não há como a explicação divergir. */}
-      {verRegras && (
-        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setVerRegras(false)}>
-          <div className="modal" style={{ maxWidth: 620 }}>
-            <div className="modal-header">
-              <span className="modal-title">Como funciona a pontuação</span>
-              <button className="btn-icon" onClick={() => setVerRegras(false)}><X size={16}/></button>
-            </div>
-            <div className="modal-body">
-              {!regras ? (
-                <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Carregando as regras...</p>
-              ) : (
-                <>
-                  <div className="card" style={{ marginBottom: 16, borderLeft: '4px solid var(--primary)', borderRadius: '0 12px 12px 0' }}>
-                    <div style={{ display: 'flex', gap: 9, alignItems: 'flex-start' }}>
-                      <Lightbulb size={17} color="var(--primary)" style={{ flexShrink: 0, marginTop: 1 }}/>
-                      <div style={{ fontSize: 13, lineHeight: 1.65 }}>
-                        <strong>A regra mais importante:</strong> vale mais aparecer todo dia
-                        do que fazer muita coisa num dia só. Quem faz três coisas por dia
-                        durante o mês passa com folga de quem faz cinquenta numa tarde.
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 13, lineHeight: 1.7, marginBottom: 18, color: 'var(--text-muted)' }}>
-                    Cada ação vale um <strong style={{ color: 'var(--text)' }}>valor base</strong>, e o{' '}
-                    <strong style={{ color: 'var(--text)' }}>peso da família</strong> multiplica esse valor —
-                    o peso de cada torneio aparece no topo do placar. Algumas ações têm{' '}
-                    <strong style={{ color: 'var(--text)' }}>limite por dia</strong>: repetir além do limite
-                    não soma mais nada naquele dia.
-                  </div>
-
-                  <div className="card" style={{ marginBottom: 18, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                    <CalendarCheck size={17} color="var(--primary)" style={{ flexShrink: 0, marginTop: 1 }}/>
-                    <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-                      <strong>Constância:</strong> cada dia em que você fizer qualquer coisa desta
-                      lista vale <strong>{regras.pontosPorDiaAtivo} pontos</strong>, multiplicados pelo peso.
-                      É o que mais rende ao longo de um mês.
-                    </div>
-                  </div>
-
-                  {regras.familias.map(f => (
-                    <div key={f.chave} style={{ marginBottom: 20 }}>
-                      <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 2 }}>{f.nome}</div>
-                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
-                        {f.descricao}
-                      </div>
-                      {f.acoes.length === 0 ? (
-                        <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                          Pontua por dia usado, não por ação.
-                        </div>
-                      ) : f.acoes.map(a => (
-                        <div key={a.chave} style={{
-                          display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0',
-                          borderBottom: '1px solid var(--border)', fontSize: 13,
-                        }}>
-                          <span style={{ flex: 1, minWidth: 0 }}>{a.nome}</span>
-                          {a.tetoDia && (
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>
-                              até {a.tetoDia}×/dia
-                            </span>
-                          )}
-                          <span style={{ fontWeight: 800, minWidth: 26, textAlign: 'right', flexShrink: 0 }}>
-                            {a.base}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ))}
-
-                  <div className="card" style={{ background: 'var(--surface-2)' }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Três coisas que valem saber</div>
-                    <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.75, color: 'var(--text-muted)' }}>
-                      <li><strong style={{ color: 'var(--text)' }}>Tarefa sem prazo não pontua</strong> na
-                        família Qualidade — só conta quem cumpre um prazo que existia.</li>
-                      <li><strong style={{ color: 'var(--text)' }}>Só abrir telas não pontua.</strong> O que
-                        conta é o que você faz e registra, não o que você olha.</li>
-                      <li><strong style={{ color: 'var(--text)' }}>Setor é comparado por média</strong>, não
-                        por soma — setor pequeno disputa de igual para igual com setor grande.</li>
-                    </ul>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {verRegras && <ModalRegras regras={regras} aoFechar={() => setVerRegras(false)}/>}
 
       {criando && (
         <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setCriando(false)}>
