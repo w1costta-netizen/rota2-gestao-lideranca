@@ -1,0 +1,43 @@
+# Mantém o servidor do Render acordado.
+#
+# O plano gratuito do Render desliga a instância depois de ~15 minutos sem
+# uso. A primeira pessoa que abre o app depois disso espera 50 segundos ou
+# mais numa tela parada — e é justamente o cliente que acabou de comprar
+# quem mais sofre com isso, porque ele abre o app pela primeira vez sozinho.
+#
+# Este agendamento só chama /api/health, que não toca no banco e não faz
+# nada além de responder a hora. É o suficiente para a instância não dormir.
+#
+# ISTO É PALIATIVO, NÃO CONSERTO. Continua valendo o outro problema do
+# plano gratuito: pouca CPU, que deixa toda chamada em ~0,8s mesmo acordada.
+# Só subir de plano resolve aquilo. Ao subir, apague este arquivo.
+#
+# Roda de graça: agendamento em repositório público não consome cota.
+# Observações do GitHub que valem conhecer:
+#  - horário agendado é aproximado; sob carga, atrasa alguns minutos. Por
+#    isso o intervalo é de 5 em 5 e não de 15 em 15.
+#  - agendamento em repositório sem commits por 60 dias é desativado
+#    automaticamente pelo GitHub.
+
+name: Manter servidor acordado
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:        # permite disparar na mão pela aba Actions
+
+jobs:
+  acordar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/health
+        run: |
+          codigo=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 \
+            https://rota2-gestao-lideranca.onrender.com/api/health)
+          echo "Resposta do servidor: $codigo"
+          # Não falha o job por resposta ruim: um alerta a cada 5 minutos
+          # viraria ruído e ninguém mais olharia. O objetivo aqui é só
+          # manter acordado.
+          if [ "$codigo" != "200" ]; then
+            echo "::warning::Servidor respondeu $codigo em vez de 200"
+          fi
