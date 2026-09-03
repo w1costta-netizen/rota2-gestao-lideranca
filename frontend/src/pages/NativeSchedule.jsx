@@ -369,6 +369,11 @@ export default function NativeSchedule({ userId, profile }) {
   const [selectedPersonId, setSelectedPersonId] = useState('');
   const [allProfiles,     setAllProfiles]     = useState([]);
   const [lastEditor,      setLastEditor]      = useState(null);
+  // Override local do nome, para o rótulo mudar na hora mesmo quando quem
+  // edita não está na lista da loja — o caso do dono do sistema.
+  const [setorLocal,      setSetorLocal]      = useState(null);
+  const [editandoSetor,   setEditandoSetor]   = useState(false);
+  const [setorDraft,      setSetorDraft]      = useState('');
 
   useEffect(() => {
     // Todo mundo carrega a lista: consultar a escala de qualquer setor é
@@ -388,6 +393,19 @@ export default function NativeSchedule({ userId, profile }) {
   const effectiveUserId = pessoaVista?.id || userId;
   const viewedProfile   = pessoaVista || profile;
 
+  // O nome do setor vem da escala (escala_setor). Onde ninguém digitou nada,
+  // cai no setor do cadastro — assim nenhuma escala antiga fica sem rótulo.
+  const rotuloDe = (p) =>
+    (p?.escala_setor || '').trim() || (p?.sector || '').trim() || 'Sem setor';
+
+  // O meu perfil vindo da lista da loja: é ele que traz o escala_setor. O
+  // profile do contexto não tem esse campo.
+  const meuPerfilNaLista = allProfiles.find(p => p.id === userId) || profile;
+  const perfilDaEscala   = pessoaVista || meuPerfilNaLista;
+  const rotuloDaEscala   = setorLocal !== null
+    ? (setorLocal || 'Sem setor')
+    : rotuloDe(perfilDaEscala);
+
   // Quem lidera a pessoa no organograma também edita a escala dela. Nível de
   // acesso e chefia são coisas diferentes: um líder tem time, mas não é
   // supervisor — e era ele quem ficava travado.
@@ -400,27 +418,30 @@ export default function NativeSchedule({ userId, profile }) {
   const somenteLeitura = !!pessoaVista && pessoaVista.id !== userId
     && !isElevated && !lideroEsta(pessoaVista.id);
 
-  // O seletor agrupa pelos setores que EXISTEM nas pessoas, não só pelos
-  // cadastrados em Configurações. Antes ele percorria a lista cadastrada, e
-  // quem tivesse um setor digitado à mão — ou nenhum — simplesmente não
-  // aparecia: a escala dessa pessoa ficava inacessível para todo mundo.
-  const gruposDoSeletor = (() => {
-    const elegivel = p => p.active !== false && p.id !== userId;
-    const setorDe  = p => (p.sector || '').trim();
-    const nomes = [...new Set([
-      ...allSectors,
-      ...allProfiles.map(setorDe).filter(Boolean),
-    ])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
-    const grupos = nomes.map(setor => ({
-      setor,
-      pessoas: allProfiles.filter(p => elegivel(p) && setorDe(p) === setor),
-    }));
-    grupos.push({
-      setor: 'Sem setor',
-      pessoas: allProfiles.filter(p => elegivel(p) && !setorDe(p)),
-    });
-    return grupos.filter(g => g.pessoas.length > 0);
-  })();
+  // Lista simples, ordenada pelo setor: escala-se por SETOR, então é o setor
+  // que tem de aparecer na caixa fechada — o nome de quem monta vem depois.
+  // Sai de allProfiles direto, então ninguém fica de fora por causa de um
+  // setor digitado à mão ou em branco, que era o que acontecia antes.
+  const pessoasDoSeletor = allProfiles
+    .filter(p => p.active !== false && p.id !== userId)
+    .sort((a, b) =>
+      rotuloDe(a).localeCompare(rotuloDe(b), 'pt-BR') ||
+      (a.full_name || '').localeCompare(b.full_name || '', 'pt-BR'));
+
+  const salvarSetorDaEscala = async () => {
+    const nome = setorDraft.trim();
+    setEditandoSetor(false);
+    if (nome === ((perfilDaEscala?.escala_setor || '').trim())) return;
+    try {
+      await api.put('/schedule/setor', { requester_id: userId, user_id: effectiveUserId, setor: nome });
+      setSetorLocal(nome);
+      setAllProfiles(prev => prev.map(p =>
+        p.id === effectiveUserId ? { ...p, escala_setor: nome || null } : p));
+      toast(nome ? `✓ Escala do setor "${nome}"` : '✓ Nome removido — volta ao setor do cadastro');
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Não foi possível renomear a escala.', 'error');
+    }
+  };
 
   const weeks   = buildWeeks(year, month);
   const allDates = Array.from({ length: daysInMonth(year, month) }, (_, i) => fmtDate(year, month, i + 1));
@@ -612,7 +633,8 @@ export default function NativeSchedule({ userId, profile }) {
       await html2pdf()
         .set({
           margin: [5, 4, 5, 4],
-          filename: `Escala_${MONTHS_PT[month-1]}_${year}_${viewedProfile?.sector||'depto'}.pdf`,
+          filename: `Escala_${MONTHS_PT[month-1]}_${year}_`
+            + `${rotuloDaEscala.replace(/[^\w\u00C0-\u017F]+/g, '_')}.pdf`,
           image: { type:'jpeg', quality:0.97 },
           html2canvas: { scale:2, useCORS:true, logging:false, backgroundColor:'#fff' },
           jsPDF: { unit:'mm', format:'a4', orientation:'landscape' },
@@ -748,6 +770,35 @@ export default function NativeSchedule({ userId, profile }) {
           background:'#f8fafc',
         }}>
           <span style={{ fontWeight:800, fontSize:13, color:'#0f172a', whiteSpace:'nowrap' }}>Escala Mensal</span>
+
+          {/* O setor da escala, digitado. Antes vinha do cadastro de quem
+              monta, que é outra coisa. */}
+          {editandoSetor ? (
+            <input
+              autoFocus value={setorDraft}
+              onChange={e => setSetorDraft(e.target.value)}
+              onBlur={salvarSetorDaEscala}
+              onKeyDown={e => {
+                if (e.key === 'Enter')  e.target.blur();
+                if (e.key === 'Escape') setEditandoSetor(false);
+              }}
+              placeholder="Nome do setor"
+              style={{ fontSize:12, fontWeight:700, padding:'2px 7px', borderRadius:4,
+                       border:'1.5px solid #0e7490', width:160, color:'#0e7490', outline:'none' }}/>
+          ) : (
+            <button
+              onClick={() => {
+                if (somenteLeitura) return;
+                setSetorDraft(setorLocal !== null ? setorLocal : (perfilDaEscala?.escala_setor || '').trim());
+                setEditandoSetor(true);
+              }}
+              title={somenteLeitura ? undefined : 'Renomear o setor desta escala'}
+              style={{ background:'#ecfeff', border:'1px solid #a5f3fc', borderRadius:4,
+                       padding:'2px 8px', fontSize:12, fontWeight:800, color:'#0e7490',
+                       cursor: somenteLeitura ? 'default' : 'pointer', whiteSpace:'nowrap' }}>
+              {rotuloDaEscala}{!somenteLeitura && ' ✏️'}
+            </button>
+          )}
           <span style={{ color:'#e2e8f0' }}>|</span>
 
           {/* Agrupado por setor para achar a pessoa rápido numa loja com
@@ -755,14 +806,18 @@ export default function NativeSchedule({ userId, profile }) {
               é ela que se escolhe aqui. */}
           <select
             value={selectedPersonId}
-            onChange={e => { setSelectedPersonId(e.target.value); setMembers([]); setEntries([]); setSubmission(null); }}
-            style={{ fontSize:10, padding:'2px 5px', borderRadius:4, border:'1px solid #0e7490', background:'#f0fdff', color:'#0e7490', fontWeight:700, maxWidth:230, cursor:'pointer' }}
+            onChange={e => {
+              setSelectedPersonId(e.target.value);
+              setSetorLocal(null); setEditandoSetor(false);
+              setMembers([]); setEntries([]); setSubmission(null);
+            }}
+            style={{ fontSize:10, padding:'2px 5px', borderRadius:4, border:'1px solid #0e7490', background:'#f0fdff', color:'#0e7490', fontWeight:700, maxWidth:290, cursor:'pointer' }}
           >
-            <option value="">Minha escala ({profile?.full_name || '—'})</option>
-            {gruposDoSeletor.map(g => (
-              <optgroup key={g.setor} label={g.setor}>
-                {g.pessoas.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-              </optgroup>
+            <option value="">
+              {rotuloDe(meuPerfilNaLista)} — {profile?.full_name || '—'} (minha escala)
+            </option>
+            {pessoasDoSeletor.map(p => (
+              <option key={p.id} value={p.id}>{rotuloDe(p)} — {p.full_name}</option>
             ))}
           </select>
           {somenteLeitura && (

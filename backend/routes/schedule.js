@@ -145,6 +145,41 @@ router.post('/save', async (req, res) => {
   res.json(data);
 });
 
+// PUT /api/schedule/setor  { requester_id, user_id, setor }
+//
+// O nome do setor da escala. Antes ele era herdado do cadastro do líder, e
+// isso está errado: o setor é da ESCALA, não do crachá de quem a monta. Um
+// líder pode responder pela Frente de Caixa com o próprio cadastro dizendo
+// outra coisa — e não havia como corrigir.
+//
+// Vazio volta a null de propósito, para a tela cair de novo no setor do
+// cadastro em vez de mostrar um rótulo em branco.
+router.put('/setor', async (req, res) => {
+  const { requester_id, user_id, setor } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
+
+  if (!(await podeAlterar(requester_id, user_id))) {
+    return res.status(403).json({ error: 'Você pode consultar esta escala, mas não renomeá-la.' });
+  }
+
+  const nome = (setor || '').trim().slice(0, 60) || null;
+  const { data: prof } = await supabase
+    .from('profiles').select('company, escala_setor').eq('id', user_id).maybeSingle();
+
+  const { data, error } = await supabase
+    .from('profiles').update({ escala_setor: nome }).eq('id', user_id)
+    .select('id, escala_setor').single();
+
+  if (error) {
+    logError({ company: prof?.company, user_id, acao: 'renomear_escala', tabela: 'profiles',
+               rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: prof?.company, user_id: requester_id, acao: 'renomear_escala', tabela: 'profiles',
+              antes: { escala_setor: prof?.escala_setor }, depois: { escala_setor: nome } });
+  res.json(data);
+});
+
 // GET /api/schedule/submission?user_id=&year=&month=
 router.get('/submission', async (req, res) => {
   const { user_id, year, month } = req.query;

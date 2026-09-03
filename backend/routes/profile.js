@@ -13,7 +13,7 @@ router.get('/all', async (req, res) => {
   let query = supabase.from('profiles')
     // reports_to_list: a tela precisa saber quem lidera quem para liberar
     // a edição da escala do time. Já é público no Organograma.
-    .select('id, full_name, sector, role, avatar_url, active, access_level, reports_to_list')
+    .select('id, full_name, sector, role, avatar_url, active, access_level, reports_to_list, escala_setor')
     .order('sector');
   if (company) query = query.eq('company', company);
   const { data, error } = await query;
