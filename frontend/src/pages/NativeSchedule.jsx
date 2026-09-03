@@ -357,10 +357,39 @@ export default function NativeSchedule({ userId, profile }) {
   const effectiveUserId = pessoaVista?.id || userId;
   const viewedProfile   = pessoaVista || profile;
 
+  // Quem lidera a pessoa no organograma também edita a escala dela. Nível de
+  // acesso e chefia são coisas diferentes: um líder tem time, mas não é
+  // supervisor — e era ele quem ficava travado.
+  const lideroEsta = (id) =>
+    (allProfiles.find(p => p.id === id)?.reports_to_list || []).includes(userId);
+
   // Consultar a escala de outra pessoa é livre; alterar, não. Quem é
   // supervisor, admin ou master continua podendo editar qualquer uma —
   // é quem já respondia por isso antes desta tela existir.
-  const somenteLeitura = !!pessoaVista && pessoaVista.id !== userId && !isElevated;
+  const somenteLeitura = !!pessoaVista && pessoaVista.id !== userId
+    && !isElevated && !lideroEsta(pessoaVista.id);
+
+  // O seletor agrupa pelos setores que EXISTEM nas pessoas, não só pelos
+  // cadastrados em Configurações. Antes ele percorria a lista cadastrada, e
+  // quem tivesse um setor digitado à mão — ou nenhum — simplesmente não
+  // aparecia: a escala dessa pessoa ficava inacessível para todo mundo.
+  const gruposDoSeletor = (() => {
+    const elegivel = p => p.active !== false && p.id !== userId;
+    const setorDe  = p => (p.sector || '').trim();
+    const nomes = [...new Set([
+      ...allSectors,
+      ...allProfiles.map(setorDe).filter(Boolean),
+    ])].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    const grupos = nomes.map(setor => ({
+      setor,
+      pessoas: allProfiles.filter(p => elegivel(p) && setorDe(p) === setor),
+    }));
+    grupos.push({
+      setor: 'Sem setor',
+      pessoas: allProfiles.filter(p => elegivel(p) && !setorDe(p)),
+    });
+    return grupos.filter(g => g.pessoas.length > 0);
+  })();
 
   const weeks   = buildWeeks(year, month);
   const allDates = Array.from({ length: daysInMonth(year, month) }, (_, i) => fmtDate(year, month, i + 1));
@@ -675,15 +704,11 @@ export default function NativeSchedule({ userId, profile }) {
             style={{ fontSize:10, padding:'2px 5px', borderRadius:4, border:'1px solid #0e7490', background:'#f0fdff', color:'#0e7490', fontWeight:700, maxWidth:230, cursor:'pointer' }}
           >
             <option value="">Minha escala ({profile?.full_name || '—'})</option>
-            {allSectors.map(setor => {
-              const doSetor = allProfiles.filter(p => p.sector === setor && p.active !== false && p.id !== userId);
-              if (!doSetor.length) return null;
-              return (
-                <optgroup key={setor} label={setor}>
-                  {doSetor.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
-                </optgroup>
-              );
-            })}
+            {gruposDoSeletor.map(g => (
+              <optgroup key={g.setor} label={g.setor}>
+                {g.pessoas.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
+              </optgroup>
+            ))}
           </select>
           {somenteLeitura && (
             <span style={{ fontSize:9, fontWeight:800, color:'#b45309', background:'#fef3c7',

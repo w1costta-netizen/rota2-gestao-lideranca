@@ -64,14 +64,25 @@ router.get('/last-editor', async (req, res) => {
 // repetir a chamada trocando o user_id para alterar a escala alheia — a
 // trava da tela é conforto, esta é a que tranca.
 //
-// Quem pode alterar: a própria pessoa, ou supervisor/admin/master, que já
-// respondiam pela escala do time antes desta tela existir.
+// Quem pode alterar: a própria pessoa, supervisor/admin/master — que já
+// respondiam pela escala do time antes desta tela existir — e quem lidera a
+// pessoa no organograma.
+//
+// A última regra existe porque nível de acesso e chefia são coisas
+// diferentes neste app: um LÍDER tem time no organograma, mas não é
+// supervisor. Sem ela, quem monta a escala do próprio time todo mês ficava
+// justamente de fora, e a escala dependia de alguém acima assumir a digitação.
 async function podeAlterar(requester_id, dono_id) {
   if (!requester_id) return false;
   if (requester_id === dono_id) return true;
-  const { data } = await supabase
+
+  const { data: quem } = await supabase
     .from('profiles').select('access_level').eq('id', requester_id).maybeSingle();
-  return ['supervisor', 'admin', 'master'].includes(data?.access_level);
+  if (['supervisor', 'admin', 'master'].includes(quem?.access_level)) return true;
+
+  const { data: dono } = await supabase
+    .from('profiles').select('reports_to_list').eq('id', dono_id).maybeSingle();
+  return (dono?.reports_to_list || []).includes(requester_id);
 }
 
 // POST /api/schedule/save
@@ -112,7 +123,10 @@ router.post('/save', async (req, res) => {
       end_time:          isWork ? (saida   || null)           : null,
       company:           prof?.company || null,
       sector:            prof?.sector  || null,
-      last_edited_by:    user_id,
+      // Quem MEXEU, não de quem é a escala. Antes gravava o dono, então o
+      // "editado por" mostrava sempre o próprio dono — inútil justamente
+      // quando outra pessoa altera a escala dele, que é o caso a rastrear.
+      last_edited_by:    requester_id || user_id,
       last_edited_at:    new Date().toISOString(),
     }, { onConflict: 'user_id,team_member_id,work_date' })
     .select('*, team_members(name,matricula,role,sector)')

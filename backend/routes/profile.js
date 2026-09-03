@@ -11,7 +11,9 @@ router.get('/all', async (req, res) => {
   // outros dois a lista fica só com o nome, difícil de reconhecer.
   // Campos a mais não quebram quem já usa esta rota.
   let query = supabase.from('profiles')
-    .select('id, full_name, sector, role, avatar_url, active, access_level')
+    // reports_to_list: a tela precisa saber quem lidera quem para liberar
+    // a edição da escala do time. Já é público no Organograma.
+    .select('id, full_name, sector, role, avatar_url, active, access_level, reports_to_list')
     .order('sector');
   if (company) query = query.eq('company', company);
   const { data, error } = await query;
