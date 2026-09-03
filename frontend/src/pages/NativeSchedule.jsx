@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { ChevronLeft, ChevronRight, Download, Users, X, Save, Trash2, Plus, CheckCircle } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
@@ -30,6 +30,11 @@ const STATUS = {
   folga_feriado: { label:'FOLGA FERIADO', bg:'#d1fae5', color:'#065f46' },
   curso:         { label:'CURSO',         bg:'#ffedd5', color:'#9a3412' },
 };
+
+// Rótulo de quem ficou sem setor. Uma escala em que ninguém tem setor
+// continua saindo exatamente como antes, sem cabeçalho nenhum: quem não
+// separa por setor não deve nem perceber que isto existe.
+const SEM_SETOR = 'Sem setor definido';
 
 function todayISO() { return new Date().toISOString().split('T')[0]; }
 function fmtDate(y, m, d) { return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
@@ -217,13 +222,32 @@ function TeamModal({ userId, userSector, onClose }) {
     await api.delete(`/team/${id}`); load();
   };
 
+  // Corrigir o setor de quem já está cadastrado. Sem isto, separar uma escala
+  // que já existe exigiria apagar e recadastrar cada pessoa — e apagar leva
+  // junto a escala dela.
+  //
+  // Manda o membro inteiro de propósito: a rota atualiza todos os campos que
+  // recebe, e mandar só o setor apagaria nome e função.
+  const salvarSetor = async (m, setor) => {
+    if ((m.sector || '') === setor.trim()) return;
+    setMembers(prev => prev.map(x => x.id === m.id ? { ...x, sector: setor.trim() } : x));
+    try { await api.put(`/team/${m.id}`, { ...m, sector: setor.trim() }); }
+    catch { load(); }
+  };
+
   return (
     <div style={{ position:'fixed', inset:0, zIndex:500, background:'rgba(0,0,0,.75)', display:'flex', alignItems:'center', justifyContent:'center' }}
       onClick={onClose}>
       <div style={{ background:'#1a1a1a', borderRadius:12, padding:24, width:560, maxHeight:'80vh', overflowY:'auto', border:'1px solid #333' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-          <h3 style={{ fontWeight:700, fontSize:16 }}>Colaboradores do Time</h3>
+          <div>
+            <h3 style={{ fontWeight:700, fontSize:16 }}>Colaboradores do Time</h3>
+            <p style={{ fontSize:11, color:'var(--text-muted)', margin:'3px 0 0' }}>
+              O <b>Setor</b> separa a escala em blocos. Escreva o mesmo nome para quem
+              trabalha junto — Açougue, Padaria, Frios — e a escala sai dividida.
+            </p>
+          </div>
           <button className="btn-icon" onClick={onClose}><X size={16}/></button>
         </div>
         {adding ? (
@@ -279,7 +303,7 @@ function TeamModal({ userId, userSector, onClose }) {
           : <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <thead>
                 <tr style={{ background:'#111', borderBottom:'1px solid #2a2a2a' }}>
-                  {['Matrícula','Nome','Função',''].map(h => (
+                  {['Matrícula','Nome','Função','Setor',''].map(h => (
                     <th key={h} style={{ padding:'7px 10px', textAlign:'left', color:'var(--text-muted)', fontWeight:600 }}>{h}</th>
                   ))}
                 </tr>
@@ -290,6 +314,13 @@ function TeamModal({ userId, userSector, onClose }) {
                     <td style={{ padding:'7px 10px', color:'var(--text-muted)' }}>{m.matricula||'—'}</td>
                     <td style={{ padding:'7px 10px', fontWeight:600 }}>{m.name}</td>
                     <td style={{ padding:'7px 10px', color:'var(--text-muted)' }}>{m.role||'—'}</td>
+                    <td style={{ padding:'4px 6px' }}>
+                      <input
+                        className="input" defaultValue={m.sector || ''} placeholder="separa a escala"
+                        onBlur={e => salvarSetor(m, e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                        style={{ fontSize:11, padding:'4px 7px', width:'100%', boxSizing:'border-box' }}/>
+                    </td>
                     <td style={{ padding:'7px 10px', textAlign:'right' }}>
                       <button className="btn-icon danger" onClick={() => remove(m.id, m.name)}><Trash2 size={13}/></button>
                     </td>
@@ -597,6 +628,30 @@ export default function NativeSchedule({ userId, profile }) {
     }
   };
 
+  // Linhas separadas pelo setor do COLABORADOR — o campo que o cadastro do
+  // time já tinha e que a tabela nunca leu. Era por isso que uma escala de
+  // perecíveis saía como lista única e misturada: dava para escrever
+  // "Açougue" e "Padaria" em cada pessoa, e a escala ignorava.
+  const gruposDeMembros = (() => {
+    const porSetor = new Map();
+    members.forEach(m => {
+      const setor = (m.sector || '').trim() || SEM_SETOR;
+      if (!porSetor.has(setor)) porSetor.set(setor, []);
+      porSetor.get(setor).push(m);
+    });
+    return [...porSetor.entries()]
+      .map(([setor, membros]) => ({ setor, membros }))
+      .sort((a, b) =>
+        a.setor === SEM_SETOR ?  1 :
+        b.setor === SEM_SETOR ? -1 :
+        a.setor.localeCompare(b.setor, 'pt-BR'));
+  })();
+
+  // Sem nenhum setor preenchido não há o que separar, e o cabeçalho só
+  // ocuparia linha à toa.
+  const mostrarSetores = gruposDeMembros.length > 1
+    || (gruposDeMembros.length === 1 && gruposDeMembros[0].setor !== SEM_SETOR);
+
   const filled = entries.filter(e => e.work_date >= allDates[0] && e.work_date <= allDates[allDates.length-1]).length;
   const total  = members.length * allDates.filter(d => getDOW(d) !== 0).length;
   const pct    = total > 0 ? Math.round(filled / total * 100) : 0;
@@ -843,7 +898,24 @@ export default function NativeSchedule({ userId, profile }) {
                 <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
                   <thead><WeekHeader week={week}/></thead>
                   <tbody>
-                    {members.map((m, ri) => {
+                    {gruposDeMembros.map(g => (
+                      <Fragment key={g.setor}>
+                        {mostrarSetores && (
+                          <tr>
+                            {/* 2 colunas fixas + 7 dias + 2 que só saem no PDF */}
+                            <td colSpan={11} style={{
+                              background:'#ecfeff', borderTop:'2px solid #0e7490',
+                              borderBottom:'1px solid #a5f3fc', padding:'3px 8px',
+                              fontSize:9.5, fontWeight:800, color:'#0e7490',
+                              letterSpacing:.4, textTransform:'uppercase',
+                            }}>
+                              {g.setor} <span style={{ fontWeight:600, opacity:.7, textTransform:'none' }}>
+                                · {g.membros.length} pessoa{g.membros.length > 1 ? 's' : ''}
+                              </span>
+                            </td>
+                          </tr>
+                        )}
+                    {g.membros.map((m, ri) => {
                       const rowBg = ri%2===0 ? '#fff' : '#f9fafb';
                       return (
                         <tr key={m.id} style={{ background:rowBg }}>
@@ -857,6 +929,8 @@ export default function NativeSchedule({ userId, profile }) {
                         </tr>
                       );
                     })}
+                      </Fragment>
+                    ))}
                   </tbody>
                 </table>
               </div>
