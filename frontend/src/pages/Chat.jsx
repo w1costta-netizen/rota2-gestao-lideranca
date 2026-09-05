@@ -63,7 +63,29 @@ export default function Chat({ userId }) {
   const [respondendo, setRespondendo] = useState(null);
   const [encaminhando, setEncaminhando] = useState(null);
 
+  // Os seis do atalho são os do WhatsApp, e de propósito: é o repertório que
+  // a pessoa já usa sem pensar. O resto fica atrás do +, que é onde ela
+  // também já procura.
   const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+
+  // Teclado completo. Ordem por uso no trabalho, não por código do emoji: o
+  // que resolve uma conversa de loja — combinado, feito, obrigado, atenção —
+  // vem antes das caras.
+  const EMOJIS_TODOS = [
+    '👍','👏','🙌','🤝','👌','✌️','🤞','💪','🙏','❤️','🔥','⭐','💯','✅','❌','⚠️',
+    '🎉','🚀','👀','💡','📌','⏰','😀','😃','😄','😁','😅','🤣','😂','🙂','😉','😊',
+    '😍','🥰','😘','🤗','🤔','🤨','😐','🙄','😏','😌','😴','🥱','🤒','🤕','🥳','🥺',
+    '😢','😭','😤','😠','😡','🤯','😳','😱','😨','😰','😥','😬','🤦','🤷','👋','🫡',
+  ];
+  const [maisEmojis, setMaisEmojis] = useState(false);
+
+  // O teclado começa fechado a cada vez: reabrir o menu com ele aberto
+  // esconderia Responder e Encaminhar, que é o que mais se usa.
+  useEffect(() => { if (!menuMsg) setMaisEmojis(false); }, [menuMsg]);
+
+  // Reagir de novo com o mesmo emoji tira a reação — a regra do WhatsApp,
+  // e é o backend que decide. Aqui só marca qual está valendo.
+  const minhaReacao = (m) => (m?.reacoes || []).find(r => r.user_id === userId)?.emoji || null;
 
   const reagir = async (m, emoji) => {
     setMenuMsg(null);
@@ -768,16 +790,45 @@ export default function Chat({ userId }) {
             style={{ background:'var(--surface)', borderRadius:'18px 18px 0 0', width:'100%',
                      maxWidth:460, padding:'14px 12px 18px',
                      borderTop:'1px solid var(--border)' }}>
-            <div style={{ display:'flex', justifyContent:'space-around', paddingBottom:12,
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
+                          gap:4, paddingBottom:10,
                           borderBottom:'1px solid var(--border)', marginBottom:8 }}>
               {EMOJIS.map(e => (
                 <button key={e} onClick={() => reagir(menuMsg, e)}
-                  style={{ background:'none', border:'none', fontSize:26, cursor:'pointer',
-                           padding:'4px 6px', lineHeight:1 }}>
+                  title={minhaReacao(menuMsg) === e ? 'Tocar de novo tira a reação' : undefined}
+                  style={{ width:34, height:34, borderRadius:'50%', cursor:'pointer', lineHeight:1,
+                           display:'flex', alignItems:'center', justifyContent:'center', fontSize:19,
+                           // A que está valendo fica marcada, senão não há como
+                           // saber qual foi sem fechar o menu e olhar a bolha.
+                           background: minhaReacao(menuMsg) === e ? 'var(--surface-2)' : 'none',
+                           border: minhaReacao(menuMsg) === e ? '1.5px solid var(--primary)' : '1.5px solid transparent' }}>
                   {e}
                 </button>
               ))}
+              <button onClick={() => setMaisEmojis(v => !v)} title="Mais emojis"
+                style={{ width:34, height:34, borderRadius:'50%', cursor:'pointer', lineHeight:1,
+                         display:'flex', alignItems:'center', justifyContent:'center',
+                         background:'var(--surface-2)', color:'var(--text-muted)',
+                         border:`1.5px solid ${maisEmojis ? 'var(--primary)' : 'var(--border)'}` }}>
+                {maisEmojis ? <X size={15}/> : <Plus size={16}/>}
+              </button>
             </div>
+
+            {maisEmojis && (
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(38px, 1fr))',
+                            gap:2, maxHeight:196, overflowY:'auto', marginBottom:8,
+                            paddingBottom:8, borderBottom:'1px solid var(--border)' }}>
+                {EMOJIS_TODOS.map(e => (
+                  <button key={e} onClick={() => reagir(menuMsg, e)}
+                    style={{ height:36, borderRadius:8, cursor:'pointer', lineHeight:1, fontSize:19,
+                             display:'flex', alignItems:'center', justifyContent:'center',
+                             background: minhaReacao(menuMsg) === e ? 'var(--surface-2)' : 'none',
+                             border: minhaReacao(menuMsg) === e ? '1.5px solid var(--primary)' : '1.5px solid transparent' }}>
+                    {e}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {[
               { icone: CornerUpLeft, texto: 'Responder',  fn: () => { setRespondendo(menuMsg); setMenuMsg(null); } },
