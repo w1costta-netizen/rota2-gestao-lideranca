@@ -117,6 +117,40 @@ export default function Anotacoes({ userId }) {
 
   const pararDitado = () => { try { recRef.current?.stop(); } catch { /* já parou */ } };
 
+  // Ctrl+V logo depois de abrir a anotação.
+  //
+  // O editor abria sem nada focado: o cursor ficava no corpo da página, e
+  // Ctrl+V não tinha onde colar — parecia que colar estava bloqueado, quando
+  // na verdade não havia campo escutando. Quem abre uma anotação para colar
+  // um texto faz exatamente isso: abre e cola, sem clicar antes.
+  //
+  // O ouvinte é no documento de propósito: quando o foco está fora dos
+  // campos, o evento nasce no <body> e nunca desce até o cartão.
+  useEffect(() => {
+    if (!editando) return undefined;
+    const aoColar = (ev) => {
+      // Com o cursor dentro de um campo o navegador já cola sozinho, e
+      // interferir aqui colaria duas vezes.
+      const alvo = ev.target;
+      if (alvo?.tagName === 'TEXTAREA' || alvo?.tagName === 'INPUT') return;
+      const vindo = ev.clipboardData?.getData('text');
+      if (!vindo) return;
+      ev.preventDefault();
+      setEditando(ed => ed && ({ ...ed, texto: ed.texto ? `${ed.texto}\n${vindo}` : vindo }));
+    };
+    document.addEventListener('paste', aoColar);
+    return () => document.removeEventListener('paste', aoColar);
+  }, [!!editando]);
+
+  // Fechar só quando o toque COMEÇOU no fundo.
+  //
+  // Sem isto, selecionar o texto e arrastar um pouco além da borda do cartão
+  // soltava o clique no fundo e fechava a anotação — no meio de um copiar,
+  // que é justamente quando se arrasta até o limite. O clique nasce no
+  // ancestral comum entre onde apertou e onde soltou, e esse ancestral é o
+  // fundo.
+  const comecouNoFundo = useRef(false);
+
   const termo = busca.trim().toLowerCase();
   const visiveis = termo
     ? anotacoes.filter(a => `${a.titulo} ${a.texto}`.toLowerCase().includes(termo))
@@ -256,7 +290,9 @@ export default function Anotacoes({ userId }) {
 
       {editando && (
         <div
-          onClick={() => salvar()}
+          onMouseDown={e => { comecouNoFundo.current = e.target === e.currentTarget; }}
+          onTouchStart={e => { comecouNoFundo.current = e.target === e.currentTarget; }}
+          onClick={e => { if (e.target === e.currentTarget && comecouNoFundo.current) salvar(); }}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000,
                    display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div
@@ -271,6 +307,10 @@ export default function Anotacoes({ userId }) {
                        fontSize:16, fontWeight:600, marginBottom:8,
                        color:corAtual.texto }}/>
             <textarea
+              // Anotação nova já abre com o cursor no campo, para dar para
+              // digitar ou colar de imediato.
+              key={editando.id || 'nova'}
+              autoFocus={!editando.id}
               value={editando.texto}
               onChange={e => setEditando({ ...editando, texto:e.target.value })}
               placeholder="Escreva aqui..."
