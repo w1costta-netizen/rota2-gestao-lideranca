@@ -17,7 +17,7 @@ import { useToast } from '../components/Toast';
 // normal). A mais apertada da paleta é o vermelho, com 4.6. Ao trocar
 // qualquer cor daqui, refaça essa conta — a olho é fácil errar.
 const CORES = {
-  padrao:   { fundo: 'var(--surface-1)', texto: 'var(--text)', apoio: 'var(--text-muted)', nome: 'Sem cor' },
+  padrao:   { fundo: 'var(--surface-2)', texto: 'var(--text)', apoio: 'var(--text-muted)', nome: 'Sem cor' },
   preto:    { fundo: '#262626', texto: '#FFFFFF', apoio: '#DCDCDC', nome: 'Preto' },
   cinza:    { fundo: '#616161', texto: '#FFFFFF', apoio: '#EAEAEA', nome: 'Cinza' },
   vermelho: { fundo: '#C62828', texto: '#FFFFFF', apoio: '#FBE3E3', nome: 'Vermelho' },

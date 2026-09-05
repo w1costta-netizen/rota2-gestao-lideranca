@@ -761,7 +761,7 @@ export default function AtaReuniao({ userId, profile }) {
             </div>
             <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center', marginBottom:10 }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, flex:'1 1 200px',
-                            background:'var(--surface-1)', borderRadius:'var(--radius)', padding:'7px 11px' }}>
+                            background:'var(--surface-2)', borderRadius:'var(--radius)', padding:'7px 11px' }}>
                 <Search size={14} style={{ color:'var(--text-muted)', flexShrink:0 }}/>
                 <input value={buscaPessoa} onChange={e => setBuscaPessoa(e.target.value)}
                   placeholder="Buscar por nome, cargo ou setor"
@@ -810,7 +810,7 @@ export default function AtaReuniao({ userId, profile }) {
                   <label key={p.id}
                     style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', cursor:'pointer',
                              borderBottom:'1px solid var(--border)',
-                             background: marcado ? 'var(--surface-1)' : 'transparent' }}>
+                             background: marcado ? 'var(--surface-2)' : 'transparent' }}>
                     <input type="checkbox" checked={marcado} onChange={() => alternarPessoa(p)}
                       style={{ width:16, height:16, flexShrink:0, cursor:'pointer', accentColor:'var(--primary)' }}/>
                     <Avatar avatarUrl={p.avatar_url} name={p.full_name} size={28}/>

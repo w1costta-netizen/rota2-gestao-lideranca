@@ -418,7 +418,7 @@ export default function Chat({ userId }) {
                     style={{ width:'100%', textAlign:'left', display:'flex', gap:10, alignItems:'center',
                              padding:'11px 14px', cursor:'pointer', border:'none',
                              borderBottom:'1px solid var(--border)',
-                             background: aberta?.id === c.id ? 'var(--surface-1)' : 'transparent' }}>
+                             background: aberta?.id === c.id ? 'var(--surface-2)' : 'transparent' }}>
                     <Avatar avatarUrl={c.outro?.avatar_url} name={c.outro?.full_name} size={36}/>
                     <div style={{ minWidth:0, flex:1 }}>
                       <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
@@ -496,7 +496,7 @@ export default function Chat({ userId }) {
                             onClick={() => !m.apagada && setMenuMsg(m)}
                             style={{ maxWidth:'78%', padding:'8px 12px', borderRadius:14,
                                         cursor: m.apagada ? 'default' : 'pointer',
-                                        background: minha ? 'var(--primary)' : 'var(--surface-1)',
+                                        background: minha ? 'var(--primary)' : 'var(--surface-2)',
                                         color: minha ? '#fff' : 'var(--text)',
                                         borderBottomRightRadius: minha ? 4 : 14,
                                         borderBottomLeftRadius: minha ? 14 : 4 }}>
@@ -716,7 +716,7 @@ export default function Chat({ userId }) {
               </button>
             </div>
             <div style={{ padding:'0 16px 12px' }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, background:'var(--surface-1)',
+              <div style={{ display:'flex', alignItems:'center', gap:8, background:'var(--surface-2)',
                             borderRadius:'var(--radius)', padding:'8px 11px' }}>
                 <Search size={14} style={{ color:'var(--text-muted)', flexShrink:0 }}/>
                 <input value={buscaContato} onChange={e => setBuscaContato(e.target.value)} autoFocus
