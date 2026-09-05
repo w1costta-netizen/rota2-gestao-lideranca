@@ -2,6 +2,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Plus, Mic, Trash2, X, Pin, PinOff, Search, Archive, ArchiveRestore, StickyNote } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
+import ExportMenu from '../components/ExportMenu';
+import { gerarPDF } from '../lib/exportUtils';
 
 // ─────────────────────────────────────────────────────────────
 // Anotações pessoais — modelo Google Keep: cartão colorido, fixar no topo,
@@ -162,6 +164,44 @@ export default function Anotacoes({ userId }) {
   // gravada não existe mais — evita tela quebrada se a paleta mudar.
   const corAtual = (editando && CORES[editando.cor]) || CORES.padrao;
 
+  // PDF para imprimir.
+  //
+  // Sai o que está NA TELA: se houver busca, só o que ela filtrou; se estiver
+  // vendo as arquivadas, são elas. Exportar coisa diferente do que a pessoa
+  // está olhando é o tipo de surpresa que faz conferir tudo de novo.
+  //
+  // Retrato, e não paisagem como os outros relatórios: anotação é texto
+  // corrido, e paisagem daria linhas largas demais para ler.
+  const exportarPDF = () => {
+    if (!visiveis.length) { toast('Não há anotações para exportar.', 'error'); return; }
+    const emLinha = a => ({
+      titulo: a.titulo?.trim() || '(sem título)',
+      texto:  a.texto?.trim()  || '—',
+      data:   a.created_at ? new Date(a.created_at).toLocaleDateString('pt-BR') : '',
+    });
+    const colunas = [
+      { header: 'Título',    dataKey: 'titulo' },
+      { header: 'Anotação',  dataKey: 'texto'  },
+      { header: 'Criada em', dataKey: 'data'   },
+    ];
+    // Fixadas em seção própria: elas estão no topo da tela por serem as que
+    // importam, e o papel deve dizer a mesma coisa.
+    const secoes = [];
+    if (fixadas.length) secoes.push({ titulo: 'Fixadas', colunas, rows: fixadas.map(emLinha) });
+    if (demais.length)  secoes.push({
+      titulo: fixadas.length ? 'Demais anotações' : null,
+      colunas, rows: demais.map(emLinha),
+    });
+    gerarPDF({
+      titulo: vendoArquivadas ? 'Anotações arquivadas' : 'Minhas anotações',
+      subtitulo: `${visiveis.length} anotação(ões)`
+        + (termo ? ` · busca por "${termo}"` : '')
+        + ` · ${new Date().toLocaleDateString('pt-BR')}`,
+      secoes,
+      orientacao: 'portrait',
+    });
+  };
+
   if (carregando) {
     return <div className="card" style={{ textAlign:'center', padding:40, color:'var(--text-muted)' }}>Carregando...</div>;
   }
@@ -230,7 +270,8 @@ export default function Anotacoes({ userId }) {
             Suas anotações pessoais — ninguém mais vê o que você escreve aqui.
           </p>
         </div>
-        <div style={{ display:'flex', gap:8 }}>
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          <ExportMenu onPDF={exportarPDF} label="Exportar" disabled={!visiveis.length}/>
           <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => setVendoArquivadas(v => !v)}>
             <Archive size={14}/> {vendoArquivadas ? 'Ver ativas' : 'Arquivadas'}
           </button>
