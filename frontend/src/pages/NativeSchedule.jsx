@@ -497,8 +497,16 @@ export default function NativeSchedule({ userId, profile }) {
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y-1); } else setMonth(m => m-1); };
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y+1); } else setMonth(m => m+1); };
 
-  const getEntry = (memberId, date) =>
-    entries.find(e => e.team_member_id === memberId && e.work_date === date);
+  // Índice das entradas. A busca linear bastava quando só a célula
+  // consultava; a ordenação por horário consulta o mês inteiro a cada
+  // desenho da tela, e aí a varredura pesa.
+  const indiceEntradas = (() => {
+    const mapa = new Map();
+    entries.forEach(e => mapa.set(`${e.team_member_id}|${e.work_date}`, e));
+    return mapa;
+  })();
+
+  const getEntry = (memberId, date) => indiceEntradas.get(`${memberId}|${date}`);
 
   const saveCell = async ({ copyToDays = [], ...payload }) => {
     if (!openCell) return;
@@ -668,6 +676,53 @@ export default function NativeSchedule({ userId, profile }) {
         b.setor === SEM_SETOR ? -1 :
         a.setor.localeCompare(b.setor, 'pt-BR'));
   })();
+
+  // Ordem das linhas: quem entra mais cedo aparece primeiro.
+  //
+  // O horário usado é o MAIS REPETIDO da pessoa naquela semana, e não o mais
+  // cedo dela. Um único dia de abertura excepcional jogaria a pessoa para o
+  // topo da semana inteira, e a escala deixaria de mostrar o turno de cada
+  // um — que é o que se procura ao bater o olho na folha.
+  //
+  // A ordem é POR SEMANA, porque o turno muda de uma para outra. E fica
+  // dentro de cada setor: separar por área continua valendo, o horário só
+  // organiza as linhas lá dentro.
+  const emMinutos = (h) => {
+    const [hh, mm] = String(h || '').split(':').map(Number);
+    return Number.isFinite(hh) ? hh * 60 + (mm || 0) : null;
+  };
+
+  const horarioDaSemana = (membro, week) => {
+    const vezes = new Map();
+    week.filter(Boolean).forEach(date => {
+      const e = getEntry(membro.id, date);
+      if (!e || e.status !== 'trabalha') return;
+      const min = emMinutos(e.entrada);
+      if (min === null) return;
+      vezes.set(min, (vezes.get(min) || 0) + 1);
+    });
+    if (!vezes.size) return null;
+    // Mais repetido; empatou, o mais cedo.
+    return [...vezes.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0][0];
+  };
+
+  const porHorario = (membros, week) => {
+    // Calcula uma vez por pessoa: dentro do comparador, a ordenação
+    // recalcularia o mesmo horário dezenas de vezes.
+    const hora = new Map(membros.map(m => [m.id, horarioDaSemana(m, week)]));
+    const nome = (m) => (m.name || '');
+    return [...membros].sort((a, b) => {
+      const ha = hora.get(a.id);
+      const hb = hora.get(b.id);
+      // Semana sem nenhum horário (folga, férias, DSR) vai para o fim: não
+      // há chegada para comparar, e no meio da lista só atrapalharia.
+      if (ha === null && hb === null) return nome(a).localeCompare(nome(b), 'pt-BR');
+      if (ha === null) return 1;
+      if (hb === null) return -1;
+      // Nome no desempate, senão a ordem mudaria a cada carregamento.
+      return ha - hb || nome(a).localeCompare(nome(b), 'pt-BR');
+    });
+  };
 
   // Sem nenhum setor preenchido não há o que separar, e o cabeçalho só
   // ocuparia linha à toa.
@@ -970,7 +1025,7 @@ export default function NativeSchedule({ userId, profile }) {
                             </td>
                           </tr>
                         )}
-                    {g.membros.map((m, ri) => {
+                    {porHorario(g.membros, week).map((m, ri) => {
                       const rowBg = ri%2===0 ? '#fff' : '#f9fafb';
                       return (
                         <tr key={m.id} style={{ background:rowBg }}>
