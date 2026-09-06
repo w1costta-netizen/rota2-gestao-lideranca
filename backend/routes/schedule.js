@@ -260,85 +260,116 @@ router.get('/', async (req, res) => {
   res.json(data || []);
 });
 
-// GET /api/schedule/operators?user_id=&day_of_week=&year=&month=
+// GET /api/schedule/operators?escala_id=&data=YYYY-MM-DD&cargos=
+//
+// Análise de caixas. Reescrita em 06/09/2026 depois de conferir a escala real
+// de setembro da frente de loja — 780 lançamentos. Os quatro defeitos, todos
+// medidos, e não suspeitados:
+//
+// 1. NÃO FILTRAVA SETOR. Buscava a loja inteira. Das 23 pessoas que contava
+//    numa terça, 12 eram de Perecíveis e Mercearia — gente que não opera
+//    caixa. Agora analisa a escala de UMA pessoa, escolhida na tela: quem
+//    responde pela frente de loja. Não há o que adivinhar.
+//
+// 2. LISTA DE CARGOS FIXA E EXATA (['operador loja','aprendiz']). "Jovem
+//    Aprendiz" não bate com "aprendiz", e assim 41% das jornadas da própria
+//    frente de loja eram descartadas. Agora os cargos vêm da escala e a tela
+//    deixa ligar e desligar cada um — loja nova tem nomes que ninguém aqui
+//    adivinha.
+//
+// 3. FAIXA DE HORAS FIXA em 8h–20h, enquanto a escala vai de 07:00 a 22:20.
+//    Havia gente às 7h, às 21h e às 22h que simplesmente não aparecia.
+//    Agora a faixa sai da própria escala.
+//
+// 4. UMA TERÇA VALIA PELO MÊS. Setembro tem cinco terças, com gente e
+//    horários diferentes, e o código pegava uma delas pela ordem que o banco
+//    devolvesse. Em 26% das combinações pessoa+dia o horário muda dentro do
+//    mês. Agora é uma DATA.
+const CARGOS_DE_CAIXA = [/operador.*loja/, /aprendiz/];
+
+const semAcento = (t) => String(t || '').toLowerCase()
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+// Cargo separado por barra vertical, e não vírgula: nome de cargo com vírgula
+// existe, e quebraria a lista sem dar erro nenhum.
+const SEPARADOR = '|';
+
 router.get('/operators', async (req, res) => {
-  const { user_id, day_of_week, year, month } = req.query;
+  const { escala_id, data: dia, cargos } = req.query;
+  if (!escala_id || !dia) {
+    return res.status(400).json({ error: 'escala_id e data são obrigatórios' });
+  }
 
-  // Busca empresa do usuário
-  const { data: prof } = await supabase
-    .from('profiles').select('company').eq('id', user_id).maybeSingle();
-  if (!prof?.company) return res.json([]);
-
-  // Faixa do mês (padrão: mês atual)
-  const y = parseInt(year)  || new Date().getFullYear();
-  const m = parseInt(month) || (new Date().getMonth() + 1);
-  const lastDay = new Date(y, m, 0).getDate();
-  const from = `${y}-${String(m).padStart(2,'0')}-01`;
-  const to   = `${y}-${String(m).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
-
-  // Busca todos os user_ids da mesma empresa (mais robusto que filtrar por company no entry)
-  const { data: companyUsers } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('company', prof.company);
-  const companyUserIds = (companyUsers || []).map(p => p.id);
-  if (!companyUserIds.length) return res.json([]);
-
-  const { data, error } = await supabase
+  const { data: linhas, error } = await supabase
     .from('schedule_entries')
-    .select('team_member_id, entrada, intervalo, retorno_intervalo, saida, status, team_members(name,sector,role)')
-    .in('user_id', companyUserIds)
-    .eq('day_of_week', day_of_week)
-    .eq('status', 'trabalha')
-    .gte('work_date', from)
-    .lte('work_date', to);
+    .select('team_member_id, entrada, intervalo, retorno_intervalo, saida, status, team_members(name, role, sector)')
+    .eq('user_id', escala_id)
+    .eq('work_date', dia)
+    .eq('status', 'trabalha');
   if (error) return res.status(500).json({ error: error.message });
 
-  const CASHIER_ROLES = ['operador loja', 'aprendiz'];
+  const comHorario = (linhas || []).filter(e => e.entrada && e.saida);
 
-  // Converte "HH:MM" em minutos, retorna null se inválido
-  const toMin = (t) => {
-    if (!t) return null;
-    const [hh, mm] = t.split(':').map(Number);
-    return isNaN(hh) ? null : hh * 60 + (mm || 0);
+  const totalPorCargo = {};
+  comHorario.forEach(e => {
+    const c = e.team_members?.role?.trim() || 'Sem cargo';
+    totalPorCargo[c] = (totalPorCargo[c] || 0) + 1;
+  });
+
+  const escolhidos = cargos
+    ? new Set(String(cargos).split(SEPARADOR).map(semAcento).filter(Boolean))
+    : null;
+  const ehDeCaixa = (nomeDoCargo) => {
+    const c = semAcento(nomeDoCargo);
+    return escolhidos ? escolhidos.has(c) : CARGOS_DE_CAIXA.some(r => r.test(c));
   };
 
-  // Filtra apenas cargos de caixa com horários preenchidos
-  const filtered = (data || []).filter(e => {
-    const role = (e.team_members?.role || '').toLowerCase().trim();
-    return CASHIER_ROLES.includes(role) && e.entrada && e.saida;
+  const doCaixa = comHorario.filter(e => ehDeCaixa(e.team_members?.role));
+
+  const emMinutos = (t) => {
+    const [h, m] = String(t).split(':').map(Number);
+    return h * 60 + (m || 0);
+  };
+
+  let primeira = 23, ultima = 0;
+  doCaixa.forEach(e => {
+    primeira = Math.min(primeira, Math.floor(emMinutos(e.entrada) / 60));
+    // Saída 22:20 cobre a faixa das 22h; por isso o -1 depois do arredonda.
+    ultima = Math.max(ultima, Math.ceil(emMinutos(e.saida) / 60) - 1);
   });
+  const horas = doCaixa.length && ultima >= primeira
+    ? Array.from({ length: ultima - primeira + 1 }, (_, i) => primeira + i)
+    : [];
 
-  // Deduplica por team_member_id mantendo a entrada com horário válido
-  const seen = new Set();
-  const cashierEntries = filtered.filter(e => {
-    if (seen.has(e.team_member_id)) return false;
-    seen.add(e.team_member_id);
-    return true;
-  });
-
-  const hours = Array.from({ length: 13 }, (_, i) => i + 8);
-  const result = hours.map(h => {
-    const hMin = h * 60;
-    const active = cashierEntries.filter(e => {
-      const entMin = toMin(e.entrada);
-      const saiMin = toMin(e.saida);
-      const intMin = toMin(e.intervalo);
-      const retMin = toMin(e.retorno_intervalo);
-
-      if (entMin === null || saiMin === null) return false;
-
-      // Operador cobre esta faixa horária?
-      if (entMin > hMin || saiMin <= hMin) return false;
-
-      // Operador está no intervalo durante esta faixa?
-      if (intMin !== null && retMin !== null && intMin <= hMin && retMin > hMin) return false;
-
+  const resultado = horas.map(h => {
+    const H = h * 60;
+    const ativos = doCaixa.filter(e => {
+      const entrou = emMinutos(e.entrada);
+      const saiu   = emMinutos(e.saida);
+      if (entrou > H || saiu <= H) return false;
+      // Quem está no intervalo não está no caixa.
+      const pausa   = e.intervalo ? emMinutos(e.intervalo) : null;
+      const voltou  = e.retorno_intervalo ? emMinutos(e.retorno_intervalo) : null;
+      if (pausa !== null && voltou !== null && pausa <= H && voltou > H) return false;
       return true;
     });
-    return { hour: h, operators: active.length, names: active.map(e => e.team_members?.name).filter(Boolean) };
+    return {
+      hour: h,
+      operators: ativos.length,
+      names: ativos.map(e => e.team_members?.name).filter(Boolean).sort(),
+    };
   });
-  res.json(result);
+
+  res.json({
+    data: dia,
+    horas: resultado,
+    // Todos os cargos que aparecem nesta escala, com quantas jornadas cada um
+    // tem no dia. A tela mostra para a pessoa ver o que entrou e o que ficou
+    // de fora — era justamente o que ninguém conseguia enxergar antes.
+    cargos: Object.entries(totalPorCargo)
+      .map(([nome, total]) => ({ nome, total, ativo: ehDeCaixa(nome) }))
+      .sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, 'pt-BR')),
+  });
 });
 
 // DELETE /api/schedule/:id
