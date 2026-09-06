@@ -182,12 +182,22 @@ export default function Listas({ userId }) {
                 </button>
               </div>
 
-              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                <input className="input" style={{ flex: 1 }} value={novoItem}
+              {/* Formulário de verdade, e não um campo solto.
+                  No computador dava para apertar Enter e pronto. No celular
+                  o teclado mostra "concluído", que só fecha o teclado sem
+                  gerar Enter nenhum — e como não havia botão ao lado, o item
+                  simplesmente não era criado: a pessoa digitava e não tinha
+                  o que tocar. Dentro de um <form> o teclado passa a mostrar
+                  a tecla de enviar, e o botão resolve para quem não a usa. */}
+              <form
+                onSubmit={e => { e.preventDefault(); adicionarItem(); }}
+                style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <input className="input" style={{ flex: 1, minWidth: 0 }} value={novoItem}
                   onChange={e => setNovoItem(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && adicionarItem()}
+                  enterKeyHint="done"
                   placeholder="Adicionar item..."/>
                 <button
+                  type="button"
                   className="btn-icon"
                   onClick={iniciarVoz}
                   title={SpeechSupported() ? 'Adicionar por voz' : 'Voz não disponível neste navegador'}
@@ -199,7 +209,21 @@ export default function Listas({ userId }) {
                 >
                   <Mic size={16}/>
                 </button>
-              </div>
+                <button
+                  type="submit"
+                  title="Adicionar item"
+                  disabled={!novoItem.trim()}
+                  style={{
+                    width: 40, height: 40, borderRadius: '50%', flexShrink: 0, border: 'none',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: novoItem.trim() ? 'var(--primary)' : 'var(--surface-2)',
+                    color: novoItem.trim() ? '#fff' : 'var(--text-muted)',
+                    cursor: novoItem.trim() ? 'pointer' : 'default',
+                  }}
+                >
+                  <Plus size={18}/>
+                </button>
+              </form>
 
               {listaAtiva.itens.length === 0 ? (
                 <p style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 13 }}>
