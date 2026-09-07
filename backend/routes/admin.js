@@ -297,6 +297,38 @@ router.get('/sectors', async (req, res) => {
 });
 
 // POST /api/admin/sectors
+// PUT /api/admin/sectors/:id  { requester_id, efetivo_minimo }
+//
+// Quantas pessoas o setor precisa ter na loja para operar. É a régua do
+// alerta do Painel da Loja: sem ela o semáforo só compara o setor com o
+// pico dele mesmo, que mostra a variação do dia mas não diz se está ruim.
+//
+// Vazio volta a null de propósito — significa "não definido", e é diferente
+// de zero. Zero seria uma loja que pode operar o setor sem ninguém.
+router.put('/sectors/:id', async (req, res) => {
+  const { requester_id, efetivo_minimo } = req.body;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const { data: me } = await supabase.from('profiles').select('access_level, company').eq('id', requester_id).single();
+  if (!me || !['admin', 'master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
+
+  const bruto = efetivo_minimo;
+  const valor = (bruto === '' || bruto === null || bruto === undefined)
+    ? null
+    : Math.max(0, Math.min(999, parseInt(bruto, 10) || 0));
+
+  const { data, error } = await supabase.from('company_sectors')
+    .update({ efetivo_minimo: valor }).eq('id', req.params.id)
+    .select('id, sector_name, efetivo_minimo, company').single();
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'definir_efetivo_minimo',
+               tabela: 'company_sectors', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: data.company, user_id: requester_id, acao: 'definir_efetivo_minimo',
+              tabela: 'company_sectors', depois: { setor: data.sector_name, efetivo_minimo: valor } });
+  res.json(data);
+});
+
 router.post('/sectors', async (req, res) => {
   const { requester_id, sector_name, company: bodyCompany } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });

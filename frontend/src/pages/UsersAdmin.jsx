@@ -152,6 +152,15 @@ function ConfigModal({ userId, company, roles, sectors, onClose, onReload }) {
     await api.delete(`/admin/sectors/${id}?requester_id=${userId}`); onReload();
   };
 
+  // Manda o item inteiro? Não: a rota só toca no efetivo_minimo, e nada
+  // mais do setor pode ser alterado por engano aqui.
+  const salvarMinimo = async (id, valor) => {
+    try {
+      await api.put(`/admin/sectors/${id}`, { requester_id: userId, efetivo_minimo: valor });
+      onReload();
+    } catch { /* a lista recarrega e mostra o valor que valeu */ }
+  };
+
   const list = tab === 'roles' ? roles : sectors;
   const nameKey = tab === 'roles' ? 'role_name' : 'sector_name';
   const newVal  = tab === 'roles' ? newRole : newSect;
@@ -188,6 +197,13 @@ function ConfigModal({ userId, company, roles, sectors, onClose, onReload }) {
         </button>
       </div>
 
+      {tab === 'sectors' && (
+        <p style={{ fontSize:11.5, color:'var(--text-muted)', marginBottom:10, lineHeight:1.6 }}>
+          O <b>mínimo</b> é quantas pessoas o setor precisa ter na loja para operar.
+          O Painel da Loja avisa quando fica abaixo disso. Deixe vazio para não gerar alerta.
+        </p>
+      )}
+
       {/* Lista */}
       <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:280, overflowY:'auto' }}>
         {list.length === 0 && (
@@ -199,7 +215,30 @@ function ConfigModal({ userId, company, roles, sectors, onClose, onReload }) {
           <div key={item.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
             padding:'10px 14px', borderRadius:8,
             background:'var(--surface-2)', border:'1px solid var(--border)' }}>
-            <span style={{ fontSize:13, fontWeight:500 }}>{item[nameKey]}</span>
+            <span style={{ fontSize:13, fontWeight:500, flex:1, minWidth:0 }}>{item[nameKey]}</span>
+
+            {/* Efetivo mínimo — só faz sentido para setor. É a régua do
+                alerta do Painel da Loja, e cada loja tem a sua: um clube com
+                12 caixas não precisa do mesmo que uma loja de bairro. */}
+            {tab === 'sectors' && (
+              <div style={{ display:'flex', alignItems:'center', gap:6, marginRight:8, flexShrink:0 }}>
+                <span style={{ fontSize:11, color:'var(--text-muted)' }}>mín.</span>
+                <input
+                  type="number" min="0" max="999"
+                  defaultValue={item.efetivo_minimo ?? ''}
+                  placeholder="—"
+                  title="Quantas pessoas o setor precisa ter na loja. Deixe vazio se não quiser alerta."
+                  onBlur={e => {
+                    const novo = e.target.value.trim();
+                    const antes = item.efetivo_minimo == null ? '' : String(item.efetivo_minimo);
+                    if (novo !== antes) salvarMinimo(item.id, novo === '' ? null : novo);
+                  }}
+                  onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
+                  style={{ width:58, padding:'4px 7px', borderRadius:6, fontSize:12.5, textAlign:'center',
+                           border:'1px solid var(--border)', background:'var(--surface)', color:'var(--text)' }}/>
+              </div>
+            )}
+
             <button className="btn-icon danger" title="Remover" onClick={() => delFn(item.id)}>
               <Trash2 size={13}/>
             </button>
