@@ -303,6 +303,16 @@ const diasEntre = (a, b) =>
 
 const hhmm = (min) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
 
+// Achado sem data não serve para nada: quem recebe precisa ir na escala e
+// olhar AQUELE dia. Vai a data curta com o dia da semana junto, porque
+// "sábado 12/09" já responde metade das perguntas antes de abrir a escala.
+const CURTO = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
+const diaCurto = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso + 'T12:00:00Z');
+  return `${CURTO[d.getUTCDay()]} ${iso.slice(8)}/${iso.slice(5, 7)}`;
+};
+
 router.get('/analise', async (req, res) => {
   const { escala_id, year, month } = req.query;
   if (!escala_id || !year || !month) {
@@ -347,7 +357,7 @@ router.get('/analise', async (req, res) => {
       const descanso = (entrou + 1440) - saiu;
       if (descanso < 11 * 60) descansoCurto.push({
         pessoa: nomeDe(id), data: agora.work_date,
-        detalhe: `saiu ${antes.saida} do dia ${antes.work_date.slice(8)} e entrou ${agora.entrada} — ${hhmm(descanso)} de descanso`,
+        detalhe: `saiu ${antes.saida} de ${diaCurto(antes.work_date)} e entrou ${antes.saida > agora.entrada ? '' : ''}${agora.entrada} em ${diaCurto(agora.work_date)} — só ${hhmm(descanso)} de descanso, faltam ${hhmm(11 * 60 - descanso)}`,
       });
     }
   });
@@ -365,7 +375,7 @@ router.get('/analise', async (req, res) => {
       const quantos = i - inicio;
       if (quantos > 6) seguidos.push({
         pessoa: nomeDe(id), data: dias[i - 1],
-        detalhe: `${quantos} dias seguidos, de ${dias[inicio].slice(8)} a ${dias[i - 1].slice(8)}, sem folga no meio`,
+        detalhe: `${quantos} dias seguidos sem folga: de ${diaCurto(dias[inicio])} até ${diaCurto(dias[i - 1])}`,
       });
       inicio = i;
     }
@@ -386,10 +396,10 @@ router.get('/analise', async (req, res) => {
     const pausa = paraMinutos(e.intervalo), volta = paraMinutos(e.retorno_intervalo);
     if (pausa === null || volta === null) {
       semIntervalo.push({ pessoa: nomeDe(e.team_member_id), data: e.work_date,
-        detalhe: `jornada de ${hhmm(bruta)} sem intervalo lançado` });
+        detalhe: `entrada ${e.entrada}, saída ${e.saida} — jornada de ${hhmm(bruta)} e nenhum intervalo lançado` });
     } else if (volta - pausa < 60) {
       intervaloCurto.push({ pessoa: nomeDe(e.team_member_id), data: e.work_date,
-        detalhe: `jornada de ${hhmm(bruta)} com apenas ${hhmm(volta - pausa)} de intervalo` });
+        detalhe: `entrada ${e.entrada}, saída ${e.saida} (${hhmm(bruta)}) — intervalo de ${e.intervalo} a ${e.retorno_intervalo}, só ${volta - pausa} min; faltam ${60 - (volta - pausa)} min` });
     }
   });
   registra('sem_intervalo', 'Jornada acima de 6 horas sem intervalo lançado', 'CLT art. 71', 'alta', semIntervalo,
@@ -402,7 +412,7 @@ router.get('/analise', async (req, res) => {
     .map(e => ({ e, d: duracao(e) }))
     .filter(x => x.d !== null && x.d > 600)
     .map(x => ({ pessoa: nomeDe(x.e.team_member_id), data: x.e.work_date,
-                 detalhe: `${hhmm(x.d)} de trabalho, sem contar o intervalo` }));
+                 detalhe: `entrada ${x.e.entrada}, saída ${x.e.saida} — ${hhmm(x.d)} de trabalho já descontando o intervalo` }));
   registra('jornada_longa', 'Jornada acima de 10 horas', 'CLT art. 59', 'alta', jornadaLonga,
     'Dividir a cobertura desse dia com outra pessoa.');
 
@@ -411,18 +421,33 @@ router.get('/analise', async (req, res) => {
   // Só entre o primeiro e o último dia com alguém trabalhando: fora disso a
   // escala pode simplesmente não ter sido preenchida ainda, e apontar mês
   // inteiro de "dia descoberto" seria alarme falso.
-  const diasComGente = [...new Set(trabalhou.map(e => e.work_date))].sort();
+  const diasComGente = new Set(trabalhou.map(e => e.work_date));
+  const ordenados = [...diasComGente].sort();
   const descobertos = [];
-  if (diasComGente.length > 1) {
-    const primeiro = diasComGente[0], ultimoDia = diasComGente[diasComGente.length - 1];
-    const cursor = new Date(primeiro + 'T00:00:00Z');
-    const fim = new Date(ultimoDia + 'T00:00:00Z');
-    while (cursor < fim) {
-      cursor.setUTCDate(cursor.getUTCDate() + 1);
-      const dia = cursor.toISOString().slice(0, 10);
-      if (dia < ultimoDia && !diasComGente.includes(dia)) {
-        descobertos.push({ pessoa: '—', data: dia, detalhe: 'nenhuma pessoa escalada neste dia' });
-      }
+  if (ordenados.length > 1) {
+    const primeiro = ordenados[0], ultimoDia = ordenados[ordenados.length - 1];
+
+    // Loja fechada não é falha de escala. Se NENHUMA ocorrência daquele dia
+    // da semana tem gente no mês inteiro, a loja não abre nesse dia — acusar
+    // todo domingo de "dia descoberto" é o tipo de alarme falso que faz o
+    // relatório perder a credibilidade na segunda leitura.
+    const vazioNoDiaDaSemana = {};
+    for (let d = 1; d <= ultimo; d++) {
+      const dia = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if (dia < primeiro || dia > ultimoDia) continue;
+      const semana = new Date(dia + 'T12:00:00Z').getUTCDay();
+      if (vazioNoDiaDaSemana[semana] === undefined) vazioNoDiaDaSemana[semana] = true;
+      if (diasComGente.has(dia)) vazioNoDiaDaSemana[semana] = false;
+    }
+
+    for (let d = 1; d <= ultimo; d++) {
+      const dia = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      if (dia <= primeiro || dia >= ultimoDia) continue;
+      if (diasComGente.has(dia)) continue;
+      const semana = new Date(dia + 'T12:00:00Z').getUTCDay();
+      if (vazioNoDiaDaSemana[semana]) continue;   // a loja não abre neste dia da semana
+      descobertos.push({ pessoa: '—', data: dia,
+        detalhe: `${diaCurto(dia)} sem ninguém escalado, e nos outros ${CURTO[semana]} do mês há gente` });
     }
   }
   registra('dia_descoberto', 'Dia sem ninguém escalado', null, 'atencao', descobertos,
@@ -447,7 +472,7 @@ router.get('/analise', async (req, res) => {
     carga.forEach(c => {
       if (mediana > 0 && c.porDia > mediana * 1.25) sobrecarga.push({
         pessoa: nomeDe(c.id), data: null,
-        detalhe: `${hhmm(Math.round(c.minutos))} em ${c.jornadas} dias — ${Math.round((c.porDia / mediana - 1) * 100)}% acima do time`,
+        detalhe: `${hhmm(Math.round(c.minutos))} em ${c.jornadas} dias trabalhados (${c.dias} dias disponíveis no mês) — ${Math.round((c.porDia / mediana - 1) * 100)}% acima da mediana do time, que é ${hhmm(Math.round(mediana))} por dia`,
       });
     });
   }
@@ -459,7 +484,7 @@ router.get('/analise', async (req, res) => {
     resumo: {
       pessoas: Object.keys(porPessoa).length,
       jornadas: trabalhou.length,
-      diasCobertos: diasComGente.length,
+      diasCobertos: diasComGente.size,
       emFerias: [...new Set(todas.filter(e => AUSENCIAS.includes(e.status)).map(e => e.team_member_id))].length,
     },
     achados,

@@ -336,6 +336,14 @@ function TeamModal({ userId, userSector, onClose }) {
   );
 }
 
+// Data curta com o dia da semana. "sábado, 12/09" responde metade das
+// perguntas antes de a pessoa abrir a escala.
+function diaPorExtenso(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T12:00:00Z');
+  return `${DAY_FULL[d.getUTCDay()].toLowerCase()}, ${iso.slice(8)}/${iso.slice(5, 7)}`;
+}
+
 /* ── Pontos de atenção da escala ── */
 //
 // O que uma pessoa não acha olhando 780 linhas: dois dias colados com pouco
@@ -421,18 +429,25 @@ function ModalAnalise({ escalaId, ano, mes, titulo, aoFechar, toast }) {
                   {a.base && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.base}</span>}
                 </div>
                 <div style={{ marginTop: 8 }}>
-                  {a.itens.slice(0, 8).map((i, n) => (
-                    <div key={n} style={{ fontSize: 12, padding: '3px 0', color: 'var(--text-muted)' }}>
-                      {i.pessoa && i.pessoa !== '—' && <b style={{ color: 'var(--text)' }}>{i.pessoa}</b>}
-                      {i.pessoa && i.pessoa !== '—' ? ' · ' : ''}
-                      {i.detalhe}
+                  {a.itens.map((i, n) => (
+                    <div key={n} style={{ fontSize: 12, padding: '4px 0', color: 'var(--text-muted)',
+                                          borderTop: n ? '1px solid var(--border)' : 'none' }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+                        {i.pessoa && i.pessoa !== '—' && (
+                          <b style={{ color: 'var(--text)' }}>{i.pessoa}</b>
+                        )}
+                        {/* A data em destaque: sem ela não dá para ir na escala
+                            conferir, e era exatamente o que faltava. */}
+                        {i.data && (
+                          <span style={{ fontSize: 11, fontWeight: 800, color: 'var(--primary)',
+                                         background: 'var(--surface-2)', borderRadius: 4, padding: '1px 6px' }}>
+                            {diaPorExtenso(i.data)}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ marginTop: 2 }}>{i.detalhe}</div>
                     </div>
                   ))}
-                  {a.itens.length > 8 && (
-                    <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>
-                      e mais {a.itens.length - 8} — a lista completa sai no PDF.
-                    </div>
-                  )}
                 </div>
                 {a.oQueFazer && (
                   <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8,
