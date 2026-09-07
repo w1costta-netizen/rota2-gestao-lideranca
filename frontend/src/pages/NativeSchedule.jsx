@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
-import { ChevronLeft, ChevronRight, Download, Users, X, Save, Trash2, Plus, CheckCircle } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Users, X, Save, Trash2, Plus, CheckCircle,
+         ShieldCheck, AlertTriangle } from 'lucide-react';
+import { gerarPDF } from '../lib/exportUtils';
 import api from '../api';
 import { useToast } from '../components/Toast';
 
@@ -334,6 +336,133 @@ function TeamModal({ userId, userSector, onClose }) {
   );
 }
 
+/* ── Pontos de atenção da escala ── */
+//
+// O que uma pessoa não acha olhando 780 linhas: dois dias colados com pouco
+// descanso, sete dias seguidos, intervalo faltando, dia descoberto.
+//
+// A base legal é citada porque dá peso ao alerta e ajuda quem recebe a levar
+// ao RH. Mas o aviso do rodapé não é enfeite: a escala é uma PREVISÃO, e o
+// que vale juridicamente é a jornada cumprida. Prometer conformidade seria
+// mentir para o cliente.
+function ModalAnalise({ escalaId, ano, mes, titulo, aoFechar, toast }) {
+  const [dados, setDados] = useState(null);
+  const [erro, setErro] = useState(false);
+
+  useEffect(() => {
+    api.get(`/schedule/analise?escala_id=${escalaId}&year=${ano}&month=${mes}`)
+      .then(r => setDados(r.data))
+      .catch(() => setErro(true));
+  }, [escalaId, ano, mes]);
+
+  const baixarPDF = () => {
+    if (!dados?.achados?.length) { toast('Nada a exportar: nenhum ponto de atenção.', 'error'); return; }
+    gerarPDF({
+      titulo: 'Pontos de atenção da escala',
+      subtitulo: titulo,
+      orientacao: 'portrait',
+      secoes: dados.achados.map(a => ({
+        titulo: `${a.titulo}${a.base ? ` (${a.base})` : ''} — ${a.total}`,
+        colunas: [
+          { header: 'Pessoa', dataKey: 'pessoa' },
+          { header: 'Dia', dataKey: 'dia' },
+          { header: 'O que foi encontrado', dataKey: 'detalhe' },
+        ],
+        rows: a.itens.map(i => ({
+          pessoa: i.pessoa || '—',
+          dia: i.data ? i.data.slice(8) + '/' + i.data.slice(5, 7) : '—',
+          detalhe: i.detalhe,
+        })),
+      })),
+    });
+  };
+
+  const cor = (g) => g === 'alta' ? '#dc2626' : '#d97706';
+
+  return (
+    <div className="modal-overlay" onClick={ev => ev.target === ev.currentTarget && aoFechar()}>
+      <div className="modal" style={{ maxWidth: 640 }}>
+        <div className="modal-header">
+          <span className="modal-title">Pontos de atenção</span>
+          <button className="btn-icon" onClick={aoFechar}><X size={16}/></button>
+        </div>
+        <div className="modal-body">
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 14 }}>{titulo}</div>
+
+          {erro && <p style={{ color: 'var(--danger)', fontSize: 13 }}>Não foi possível analisar a escala.</p>}
+          {!dados && !erro && <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Conferindo a escala...</p>}
+
+          {dados && (<>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12,
+                          color: 'var(--text-muted)', marginBottom: 16 }}>
+              <span><b style={{ color: 'var(--text)' }}>{dados.resumo.pessoas}</b> pessoas</span>
+              <span><b style={{ color: 'var(--text)' }}>{dados.resumo.jornadas}</b> jornadas</span>
+              <span><b style={{ color: 'var(--text)' }}>{dados.resumo.diasCobertos}</b> dias cobertos</span>
+              {dados.resumo.emFerias > 0 && <span><b style={{ color: 'var(--text)' }}>{dados.resumo.emFerias}</b> de férias</span>}
+            </div>
+
+            {dados.achados.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '26px 10px' }}>
+                <ShieldCheck size={38} color="#16a34a" style={{ marginBottom: 10 }}/>
+                <div style={{ fontWeight: 800, fontSize: 15 }}>Nenhum ponto de atenção</div>
+                <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.6 }}>
+                  Descanso entre jornadas, sequência de dias, intervalos e cobertura:
+                  tudo dentro do esperado neste mês.
+                </p>
+              </div>
+            ) : dados.achados.map(a => (
+              <div key={a.chave} style={{ border: '1px solid var(--border)', borderLeft: `3px solid ${cor(a.gravidade)}`,
+                                          borderRadius: 8, padding: '10px 12px', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <AlertTriangle size={14} color={cor(a.gravidade)}/>
+                  <span style={{ fontWeight: 800, fontSize: 13.5 }}>{a.titulo}</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: '#fff', background: cor(a.gravidade),
+                                 borderRadius: 99, padding: '1px 8px' }}>{a.total}</span>
+                  {a.base && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{a.base}</span>}
+                </div>
+                <div style={{ marginTop: 8 }}>
+                  {a.itens.slice(0, 8).map((i, n) => (
+                    <div key={n} style={{ fontSize: 12, padding: '3px 0', color: 'var(--text-muted)' }}>
+                      {i.pessoa && i.pessoa !== '—' && <b style={{ color: 'var(--text)' }}>{i.pessoa}</b>}
+                      {i.pessoa && i.pessoa !== '—' ? ' · ' : ''}
+                      {i.detalhe}
+                    </div>
+                  ))}
+                  {a.itens.length > 8 && (
+                    <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 4 }}>
+                      e mais {a.itens.length - 8} — a lista completa sai no PDF.
+                    </div>
+                  )}
+                </div>
+                {a.oQueFazer && (
+                  <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8,
+                                paddingTop: 7, borderTop: '1px dashed var(--border)' }}>
+                    <b>O que fazer:</b> {a.oQueFazer}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+              <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, flex: 1, minWidth: 240, margin: 0 }}>
+                Esta conferência ajuda a encontrar pontos de atenção na escala <b>planejada</b>.
+                O que vale juridicamente é a jornada efetivamente cumprida — a validação
+                final é do RH da sua empresa.
+              </p>
+              {dados.achados.length > 0 && (
+                <button className="btn btn-primary btn-sm" onClick={baixarPDF}>
+                  <Download size={13}/> Baixar PDF
+                </button>
+              )}
+            </div>
+          </>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Página principal ── */
 const ELEVATED_LEVELS = ['admin', 'supervisor', 'master'];
 
@@ -347,6 +476,7 @@ export default function NativeSchedule({ userId, profile }) {
   const [openCell,   setOpenCell]   = useState(null);
   const [cellSaving, setCellSaving] = useState(false);
   const [showTeam,   setShowTeam]   = useState(false);
+  const [verAnalise, setVerAnalise] = useState(false);
   const [submission, setSubmission] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading,    setLoading]    = useState(false);
@@ -938,6 +1068,10 @@ export default function NativeSchedule({ userId, profile }) {
           <button onClick={() => setShowTeam(true)} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}>
             <Users size={11}/> Time
           </button>
+          <button onClick={() => setVerAnalise(true)} title="Conferir a escala do mês"
+            style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}>
+            <ShieldCheck size={11}/> Análise
+          </button>
           <button onClick={downloadPDF} disabled={generatingPdf} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0, opacity: generatingPdf ? .6 : 1 }}>
             <Download size={11}/> {generatingPdf ? 'Gerando...' : 'Baixar PDF'}
           </button>
@@ -1095,6 +1229,16 @@ export default function NativeSchedule({ userId, profile }) {
           onSave={saveCell}
           onClose={() => !cellSaving && setOpenCell(null)}
           saving={cellSaving}
+        />
+      )}
+
+      {verAnalise && (
+        <ModalAnalise
+          escalaId={effectiveUserId}
+          ano={year} mes={month}
+          titulo={`${rotuloDaEscala} · ${MONTHS_PT[month-1]} ${year}`}
+          toast={toast}
+          aoFechar={() => setVerAnalise(false)}
         />
       )}
 

@@ -260,6 +260,212 @@ router.get('/', async (req, res) => {
   res.json(data || []);
 });
 
+// GET /api/schedule/analise?escala_id=&year=&month=
+//
+// Pontos de atenção de uma escala fechada. Procura o que ninguém enxerga
+// numa planilha de 780 linhas: descanso curto entre dois dias, sequência sem
+// folga, intervalo faltando, dia descoberto.
+//
+// AS REGRAS DA CLT SÃO CITADAS, mas a conferência final é do RH do cliente —
+// a escala aqui é uma previsão, e o que vale juridicamente é a jornada
+// efetivamente cumprida. A tela diz isso.
+//
+// Cuidado que veio dos dados reais: FÉRIAS NÃO É CARGA BAIXA. Na escala de
+// setembro da frente de loja havia quatro pessoas com metade das horas do
+// time, todas de férias. Um relatório que compara hora bruta acusaria quatro
+// injustiças inexistentes — o que destrói a confiança no relatório inteiro
+// mais rápido do que qualquer erro de conta. Por isso a carga é medida por
+// DIA DISPONÍVEL.
+const FOLGAS = ['folga', 'dsr', 'folga_premio', 'folga_feriado', 'feriado'];
+const AUSENCIAS = ['ferias'];
+
+const paraMinutos = (t) => {
+  const [h, m] = String(t || '').split(':').map(Number);
+  return Number.isFinite(h) ? h * 60 + (m || 0) : null;
+};
+
+// Jornada em minutos, já descontado o intervalo. Vira o dia quando a saída é
+// menor que a entrada — turno que atravessa a meia-noite.
+function duracao(e) {
+  const ini = paraMinutos(e.entrada);
+  let fim = paraMinutos(e.saida);
+  if (ini === null || fim === null) return null;
+  if (fim <= ini) fim += 1440;
+  let total = fim - ini;
+  const pausa = paraMinutos(e.intervalo);
+  const volta = paraMinutos(e.retorno_intervalo);
+  if (pausa !== null && volta !== null && volta > pausa) total -= (volta - pausa);
+  return total;
+}
+
+const diasEntre = (a, b) =>
+  Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
+
+const hhmm = (min) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
+
+router.get('/analise', async (req, res) => {
+  const { escala_id, year, month } = req.query;
+  if (!escala_id || !year || !month) {
+    return res.status(400).json({ error: 'escala_id, year e month são obrigatórios' });
+  }
+
+  const ultimo = new Date(parseInt(year), parseInt(month), 0).getDate();
+  const de  = `${year}-${String(month).padStart(2, '0')}-01`;
+  const ate = `${year}-${String(month).padStart(2, '0')}-${String(ultimo).padStart(2, '0')}`;
+
+  const { data: linhas, error } = await supabase
+    .from('schedule_entries')
+    .select('team_member_id, work_date, status, entrada, intervalo, retorno_intervalo, saida, team_members(name, role)')
+    .eq('user_id', escala_id)
+    .gte('work_date', de).lte('work_date', ate)
+    .order('work_date');
+  if (error) return res.status(500).json({ error: error.message });
+
+  const todas = linhas || [];
+  const trabalhou = todas.filter(e => e.status === 'trabalha' && e.entrada && e.saida);
+
+  const nomeDe = (id) => todas.find(e => e.team_member_id === id)?.team_members?.name || 'Sem nome';
+  const porPessoa = {};
+  trabalhou.forEach(e => (porPessoa[e.team_member_id] = porPessoa[e.team_member_id] || []).push(e));
+
+  const achados = [];
+  const registra = (chave, titulo, base, gravidade, itens, oQueFazer) => {
+    if (itens.length) achados.push({ chave, titulo, base, gravidade, total: itens.length, itens, oQueFazer });
+  };
+
+  // ── 1. Descanso entre jornadas (CLT art. 66: mínimo 11 horas) ──
+  const descansoCurto = [];
+  Object.entries(porPessoa).forEach(([id, es]) => {
+    const ordenadas = [...es].sort((a, b) => a.work_date.localeCompare(b.work_date));
+    for (let i = 1; i < ordenadas.length; i++) {
+      const antes = ordenadas[i - 1], agora = ordenadas[i];
+      if (diasEntre(antes.work_date, agora.work_date) !== 1) continue;
+      let saiu = paraMinutos(antes.saida);
+      const entrou = paraMinutos(agora.entrada);
+      if (saiu === null || entrou === null) continue;
+      if (saiu <= paraMinutos(antes.entrada)) saiu += 1440;   // saiu depois da meia-noite
+      const descanso = (entrou + 1440) - saiu;
+      if (descanso < 11 * 60) descansoCurto.push({
+        pessoa: nomeDe(id), data: agora.work_date,
+        detalhe: `saiu ${antes.saida} do dia ${antes.work_date.slice(8)} e entrou ${agora.entrada} — ${hhmm(descanso)} de descanso`,
+      });
+    }
+  });
+  registra('descanso', 'Descanso menor que 11 horas entre dois dias', 'CLT art. 66', 'alta', descansoCurto,
+    'Adiar a entrada do dia seguinte ou antecipar a saída da véspera.');
+
+  // ── 2. Mais de 6 dias seguidos (CLT art. 67: repouso semanal) ──
+  const seguidos = [];
+  Object.entries(porPessoa).forEach(([id, es]) => {
+    const dias = [...new Set(es.map(e => e.work_date))].sort();
+    let inicio = 0;
+    for (let i = 1; i <= dias.length; i++) {
+      const emSequencia = i < dias.length && diasEntre(dias[i - 1], dias[i]) === 1;
+      if (emSequencia) continue;
+      const quantos = i - inicio;
+      if (quantos > 6) seguidos.push({
+        pessoa: nomeDe(id), data: dias[i - 1],
+        detalhe: `${quantos} dias seguidos, de ${dias[inicio].slice(8)} a ${dias[i - 1].slice(8)}, sem folga no meio`,
+      });
+      inicio = i;
+    }
+  });
+  registra('sequencia', 'Mais de 6 dias seguidos sem folga', 'CLT art. 67', 'alta', seguidos,
+    'Encaixar uma folga dentro de cada sete dias.');
+
+  // ── 3. Intervalo (CLT art. 71: acima de 6h exige 1 hora) ──
+  const semIntervalo = [], intervaloCurto = [];
+  trabalhou.forEach(e => {
+    const bruta = (() => {
+      const i = paraMinutos(e.entrada); let f = paraMinutos(e.saida);
+      if (i === null || f === null) return null;
+      if (f <= i) f += 1440;
+      return f - i;
+    })();
+    if (bruta === null || bruta <= 360) return;
+    const pausa = paraMinutos(e.intervalo), volta = paraMinutos(e.retorno_intervalo);
+    if (pausa === null || volta === null) {
+      semIntervalo.push({ pessoa: nomeDe(e.team_member_id), data: e.work_date,
+        detalhe: `jornada de ${hhmm(bruta)} sem intervalo lançado` });
+    } else if (volta - pausa < 60) {
+      intervaloCurto.push({ pessoa: nomeDe(e.team_member_id), data: e.work_date,
+        detalhe: `jornada de ${hhmm(bruta)} com apenas ${hhmm(volta - pausa)} de intervalo` });
+    }
+  });
+  registra('sem_intervalo', 'Jornada acima de 6 horas sem intervalo lançado', 'CLT art. 71', 'alta', semIntervalo,
+    'Lançar o intervalo na escala, ou reduzir a jornada para até 6 horas.');
+  registra('intervalo_curto', 'Intervalo menor que 1 hora em jornada acima de 6 horas', 'CLT art. 71', 'alta', intervaloCurto,
+    'Completar o intervalo para 1 hora.');
+
+  // ── 4. Jornada acima de 10h (CLT art. 59: 8h + no máximo 2h extras) ──
+  const jornadaLonga = trabalhou
+    .map(e => ({ e, d: duracao(e) }))
+    .filter(x => x.d !== null && x.d > 600)
+    .map(x => ({ pessoa: nomeDe(x.e.team_member_id), data: x.e.work_date,
+                 detalhe: `${hhmm(x.d)} de trabalho, sem contar o intervalo` }));
+  registra('jornada_longa', 'Jornada acima de 10 horas', 'CLT art. 59', 'alta', jornadaLonga,
+    'Dividir a cobertura desse dia com outra pessoa.');
+
+  // ── 5. Dia sem ninguém escalado ──
+  //
+  // Só entre o primeiro e o último dia com alguém trabalhando: fora disso a
+  // escala pode simplesmente não ter sido preenchida ainda, e apontar mês
+  // inteiro de "dia descoberto" seria alarme falso.
+  const diasComGente = [...new Set(trabalhou.map(e => e.work_date))].sort();
+  const descobertos = [];
+  if (diasComGente.length > 1) {
+    const primeiro = diasComGente[0], ultimoDia = diasComGente[diasComGente.length - 1];
+    const cursor = new Date(primeiro + 'T00:00:00Z');
+    const fim = new Date(ultimoDia + 'T00:00:00Z');
+    while (cursor < fim) {
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+      const dia = cursor.toISOString().slice(0, 10);
+      if (dia < ultimoDia && !diasComGente.includes(dia)) {
+        descobertos.push({ pessoa: '—', data: dia, detalhe: 'nenhuma pessoa escalada neste dia' });
+      }
+    }
+  }
+  registra('dia_descoberto', 'Dia sem ninguém escalado', null, 'atencao', descobertos,
+    'Conferir se a loja abre neste dia.');
+
+  // ── 6. Carga acima do time, medida por DIA DISPONÍVEL ──
+  const disponiveis = {};
+  todas.forEach(e => {
+    if (AUSENCIAS.includes(e.status)) return;  // férias não conta como dia disponível
+    disponiveis[e.team_member_id] = (disponiveis[e.team_member_id] || 0) + 1;
+  });
+  const carga = Object.entries(porPessoa).map(([id, es]) => {
+    const minutos = es.reduce((soma, e) => soma + (duracao(e) || 0), 0);
+    const dias = disponiveis[id] || es.length;
+    return { id, minutos, dias, porDia: minutos / Math.max(dias, 1), jornadas: es.length };
+  }).filter(c => c.jornadas >= 5);
+
+  const sobrecarga = [];
+  if (carga.length >= 4) {
+    const ordenado = [...carga].map(c => c.porDia).sort((a, b) => a - b);
+    const mediana = ordenado[Math.floor(ordenado.length / 2)];
+    carga.forEach(c => {
+      if (mediana > 0 && c.porDia > mediana * 1.25) sobrecarga.push({
+        pessoa: nomeDe(c.id), data: null,
+        detalhe: `${hhmm(Math.round(c.minutos))} em ${c.jornadas} dias — ${Math.round((c.porDia / mediana - 1) * 100)}% acima do time`,
+      });
+    });
+  }
+  registra('sobrecarga', 'Carga bem acima da média do time', null, 'atencao', sobrecarga,
+    'Redistribuir alguns dias com quem está mais leve.');
+
+  res.json({
+    periodo: { ano: parseInt(year), mes: parseInt(month), de, ate },
+    resumo: {
+      pessoas: Object.keys(porPessoa).length,
+      jornadas: trabalhou.length,
+      diasCobertos: diasComGente.length,
+      emFerias: [...new Set(todas.filter(e => AUSENCIAS.includes(e.status)).map(e => e.team_member_id))].length,
+    },
+    achados,
+  });
+});
+
 // GET /api/schedule/operators?escala_id=&data=YYYY-MM-DD&cargos=
 //
 // Análise de caixas. Reescrita em 06/09/2026 depois de conferir a escala real
