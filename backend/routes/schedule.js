@@ -266,6 +266,41 @@ router.get('/', async (req, res) => {
   res.json(data || []);
 });
 
+// PUT /api/schedule/lideranca  { requester_id, user_id, lideranca }
+//
+// Marca UMA escala como sendo a da liderança. É ela que responde "tem líder
+// na loja agora".
+//
+// Precisa de marca explícita, e não de adivinhação pelo nome: "Liderança",
+// "Lideranca", "Gestão", "Plantão" — cada loja escreve de um jeito, e um
+// painel que erra a leitura do nome mostra a loja sem líder quando há um.
+//
+// Só admin e master marcam. Se um líder pudesse marcar a própria escala de
+// setor, o painel passaria a contar como cobertura de liderança quem está
+// escalado para outra coisa.
+router.put('/lideranca', async (req, res) => {
+  const { requester_id, user_id, lideranca } = req.body;
+  if (!requester_id || !user_id) return res.status(400).json({ error: 'requester_id e user_id são obrigatórios' });
+
+  const { data: me } = await supabase
+    .from('profiles').select('access_level, company').eq('id', requester_id).maybeSingle();
+  if (!me || !['admin', 'master'].includes(me.access_level)) {
+    return res.status(403).json({ error: 'Só um administrador pode definir a escala da liderança.' });
+  }
+
+  const { data, error } = await supabase
+    .from('profiles').update({ escala_lideranca: !!lideranca }).eq('id', user_id)
+    .select('id, full_name, escala_lideranca, company').single();
+  if (error) {
+    logError({ company: me.company, user_id: requester_id, acao: 'definir_escala_lideranca',
+               tabela: 'profiles', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  logAction({ company: data.company, user_id: requester_id, acao: 'definir_escala_lideranca',
+              tabela: 'profiles', depois: { escala: data.full_name, lideranca: !!lideranca } });
+  res.json(data);
+});
+
 // GET /api/schedule/painel?company=&data=&minuto=
 //
 // Painel ao vivo da loja inteira: quem DEVERIA estar em cada setor agora.
@@ -289,7 +324,7 @@ router.get('/painel', async (req, res) => {
   const agora = minuto != null ? parseInt(minuto, 10) : null;
 
   const { data: perfis } = await supabase
-    .from('profiles').select('id, sector, escala_setor').eq('company', company);
+    .from('profiles').select('id, full_name, sector, escala_setor, escala_lideranca, access_level, active').eq('company', company);
   const ids = (perfis || []).map(p => p.id);
   if (!ids.length) return res.json({ vazio: true, setores: [], totais: {}, alertas: [] });
 
@@ -322,7 +357,7 @@ router.get('/painel', async (req, res) => {
   const mesDe = hoje.slice(0, 7);
   const { data: linhasDoMes } = await supabase
     .from('schedule_entries')
-    .select('user_id, team_members(sector)')
+    .select('user_id, team_members(name, sector)')
     .in('user_id', ids)
     .gte('work_date', `${mesDe}-01`).lte('work_date', `${mesDe}-31`)
     .eq('status', 'trabalha');
@@ -365,6 +400,7 @@ router.get('/painel', async (req, res) => {
       retorno: temPausa ? e.retorno_intervalo : null,
       entrouMin: entrou, saiuMin: saiu,
       situacao,
+      dono: e.user_id,
     });
   });
 
@@ -437,10 +473,82 @@ router.get('/painel', async (req, res) => {
     }
   }
 
+  // ── Liderança ──
+  //
+  // A pergunta que ninguém responde hoje: tem alguém respondendo pela loja
+  // neste momento? Ela não sai da escala dos setores — o líder do açougue
+  // está escalado para o açougue, não para a loja.
+  const semAcento = (t) => String(t || '').toUpperCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+  const idsLideranca = new Set((perfis || []).filter(p => p.escala_lideranca).map(p => p.id));
+  const daLideranca = pessoas.filter(p => idsLideranca.has(p.dono));
+
+  const naEscalaDoMes = new Set();
+  (linhasDoMes || []).forEach(e => {
+    if (idsLideranca.has(e.user_id)) naEscalaDoMes.add(semAcento(e.team_members?.name));
+  });
+
+  // Estar NO TIME e ter HORÁRIO lançado são duas coisas diferentes, e
+  // confundi-las daria um alerta errado: a escala da liderança pode ter o
+  // time inteiro montado e nenhum horário preenchido ainda — que é
+  // exatamente o estado mais comum no começo do mês.
+  const { data: timeLideranca } = idsLideranca.size
+    ? await supabase.from('team_members').select('name, user_id')
+        .in('user_id', [...idsLideranca]).eq('active', true)
+    : { data: [] };
+
+  const nomesNoTime = new Set((timeLideranca || []).map(m => semAcento(m.name)));
+
+  // Compara pelo NOME porque colaborador de escala e perfil de acesso são
+  // cadastros separados, sem ligação no banco. A tela avisa disso: nome
+  // escrito diferente aparece como se estivesse fora da escala.
+  const foraDeEscala = (perfis || [])
+    .filter(p => p.active !== false
+      && ['lider', 'supervisor', 'admin'].includes(p.access_level)
+      && !nomesNoTime.has(semAcento(p.full_name)))
+    .map(p => ({ nome: p.full_name, setor: (p.sector || '').trim() || 'Sem setor' }))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+  // No time da liderança, mas sem nenhum horário lançado no mês.
+  const semHorario = (timeLideranca || [])
+    .filter(m => !naEscalaDoMes.has(semAcento(m.name)))
+    .map(m => m.name)
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  const proximoLider = (() => {
+    if (agora === null) return null;
+    const futuros = daLideranca.filter(p => p.entrouMin > agora);
+    if (!futuros.length) return null;
+    const menor = Math.min(...futuros.map(p => p.entrouMin));
+    const quem = futuros.find(p => p.entrouMin === menor);
+    return { nome: quem.nome, entrada: quem.entrada, saida: quem.saida };
+  })();
+
+  const lideranca = {
+    configurada: idsLideranca.size > 0,
+    dePlantao: daLideranca.filter(p => p.situacao === 'na_loja')
+      .map(p => ({ nome: p.nome, cargo: p.cargo, entrada: p.entrada, saida: p.saida })),
+    emIntervalo: daLideranca.filter(p => p.situacao === 'intervalo')
+      .map(p => ({ nome: p.nome, retorno: p.retorno })),
+    escaladosHoje: daLideranca.length,
+    proximo: proximoLider,
+    foraDeEscala,
+    semHorario,
+    noTime: (timeLideranca || []).length,
+  };
+
   const conta = (situacao) => pessoas.filter(p => p.situacao === situacao).length;
   const alertas = [
-    // Escala não montada vem primeiro: é o problema maior, e é o único que
-    // ninguém descobre sozinho — não há sintoma até o dia chegar.
+    // Loja sem ninguém respondendo por ela vem na frente de tudo.
+    ...(lideranca.configurada && lideranca.dePlantao.length === 0 && agora !== null
+      ? [{ tipo: 'sem_lider', setor: 'Liderança',
+           detalhe: lideranca.emIntervalo.length
+             ? `líder em intervalo, volta ${lideranca.emIntervalo[0].retorno}`
+             : (lideranca.proximo ? `próximo líder entra ${lideranca.proximo.entrada}` : 'nenhum líder escalado agora') }]
+      : []),
+    // Escala não montada vem em seguida: é o único problema que ninguém
+    // descobre sozinho — não há sintoma até o dia chegar.
     ...setores.filter(s => s.semEscalaNoMes)
       .map(s => ({ tipo: 'sem_escala', setor: s.setor })),
     ...setores.filter(s => !s.semEscalaNoMes && s.minimo != null && s.naLoja < s.minimo)
@@ -457,6 +565,7 @@ router.get('/painel', async (req, res) => {
       jaSaiu: conta('ja_saiu'),
     },
     setores,
+    lideranca,
     proximoTurno: proximo,
     alertas,
     // Diz à tela se o mínimo por setor já foi configurado. Sem isso ela

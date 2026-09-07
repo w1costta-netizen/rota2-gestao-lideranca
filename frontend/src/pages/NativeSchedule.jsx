@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { ChevronLeft, ChevronRight, Download, Users, X, Save, Trash2, Plus, CheckCircle,
-         ShieldCheck, AlertTriangle } from 'lucide-react';
+         ShieldCheck, AlertTriangle, Crown } from 'lucide-react';
 import { gerarPDF } from '../lib/exportUtils';
 import api from '../api';
 import { useToast } from '../components/Toast';
@@ -595,6 +595,26 @@ export default function NativeSchedule({ userId, profile }) {
       rotuloDe(a).localeCompare(rotuloDe(b), 'pt-BR') ||
       (a.full_name || '').localeCompare(b.full_name || '', 'pt-BR'));
 
+  // Marcar QUAL escala é a da liderança. Sem marca explícita o painel teria
+  // que adivinhar pelo nome — "Liderança", "Gestão", "Plantão" — e errar a
+  // leitura mostraria a loja sem líder havendo um.
+  const ehAdmin = ['admin', 'master'].includes(profile?.access_level);
+  const escalaDeLideranca = !!perfilDaEscala?.escala_lideranca;
+
+  const alternarLideranca = async () => {
+    const novo = !escalaDeLideranca;
+    try {
+      await api.put('/schedule/lideranca', { requester_id: userId, user_id: effectiveUserId, lideranca: novo });
+      setAllProfiles(prev => prev.map(p =>
+        p.id === effectiveUserId ? { ...p, escala_lideranca: novo } : p));
+      toast(novo
+        ? '✓ Esta passou a ser a escala da liderança'
+        : 'Esta escala não é mais a da liderança');
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Não foi possível alterar.', 'error');
+    }
+  };
+
   const salvarSetorDaEscala = async () => {
     const nome = setorDraft.trim();
     setEditandoSetor(false);
@@ -1113,6 +1133,20 @@ export default function NativeSchedule({ userId, profile }) {
           <button onClick={() => setShowTeam(true)} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}>
             <Users size={11}/> Time
           </button>
+          {(ehAdmin || escalaDeLideranca) && (
+            <button
+              onClick={ehAdmin ? alternarLideranca : undefined}
+              title={ehAdmin
+                ? (escalaDeLideranca ? 'Deixar de ser a escala da liderança' : 'Marcar como a escala da liderança')
+                : 'Esta é a escala da liderança'}
+              style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5,
+                       cursor: ehAdmin ? 'pointer' : 'default', fontSize:11, whiteSpace:'nowrap', flexShrink:0,
+                       border:`1px solid ${escalaDeLideranca ? '#a16207' : '#e2e8f0'}`,
+                       background: escalaDeLideranca ? '#fef9c3' : '#fff',
+                       color: escalaDeLideranca ? '#a16207' : '#374151' }}>
+              <Crown size={11}/> {escalaDeLideranca ? 'Escala da liderança' : 'É a liderança?'}
+            </button>
+          )}
           <button onClick={() => setVerAnalise(true)} title="Conferir a escala do mês"
             style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}>
             <ShieldCheck size={11}/> Análise

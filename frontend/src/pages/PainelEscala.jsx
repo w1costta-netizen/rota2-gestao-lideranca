@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Users, Coffee, LogIn, LogOut, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Users, Coffee, LogIn, LogOut, AlertTriangle, RefreshCw, Crown } from 'lucide-react';
 import api from '../api';
 
 // ─────────────────────────────────────────────────────────────
@@ -153,9 +153,11 @@ export default function PainelEscala({ profile }) {
           {dados.alertas.map(a => (
             <div key={`${a.tipo}-${a.setor}`} style={{ fontSize: 13, padding: '3px 0' }}>
               <b>{a.setor}</b>{' — '}
-              {a.tipo === 'sem_escala'
-                ? 'escala deste mês ainda não foi lançada'
-                : `${a.naLoja} na loja, mínimo ${a.minimo}`}
+              {a.tipo === 'sem_lider'
+                ? `nenhum líder na loja agora — ${a.detalhe}`
+                : a.tipo === 'sem_escala'
+                  ? 'escala deste mês ainda não foi lançada'
+                  : `${a.naLoja} na loja, mínimo ${a.minimo}`}
             </div>
           ))}
         </div>
@@ -168,6 +170,85 @@ export default function PainelEscala({ profile }) {
         <KPI icone={LogIn}  valor={totais.aEntrar ?? 0}       rotulo="Ainda entram hoje"       cor="#3b82f6"/>
         <KPI icone={LogOut} valor={totais.jaSaiu ?? 0}        rotulo="Já saíram"               cor="#94a3b8"/>
       </div>
+
+      {/* Liderança — quem responde pela loja agora.
+          Fica antes dos setores porque é a pergunta de maior consequência:
+          um setor curto atrasa o atendimento, uma loja sem ninguém
+          respondendo por ela trava qualquer decisão. */}
+      {dados?.lideranca && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Crown size={16} color="#a16207"/>
+            <h3 style={{ fontWeight: 700, fontSize: 15 }}>Liderança</h3>
+          </div>
+
+          {!dados.lideranca.configurada ? (
+            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              Nenhuma escala está marcada como a da liderança. Abra a escala dos líderes
+              e toque em <b>É a liderança?</b> na barra do topo — a partir daí este bloco
+              mostra quem responde pela loja a cada momento.
+            </p>
+          ) : (<>
+            {dados.lideranca.dePlantao.length > 0 ? (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                {dados.lideranca.dePlantao.map((l, i) => (
+                  <div key={i} style={{ background: '#fef9c3', border: '1px solid #fde047',
+                                        borderRadius: 8, padding: '8px 12px' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: '#713f12' }}>{l.nome}</div>
+                    <div style={{ fontSize: 11.5, color: '#a16207' }}>
+                      {l.cargo ? `${l.cargo} · ` : ''}até {l.saida}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: '#dc2626', fontWeight: 700, marginBottom: 10 }}>
+                Nenhum líder na loja agora
+                {dados.lideranca.emIntervalo.length > 0 &&
+                  ` — em intervalo, volta ${dados.lideranca.emIntervalo[0].retorno}`}
+                {dados.lideranca.proximo && dados.lideranca.emIntervalo.length === 0 &&
+                  ` — ${dados.lideranca.proximo.nome} entra ${dados.lideranca.proximo.entrada}`}
+              </div>
+            )}
+
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+              {dados.lideranca.escaladosHoje} líder(es) escalado(s) hoje
+              {dados.lideranca.proximo && ` · próximo entra ${dados.lideranca.proximo.entrada}`}
+            </div>
+
+            {/* Estar no time e ter horário lançado são coisas diferentes — o
+                painel não pode dizer "fora da escala" para quem só está
+                esperando o horário ser preenchido. */}
+            {dados.lideranca.semHorario?.length > 0 && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#d97706', marginBottom: 4 }}>
+                  {dados.lideranca.semHorario.length} no time da liderança, sem horário lançado neste mês
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  {dados.lideranca.semHorario.slice(0, 10).join(' · ')}
+                  {dados.lideranca.semHorario.length > 10 && ` +${dados.lideranca.semHorario.length - 10}`}
+                </div>
+              </div>
+            )}
+
+            {dados.lideranca.foraDeEscala?.length > 0 && (
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>
+                  {dados.lideranca.foraDeEscala.length} com acesso de liderança fora da escala
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                  {dados.lideranca.foraDeEscala.slice(0, 10).map(l => l.nome).join(' · ')}
+                  {dados.lideranca.foraDeEscala.length > 10 && ` +${dados.lideranca.foraDeEscala.length - 10}`}
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginTop: 5 }}>
+                  Comparado pelo nome: quem estiver escrito diferente no cadastro do time
+                  aparece aqui mesmo estando na escala.
+                </div>
+              </div>
+            )}
+          </>)}
+        </div>
+      )}
 
       {/* Cobertura por setor */}
       <div className="card" style={{ marginBottom: 20 }}>
