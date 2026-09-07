@@ -466,7 +466,13 @@ router.get('/analise', async (req, res) => {
   const diasComGente = new Set(trabalhou.map(e => e.work_date));
   const ordenados = [...diasComGente].sort();
   const descobertos = [];
-  if (ordenados.length > 1) {
+  // Time de uma pessoa nao tem "dia descoberto": quando ela folga, o dia
+  // fica vazio, e isso e folga, nao falha de cobertura. Medido: os 17
+  // achados desta regra na loja inteira vinham TODOS de escalas de uma
+  // pessoa so - ruido puro. So faz sentido falar em cobertura quando ha um
+  // time para cobrir.
+  const pessoasNoMes = new Set(trabalhou.map(e => e.team_member_id)).size;
+  if (ordenados.length > 1 && pessoasNoMes > 1) {
     const primeiro = ordenados[0], ultimoDia = ordenados[ordenados.length - 1];
 
     // Loja fechada não é falha de escala. Se NENHUMA ocorrência daquele dia
