@@ -202,7 +202,7 @@ router.post('/submit', async (req, res) => {
   if (!(await podeAlterar(req.body?.requester_id, req.body?.user_id))) {
     return res.status(403).json({ error: 'Você pode consultar esta escala, mas não fechá-la.' });
   }
-  const { user_id, year, month } = req.body;
+  const { user_id, year, month, pontos_atencao } = req.body;
   if (!user_id) return res.status(400).json({ error: 'user_id obrigatório' });
 
   const { data, error } = await supabase
@@ -219,7 +219,13 @@ router.post('/submit', async (req, res) => {
     logError({ company: prof?.company, user_id, acao: 'enviar_escala', tabela: 'schedule_submissions', rota: req.originalUrl, erro_mensagem: error.message });
     return res.status(500).json({ error: error.message });
   }
-  logAction({ company: prof?.company, user_id, acao: 'enviar_escala', tabela: 'schedule_submissions', depois: { year, month } });
+  // Quantos pontos de atenção existiam no momento do fechamento fica no log.
+  // Fechar com problema em aberto é decisão de quem fecha — e é legítima, um
+  // líder pode ter motivo. O que não pode é a decisão não deixar rastro.
+  logAction({
+    company: prof?.company, user_id, acao: 'enviar_escala', tabela: 'schedule_submissions',
+    depois: { year, month, ...(pontos_atencao != null ? { pontos_atencao } : {}) },
+  });
   res.json(data);
 });
 

@@ -353,7 +353,7 @@ function diaPorExtenso(iso) {
 // ao RH. Mas o aviso do rodapé não é enfeite: a escala é uma PREVISÃO, e o
 // que vale juridicamente é a jornada cumprida. Prometer conformidade seria
 // mentir para o cliente.
-function ModalAnalise({ escalaId, ano, mes, titulo, aoFechar, toast }) {
+function ModalAnalise({ escalaId, ano, mes, titulo, aoFechar, toast, aoConfirmar, confirmando }) {
   const [dados, setDados] = useState(null);
   const [erro, setErro] = useState(false);
 
@@ -466,11 +466,32 @@ function ModalAnalise({ escalaId, ano, mes, titulo, aoFechar, toast }) {
                 final é do RH da sua empresa.
               </p>
               {dados.achados.length > 0 && (
-                <button className="btn btn-primary btn-sm" onClick={baixarPDF}>
+                <button className="btn btn-sm" onClick={baixarPDF}>
                   <Download size={13}/> Baixar PDF
                 </button>
               )}
             </div>
+
+            {/* Fechando a escala: a conferência deixa de ser opcional.
+                Sem isto a análise dependia de alguém lembrar de clicar, e o
+                líder que não clicasse fechava o mês com o problema dentro.
+                Não bloqueia: fechar com ponto em aberto é decisão de quem
+                fecha, e pode ser legítima. Só não passa despercebido — e o
+                número de pontos em aberto vai para o log. */}
+            {aoConfirmar && (
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end',
+                            marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--border)',
+                            flexWrap: 'wrap' }}>
+                <button className="btn btn-ghost btn-sm" disabled={confirmando} onClick={aoFechar}>
+                  Voltar e corrigir
+                </button>
+                <button className="btn btn-primary btn-sm" disabled={confirmando}
+                  onClick={() => aoConfirmar(dados.achados.reduce((n, a) => n + a.total, 0))}>
+                  {confirmando ? 'Fechando...' :
+                    dados.achados.length ? 'Fechar assim mesmo' : 'Fechar escala'}
+                </button>
+              </div>
+            )}
           </>)}
         </div>
       </div>
@@ -492,6 +513,7 @@ export default function NativeSchedule({ userId, profile }) {
   const [cellSaving, setCellSaving] = useState(false);
   const [showTeam,   setShowTeam]   = useState(false);
   const [verAnalise, setVerAnalise] = useState(false);
+  const [fechando,   setFechando]   = useState(false);
   const [submission, setSubmission] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [loading,    setLoading]    = useState(false);
@@ -694,13 +716,21 @@ export default function NativeSchedule({ userId, profile }) {
     }
   };
 
-  const submitSchedule = async () => {
-    if (somenteLeitura) return;
+  // Fechar a escala passa PELA ANÁLISE, sempre. É o único momento em que dá
+  // para garantir que toda escala recebeu a mesma conferência: até aqui ela
+  // dependia de o líder lembrar de abrir a tela, e quem não lembrasse
+  // fechava o mês com o problema dentro.
+  const confirmarFechamento = async (pontos) => {
     setSubmitting(true);
     try {
-      const res = await api.post('/schedule/submit', { requester_id: userId, user_id: effectiveUserId, year, month });
+      const res = await api.post('/schedule/submit', {
+        requester_id: userId, user_id: effectiveUserId, year, month, pontos_atencao: pontos,
+      });
       setSubmission(res.data);
-      toast('Escala fechada com sucesso!');
+      setFechando(false);
+      toast(pontos > 0
+        ? `Escala fechada com ${pontos} ponto${pontos > 1 ? 's' : ''} de atenção em aberto.`
+        : 'Escala fechada, sem pontos de atenção!');
     } catch {
       toast('Erro ao fechar escala.', 'error');
     } finally {
@@ -1096,7 +1126,7 @@ export default function NativeSchedule({ userId, profile }) {
             </button>
           )}
           {!submission && (
-            <button onClick={submitSchedule} disabled={submitting} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:5, border:'none', background:'#16a34a', color:'#fff', cursor:'pointer', fontWeight:700, fontSize:11, whiteSpace:'nowrap', flexShrink:0 }}>
+            <button onClick={() => !somenteLeitura && setFechando(true)} disabled={submitting} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:5, border:'none', background:'#16a34a', color:'#fff', cursor:'pointer', fontWeight:700, fontSize:11, whiteSpace:'nowrap', flexShrink:0 }}>
               <CheckCircle size={11}/> {submitting ? 'Fechando...' : 'Fechar Escala'}
             </button>
           )}
@@ -1247,13 +1277,15 @@ export default function NativeSchedule({ userId, profile }) {
         />
       )}
 
-      {verAnalise && (
+      {(verAnalise || fechando) && (
         <ModalAnalise
           escalaId={effectiveUserId}
           ano={year} mes={month}
           titulo={`${rotuloDaEscala} · ${MONTHS_PT[month-1]} ${year}`}
           toast={toast}
-          aoFechar={() => setVerAnalise(false)}
+          aoFechar={() => { setVerAnalise(false); setFechando(false); }}
+          aoConfirmar={fechando ? confirmarFechamento : null}
+          confirmando={submitting}
         />
       )}
 
