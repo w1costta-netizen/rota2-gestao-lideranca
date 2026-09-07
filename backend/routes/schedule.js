@@ -527,7 +527,7 @@ router.get('/painel', async (req, res) => {
 
   const lideranca = {
     configurada: idsLideranca.size > 0,
-    dePlantao: daLideranca.filter(p => p.situacao === 'na_loja')
+    naLoja: daLideranca.filter(p => p.situacao === 'na_loja')
       .map(p => ({ nome: p.nome, cargo: p.cargo, entrada: p.entrada, saida: p.saida })),
     emIntervalo: daLideranca.filter(p => p.situacao === 'intervalo')
       .map(p => ({ nome: p.nome, retorno: p.retorno })),
@@ -541,7 +541,7 @@ router.get('/painel', async (req, res) => {
   const conta = (situacao) => pessoas.filter(p => p.situacao === situacao).length;
   const alertas = [
     // Loja sem ninguém respondendo por ela vem na frente de tudo.
-    ...(lideranca.configurada && lideranca.dePlantao.length === 0 && agora !== null
+    ...(lideranca.configurada && lideranca.naLoja.length === 0 && agora !== null
       ? [{ tipo: 'sem_lider', setor: 'Liderança',
            detalhe: lideranca.emIntervalo.length
              ? `líder em intervalo, volta ${lideranca.emIntervalo[0].retorno}`

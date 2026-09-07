@@ -189,9 +189,17 @@ export default function PainelEscala({ profile }) {
               mostra quem responde pela loja a cada momento.
             </p>
           ) : (<>
-            {dados.lideranca.dePlantao.length > 0 ? (
+            {dados.lideranca.naLoja.length > 0 ? (<>
+              {/* "Na loja agora", e nao "de plantao": o app nao registra
+                  plantao, e chamar assim seria dar ao gestor uma certeza que
+                  o dado nao sustenta. Varios lideres podem estar escalados ao
+                  mesmo tempo sem que nenhum responda formalmente pela loja. */}
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
+                            textTransform: 'uppercase', letterSpacing: .4, marginBottom: 7 }}>
+                Na loja agora
+              </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                {dados.lideranca.dePlantao.map((l, i) => (
+                {dados.lideranca.naLoja.map((l, i) => (
                   <div key={i} style={{ background: '#fef9c3', border: '1px solid #fde047',
                                         borderRadius: 8, padding: '8px 12px' }}>
                     <div style={{ fontWeight: 700, fontSize: 13, color: '#713f12' }}>{l.nome}</div>
@@ -201,7 +209,7 @@ export default function PainelEscala({ profile }) {
                   </div>
                 ))}
               </div>
-            ) : (
+            </>) : (
               <div style={{ fontSize: 13, color: '#dc2626', fontWeight: 700, marginBottom: 10 }}>
                 Nenhum líder na loja agora
                 {dados.lideranca.emIntervalo.length > 0 &&
