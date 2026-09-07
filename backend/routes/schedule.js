@@ -384,17 +384,40 @@ router.get('/analise', async (req, res) => {
     'Encaixar uma folga dentro de cada sete dias.');
 
   // ── 3. Intervalo (CLT art. 71: acima de 6h exige 1 hora) ──
-  const semIntervalo = [], intervaloCurto = [];
+  const semIntervalo = [], intervaloCurto = [], intervaloErrado = [];
   trabalhou.forEach(e => {
-    const bruta = (() => {
-      const i = paraMinutos(e.entrada); let f = paraMinutos(e.saida);
-      if (i === null || f === null) return null;
-      if (f <= i) f += 1440;
-      return f - i;
-    })();
-    if (bruta === null || bruta <= 360) return;
+    const entrou = paraMinutos(e.entrada);
+    let saiu = paraMinutos(e.saida);
+    if (entrou === null || saiu === null) return;
+    if (saiu <= entrou) saiu += 1440;
+    const bruta = saiu - entrou;
+
     const pausa = paraMinutos(e.intervalo), volta = paraMinutos(e.retorno_intervalo);
-    if (pausa === null || volta === null) {
+    const temIntervalo = pausa !== null && volta !== null;
+
+    // ERRO DE LANÇAMENTO vem ANTES de qualquer regra de jornada, e é
+    // categoria própria.
+    //
+    // Um retorno anterior à saída para o intervalo não é jornada irregular:
+    // é um dígito trocado na hora de digitar. Tratar isso como infração da
+    // CLT produz um alerta que a pessoa confere na escala, vê que não
+    // procede, e a partir daí passa a duvidar do relatório inteiro — foi
+    // exatamente o que aconteceu. Caso real: 16:00 -> 15:00 em três dias,
+    // enquanto todos os colegas do mesmo turno usam 16:00 -> 17:00.
+    if (temIntervalo && volta <= pausa) {
+      intervaloErrado.push({ pessoa: nomeDe(e.team_member_id), data: e.work_date,
+        detalhe: `saída para o intervalo ${e.intervalo} e retorno ${e.retorno_intervalo} — o retorno está antes da saída, então o horário não pode estar certo` });
+      return;
+    }
+    if (temIntervalo && (pausa < entrou || volta > saiu)) {
+      intervaloErrado.push({ pessoa: nomeDe(e.team_member_id), data: e.work_date,
+        detalhe: `intervalo de ${e.intervalo} a ${e.retorno_intervalo} fora da jornada, que vai de ${e.entrada} a ${e.saida}` });
+      return;
+    }
+
+    if (bruta <= 360) return;   // até 6 horas a lei não exige intervalo
+
+    if (!temIntervalo) {
       semIntervalo.push({ pessoa: nomeDe(e.team_member_id), data: e.work_date,
         detalhe: `entrada ${e.entrada}, saída ${e.saida} — jornada de ${hhmm(bruta)} e nenhum intervalo lançado` });
     } else if (volta - pausa < 60) {
@@ -402,6 +425,9 @@ router.get('/analise', async (req, res) => {
         detalhe: `entrada ${e.entrada}, saída ${e.saida} (${hhmm(bruta)}) — intervalo de ${e.intervalo} a ${e.retorno_intervalo}, só ${volta - pausa} min; faltam ${60 - (volta - pausa)} min` });
     }
   });
+
+  registra('intervalo_errado', 'Intervalo lançado com horário impossível', null, 'atencao', intervaloErrado,
+    'Abrir o dia na escala e corrigir os horários do intervalo — provavelmente é dígito trocado.');
   registra('sem_intervalo', 'Jornada acima de 6 horas sem intervalo lançado', 'CLT art. 71', 'alta', semIntervalo,
     'Lançar o intervalo na escala, ou reduzir a jornada para até 6 horas.');
   registra('intervalo_curto', 'Intervalo menor que 1 hora em jornada acima de 6 horas', 'CLT art. 71', 'alta', intervaloCurto,
