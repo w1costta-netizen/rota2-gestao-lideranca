@@ -92,11 +92,39 @@ export default function CashierAnalysis({ userId, profile }) {
     setCargosLigados(atuais.includes(nome) ? atuais.filter(c => c !== nome) : [...atuais, nome]);
   };
 
-  const linhasExport = () => horas.map(h => ({
-    horario: `${fmt(h.hour)} – ${fmt(h.hour + 1)}`,
-    operadores: h.operators,
-    disponivel: Math.min(h.operators, MAX_CAIXAS),
-  }));
+  // Só o primeiro nome no relatório — a folha é para bater o olho, e nome
+  // completo de dez pessoas numa linha não se lê.
+  //
+  // Com uma ressalva: um time de frente de loja repete primeiro nome. Neste
+  // aqui há dois JOSÉ e duas MARIA, e "José" duas vezes na mesma linha não
+  // identifica ninguém. Então entra a inicial do segundo nome, e SÓ para
+  // quem repete: os demais continuam com o primeiro nome limpo.
+  const apelidos = () => {
+    const todos = [...new Set(horas.flatMap(h => h.names || []))];
+    const capitaliza = (p) => p.charAt(0) + p.slice(1).toLowerCase();
+    const primeiro = (n) => capitaliza(String(n).trim().split(/\s+/)[0] || String(n));
+
+    const quantos = {};
+    todos.forEach(n => { const pr = primeiro(n); quantos[pr] = (quantos[pr] || 0) + 1; });
+
+    const mapa = {};
+    todos.forEach(n => {
+      const partes = String(n).trim().split(/\s+/);
+      const pr = primeiro(n);
+      mapa[n] = quantos[pr] > 1 && partes[1] ? `${pr} ${partes[1].charAt(0)}.` : pr;
+    });
+    return mapa;
+  };
+
+  const linhasExport = () => {
+    const comoChamar = apelidos();
+    return horas.map(h => ({
+      horario: `${fmt(h.hour)} – ${fmt(h.hour + 1)}`,
+      operadores: h.operators,
+      disponivel: Math.min(h.operators, MAX_CAIXAS),
+      nomes: (h.names || []).map(n => comoChamar[n] || n).join(', ') || '—',
+    }));
+  };
 
   function handlePDF() {
     if (!horas.length) return;
@@ -107,8 +135,9 @@ export default function CashierAnalysis({ userId, profile }) {
         titulo: 'Operadores por horário',
         colunas: [
           { header: 'Horário', dataKey: 'horario' },
-          { header: 'Operadores', dataKey: 'operadores' },
+          { header: 'Qtd', dataKey: 'operadores' },
           { header: 'Caixas disponíveis', dataKey: 'disponivel' },
+          { header: 'Quem está na frente', dataKey: 'nomes' },
         ],
         rows: linhasExport(),
       }],
@@ -121,8 +150,8 @@ export default function CashierAnalysis({ userId, profile }) {
       nomeArquivo: 'Caixas',
       abas: [{
         nome: dia,
-        colunas: ['Horário', 'Operadores', 'Caixas disponíveis'],
-        rows: linhasExport().map(l => [l.horario, l.operadores, l.disponivel]),
+        colunas: ['Horário', 'Operadores', 'Caixas disponíveis', 'Quem está na frente'],
+        rows: linhasExport().map(l => [l.horario, l.operadores, l.disponivel, l.nomes]),
       }],
     });
   }
