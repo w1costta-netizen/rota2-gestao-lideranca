@@ -311,6 +311,28 @@ router.get('/painel', async (req, res) => {
     if (s.efetivo_minimo != null) minimoDe[String(s.sector_name).trim()] = s.efetivo_minimo;
   });
 
+  // Setor sem escala lançada é justamente o que mais precisa aparecer, e era
+  // o único que sumia: o painel só conhecia quem tinha lançamento no dia.
+  // Uma padaria esquecida ficava invisível, e o painel dizia "está tudo bem"
+  // sobre um setor que ninguém escalou.
+  //
+  // São dois problemas diferentes e o painel não pode confundi-los:
+  //   nada no mês inteiro  -> a escala ainda não foi montada
+  //   tem no mês, não hoje -> a escala existe e hoje não tem ninguém
+  const mesDe = hoje.slice(0, 7);
+  const { data: linhasDoMes } = await supabase
+    .from('schedule_entries')
+    .select('user_id, team_members(sector)')
+    .in('user_id', ids)
+    .gte('work_date', `${mesDe}-01`).lte('work_date', `${mesDe}-31`)
+    .eq('status', 'trabalha');
+
+  const comEscalaNoMes = new Set();
+  (linhasDoMes || []).forEach(e => {
+    const setor = (e.team_members?.sector || '').trim() || setorDoDono[e.user_id] || 'Sem setor';
+    comEscalaNoMes.add(setor);
+  });
+
   const pessoas = [];
   (linhas || []).forEach(e => {
     const entrou = paraMinutos(e.entrada);
@@ -376,8 +398,29 @@ router.get('/painel', async (req, res) => {
     s.pessoas.sort((a, b) => a.entrouMin - b.entrouMin || a.nome.localeCompare(b.nome, 'pt-BR'));
   });
 
-  const setores = Object.values(porSetor)
-    .sort((a, b) => b.naLoja - a.naLoja || a.setor.localeCompare(b.setor, 'pt-BR'));
+  // Entram também os setores cadastrados na empresa que não têm ninguém
+  // hoje. Sem isto o painel só sabe da existência de quem já foi escalado.
+  (setoresCad || []).forEach(c => {
+    const nome = String(c.sector_name || '').trim();
+    if (!nome || porSetor[nome]) return;
+    porSetor[nome] = {
+      setor: nome, minimo: c.efetivo_minimo ?? null,
+      naLoja: 0, intervalo: 0, aEntrar: 0, jaSaiu: 0, totalDia: 0, pico: 0, pessoas: [],
+    };
+  });
+
+  Object.values(porSetor).forEach(s => {
+    s.semEscalaHoje  = s.totalDia === 0;
+    s.semEscalaNoMes = s.totalDia === 0 && !comEscalaNoMes.has(s.setor);
+  });
+
+  // Quem tem gente na loja primeiro; os sem escala no mês por último, porque
+  // são pendência de montagem e não leitura da operação de agora.
+  const setores = Object.values(porSetor).sort((a, b) =>
+    Number(a.semEscalaNoMes) - Number(b.semEscalaNoMes) ||
+    Number(a.semEscalaHoje) - Number(b.semEscalaHoje) ||
+    b.naLoja - a.naLoja ||
+    a.setor.localeCompare(b.setor, 'pt-BR'));
 
   // Próximo turno: a próxima hora de entrada que ainda não chegou.
   let proximo = null;
@@ -395,9 +438,14 @@ router.get('/painel', async (req, res) => {
   }
 
   const conta = (situacao) => pessoas.filter(p => p.situacao === situacao).length;
-  const alertas = setores
-    .filter(s => s.minimo != null && s.naLoja < s.minimo)
-    .map(s => ({ setor: s.setor, naLoja: s.naLoja, minimo: s.minimo }));
+  const alertas = [
+    // Escala não montada vem primeiro: é o problema maior, e é o único que
+    // ninguém descobre sozinho — não há sintoma até o dia chegar.
+    ...setores.filter(s => s.semEscalaNoMes)
+      .map(s => ({ tipo: 'sem_escala', setor: s.setor })),
+    ...setores.filter(s => !s.semEscalaNoMes && s.minimo != null && s.naLoja < s.minimo)
+      .map(s => ({ tipo: 'abaixo_minimo', setor: s.setor, naLoja: s.naLoja, minimo: s.minimo })),
+  ];
 
   res.json({
     data: hoje,

@@ -148,11 +148,14 @@ export default function PainelEscala({ profile }) {
         <div className="card" style={{ marginBottom: 16, borderLeft: '3px solid #dc2626' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
             <AlertTriangle size={16} color="#dc2626"/>
-            <b style={{ fontSize: 14 }}>Setor abaixo do efetivo mínimo</b>
+            <b style={{ fontSize: 14 }}>Precisa de atenção</b>
           </div>
           {dados.alertas.map(a => (
-            <div key={a.setor} style={{ fontSize: 13, padding: '3px 0' }}>
-              <b>{a.setor}</b> — {a.naLoja} na loja, mínimo {a.minimo}
+            <div key={`${a.tipo}-${a.setor}`} style={{ fontSize: 13, padding: '3px 0' }}>
+              <b>{a.setor}</b>{' — '}
+              {a.tipo === 'sem_escala'
+                ? 'escala deste mês ainda não foi lançada'
+                : `${a.naLoja} na loja, mínimo ${a.minimo}`}
             </div>
           ))}
         </div>
@@ -184,27 +187,46 @@ export default function PainelEscala({ profile }) {
         ) : setores.map(s => {
           const { cor, pct } = semaforo(s);
           const aberto = setorAberto === s.setor;
+          const vazio = s.semEscalaHoje;
           return (
             <div key={s.setor}
-              onClick={() => setSetorAberto(aberto ? null : s.setor)}
-              style={{ padding: '9px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
+              onClick={() => !vazio && setSetorAberto(aberto ? null : s.setor)}
+              style={{ padding: '9px 0', borderBottom: '1px solid var(--border)',
+                       cursor: vazio ? 'default' : 'pointer', opacity: vazio ? .75 : 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <span style={{ width: 9, height: 9, borderRadius: '50%', background: cor, flexShrink: 0 }}/>
+                <span style={{ width: 9, height: 9, borderRadius: '50%', flexShrink: 0,
+                               background: vazio ? 'transparent' : cor,
+                               border: vazio ? '1.5px dashed var(--text-muted)' : 'none' }}/>
                 <span style={{ fontWeight: aberto ? 800 : 600, fontSize: 13.5, flex: 1, minWidth: 120 }}>
                   {s.setor}
                 </span>
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {s.intervalo > 0 && `${s.intervalo} em intervalo · `}
-                  {s.aEntrar > 0 && `${s.aEntrar} a entrar · `}
-                  {s.totalDia} no dia
-                </span>
-                <span style={{ fontWeight: 800, fontSize: 15, color: cor, minWidth: 54, textAlign: 'right' }}>
-                  {s.naLoja}{s.minimo != null ? ` / ${s.minimo}` : ''}
-                </span>
+
+                {/* Os dois vazios não são a mesma coisa e o painel não pode
+                    misturá-los: um é escala esquecida, o outro é um dia sem
+                    ninguém numa escala que existe. */}
+                {vazio ? (
+                  <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 99, padding: '2px 9px',
+                                 color: s.semEscalaNoMes ? '#dc2626' : 'var(--text-muted)',
+                                 background: s.semEscalaNoMes ? '#dc262618' : 'var(--surface-2)',
+                                 border: `1px solid ${s.semEscalaNoMes ? '#dc262640' : 'var(--border)'}` }}>
+                    {s.semEscalaNoMes ? 'escala não lançada' : 'ninguém escalado hoje'}
+                  </span>
+                ) : (<>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {s.intervalo > 0 && `${s.intervalo} em intervalo · `}
+                    {s.aEntrar > 0 && `${s.aEntrar} a entrar · `}
+                    {s.totalDia} no dia
+                  </span>
+                  <span style={{ fontWeight: 800, fontSize: 15, color: cor, minWidth: 54, textAlign: 'right' }}>
+                    {s.naLoja}{s.minimo != null ? ` / ${s.minimo}` : ''}
+                  </span>
+                </>)}
               </div>
-              <div style={{ height: 6, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden', marginTop: 6 }}>
-                <div style={{ width: `${pct}%`, height: '100%', background: cor, transition: 'width .3s' }}/>
-              </div>
+              {!vazio && (
+                <div style={{ height: 6, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden', marginTop: 6 }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: cor, transition: 'width .3s' }}/>
+                </div>
+              )}
             </div>
           );
         })}
