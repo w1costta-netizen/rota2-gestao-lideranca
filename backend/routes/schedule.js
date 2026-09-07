@@ -285,9 +285,19 @@ router.get('/', async (req, res) => {
 const FOLGAS = ['folga', 'dsr', 'folga_premio', 'folga_feriado', 'feriado'];
 const AUSENCIAS = ['ferias'];
 
+// ATENÇÃO AO Number('') === 0.
+//
+// A versão anterior fazia String(t || '').split(':').map(Number) e conferia
+// só a hora: para um campo VAZIO isso devolvia 0, e não null. Resultado:
+// "sem intervalo" virava "intervalo das 00:00 às 00:00", que a checagem de
+// horário impossível leu como retorno antes da saída. Foram 80 alertas
+// falsos numa loja só — todos em quem legitimamente não tem intervalo, como
+// aprendiz de 4 horas.
 const paraMinutos = (t) => {
-  const [h, m] = String(t || '').split(':').map(Number);
-  return Number.isFinite(h) ? h * 60 + (m || 0) : null;
+  const partes = String(t ?? '').trim().split(':');
+  if (partes.length < 2) return null;
+  const h = Number(partes[0]), m = Number(partes[1]);
+  return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null;
 };
 
 // Jornada em minutos, já descontado o intervalo. Vira o dia quando a saída é
