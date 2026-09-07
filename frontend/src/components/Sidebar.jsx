@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Lock, Trophy, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, MessageCircle, PenTool } from 'lucide-react';
+import { Lock, Trophy, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, MessageCircle, PenTool, MonitorDot } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission, moduloNaoContratado } from '../lib/permissions';
 import { useTheme } from '../contexts/ThemeContext';
@@ -16,6 +16,7 @@ const NAV_SOLO = [
   { id: 'estoque',          label: 'Estoque',          icon: Package,     perm: 'estoque' },
   { id: 'importador_estoque', label: 'Import. Estoque', icon: PackagePlus, perm: 'importador_estoque' },
   { id: 'nscale',           label: 'Escala',           icon: CalendarRange, perm: 'escala' },
+  { id: 'painel',           label: 'Painel da Loja',   icon: MonitorDot,  perm: 'painel' },
   { id: 'cashier',          label: 'Caixas',           icon: ShoppingCart, perm: 'caixas' },
   { id: 'organograma',      label: 'Organograma',      icon: GitBranch,   perm: 'organograma' },
   { id: 'usersadmin',       label: 'Usuários',         icon: ShieldCheck, perm: 'usuarios' },
@@ -74,6 +75,7 @@ const NAV_GROUPS = [
     icon:  Briefcase,
     items: [
       { id: 'nscale',            label: 'Escala',               icon: CalendarRange, perm: 'escala' },
+      { id: 'painel',            label: 'Painel da Loja',       icon: MonitorDot,    perm: 'painel' },
       { id: 'cashier',           label: 'Caixas',               icon: ShoppingCart,  perm: 'caixas' },
       { id: 'relatorios',        label: 'Tour 4x4',             icon: Camera,        perm: 'relatorios' },
       { id: 'campanhas',         label: 'Flyers',               icon: Tag,           perm: 'campanhas' },

@@ -266,6 +266,157 @@ router.get('/', async (req, res) => {
   res.json(data || []);
 });
 
+// GET /api/schedule/painel?company=&data=&minuto=
+//
+// Painel ao vivo da loja inteira: quem DEVERIA estar em cada setor agora.
+//
+// O QUE ESTE PAINEL NÃO É: não é controle de presença. O app não coleta
+// ponto, chegada nem atraso — nada disso existe no banco. Ele mostra o
+// PLANEJADO, que é o que se sabe de verdade. Chamar de "presentes" o que na
+// realidade é "escalados" seria inventar um dado, e um painel que mente uma
+// vez não volta a ser consultado.
+//
+// Mesmo assim resolve uma pergunta que hoje ninguém responde sem abrir a
+// escala e contar na mão: quantas pessoas deveriam estar na padaria agora.
+router.get('/painel', async (req, res) => {
+  const { company, data: dia, minuto } = req.query;
+  if (!company) return res.status(400).json({ error: 'company obrigatório' });
+
+  const hoje = dia || new Date().toISOString().slice(0, 10);
+  // O minuto vem do navegador de propósito: o servidor roda em UTC e a loja
+  // não. Deixar o fuso para o cliente é mais simples e mais certo do que
+  // adivinhar aqui.
+  const agora = minuto != null ? parseInt(minuto, 10) : null;
+
+  const { data: perfis } = await supabase
+    .from('profiles').select('id, sector, escala_setor').eq('company', company);
+  const ids = (perfis || []).map(p => p.id);
+  if (!ids.length) return res.json({ vazio: true, setores: [], totais: {}, alertas: [] });
+
+  const setorDoDono = {};
+  (perfis || []).forEach(p => { setorDoDono[p.id] = (p.escala_setor || p.sector || '').trim(); });
+
+  const { data: linhas, error } = await supabase
+    .from('schedule_entries')
+    .select('user_id, team_member_id, entrada, intervalo, retorno_intervalo, saida, status, team_members(name, role, sector)')
+    .in('user_id', ids)
+    .eq('work_date', hoje)
+    .eq('status', 'trabalha');
+  if (error) return res.status(500).json({ error: error.message });
+
+  const { data: setoresCad } = await supabase
+    .from('company_sectors').select('sector_name, efetivo_minimo').eq('company', company);
+  const minimoDe = {};
+  (setoresCad || []).forEach(s => {
+    if (s.efetivo_minimo != null) minimoDe[String(s.sector_name).trim()] = s.efetivo_minimo;
+  });
+
+  const pessoas = [];
+  (linhas || []).forEach(e => {
+    const entrou = paraMinutos(e.entrada);
+    let saiu = paraMinutos(e.saida);
+    if (entrou === null || saiu === null) return;
+    if (saiu <= entrou) saiu += 1440;
+
+    const pausa = paraMinutos(e.intervalo);
+    const volta = paraMinutos(e.retorno_intervalo);
+    const temPausa = pausa !== null && volta !== null && volta > pausa;
+
+    let situacao = 'sem_hora';
+    if (agora !== null) {
+      if (agora < entrou) situacao = 'a_entrar';
+      else if (agora >= saiu) situacao = 'ja_saiu';
+      else if (temPausa && agora >= pausa && agora < volta) situacao = 'intervalo';
+      else situacao = 'na_loja';
+    }
+
+    // O setor do COLABORADOR manda; o do dono da escala é rede de segurança
+    // para quem ainda não preencheu o campo por pessoa.
+    const setor = (e.team_members?.sector || '').trim() || setorDoDono[e.user_id] || 'Sem setor';
+
+    pessoas.push({
+      nome: e.team_members?.name || 'Sem nome',
+      cargo: e.team_members?.role || '',
+      setor,
+      entrada: e.entrada, saida: e.saida,
+      intervalo: temPausa ? e.intervalo : null,
+      retorno: temPausa ? e.retorno_intervalo : null,
+      entrouMin: entrou, saiuMin: saiu,
+      situacao,
+    });
+  });
+
+  const porSetor = {};
+  pessoas.forEach(p => {
+    const s = (porSetor[p.setor] = porSetor[p.setor] || {
+      setor: p.setor, minimo: minimoDe[p.setor] ?? null,
+      naLoja: 0, intervalo: 0, aEntrar: 0, jaSaiu: 0, totalDia: 0, pico: 0, pessoas: [],
+    });
+    s.totalDia++;
+    s.pessoas.push(p);
+    if (p.situacao === 'na_loja') s.naLoja++;
+    else if (p.situacao === 'intervalo') s.intervalo++;
+    else if (p.situacao === 'a_entrar') s.aEntrar++;
+    else if (p.situacao === 'ja_saiu') s.jaSaiu++;
+  });
+
+  // Pico do dia em cada setor: sem um mínimo cadastrado, é a única régua
+  // honesta para o semáforo — compara o agora com o próprio melhor momento
+  // do setor, e não com um número inventado.
+  Object.values(porSetor).forEach(s => {
+    for (let m = 0; m < 1440; m += 15) {
+      const quantos = s.pessoas.filter(p => {
+        if (m < p.entrouMin || m >= p.saiuMin) return false;
+        const pa = paraMinutos(p.intervalo), vo = paraMinutos(p.retorno);
+        if (pa !== null && vo !== null && m >= pa && m < vo) return false;
+        return true;
+      }).length;
+      if (quantos > s.pico) s.pico = quantos;
+    }
+    s.pessoas.sort((a, b) => a.entrouMin - b.entrouMin || a.nome.localeCompare(b.nome, 'pt-BR'));
+  });
+
+  const setores = Object.values(porSetor)
+    .sort((a, b) => b.naLoja - a.naLoja || a.setor.localeCompare(b.setor, 'pt-BR'));
+
+  // Próximo turno: a próxima hora de entrada que ainda não chegou.
+  let proximo = null;
+  if (agora !== null) {
+    const futuras = pessoas.filter(p => p.entrouMin > agora).map(p => p.entrouMin);
+    if (futuras.length) {
+      const hora = Math.min(...futuras);
+      proximo = {
+        minuto: hora,
+        hora: `${String(Math.floor(hora / 60) % 24).padStart(2, '0')}:${String(hora % 60).padStart(2, '0')}`,
+        pessoas: pessoas.filter(p => p.entrouMin === hora)
+          .map(p => ({ nome: p.nome, setor: p.setor, entrada: p.entrada, saida: p.saida })),
+      };
+    }
+  }
+
+  const conta = (situacao) => pessoas.filter(p => p.situacao === situacao).length;
+  const alertas = setores
+    .filter(s => s.minimo != null && s.naLoja < s.minimo)
+    .map(s => ({ setor: s.setor, naLoja: s.naLoja, minimo: s.minimo }));
+
+  res.json({
+    data: hoje,
+    totais: {
+      escaladosHoje: pessoas.length,
+      naLoja: conta('na_loja'),
+      intervalo: conta('intervalo'),
+      aEntrar: conta('a_entrar'),
+      jaSaiu: conta('ja_saiu'),
+    },
+    setores,
+    proximoTurno: proximo,
+    alertas,
+    // Diz à tela se o mínimo por setor já foi configurado. Sem isso ela
+    // ofereceria um alerta que nunca dispara, sem explicar por quê.
+    temMinimoConfigurado: Object.keys(minimoDe).length > 0,
+  });
+});
+
 // GET /api/schedule/analise?escala_id=&year=&month=
 //
 // Pontos de atenção de uma escala fechada. Procura o que ninguém enxerga

@@ -12,6 +12,7 @@ export const MODULES = [
   { key: 'escala',         label: 'Escala',                 icon: '📋', desc: 'Ver e gerenciar a própria escala' },
   { key: 'escala_setores', label: 'Escala — Setores',       icon: '🗂️', desc: 'Visualizar escalas de outros setores' },
   { key: 'caixas',         label: 'Caixas',                 icon: '💳', desc: 'Análise de desempenho de caixas' },
+  { key: 'painel',         label: 'Painel da Loja',         icon: '🖥️', desc: 'Quem está escalado em cada setor agora, ao vivo' },
   { key: 'campanhas',      label: 'Conferência Flyers',     icon: '🏷️', desc: 'Sinalização e conferência de materiais promocionais' },
   { key: 'relatorios',     label: 'Tour 4x4',               icon: '📷', desc: 'Criar e compartilhar tours com fotos anotadas' },
   { key: 'vendas_gestao', label: 'Gestão de Vendas',       icon: '📂', desc: 'Importar planilhas e fechar mês de vendas' },
@@ -28,10 +29,10 @@ export const MODULES = [
 ];
 
 export const DEFAULT_PERMISSIONS = {
-  master:       ['lojas', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio', 'logs'],
-  admin:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio', 'logs'],
-  supervisor:   ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio'],
-  lider:        ['dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio'],
+  master:       ['painel', 'lojas', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio', 'logs'],
+  admin:        ['painel', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio', 'logs'],
+  supervisor:   ['painel', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio'],
+  lider:        ['painel', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'produtividade', 'torneio'],
   // Agenda e escala entram aqui porque são a agenda e a escala DA PRÓPRIA
   // pessoa — quem trabalha no dia precisa saber quando trabalha. Ver a
   // escala de outros setores ('escala_setores') continua fora.
@@ -60,11 +61,12 @@ export const PREMIUM_MODULES = ['vendas_gestao', 'vendas_painel', 'estoque', 'im
 //
 // Ao criar um módulo novo: suba CATALOGO_VERSAO em 1 e registre a chave
 // dele em MODULOS_DA_VERSAO com esse número. Só isso.
-export const CATALOGO_VERSAO = 3;
+export const CATALOGO_VERSAO = 4;
 
 const MODULOS_DA_VERSAO = {
   2: ['chat', 'anotacoes', 'diario'],
   3: ['torneio'],
+  4: ['painel'],
 };
 
 function modulosDepoisDe(versao) {

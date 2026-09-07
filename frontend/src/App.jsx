@@ -96,6 +96,7 @@ const Profile                = lazy(() => import('./pages/Profile'));
 const CashierAnalysis        = lazy(() => import('./pages/CashierAnalysis'));
 const TeamMembers            = lazy(() => import('./pages/TeamMembers'));
 const NativeSchedule         = lazy(() => import('./pages/NativeSchedule'));
+const PainelEscala           = lazy(() => import('./pages/PainelEscala'));
 const UsersAdmin             = lazy(() => import('./pages/UsersAdmin'));
 const Comunicados            = lazy(() => import('./pages/Comunicados'));
 const Tarefas                = lazy(() => import('./pages/Tarefas'));
@@ -437,6 +438,7 @@ function AppContent() {
     team:         () => <TeamMembers userId={userId} userSector={userSector} />,
     nscale:       () => has('escala')     ? <NativeSchedule userId={userId} profile={effectiveProfile} />           : <AccessDenied />,
     cashier:      () => has('caixas')     ? <CashierAnalysis userId={userId} profile={effectiveProfile} />        : <AccessDenied />,
+    painel:       () => has('painel')     ? <PainelEscala profile={effectiveProfile} />                           : <AccessDenied />,
     profile:      () => <Profile />,
     comunicados:  () => <Comunicados userId={userId} profile={effectiveProfile} />,
     tarefas:      () => has('tarefas')    ? <Tarefas userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
