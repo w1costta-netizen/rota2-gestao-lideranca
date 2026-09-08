@@ -531,6 +531,12 @@ router.get('/painel', async (req, res) => {
       .map(p => ({ nome: p.nome, cargo: p.cargo, entrada: p.entrada, saida: p.saida })),
     emIntervalo: daLideranca.filter(p => p.situacao === 'intervalo')
       .map(p => ({ nome: p.nome, retorno: p.retorno })),
+    // Nome antigo mantido junto com o novo. Frontend e backend sobem
+    // separados, e por um tempo os dois convivem: durante a troca, e para
+    // quem ainda tem o arquivo antigo em cache, ler dePlantao.length de um
+    // campo que sumiu derruba a tela inteira. Um apelido custa uma linha.
+    dePlantao: daLideranca.filter(p => p.situacao === 'na_loja')
+      .map(p => ({ nome: p.nome, cargo: p.cargo, entrada: p.entrada, saida: p.saida })),
     escaladosHoje: daLideranca.length,
     proximo: proximoLider,
     foraDeEscala,
