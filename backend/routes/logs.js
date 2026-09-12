@@ -4,7 +4,7 @@ const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function getProfile(id) {
-  const { data } = await supabase.from('profiles').select('access_level, company').eq('id', id).single();
+  const { data } = await supabase.from('profiles').select('access_level, company, grupo').eq('id', id).single();
   return data;
 }
 
@@ -121,6 +121,25 @@ router.post('/empresas-extras', async (req, res) => {
   if (!company?.trim()) return res.status(400).json({ error: 'Nome da loja obrigatório' });
   const me = await getProfile(requester_id);
   if (!me || !['admin', 'master'].includes(me.access_level)) return res.status(403).json({ error: 'Acesso negado' });
+
+  // A LOJA PRECISA SER DO MESMO GRUPO. Antes qualquer admin digitava o nome
+  // de qualquer loja e passava a ler os logs dela — nomes, ações, dados de
+  // antes e depois de outro cliente. A rota nasceu quando só havia uma
+  // conta gerenciando várias lojas; com clientes de fora, virou uma porta
+  // entre inquilinos. Master continua livre; admin só alcança loja do
+  // próprio grupo, que é o caso legítimo (dono de rede).
+  if (me.access_level !== 'master') {
+    const { data: alvo } = await supabase
+      .from('stores').select('name, grupo').eq('name', company.trim()).maybeSingle();
+    const mesmoGrupo = alvo && me.grupo && alvo.grupo === me.grupo;
+    if (!mesmoGrupo) {
+      registrarLog('adicionar_loja_extra', 'admin_companies', 'erro', {
+        company: me.company, user_id: requester_id, rota: req.originalUrl,
+        erro: `tentou liberar "${company.trim()}", que não é do grupo desta conta`,
+      });
+      return res.status(403).json({ error: 'Você só pode liberar lojas do seu próprio grupo.' });
+    }
+  }
 
   const { data, error } = await supabase
     .from('admin_companies')

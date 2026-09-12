@@ -693,6 +693,14 @@ tbody td { padding: 12px 14px; font-size: 13.5px; color: var(--text); }
   );
   animation: skeleton-shimmer 1.4s ease infinite;
 }
+/* Botão fantasma no escuro. A cor dele é --secondary (#2E1A47, roxo
+   escuro), que no claro contrasta com o fundo branco e no escuro some em
+   cima do cartão #2A1A3D: "Cancelar", "Fechar" e "Ver ativas" ficavam
+   praticamente invisíveis. A variável não muda porque ela também é FUNDO
+   (a barra lateral); só o botão troca de cor. */
+[data-theme="dark"] .btn-ghost { color: var(--text); }
+[data-theme="dark"] .btn-ghost:hover { background: rgba(255,255,255,.08); color: var(--text); }
+
 [data-theme="dark"] .skeleton::after {
   background: linear-gradient(90deg,
     transparent 0%,

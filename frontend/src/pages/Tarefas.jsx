@@ -251,7 +251,17 @@ export default function Tarefas({ userId, profile, setPage }) {
   useEffect(() => {
     if (isAdmin && userId) {
       const q = company ? `&company=${encodeURIComponent(company)}` : '';
-      api.get(`/admin/users?requester_id=${userId}${q}`).then(r => setProfiles(r.data || [])).catch(() => {});
+      // /admin/users exclui quem pede — certo na tela de Usuários, errado
+      // aqui: a tarefa vai para mim por padrão e eu não aparecia na lista
+      // para ver ou desmarcar. Numa loja nova a lista dizia "Nenhum usuário
+      // cadastrado" enquanto a tarefa ia para o admin às escondidas.
+      api.get(`/admin/users?requester_id=${userId}${q}`)
+        .then(r => {
+          const outros = (r.data || []).filter(p => p.id !== userId);
+          const eu = { id: userId, full_name: `${profile?.full_name || 'Eu'} (eu)`, access_level: profile?.access_level };
+          setProfiles([eu, ...outros]);
+        })
+        .catch(() => setProfiles([{ id: userId, full_name: `${profile?.full_name || 'Eu'} (eu)` }]));
     }
   }, [userId, isAdmin, company]);
 

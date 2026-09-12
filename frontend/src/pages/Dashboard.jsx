@@ -261,7 +261,7 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       {/* Stats */}
       <div className="stats-grid">
         <StatCard icon={CheckSquare} color="#6366f1" bg="#6366f115"
-          value={tarefasPendentes.length} label="Tarefas pendentes"
+          value={tarefasPendentes.length} label="Tarefas atrasadas"
           onClick={() => setPage('tarefas')}/>
         <StatCard icon={Clock} color="#f59e0b" bg="#f59e0b15"
           value={tarefasEmAndamento.length} label="Em andamento"

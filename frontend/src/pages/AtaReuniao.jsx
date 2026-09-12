@@ -164,12 +164,16 @@ function BlocoPauta({ pauta, indice, aoMudar, aoRemover }) {
   );
 }
 
-const formVazio = () => ({
+// Quem escreve a ata estava na reunião: entra como participante de saída.
+// Sem isto, numa loja nova, a lista de participantes nascia vazia, o autor
+// não era incluído e a assinatura ficava impossível — "Você não é
+// participante desta ata" para quem acabou de escrevê-la.
+const formVazio = (autor = null) => ({
   // id vazio = ata nova. Preenchido = está editando uma que já existe.
   id: null,
   titulo: '', data: new Date().toISOString().slice(0, 10),
   hora_inicio: '', hora_fim: '', local: '',
-  participantes: [], pautas: [], decisoes: [], acoes: [], proxima_reuniao: '',
+  participantes: autor ? [autor] : [], pautas: [], decisoes: [], acoes: [], proxima_reuniao: '',
 });
 
 export default function AtaReuniao({ userId, profile }) {
@@ -183,7 +187,8 @@ export default function AtaReuniao({ userId, profile }) {
 
   // Começa do rascunho, se houver: a recuperação precisa acontecer já na
   // primeira renderização, senão a tela pisca vazia antes de preencher.
-  const [form, setForm] = useState(() => lerRascunho(userId) || formVazio());
+  const eu = { id: userId, full_name: profile?.full_name || '' };
+  const [form, setForm] = useState(() => lerRascunho(userId) || formVazio(eu));
   const [rascunhoRecuperado, setRascunhoRecuperado] = useState(() => !!lerRascunho(userId));
   const [novaPautaTitulo, setNovaPautaTitulo] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -231,7 +236,7 @@ export default function AtaReuniao({ userId, profile }) {
   const descartarRascunho = () => {
     if (!window.confirm('Descartar o que já foi preenchido?')) return;
     try { localStorage.removeItem(chaveRascunho(userId)); } catch { /* nada */ }
-    setForm(formVazio());
+    setForm(formVazio(eu));
     setRascunhoRecuperado(false);
   };
 
@@ -334,7 +339,7 @@ export default function AtaReuniao({ userId, profile }) {
 
   const cancelarEdicao = () => {
     const id = form.id;
-    setForm(formVazio());
+    setForm(formVazio(eu));
     setRascunhoRecuperado(false);
     if (id) abrirDetalhe(id); else setAba('lista');
   };
@@ -369,7 +374,7 @@ export default function AtaReuniao({ userId, profile }) {
       // antes significaria perder tudo se o envio falhasse.
       try { localStorage.removeItem(chaveRascunho(userId)); } catch { /* nada */ }
       setRascunhoRecuperado(false);
-      setForm(formVazio());
+      setForm(formVazio(eu));
       await loadAtas();
       abrirDetalhe(editando ? form.id : r.data.id);
     } catch (e) {
@@ -649,7 +654,7 @@ export default function AtaReuniao({ userId, profile }) {
           <button className="btn btn-primary btn-sm" onClick={() => {
             // Se havia uma edição aberta, "Nova ata" começa de fato do zero —
             // senão a pessoa editaria a ata antiga achando que criava outra.
-            if (form.id) setForm(formVazio());
+            if (form.id) setForm(formVazio(eu));
             setAba('nova');
           }}>
             <Plus size={14}/> Nova ata

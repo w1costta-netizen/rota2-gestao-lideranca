@@ -68,11 +68,16 @@ export default function Listas({ userId }) {
   const adicionarItem = async (texto) => {
     const t = (texto ?? novoItem).trim();
     if (!t || !ativa) return;
+    // Limpa ANTES de esperar o servidor. O Render leva quase um segundo;
+    // quem digita rápido escrevia o próximo item em cima do anterior, que
+    // ainda estava no campo, e o segundo saía "Item umItem dois".
+    if (texto === undefined) setNovoItem('');
     try {
       const r = await api.post(`/listas/${ativa}/itens`, { requester_id: userId, texto: t });
       setListas(ls => ls.map(l => l.id === ativa ? { ...l, itens: [...l.itens, r.data] } : l));
-      setNovoItem('');
     } catch {
+      // Devolve o texto para a pessoa não perder o que digitou.
+      if (texto === undefined) setNovoItem(t);
       toast('Erro ao adicionar item', 'error');
     }
   };

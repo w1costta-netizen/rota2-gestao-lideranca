@@ -332,7 +332,7 @@ export default function UsersAdmin({ userId, profile }) {
   const FORM_KEY = 'rota2_new_user_form';
   const savedForm = (() => { try { return JSON.parse(sessionStorage.getItem(FORM_KEY) || 'null'); } catch { return null; } })();
   const [form, setForm] = useState(savedForm || {
-    full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:'', company:''
+    full_name:'', email:'', password:'', role:'', sector:'', access_level:'colaborador', phone:'', company:''
   });
   const [selectedCompany, setSelectedCompany] = useState('');
   const [allStores, setAllStores] = useState([]);
@@ -404,7 +404,7 @@ export default function UsersAdmin({ userId, profile }) {
       });
       setCreatedUser({ full_name: form.full_name, email: form.email, password: form.password });
       sessionStorage.removeItem(FORM_KEY);
-      setForm({ full_name:'', email:'', password:'', role:'', sector:'', access_level:'lider', phone:'', company:'' });
+      setForm({ full_name:'', email:'', password:'', role:'', sector:'', access_level:'colaborador', phone:'', company:'' });
       load();
     } catch (e) {
       setError(e.response?.data?.error || 'Erro ao criar usuário.');

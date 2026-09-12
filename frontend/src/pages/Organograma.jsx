@@ -551,7 +551,7 @@ export default function Organograma({ userId, profile }) {
       <div className="page-header">
         <div>
           <div className="page-title">Organograma</div>
-          <div className="page-subtitle">{pessoas.length} pessoas na equipe</div>
+          <div className="page-subtitle">{pessoas.length} {pessoas.length === 1 ? 'pessoa' : 'pessoas'} na equipe</div>
         </div>
         <div style={{ display:'flex', gap:8 }}>
           {directReports.length > 0 && (

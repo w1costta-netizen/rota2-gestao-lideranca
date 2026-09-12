@@ -214,7 +214,12 @@ function TeamModal({ userId, userSector, onClose }) {
     try {
       await api.post('/team', { user_id:userId, ...form });
       setForm({ matricula:'', name:'', role:'', sector:userSector||'' });
-      setAdding(false); load();
+      setAdding(false);
+      // Espera a lista voltar antes de liberar o botão. No Render gratuito a
+      // busca leva quase um segundo, e nesse intervalo a tela dizia "Nenhum
+      // colaborador cadastrado" com a pessoa já salva — parecia que não
+      // tinha gravado.
+      await load();
     } catch {}
     setSaving(false);
   };
