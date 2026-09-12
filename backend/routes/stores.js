@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { enviarPush } = require('../lib/notificacoes');
+const { bloquearLoja, reativarLoja } = require('../lib/assinatura');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
 async function requireMaster(req, res) {
@@ -149,7 +150,7 @@ router.put('/:id/approve', async (req, res) => {
 
   const { data, error } = await supabase
     .from('stores')
-    .update({ active: true, approved_by: req.body.requester_id })
+    .update({ active: true, approved_by: req.body.requester_id, motivo_bloqueio: null })
     .eq('id', req.params.id)
     .select().single();
   if (error) {
@@ -181,17 +182,16 @@ router.put('/:id/disable', async (req, res) => {
   const me = await requireMaster(req, res);
   if (!me) return;
 
-  const { data, error } = await supabase
-    .from('stores')
-    .update({ active: false })
-    .eq('id', req.params.id)
-    .select().single();
-  if (error) {
-    logError({ user_id: req.body.requester_id, acao: 'desativar_loja', tabela: 'stores', rota: req.originalUrl, erro_mensagem: error.message });
-    return res.status(500).json({ error: error.message });
-  }
-  logAction({ company: data.name, user_id: req.body.requester_id, acao: 'desativar_loja', tabela: 'stores', antes: { id: data.id, name: data.name } });
-  res.json(data);
+  // Antes só marcava a loja como inativa; os usuários dela continuavam
+  // entrando. O master desativava acreditando que cortou o acesso, e não
+  // tinha cortado. Agora passa pelo mesmo bloqueio do reembolso.
+  const { data: loja } = await supabase
+    .from('stores').select('id, name, active, acesso_ate, motivo_bloqueio')
+    .eq('id', req.params.id).maybeSingle();
+  if (!loja) return res.status(404).json({ error: 'Loja não encontrada' });
+  const r = await bloquearLoja(loja, 'desativada pelo master', { quem: req.body.requester_id, rota: req.originalUrl });
+  if (!r.ok) return res.status(500).json({ error: r.erro });
+  res.json({ ...loja, active: false, pessoas_bloqueadas: r.pessoas });
 });
 
 // DELETE /api/stores/:id — master apaga a loja de vez

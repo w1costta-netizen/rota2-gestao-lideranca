@@ -4,13 +4,26 @@ const crypto  = require('crypto');
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 const { enviarPush } = require('../lib/notificacoes');
+const {
+  lojaPorEmail, bloquearLoja, reativarLoja, definirAcessoAte,
+  calcularAcessoAte, bloquearVencidas, avisarMaster,
+} = require('../lib/assinatura');
 const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 // Hotmart envia o "hottok" no header x-hotmart-hottok para validar autenticidade
+// FECHA quando não está configurado. A versão anterior aceitava qualquer
+// requisição se HOTMART_HOTTOK faltasse no ambiente — qualquer pessoa podia
+// forjar uma compra aprovada e ganhar acesso, e, agora que o webhook também
+// bloqueia, forjar um reembolso e derrubar a loja de um cliente. Webhook de
+// pagamento sem segredo é porta aberta; se o segredo faltar, o log diz e o
+// alerta de "compra sem acesso" avisa na primeira compra real.
 function validarHottok(req) {
   const hottok = process.env.HOTMART_HOTTOK;
-  if (!hottok) return true; // se não configurado, aceita (remover em produção)
+  if (!hottok) {
+    console.error('[Hotmart] HOTMART_HOTTOK não configurado — webhook recusado');
+    return false;
+  }
   return req.headers['x-hotmart-hottok'] === hottok;
 }
 
@@ -28,22 +41,90 @@ router.post('/webhook', async (req, res) => {
 
   console.log('[Hotmart] Evento recebido:', evento);
 
-  // 2. Só processa compra aprovada
-  if (evento !== 'PURCHASE_APPROVED') {
-    return res.status(200).json({ ok: true, msg: 'Evento ignorado' });
-  }
-
-  const email = dados?.buyer?.email || dados?.purchase?.buyer?.email;
-  const nome  = dados?.buyer?.name  || dados?.purchase?.buyer?.name || '';
+  const email = dados?.buyer?.email || dados?.purchase?.buyer?.email || dados?.subscriber?.email;
+  const nome  = dados?.buyer?.name  || dados?.purchase?.buyer?.name  || dados?.subscriber?.name || '';
 
   if (!email) {
     console.error('[Hotmart] E-mail não encontrado no payload');
-    registrarLog('webhook_hotmart', 'pending_signups', 'erro', { rota: req.originalUrl, erro: 'Compra aprovada sem e-mail no payload' });
+    registrarLog('webhook_hotmart', 'pending_signups', 'erro', { rota: req.originalUrl, erro: `${evento} sem e-mail no payload` });
     return res.status(400).json({ error: 'E-mail não encontrado' });
   }
 
+  // 2. O que acontece quando o dinheiro VOLTA ou PARA.
+  //
+  // Antes, tudo que não fosse compra aprovada era "Evento ignorado": quem
+  // pedia reembolso no dia 6 ficava com o app — e com os usuários da loja
+  // inteira — para sempre. Um mês pago comprava acesso permanente.
+  const BLOQUEIA_NA_HORA = {
+    PURCHASE_REFUNDED:   'reembolso na Hotmart',
+    PURCHASE_CHARGEBACK: 'chargeback na Hotmart',
+  };
+  if (BLOQUEIA_NA_HORA[evento]) {
+    const { loja } = await lojaPorEmail(email);
+    registrarLog('webhook_hotmart', 'stores', 'sucesso', { company: loja?.name, depois: { evento, email } });
+    if (!loja) return res.status(200).json({ ok: true, msg: 'Sem loja para este e-mail' });
+    const r = await bloquearLoja(loja, BLOQUEIA_NA_HORA[evento], { rota: req.originalUrl });
+    return res.status(200).json({ ok: true, msg: 'Loja bloqueada', ...r });
+  }
+
+  // Cancelou a assinatura: o que foi pago continua valendo. A pessoa que
+  // cancela no dia 10 comprou 30 dias, e cortar na hora é cortar o que ela
+  // pagou — o CDC não deixa e a disputa vem certa. A loja vence na data
+  // "acesso até", e a checagem diária bloqueia quando ela passar.
+  if (evento === 'SUBSCRIPTION_CANCELLATION') {
+    const { loja } = await lojaPorEmail(email);
+    registrarLog('webhook_hotmart', 'stores', 'sucesso', { company: loja?.name, depois: { evento, email } });
+    if (!loja) return res.status(200).json({ ok: true, msg: 'Sem loja para este e-mail' });
+    if (!loja.acesso_ate) {
+      // Loja de antes desta regra, sem data: dá 30 dias em vez de bloquear
+      // no escuro.
+      const d = new Date(); d.setUTCDate(d.getUTCDate() + 30);
+      await definirAcessoAte(loja, d.toISOString().slice(0, 10), { origem: 'cancelamento sem data anterior' });
+    }
+    await avisarMaster('📉 Assinatura cancelada',
+      `${loja.name} cancelou. O acesso vale até ${loja.acesso_ate || 'daqui a 30 dias'} e bloqueia sozinho depois.`,
+      req.originalUrl);
+    return res.status(200).json({ ok: true, msg: 'Cancelamento registrado' });
+  }
+
+  // Atraso e contestação: a Hotmart tem carência própria e tenta de novo.
+  // Bloquear aqui seria punir cartão recusado por engano. Só avisa.
+  if (['PURCHASE_DELAYED', 'PURCHASE_PROTEST'].includes(evento)) {
+    const { loja } = await lojaPorEmail(email);
+    registrarLog('webhook_hotmart', 'stores', 'sucesso', { company: loja?.name, depois: { evento, email } });
+    if (loja) await avisarMaster('⚠️ Pagamento com problema',
+      `${loja.name}: ${evento === 'PURCHASE_DELAYED' ? 'pagamento atrasado' : 'pagamento contestado'}. Sem bloqueio por enquanto.`,
+      req.originalUrl);
+    return res.status(200).json({ ok: true, msg: 'Aviso registrado' });
+  }
+
+  if (evento !== 'PURCHASE_APPROVED') {
+    registrarLog('webhook_hotmart', 'pending_signups', 'sucesso', { depois: { evento, email, tratado: false } });
+    return res.status(200).json({ ok: true, msg: 'Evento ignorado' });
+  }
+
   console.log('[Hotmart] Compra aprovada para:', email);
-  registrarLog('webhook_hotmart', 'pending_signups', 'sucesso', { depois: { evento, email, nome } });
+  const acesso = calcularAcessoAte(dados);
+  registrarLog('webhook_hotmart', 'pending_signups', 'sucesso', { depois: { evento, email, nome, acesso_ate: acesso.data, origem: acesso.origem } });
+
+  // 3a. RENOVAÇÃO ou RECOMPRA: a conta já existe.
+  //
+  // Assinatura mensal manda PURCHASE_APPROVED todo mês. O código antigo não
+  // sabia disso: gerava um token novo e mandava "Criar minha conta agora"
+  // para quem já tinha conta — todo mês. Se a loja estiver bloqueada
+  // (reembolso, vencimento), a compra nova reativa.
+  {
+    const { perfil, loja } = await lojaPorEmail(email);
+    if (perfil && loja) {
+      if (!loja.active) {
+        await reativarLoja(loja, { rota: req.originalUrl, acessoAte: acesso.data });
+        await avisarMaster('✅ Loja reativada por nova compra', `${loja.name} voltou. Acesso até ${acesso.data}.`, req.originalUrl);
+        return res.status(200).json({ ok: true, msg: 'Loja reativada', acesso_ate: acesso.data });
+      }
+      await definirAcessoAte(loja, acesso.data, { origem: `renovação (${acesso.origem})` });
+      return res.status(200).json({ ok: true, msg: 'Renovação registrada', acesso_ate: acesso.data });
+    }
+  }
 
   // 3. Verificar se já existe cadastro pendente para este e-mail
   const { data: existente } = await supabase
@@ -62,7 +143,7 @@ router.post('/webhook', async (req, res) => {
   const token = crypto.randomUUID();
   const { error } = await supabase
     .from('pending_signups')
-    .upsert({ email, token, used: false }, { onConflict: 'email' });
+    .upsert({ email, token, used: false, acesso_ate: acesso.data }, { onConflict: 'email' });
 
   if (error) {
     console.error('[Hotmart] Erro ao salvar pending_signup:', error);
@@ -188,6 +269,17 @@ async function avisarFalhaDeAcesso(email, motivo) {
   }
 }
 
+// POST /api/hotmart/verificar-vencimentos
+//
+// Chamado uma vez por dia pelo agendamento do GitHub. Bloqueia as lojas cuja
+// data "acesso até" já passou. Não tem segredo de propósito: só aplica uma
+// regra que já é verdade no banco — quem chamar de fora não muda nada além
+// de antecipar em algumas horas o que o próprio agendamento faria.
+router.post('/verificar-vencimentos', async (req, res) => {
+  const r = await bloquearVencidas({ rota: req.originalUrl });
+  res.status(r.ok ? 200 : 500).json(r);
+});
+
 // GET /api/hotmart/verificar-token?token=
 // Usado pela tela de cadastro para validar o link recebido por e-mail.
 // Fica no backend (service role) para não expor a tabela pending_signups
@@ -221,7 +313,7 @@ router.post('/ativar-conta', async (req, res) => {
   // 1. Validar token
   const { data: signup, error: tokenErr } = await supabase
     .from('pending_signups')
-    .select('id, email, used')
+    .select('id, email, used, acesso_ate')
     .eq('token', token)
     .single();
 
@@ -234,7 +326,11 @@ router.post('/ativar-conta', async (req, res) => {
   // (tabela "stores" + profiles.company), não uma tabela "tenants" separada.
   const { data: store, error: storeErr } = await supabase
     .from('stores')
-    .insert({ name: company, active: true, created_by: user_id, approved_by: user_id })
+    // A data de acesso veio da compra e fica na loja: é ela que a
+    // checagem diária olha. Sem data, a loja nunca vence — e é o que
+    // acontece com as lojas de antes desta regra.
+    .insert({ name: company, active: true, created_by: user_id, approved_by: user_id,
+              acesso_ate: signup.acesso_ate || null })
     .select()
     .single();
 

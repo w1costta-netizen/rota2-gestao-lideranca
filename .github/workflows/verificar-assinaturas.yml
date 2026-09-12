@@ -1,0 +1,31 @@
+# Bloqueia as lojas cuja assinatura venceu.
+#
+# A Hotmart avisa reembolso e cancelamento na hora, pelo webhook. O que ela
+# NÃO avisa é "passou a data e ninguém renovou" — isso o app precisa olhar
+# sozinho, todo dia. É este agendamento.
+#
+# A rota só aplica uma regra que já é verdade no banco (data "acesso até"
+# menor que hoje), então não tem segredo: quem chamar de fora não consegue
+# nada além de antecipar em algumas horas o que este job faria.
+#
+# 04:10 UTC = 01:10 em Brasília: madrugada, loja fechada, ninguém bloqueado
+# no meio do expediente. O "10" foge do minuto cheio, que é quando o GitHub
+# mais atrasa por fila.
+
+name: Verificar assinaturas vencidas
+
+on:
+  schedule:
+    - cron: '10 4 * * *'
+  workflow_dispatch:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/hotmart/verificar-vencimentos
+        run: |
+          resposta=$(curl -s --max-time 120 -X POST \
+            https://rota2-gestao-lideranca.onrender.com/api/hotmart/verificar-vencimentos)
+          echo "Resposta: $resposta"
+          echo "$resposta" | grep -q '"ok":true' || echo "::warning::A verificação não respondeu ok"

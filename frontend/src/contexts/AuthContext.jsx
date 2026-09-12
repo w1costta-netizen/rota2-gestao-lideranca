@@ -16,6 +16,7 @@ const AuthCtx = createContext({
   signOut: async () => {},
   loadProfile: async () => {},
   contaDesativada: false,
+  motivoBloqueio: null,
   motivoPerfil: null,
 });
 
@@ -28,6 +29,7 @@ export function AuthProvider({ children }) {
   // como "Acesso restrito" por um instante e depois liberava sozinho.
   const [profile, setProfile] = useState(undefined);
   const [contaDesativada, setContaDesativada] = useState(false);
+  const [motivoBloqueio, setMotivoBloqueio] = useState(null);
   // Por que o perfil não veio. A tela de erro mostrava sempre o mesmo texto
   // para causas diferentes — falta de rede, perfil inexistente, permissão do
   // banco — e sem essa distinção não há como investigar sem adivinhar.
@@ -74,6 +76,9 @@ export function AuthProvider({ children }) {
       // que tornava a falha perigosa.
       if (data && data.active === false) {
         setContaDesativada(true);
+        // Bloqueado porque a LOJA parou de pagar é diferente de ter sido
+        // desligado pelo gestor: a pessoa precisa saber com quem falar.
+        setMotivoBloqueio(data.bloqueado_pela_loja ? 'loja' : 'pessoa');
         setProfile(null);
         try { await supabase.auth.signOut(); } catch { /* sair local basta */ }
         return null;
@@ -159,7 +164,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthCtx.Provider value={{ session, profile, signOut, loadProfile, contaDesativada, motivoPerfil }}>
+    <AuthCtx.Provider value={{ session, profile, signOut, loadProfile, contaDesativada, motivoBloqueio, motivoPerfil }}>
       {children}
     </AuthCtx.Provider>
   );
