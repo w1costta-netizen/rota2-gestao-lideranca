@@ -1,0 +1,29 @@
+# Manda o resumo diário por e-mail: tarefas pendentes e agenda de hoje.
+#
+# Sai do SERVIDOR, não do navegador. Os lembretes antigos do app só
+# disparavam quando alguém estava com o app aberto; este sai todo dia,
+# com a loja fechada e o celular no bolso.
+#
+# 09:00 UTC = 06:00 em Brasília — antes do primeiro turno. O horário do
+# GitHub é aproximado e atrasa alguns minutos sob fila; não importa aqui.
+#
+# A rota só manda para quem ainda não recebeu hoje, então chamar de novo
+# (ou de fora) não duplica nada.
+
+name: Resumo diário por e-mail
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/resumo/diario
+        run: |
+          resposta=$(curl -s --max-time 280 -X POST \
+            https://rota2-gestao-lideranca.onrender.com/api/resumo/diario)
+          echo "Resposta: $resposta"
+          echo "$resposta" | grep -q '"ok":true' || echo "::warning::O resumo não respondeu ok"

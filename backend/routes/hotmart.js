@@ -178,14 +178,11 @@ async function enviarEmailAcesso(email, nome, token) {
         <!-- Header -->
         <tr>
           <td style="background:#2E1A47;padding:32px 40px;text-align:center;">
-            <div style="display:inline-block;width:48px;height:48px;background:#EE5A24;border-radius:50%;margin-bottom:12px;">
-              <svg width="48" height="48" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="24" cy="24" r="16" fill="none" stroke="white" stroke-width="1.5"/>
-                <polygon points="24,9 27,24 24,21 21,24" fill="white"/>
-                <polygon points="24,39 27,24 24,27 21,24" fill="rgba(255,255,255,0.4)"/>
-                <circle cx="24" cy="24" r="2.5" fill="white"/>
-              </svg>
-            </div>
+            <!-- Logo hospedada. Antes era um SVG embutido, que o Gmail
+                 descarta: o cliente que paga pelo Gmail recebia o e-mail
+                 sem marca nenhuma. -->
+            <img src="https://rotalider.com.br/icon-192.png" width="52" height="52" alt="Rota Líder"
+                 style="display:block;margin:0 auto 12px;width:52px;height:52px;border-radius:12px;border:0;">
             <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:700;">Rota Líder</h1>
             <p style="color:rgba(255,255,255,0.7);margin:4px 0 0;font-size:14px;">Gestão de Liderança</p>
           </td>

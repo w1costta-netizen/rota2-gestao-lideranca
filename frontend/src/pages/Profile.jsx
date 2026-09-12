@@ -288,6 +288,32 @@ export default function Profile() {
 
       <CardNotificacoes userId={session?.user?.id} />
 
+      {/* Resumo diário por e-mail. Vem ligado para todo mundo — o rodapé
+          do e-mail desliga com um clique, e este é o lugar de religar. */}
+      <div className="card" style={{ marginTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Resumo diário por e-mail</div>
+            <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+              Às 6h da manhã, só nos dias em que você tiver tarefa pendente ou compromisso na agenda.
+              Quem não tem nada no dia não recebe nada.
+            </p>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0 }}>
+            <input type="checkbox" checked={profile?.email_resumo !== false}
+              onChange={async e => {
+                const ligado = e.target.checked;
+                try {
+                  await api.put('/resumo/preferencia', { requester_id: session?.user?.id, email_resumo: ligado });
+                  await loadProfile(session?.user?.id);
+                  toast(ligado ? 'Resumo diário ligado.' : 'Resumo diário desligado.');
+                } catch { toast('Não foi possível salvar.', 'error'); }
+              }}/>
+            <span style={{ fontSize: 13 }}>{profile?.email_resumo !== false ? 'Ligado' : 'Desligado'}</span>
+          </label>
+        </div>
+      </div>
+
       {/* Preview da nova foto */}
       {(photoPreview || photoError) && (
         <div className="card" style={{ marginBottom: 20, border: photoError ? '1.5px solid var(--danger)' : '1.5px solid var(--accent)' }}>
