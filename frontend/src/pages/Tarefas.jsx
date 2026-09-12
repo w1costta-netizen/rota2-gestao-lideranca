@@ -222,7 +222,9 @@ export default function Tarefas({ userId, profile, setPage }) {
   const [form, setForm]         = useState(EMPTY);
   const [lideresSel, setLideresSel]     = useState([]);
   const [saving, setSaving]     = useState(false);
-  const [filter, setFilter]     = useState('hoje');
+  // Começa em "Abertas", não em "Hoje": numa loja nova, "Hoje" vazia com
+  // tarefas criadas parecia app quebrado. Quem quer só o dia clica em Hoje.
+  const [filter, setFilter]     = useState('abertas');
   const [filterResp, setFilterResp] = useState('');
   const [filterTag,  setFilterTag]  = useState('');
   const [viewMode, setViewMode] = useState('lista');       // 'lista' | 'calendario'
@@ -325,11 +327,18 @@ export default function Tarefas({ userId, profile, setPage }) {
 
   // ── Visão Lista ──────────────────────────────────────
   const todayYMDList = toYMD(new Date());
+  // Toda tarefa precisa caber em pelo menos uma aba. Antes, uma tarefa nova
+  // com prazo na semana que vem não era de hoje, não estava atrasada, não
+  // estava em andamento nem concluída — e por isso não aparecia em aba
+  // NENHUMA. O cabeçalho contava "2 tarefas" e todas as abas diziam zero.
+  // Foi o primeiro defeito que um cliente novo encontrou: criou a primeira
+  // tarefa e ela sumiu. "Abertas" cobre tudo o que ainda não foi concluído.
   let filtered = list.filter(t => {
     if (filter === 'hoje')        return t.due_date === todayYMDList;
-    if (filter === 'pendente')    return isOverdue(t.due_date, t.due_time, t.status);
+    if (filter === 'atrasada')    return isOverdue(t.due_date, t.due_time, t.status);
     if (filter === 'em_andamento') return t.status === 'em_andamento';
     if (filter === 'concluida')   return t.status === 'concluida';
+    if (filter === 'abertas')     return t.status !== 'concluida';
     return true;
   });
   if (filterResp) filtered = filtered.filter(t => t.assigned_to === filterResp);
@@ -343,8 +352,9 @@ export default function Tarefas({ userId, profile, setPage }) {
   });
 
   const counts = {
+    abertas: list.filter(t => t.status !== 'concluida').length,
     hoje: list.filter(t => t.due_date === todayYMDList).length,
-    pendente: list.filter(t => isOverdue(t.due_date, t.due_time, t.status)).length,
+    atrasada: list.filter(t => isOverdue(t.due_date, t.due_time, t.status)).length,
     em_andamento: list.filter(t => t.status === 'em_andamento').length,
     concluida: list.filter(t => t.status === 'concluida').length,
   };
@@ -590,7 +600,7 @@ export default function Tarefas({ userId, profile, setPage }) {
         <>
           {/* Filtros de status */}
           <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-            {[['hoje','Hoje','var(--primary)'],['pendente','Pendentes','#f59e0b'],['em_andamento','Em andamento','#6366f1'],['concluida','Concluídas','#10b981']].map(([key,label,color]) => (
+            {[['abertas','Abertas','var(--text)'],['hoje','Hoje','var(--primary)'],['atrasada','Atrasadas','#f59e0b'],['em_andamento','Em andamento','#6366f1'],['concluida','Concluídas','#10b981']].map(([key,label,color]) => (
               <button key={key} onClick={() => setFilter(key)} style={{
                 padding:'6px 14px', borderRadius:20, fontSize:12, fontWeight:600, cursor:'pointer',
                 background: filter===key ? color : 'var(--surface)',
