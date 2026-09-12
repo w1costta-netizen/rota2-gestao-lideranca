@@ -329,8 +329,13 @@ router.post('/ativar-conta', async (req, res) => {
     // A data de acesso veio da compra e fica na loja: é ela que a
     // checagem diária olha. Sem data, a loja nunca vence — e é o que
     // acontece com as lojas de antes desta regra.
+    // MODULOS PREMIUM COMECAM VAZIOS, explicitamente. Vendas, Estoque, Flyers
+    // e Conferencia sao contratados a parte; a assinatura da Hotmart nao os
+    // inclui. Sem esta linha a loja nascia com o PADRAO da coluna no banco -
+    // e o padrao entregava tudo de graca. O master libera modulo por modulo
+    // em Lojas quando o cliente contratar.
     .insert({ name: company, active: true, created_by: user_id, approved_by: user_id,
-              acesso_ate: signup.acesso_ate || null })
+              acesso_ate: signup.acesso_ate || null, modulos_premium: [] })
     .select()
     .single();
 
