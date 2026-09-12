@@ -94,7 +94,10 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       setListas(li.data || []);
       setAnotacoes(an.data || []);
       setAgenda(ag.data || []);
-      setStats({ totalUsers: (users.data || []).length });
+      // /admin/users exclui quem pede. Se eu sou desta loja, eu conto —
+      // senão uma loja de uma pessoa diz "0 usuários cadastrados".
+      const euConto = authProfile?.company && authProfile.company === company ? 1 : 0;
+      setStats({ totalUsers: (users.data || []).length + euConto });
       setNaoLidasChat(chat.data?.total || 0);
       setConversas(Array.isArray(convs.data) ? convs.data : []);
     }).finally(() => setLoading(false));

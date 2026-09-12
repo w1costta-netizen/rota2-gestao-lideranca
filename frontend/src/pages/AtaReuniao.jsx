@@ -212,7 +212,9 @@ export default function AtaReuniao({ userId, profile }) {
         // Fora eu mesmo (quem cria já é participante) e quem está
         // desligado: convidar alguém inativo para uma reunião não faz
         // sentido, e ele nunca chegaria para assinar.
-        .then(r => setEquipe((r.data || []).filter(p => p.id !== userId && p.active !== false)))
+        // Eu também entro na lista: já venho marcado, e assim dá para me
+        // desmarcar e o contador para de dizer "1 de 0".
+        .then(r => setEquipe((r.data || []).filter(p => p.active !== false)))
         .catch(() => {});
     }
   }, [userId, profile?.company]);

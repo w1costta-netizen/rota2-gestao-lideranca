@@ -61,7 +61,10 @@ router.get('/:id', async (req, res) => {
   if (error || !ata) return res.status(404).json({ error: 'Ata não encontrada' });
   if (ata.company !== me.company) return res.status(403).json({ error: 'Acesso negado' });
 
-  const ids = ata.participantes || [];
+  // Quem escreveu a ata conta como participante mesmo que não esteja na
+  // lista — o caso das atas criadas antes de o autor entrar sozinho. Sem
+  // isto elas ficavam órfãs: "0 participantes", ninguém para assinar.
+  const ids = [...new Set([...(ata.participantes || []), ...(ata.criado_por ? [ata.criado_por] : [])])];
   const { data: perfis } = ids.length
     ? await supabase.from('profiles').select('id, full_name').in('id', ids)
     : { data: [] };
@@ -263,9 +266,9 @@ router.post('/:id/assinar', async (req, res) => {
   const me = await getRequester(req.body.requester_id);
   if (!me) return res.status(401).json({ error: 'requester_id inválido' });
 
-  const { data: ata } = await supabase.from('atas_reuniao').select('company, participantes').eq('id', req.params.id).single();
+  const { data: ata } = await supabase.from('atas_reuniao').select('company, participantes, criado_por').eq('id', req.params.id).single();
   if (!ata || ata.company !== me.company) return res.status(404).json({ error: 'Ata não encontrada' });
-  if (!(ata.participantes || []).includes(me.id)) return res.status(403).json({ error: 'Você não é participante desta ata' });
+  if (!(ata.participantes || []).includes(me.id) && ata.criado_por !== me.id) return res.status(403).json({ error: 'Você não é participante desta ata' });
 
   const { data: perfil } = await supabase.from('profiles').select('assinatura_texto, full_name').eq('id', me.id).single();
   const texto = perfil?.assinatura_texto?.trim() || perfil?.full_name || me.full_name;

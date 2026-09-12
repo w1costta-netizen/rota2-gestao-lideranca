@@ -1223,7 +1223,12 @@ export default function NativeSchedule({ userId, profile }) {
                     {fmt(first)} – {fmt(last)}
                   </span>
                 </div>
-                <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
+                {/* Em tela de tablet (~900px) as sete colunas espremiam e os
+                    quatro horários de cada célula se sobrepunham, ilegíveis.
+                    Rolar de lado preserva a leitura; a largura mínima é a que
+                    a grade precisa para os horários caberem. */}
+                <div className="week-scroll" style={{ overflowX:'auto' }}>
+                <table style={{ width:'100%', minWidth:860, borderCollapse:'collapse', tableLayout:'fixed' }}>
                   <thead><WeekHeader week={week}/></thead>
                   <tbody>
                     {gruposDeMembros.map(g => (
@@ -1261,6 +1266,7 @@ export default function NativeSchedule({ userId, profile }) {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             );
           })}
@@ -1288,6 +1294,8 @@ export default function NativeSchedule({ userId, profile }) {
         .pdf-generating .print-only { display: table-cell !important; }
         .pdf-generating .pdf-page-break { page-break-before: always; }
         .pdf-generating .week-block { border-radius:0 !important; margin:4px 0 !important; box-shadow:none !important; overflow:visible !important; }
+        .pdf-generating .week-scroll { overflow:visible !important; }
+        .pdf-generating .week-scroll table { min-width:0 !important; }
         /* Remove clipping para que colunas extras não sejam cortadas */
         .pdf-generating { overflow:visible !important; border-radius:0 !important; box-shadow:none !important; }
         /* Permite nomes completos no PDF */

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Users, Plus, Edit2, X, Save, Trash2, UserCheck, UserX, Settings, AlertTriangle } from 'lucide-react';
 import api from '../api';
+import { useAuth } from '../contexts/AuthContext';
 import { MODULES, DEFAULT_PERMISSIONS, CATALOGO_VERSAO, getEffectivePermissions } from '../lib/permissions';
 import Avatar from '../components/Avatar';
 
@@ -329,6 +330,9 @@ export default function UsersAdmin({ userId, profile }) {
   const [createdUser, setCreatedUser] = useState(null); // dados pós-criação p/ WhatsApp
 
   const isMaster = profile?.access_level === 'master';
+  // O perfil REAL, não o da loja em que o master está olhando: o master
+  // visitando uma loja não é funcionário dela e não pode entrar na conta.
+  const { profile: perfilReal } = useAuth();
   const FORM_KEY = 'rota2_new_user_form';
   const savedForm = (() => { try { return JSON.parse(sessionStorage.getItem(FORM_KEY) || 'null'); } catch { return null; } })();
   const [form, setForm] = useState(savedForm || {
@@ -514,7 +518,7 @@ export default function UsersAdmin({ userId, profile }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">Gestão de Usuários</h1>
-          <p className="page-subtitle">{company || '—'} · {users.filter(u=>u.active).length} ativos</p>
+          <p className="page-subtitle">{company || '—'} · {users.filter(u=>u.active).length + (perfilReal?.company && perfilReal.company === company ? 1 : 0)} ativos</p>
         </div>
         {isMaster && allStores.length > 1 && (
           <select

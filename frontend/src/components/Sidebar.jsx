@@ -156,7 +156,14 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
         ...(indent && !collapsed ? { paddingLeft: 28 } : {}),
       }}
     >
-      <Icon size={indent ? 15 : 18} style={indent ? { opacity: 0.85 } : {}}/>
+      {/* Recolhido, o cadeado vira uma marca no canto do ícone: sem isso, num
+          tablet o cliente não descobre que Vendas e Estoque são pagos. */}
+      <span style={{ position: 'relative', display: 'inline-flex' }}>
+        <Icon size={indent ? 15 : 18} style={indent ? { opacity: 0.85 } : {}}/>
+        {collapsed && bloqueado(NAV_PERM[id]) && (
+          <Lock size={9} style={{ position: 'absolute', right: -6, bottom: -4, opacity: .9 }}/>
+        )}
+      </span>
       {!collapsed && <span style={indent ? { fontSize: 13 } : {}}>{label}</span>}
       {!collapsed && bloqueado(NAV_PERM[id]) && (
         <Lock size={12} style={{ marginLeft: 'auto', opacity: .55, flexShrink: 0 }}/>

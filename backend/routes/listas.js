@@ -17,7 +17,11 @@ router.get('/', async (req, res) => {
 
   const result = (listas || []).map(l => ({
     ...l,
-    itens: (l.lista_itens || []).sort((a, b) => a.ordem - b.ordem),
+    // Três itens digitados em sequência chegam ao mesmo tempo, leem a mesma
+    // contagem e recebem a mesma "ordem"; sem desempate a lista embaralhava
+    // (seis, cinco, quatro). created_at tem microssegundos: desempata.
+    itens: (l.lista_itens || []).sort((a, b) =>
+      (a.ordem - b.ordem) || String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id))),
     lista_itens: undefined,
   }));
   res.json(result);
