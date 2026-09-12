@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, Trophy, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, MessageCircle, PenTool, MonitorDot } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission, moduloNaoContratado } from '../lib/permissions';
@@ -109,7 +109,21 @@ const SOLO_AFTER  = [];
 export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, isMobile }) {
   const { profile, signOut } = useAuth();
   const { theme, toggle } = useTheme();
-  const collapsed = !isMobile && width !== undefined && width < 100;
+  // Tela estreita de desktop (768–900px): um painel lateral do navegador,
+  // uma janela dividida ao meio. O CSS já escondia os textos do menu nessa
+  // faixa, mas a largura arrastada pelo usuário — gravada como estilo
+  // inline — vencia a regra e a barra ficava LARGA e SEM TEXTO ao mesmo
+  // tempo: 320px só de ícones centralizados, o pior dos dois mundos. Foi
+  // assim que a tela apareceu com o painel do Claude aberto ao lado. Aqui
+  // o modo recolhido de verdade assume, com dica ao passar o mouse.
+  const [estreito, setEstreito] = useState(() => window.innerWidth >= 768 && window.innerWidth < 900);
+  useEffect(() => {
+    const fn = () => setEstreito(window.innerWidth >= 768 && window.innerWidth < 900);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+
+  const collapsed = !isMobile && ((width !== undefined && width < 100) || estreito);
 
   // Abre automaticamente o grupo que contém a página ativa
   const activeGroup = NAV_GROUPS.find(g => g.items.some(i => i.id === page))?.id || null;
@@ -203,7 +217,7 @@ export default function Sidebar({ page, setPage, width, sidebarRef, mobileOpen, 
     transform: mobileOpen ? 'translateX(0)' : 'translateX(-100%)',
     transition: 'transform .25s ease',
     zIndex: 300,
-  } : (width ? { width } : undefined);
+  } : (estreito ? { width: 60 } : (width ? { width } : undefined));
 
   const soloVisible = (ids) => NAV_SOLO.filter(n => ids.includes(n.id) && has(n.perm));
 
