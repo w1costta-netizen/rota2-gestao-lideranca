@@ -13,6 +13,10 @@ function cliente() {
 }
 
 const REMETENTE = 'Rota Líder <acesso@rotalider.com.br>';
+// Quem aperta "Responder" cai na caixa que alguém lê. Sem isto a resposta
+// ia para acesso@, que só envia — um cliente com dúvida escrevendo para o
+// vazio, logo depois de pagar. contato@ é o endereço dos Termos de Uso.
+const RESPONDER_PARA = 'contato@rotalider.com.br';
 // A logo do app, publicada com o site. Hospedada, e não embutida: Gmail
 // descarta imagem em base64 e SVG dentro de e-mail.
 const LOGO = 'https://rotalider.com.br/icon-192.png';
@@ -21,7 +25,7 @@ const LOGO = 'https://rotalider.com.br/icon-192.png';
 // derrubar quem chamou. Devolve { ok, id | erro } e deixa rastro no log.
 async function enviarEmail({ para, assunto, html, acao = 'enviar_email', company = null, user_id = null }) {
   try {
-    const { data, error } = await cliente().emails.send({ from: REMETENTE, to: para, subject: assunto, html });
+    const { data, error } = await cliente().emails.send({ from: REMETENTE, to: para, subject: assunto, html, reply_to: RESPONDER_PARA });
     if (error) {
       registrarLog(acao, 'profiles', 'erro', {
         company, user_id, erro: `${para}: ${error.message || JSON.stringify(error)}`,
@@ -92,4 +96,4 @@ function moldura({ titulo, corpo, botao = null }) {
 </html>`;
 }
 
-module.exports = { enviarEmail, moldura, REMETENTE, LOGO };
+module.exports = { enviarEmail, moldura, REMETENTE, LOGO, RESPONDER_PARA };

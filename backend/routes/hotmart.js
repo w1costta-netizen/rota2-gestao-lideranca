@@ -165,6 +165,10 @@ async function enviarEmailAcesso(email, nome, token) {
   try {
     const { data, error } = await resend.emails.send({
       from: 'Rota Líder <acesso@rotalider.com.br>',
+      // "Responder" cai em contato@, a caixa que alguém lê — não em acesso@,
+      // que só envia. É o e-mail que o cliente recebe logo depois de pagar;
+      // se ele tiver dúvida, é aqui que ele vai apertar Responder.
+      reply_to: 'contato@rotalider.com.br',
       to: email,
       subject: 'Seu acesso ao Rota Líder está pronto!',
       html: `
