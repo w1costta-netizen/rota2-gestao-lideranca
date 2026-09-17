@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { AlertTriangle, Package } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ExportMenu from '../components/ExportMenu';
+import RupturaVendaPerdida from './RupturaVendaPerdida';
 import { gerarPDF, gerarExcel, compartilharWhatsApp, compartilharEmail } from '../lib/exportUtils';
 
 const brl = v => v == null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
@@ -12,6 +13,9 @@ const fmtData = v => { if (!v) return '—'; const [y, m, d] = String(v).slice(0
 const TABS = [
   { id: 'acervo',     label: 'Acervo Ativo', cor: '#0ea5e9' },
   { id: 'ruptura',    label: 'Ruptura',      cor: '#ef4444' },
+  // Painel novo, sobre a extração inteira. A aba "Ruptura" acima continua
+  // sendo o relatório antigo, com o recorte por divisões — não foi tocada.
+  { id: 'venda_perdida', label: 'Ruptura e Venda Perdida', cor: '#dc2626' },
   { id: 'urgente',    label: 'Urgente',      cor: '#f59e0b' },
   { id: 'aging',      label: 'Aging +365d',  cor: '#6366f1' },
   { id: 'sem4s',      label: 'Sem venda 5s', cor: '#8b5cf6' },
@@ -1047,12 +1051,13 @@ export default function Estoque({ profile }) {
           <div>
             {tab === 0 && <TabAcervo     d={d} />}
             {tab === 1 && <TabRuptura    d={d} />}
-            {tab === 2 && <TabUrgente    d={d} />}
-            {tab === 3 && <TabAging      d={d} />}
-            {tab === 4 && <TabSem4s      d={d} />}
-            {tab === 5 && <TabGiroLento  d={d} />}
-            {tab === 6 && <TabNegativo   d={d} />}
-            {tab === 7 && <TabSuspensos  d={d} />}
+            {tab === 2 && <RupturaVendaPerdida bloco={d.ruptura_v2} />}
+            {tab === 3 && <TabUrgente    d={d} />}
+            {tab === 4 && <TabAging      d={d} />}
+            {tab === 5 && <TabSem4s      d={d} />}
+            {tab === 6 && <TabGiroLento  d={d} />}
+            {tab === 7 && <TabNegativo   d={d} />}
+            {tab === 8 && <TabSuspensos  d={d} />}
           </div>
         </>
       )}

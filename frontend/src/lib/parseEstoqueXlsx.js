@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { montarBlocoRuptura } from './ruptura';
 
 const COL_MAP = {
   CD_PRODUTO:                    ['CD_PRODUTO','COD_PRODUTO','CODIGO_PRODUTO','CD PRODUTO'],
@@ -77,6 +78,12 @@ export async function parseEstoqueXlsx(file) {
   const ws = wb.Sheets[wb.SheetNames[abaIdx]];
   const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true });
   if (!rows.length) throw new Error('Planilha sem dados na aba "Dados"');
+
+  // Bloco do painel "Ruptura e Venda Perdida", montado sobre a EXTRAÇÃO
+  // INTEIRA — antes do recorte por divisões que vale para os relatórios
+  // abaixo. Os números de validação do painel só fecham com todas as
+  // linhas. Nada do que já era gerado muda; isto é uma chave a mais.
+  const ruptura_v2 = montarBlocoRuptura(rows, file.name);
 
   const COLUNAS_OPCIONAIS = new Set([
     'ESTOQUE_ON_HAND_CD_CXS',
@@ -281,6 +288,7 @@ export async function parseEstoqueXlsx(file) {
   return {
     gerado_em,
     arquivo: file.name,
+    ruptura_v2,
     linhas: items.length,
     totais: {
       ruptura_count:         ruptura.length,
