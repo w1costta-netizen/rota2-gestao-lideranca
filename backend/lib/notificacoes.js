@@ -45,6 +45,7 @@ const PAGINA_POR_TIPO = {
   tarefa:     'tarefas',
   agenda:     'agenda',
   mural:      'mural',
+  diario:     'diario',
   comunicado: 'comunicados',
   ata:        'atas',
   chat:       'chat',

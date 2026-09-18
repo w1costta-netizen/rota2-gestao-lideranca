@@ -2,6 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError } = require('../lib/auditLog');
+const { cadeiaDeSubordinados } = require('../lib/equipe');
+const crypto = require('node:crypto');
 
 // ─────────────────────────────────────────────────────────────
 // Torneios entre setores e entre pessoas.
@@ -25,48 +27,41 @@ const { logAction, logError } = require('../lib/auditLog');
 // ─────────────────────────────────────────────────────────────
 
 // Ações que pontuam, vindas do registro de auditoria — que já grava mais de
-// cem ações do app com quem fez e quando. Ação nova entra no jogo só
-// acrescentando a chave aqui; não precisa de consulta nova.
+// cem ações do app com quem fez e quando.
+//
+// LISTA JUSTA (decisão do dono do produto, 18/09/2026): só entra o que
+// QUALQUER pessoa da loja pode fazer. Importar estoque, conferência de
+// seção, análise de caixas, flyer e Tour 4x4 ficaram de fora — são função de
+// alguns cargos, e quem as tem ganhava "de graça" de quem trabalha no salão.
+// Criar tarefa, lista e anotação também saíram: planejamento próprio é bom,
+// mas pontuar a criação premiava volume, não entrega. O que mede entrega
+// está na família QUALIDADE (prazo cumprido), que é a que vale mais.
 //
 // NAVEGAÇÃO NÃO PONTUA de propósito. Premiar quem abre tela ensina a abrir
-// tela, e não há como separar quem analisou de quem passou o dedo. O que
-// mede a mesma intenção é a constância.
+// tela. O que mede a mesma intenção é a constância.
 const ACOES = {
-  // Planejamento próprio — vale mais porque mede iniciativa, não obediência
-  criar_agenda:            { nome: 'Colocar um item na agenda', familia: 'planejamento', base: 4, tetoDia: 3 },
-  criar_tarefa:            { nome: 'Criar uma tarefa', familia: 'planejamento', base: 4, tetoDia: 3 },
-  criar_plano_pdca:        { nome: 'Criar um plano de ação', familia: 'planejamento', base: 5, tetoDia: 2 },
-  criar_acao_pdca:         { nome: 'Criar uma ação dentro do plano', familia: 'planejamento', base: 2, tetoDia: 5 },
-  criar_lista:             { nome: 'Criar uma lista', familia: 'planejamento', base: 2, tetoDia: 2 },
-  adicionar_item_lista:    { nome: 'Adicionar item numa lista', familia: 'planejamento', base: 1, tetoDia: 5 },
-  criar_anotacao:          { nome: 'Criar uma anotação', familia: 'planejamento', base: 1, tetoDia: 3 },
-
-  // Operação — o trabalho da loja registrado no app
-  finalizar_conferencia:   { nome: 'Finalizar uma conferência de seção', familia: 'operacao', base: 8, tetoDia: 2 },
-  criar_ata:               { nome: 'Criar uma ata de reunião', familia: 'operacao', base: 6, tetoDia: 2 },
-  criar_conferencia:       { nome: 'Abrir uma conferência de seção', familia: 'operacao', base: 4, tetoDia: 2 },
-  criar_relato_diario:     { nome: 'Escrever no Diário de Bordo', familia: 'operacao', base: 4, tetoDia: 3 },
-  salvar_caixas:           { nome: 'Salvar análise de caixas', familia: 'operacao', base: 3, tetoDia: 3 },
-  criar_comunicado:        { nome: 'Publicar um comunicado', familia: 'operacao', base: 3, tetoDia: 3 },
-  criar_mural:             { nome: 'Publicar no mural', familia: 'operacao', base: 3, tetoDia: 3 },
-  coletar_item_conferencia:{ nome: 'Conferir um item de seção', familia: 'operacao', base: 2, tetoDia: 20 },
-  sinalizar_item_flyer:    { nome: 'Sinalizar um item de flyer', familia: 'operacao', base: 2, tetoDia: 20 },
-  adicionar_foto_flyer:    { nome: 'Adicionar foto num flyer', familia: 'operacao', base: 2, tetoDia: 15 },
-  adicionar_foto_tour:     { nome: 'Adicionar foto no Tour 4x4', familia: 'operacao', base: 2, tetoDia: 15 },
-  salvar_escala:           { nome: 'Trabalhar na escala', familia: 'operacao', base: 1, tetoDia: 5 },
-
-  // Participação — peso baixo de propósito: comentar é bom, mas não é o que
-  // muda a operação, e é o mais fácil de inflar
-  concluir_treinamento_produtividade: { nome: 'Concluir um treinamento', familia: 'participacao', base: 10, tetoDia: 2 },
-  comentar_tarefa:         { nome: 'Comentar numa tarefa', familia: 'participacao', base: 2, tetoDia: 5 },
-  comentar_comunicado:     { nome: 'Comentar num comunicado', familia: 'participacao', base: 2, tetoDia: 5 },
-  comentar_mural:          { nome: 'Comentar no mural', familia: 'participacao', base: 2, tetoDia: 5 },
-  comentar_ata:            { nome: 'Comentar numa ata', familia: 'participacao', base: 2, tetoDia: 5 },
-  reagir:                  { nome: 'Reagir a uma mensagem', familia: 'participacao', base: 1, tetoDia: 8 },
-  enviar_mensagem:         { nome: 'Enviar mensagem no chat', familia: 'participacao', base: 1, tetoDia: 10 },
+  // Comunicação — teto baixo de propósito: é o mais fácil de inflar
   marcar_comunicado_lido:  { nome: 'Ler um comunicado', familia: 'participacao', base: 1, tetoDia: 5 },
-  marcar_mural_lido:       { nome: 'Ler o mural', familia: 'participacao', base: 1, tetoDia: 5 },
+  marcar_mural_lido:       { nome: 'Ler o mural', familia: 'participacao', base: 1, tetoDia: 3 },
+  comentar_tarefa:         { nome: 'Comentar numa tarefa', familia: 'participacao', base: 2, tetoDia: 3 },
+  comentar_comunicado:     { nome: 'Comentar num comunicado', familia: 'participacao', base: 2, tetoDia: 3 },
+  comentar_mural:          { nome: 'Comentar no mural', familia: 'participacao', base: 2, tetoDia: 3 },
+  comentar_ata:            { nome: 'Comentar numa ata', familia: 'participacao', base: 2, tetoDia: 3 },
+  comentar_diario:         { nome: 'Comentar no Diário de Bordo', familia: 'participacao', base: 2, tetoDia: 3 },
+  reagir:                  { nome: 'Reagir a uma publicação', familia: 'participacao', base: 1, tetoDia: 5 },
+  enviar_mensagem:         { nome: 'Enviar mensagem no chat', familia: 'participacao', base: 1, tetoDia: 5 },
+  concluir_treinamento_produtividade: { nome: 'Concluir um treinamento', familia: 'participacao', base: 10, tetoDia: 2 },
 };
+
+// Ações que contam DIA ATIVO mas não dão ponto por si: fazer o trabalho
+// (criar tarefa, escrever no diário, mexer na escala) marca presença; o
+// ponto vem quando a entrega cumpre o prazo, na família Qualidade.
+const ACOES_PRESENCA = [
+  'criar_tarefa', 'editar_tarefa', 'criar_agenda', 'criar_relato_diario', 'criar_ata', 'assinar_ata',
+  'salvar_escala', 'enviar_escala', 'criar_plano_pdca', 'criar_acao_pdca', 'editar_acao_pdca',
+  'criar_lista', 'adicionar_item_lista', 'criar_anotacao',
+];
+const ACOES_DO_LOG = [...new Set([...Object.keys(ACOES), ...ACOES_PRESENCA])];
 
 // Vale por cada dia distinto em que a pessoa fez qualquer coisa da lista.
 // É a métrica mais resistente a fraude que existe aqui, e a que mede o que
@@ -74,11 +69,9 @@ const ACOES = {
 const PONTOS_POR_DIA_ATIVO = 5;
 
 const FAMILIAS = {
-  constancia:   { nome: 'Constância',   descricao: 'Cada dia em que a pessoa usou o app de verdade' },
-  planejamento: { nome: 'Planejamento', descricao: 'O que a pessoa organiza para si: agenda, tarefas, listas, plano de ação' },
-  qualidade:    { nome: 'Qualidade',    descricao: 'Prazo cumprido: tarefa, escala, ata, comunicado e diário no dia' },
-  operacao:     { nome: 'Operação',     descricao: 'Conferência de seção, flyer, Tour 4x4, escala, caixas e comunicados' },
-  participacao: { nome: 'Participação', descricao: 'Comentar, reagir, conversar e concluir treinamentos' },
+  constancia:   { nome: 'Constância',        descricao: 'Cada dia em que a pessoa usou o app de verdade' },
+  qualidade:    { nome: 'Entregas no prazo', descricao: 'Tarefa, ação do plano, ata, diário, comunicado e escala dentro do prazo' },
+  participacao: { nome: 'Comunicação',       descricao: 'Ler, comentar, reagir, conversar e concluir treinamentos' },
 };
 
 const diaDe    = (iso) => new Date(iso).toISOString().slice(0, 10);
@@ -113,13 +106,25 @@ const QUALIDADE = {
   tarefa_no_prazo: {
     nome: 'Tarefa concluída dentro do prazo', base: 5,
     async contar(ids, inicio, fim) {
+      // A rota de tarefas grava `status` e `updated_at` — não existe
+      // `concluida_em`. Lendo a coluna errada, esta regra nunca pontuou.
       const { data } = await supabase
-        .from('tarefas').select('assigned_to, due_date, concluida_em')
-        .in('assigned_to', ids).eq('concluida', true)
-        .gte('concluida_em', inicio).lte('concluida_em', fimDoDia(fim));
+        .from('tarefas').select('assigned_to, due_date, status, updated_at')
+        .in('assigned_to', ids).eq('status', 'concluida')
+        .gte('updated_at', inicio).lte('updated_at', fimDoDia(fim));
       // Sem prazo definido não há mérito de prazo: não pontua, senão
       // premiaria quem cria tarefa sem data e fecha na hora.
-      return contagem(data, r => r.due_date && diaDe(r.concluida_em) <= r.due_date, 'assigned_to');
+      return contagem(data, r => r.due_date && diaDe(r.updated_at) <= r.due_date, 'assigned_to');
+    },
+  },
+  acao_pdca_no_prazo: {
+    nome: 'Ação do plano de ação concluída no prazo', base: 6,
+    async contar(ids, inicio, fim) {
+      const { data } = await supabase
+        .from('acoes_pdca').select('responsavel_id, prazo, concluida_em')
+        .in('responsavel_id', ids).eq('concluida', true)
+        .gte('concluida_em', inicio).lte('concluida_em', fimDoDia(fim));
+      return contagem(data, r => r.prazo && diaDe(r.concluida_em) <= r.prazo, 'responsavel_id');
     },
   },
   ata_assinada: {
@@ -165,6 +170,64 @@ async function getPerfil(id) {
 }
 
 const podeCriar = (me) => ['admin', 'master'].includes(me.access_level);
+
+// ─── Campanha por OBJETIVO ──────────────────────────────────────────
+//
+// Além da automática (pontos do log), o líder cria campanha com metas de
+// RESULTADO — venda do setor, ruptura, perda, atrasos — e lança a apuração.
+// O que o mercado mostra que funciona em incentivo de varejo: meta numérica
+// clara, prazo curto, apuração visível e resultado lançado por quem responde
+// pelo número (o apurador), nunca pelo próprio participante.
+//
+// TETO DE 120%: uma meta estourada não decide a campanha sozinha.
+// PROPORCIONAL: quem faz 55 de 50 (110%) empata com quem faz 110 de 100.
+const TETO_ATINGIMENTO = 1.2;
+const TIPOS = ['automatica', 'objetivo', 'mista'];
+const FREQUENCIAS = { semanal: 'toda semana', quinzenal: 'a cada 15 dias', mensal: 'todo mês', final: 'no fim da campanha' };
+const UNIDADES = ['R$', '%', 'un', 'pontos', 'ocorrências', 'horas'];
+
+function validarObjetivos(lista) {
+  const objetivos = (Array.isArray(lista) ? lista : []).slice(0, 5).map(o => ({
+    id: /^[0-9a-f-]{36}$/i.test(o?.id || '') ? o.id : crypto.randomUUID(),
+    nome: String(o?.nome || '').trim().slice(0, 80),
+    unidade: UNIDADES.includes(o?.unidade) ? o.unidade : 'un',
+    alvo: Number(o?.alvo),
+    direcao: o?.direcao === 'menor' ? 'menor' : 'maior',
+    apuracao: o?.apuracao === 'ultimo' ? 'ultimo' : 'soma',
+    peso: Math.min(Math.max(parseInt(o?.peso, 10) || 1, 1), 5),
+  }));
+  const invalido = objetivos.find(o => !o.nome || !(o.alvo > 0));
+  if (invalido) return { erro: 'Cada objetivo precisa de nome e meta maior que zero.' };
+  return { objetivos };
+}
+
+// Valor apurado por objetivo e participante: soma dos lançamentos ou o
+// último (por data de referência, depois por data de lançamento).
+function apurar(objetivo, lancamentos) {
+  if (!lancamentos.length) return null;
+  if (objetivo.apuracao === 'soma') return lancamentos.reduce((t, l) => t + Number(l.valor || 0), 0);
+  const ordenados = [...lancamentos].sort((a, b) =>
+    String(a.periodo_ref || '').localeCompare(String(b.periodo_ref || '')) || String(a.created_at).localeCompare(String(b.created_at)));
+  return Number(ordenados[ordenados.length - 1].valor || 0);
+}
+
+function atingimentoDe(objetivo, valor) {
+  if (valor == null) return null;
+  const alvo = Number(objetivo.alvo);
+  let a;
+  if (objetivo.direcao === 'maior') a = alvo > 0 ? valor / alvo : 0;
+  else a = valor <= 0 ? TETO_ATINGIMENTO : alvo / valor;   // menor é melhor: zero ocorrências estoura a meta
+  return Math.min(TETO_ATINGIMENTO, Math.max(0, a));
+}
+
+// Quem pode lançar resultado: criador, apuradores escolhidos, admin/master.
+const ehApurador = (campanha, me) =>
+  campanha.criado_por === me.id || (campanha.apuradores || []).includes(me.id) || podeCriar(me);
+
+// Quem pode ver a campanha: loja inteira vê as de escopo 'loja'; as de
+// equipe só quem participa, criou, apura ou administra.
+const podeVer = (campanha, me) =>
+  campanha.escopo !== 'equipe' || ehApurador(campanha, me) || (campanha.participantes || []).includes(me.id);
 const FAMILIAS_VALIDAS = Object.keys(FAMILIAS);
 const TEMAS_VALIDOS = ['classico', 'reinos', 'copa', 'corrida'];
 
@@ -331,6 +394,22 @@ router.get('/familias', (_req, res) => {
   res.json(FAMILIAS_VALIDAS.map(chave => ({ chave, ...FAMILIAS[chave] })));
 });
 
+// GET /api/gamificacao/contexto?requester_id= — o que esta pessoa pode criar
+router.get('/contexto', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  if (!me.company) return res.json({ podeCriar: false, escopoLoja: false, subordinados: [], pessoasLoja: [] });
+  const { todos, subordinados } = await cadeiaDeSubordinados(me.company, me.id);
+  const enxuto = p => ({ id: p.id, full_name: p.full_name, sector: p.sector, avatar_url: p.avatar_url });
+  res.json({
+    podeCriar: podeCriar(me) || subordinados.length > 0,
+    escopoLoja: podeCriar(me),
+    subordinados: subordinados.map(enxuto),
+    pessoasLoja: todos.map(enxuto),
+    frequencias: FREQUENCIAS, unidades: UNIDADES, tetoAtingimento: TETO_ATINGIMENTO,
+  });
+});
+
 // GET /api/gamificacao/campanhas?requester_id=
 router.get('/campanhas', async (req, res) => {
   const me = await getPerfil(req.query.requester_id);
@@ -341,20 +420,54 @@ router.get('/campanhas', async (req, res) => {
     .from('campanhas_gamificacao').select('*')
     .eq('company', me.company).order('inicio', { ascending: false });
   if (error) return res.status(500).json({ error: 'Erro ao carregar as campanhas.' });
-  res.json(data || []);
+
+  // Nome de quem criou e dos apuradores: a tela mostra "apuração semanal
+  // por Maria" — quem lança o resultado tem que estar claro para todos.
+  const visiveis = (data || []).filter(c => podeVer(c, me));
+  const ids = [...new Set(visiveis.flatMap(c => [c.criado_por, ...(c.apuradores || [])]).filter(Boolean))];
+  const { data: pessoas } = ids.length
+    ? await supabase.from('profiles').select('id, full_name').in('id', ids) : { data: [] };
+  const nome = Object.fromEntries((pessoas || []).map(p => [p.id, p.full_name]));
+  res.json(visiveis.map(c => ({
+    ...c,
+    criador_nome: nome[c.criado_por] || null,
+    apuradores_nomes: (c.apuradores || []).map(id => nome[id]).filter(Boolean),
+    frequencia_texto: FREQUENCIAS[c.frequencia_apuracao] || null,
+    souApurador: ehApurador(c, me),
+    participo: c.escopo !== 'equipe' || (c.participantes || []).includes(me.id),
+  })));
 });
 
 // POST /api/gamificacao/campanhas
 router.post('/campanhas', async (req, res) => {
   const me = await getPerfil(req.body?.requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
-  if (!podeCriar(me)) return res.status(403).json({ error: 'Só quem administra a loja cria torneios.' });
 
-  const { nome, descricao, premio, premios, inicio, fim, metricas, tema } = req.body || {};
+  // Admin cria para a loja; quem lidera pessoas cria para os subordinados.
+  const { subordinados, todos } = await cadeiaDeSubordinados(me.company, me.id);
+  const ehAdmin = podeCriar(me);
+  if (!ehAdmin && !subordinados.length) {
+    return res.status(403).json({ error: 'Só quem administra a loja ou lidera pessoas cria torneios.' });
+  }
+
+  const { nome, descricao, premio, premios, inicio, fim, metricas, tema, tipo, objetivos, apuradores, frequencia_apuracao, peso_objetivo } = req.body || {};
   if (!nome?.trim() || !inicio || !fim) {
     return res.status(400).json({ error: 'Nome, início e fim são obrigatórios.' });
   }
   if (fim < inicio) return res.status(400).json({ error: 'O fim não pode ser antes do início.' });
+
+  const tipoFinal = TIPOS.includes(tipo) ? tipo : 'automatica';
+
+  // Escopo: loja inteira só para admin; líder cria para a equipe dele, e só
+  // pode incluir gente da própria cadeia. O líder não concorre no próprio
+  // torneio — ele apura.
+  const escopo = ehAdmin && req.body?.escopo !== 'equipe' ? 'loja' : 'equipe';
+  let participantes = null;
+  if (escopo === 'equipe') {
+    const permitidos = new Set((ehAdmin ? todos : subordinados).map(p => p.id).filter(id => id !== me.id));
+    participantes = [...new Set((Array.isArray(req.body?.participantes) ? req.body.participantes : []).filter(id => permitidos.has(id)))];
+    if (!participantes.length) return res.status(400).json({ error: 'Escolha quem participa (pessoas da sua equipe).' });
+  }
 
   // `metricas` guarda o PESO DE CADA FAMÍLIA. Peso limitado entre 1 e 5:
   // sem limite, um número absurdo faria uma família decidir o torneio
@@ -362,13 +475,32 @@ router.post('/campanhas', async (req, res) => {
   const pesos = (Array.isArray(metricas) ? metricas : [])
     .filter(m => FAMILIAS_VALIDAS.includes(m?.chave))
     .map(m => ({ chave: m.chave, peso: Math.min(Math.max(Number(m.peso) || 1, 1), 5) }));
-  if (!pesos.length) return res.status(400).json({ error: 'Escolha pelo menos uma família de pontos.' });
+  if (tipoFinal !== 'objetivo' && !pesos.length) return res.status(400).json({ error: 'Escolha pelo menos uma família de pontos.' });
+
+  let objetivosFinal = [];
+  if (tipoFinal !== 'automatica') {
+    const v = validarObjetivos(objetivos);
+    if (v.erro) return res.status(400).json({ error: v.erro });
+    if (!v.objetivos.length) return res.status(400).json({ error: 'Defina pelo menos um objetivo.' });
+    objetivosFinal = v.objetivos;
+  }
+
+  // Apuradores: qualquer pessoa da loja (a apuração pode ser delegada); o
+  // criador sempre está. Tudo o que eles lançarem fica no log com nome.
+  const daLoja = new Set(todos.map(p => p.id));
+  const apuradoresFinal = [...new Set([me.id, ...(Array.isArray(apuradores) ? apuradores : []).filter(id => daLoja.has(id))])];
 
   const { data, error } = await supabase.from('campanhas_gamificacao').insert({
     company: me.company,
     nome: nome.trim(),
     descricao: descricao?.trim() || null,
     premio: premio?.trim() || null,
+    escopo, participantes,
+    tipo: tipoFinal,
+    objetivos: objetivosFinal,
+    apuradores: apuradoresFinal,
+    frequencia_apuracao: tipoFinal === 'automatica' ? null : (FREQUENCIAS[frequencia_apuracao] ? frequencia_apuracao : 'final'),
+    peso_objetivo: tipoFinal === 'mista' ? Math.min(90, Math.max(10, parseInt(peso_objetivo, 10) || 50)) : (tipoFinal === 'objetivo' ? 100 : 0),
     // Três colocações para cada disputa. Texto livre: prêmio é combinado da
     // loja (folga, vale, brinde), não valor que o sistema controla — o app
     // anuncia e registra, quem entrega é a loja.
@@ -386,7 +518,7 @@ router.post('/campanhas', async (req, res) => {
     logError({ company: me.company, user_id: me.id, acao: 'criar_campanha', tabela: 'campanhas_gamificacao', rota: req.originalUrl, erro_mensagem: error.message });
     return res.status(500).json({ error: error.message });
   }
-  logAction({ company: me.company, user_id: me.id, acao: 'criar_campanha', tabela: 'campanhas_gamificacao', depois: { id: data.id, nome: data.nome } });
+  logAction({ company: me.company, user_id: me.id, acao: 'criar_campanha', tabela: 'campanhas_gamificacao', depois: { id: data.id, nome: data.nome, escopo, tipo: tipoFinal, participantes: participantes?.length ?? 'loja' } });
   res.json(data);
 });
 
@@ -394,11 +526,11 @@ router.post('/campanhas', async (req, res) => {
 router.put('/campanhas/:id/encerrar', async (req, res) => {
   const me = await getPerfil(req.body?.requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
-  if (!podeCriar(me)) return res.status(403).json({ error: 'Acesso negado' });
 
   const { data: c } = await supabase
-    .from('campanhas_gamificacao').select('company').eq('id', req.params.id).maybeSingle();
+    .from('campanhas_gamificacao').select('company, criado_por').eq('id', req.params.id).maybeSingle();
   if (!c || c.company !== me.company) return res.status(404).json({ error: 'Campanha não encontrada' });
+  if (!podeCriar(me) && c.criado_por !== me.id) return res.status(403).json({ error: 'Só quem criou o torneio (ou o admin) encerra.' });
 
   await supabase.from('campanhas_gamificacao').update({ ativa: false }).eq('id', req.params.id);
   logAction({ company: me.company, user_id: me.id, acao: 'encerrar_campanha', tabela: 'campanhas_gamificacao', antes: { id: req.params.id } });
@@ -415,13 +547,16 @@ router.get('/campanhas/:id/placar', async (req, res) => {
   if (!campanha || campanha.company !== me.company) {
     return res.status(404).json({ error: 'Campanha não encontrada' });
   }
+  if (!podeVer(campanha, me)) return res.status(403).json({ error: 'Este torneio é de outra equipe.' });
 
-  const { data: pessoas } = await supabase
+  let consultaPessoas = supabase
     .from('profiles').select('id, full_name, sector, avatar_url')
     .eq('company', me.company).eq('active', true);
+  if (campanha.escopo === 'equipe') consultaPessoas = consultaPessoas.in('id', campanha.participantes || []);
+  const { data: pessoas } = await consultaPessoas;
 
   const ids = (pessoas || []).map(p => p.id);
-  if (!ids.length) return res.json({ campanha, individual: [], setores: [], familias: [] });
+  if (!ids.length) return res.json({ campanha, individual: [], setores: [], familias: [], objetivos: [] });
 
   const pesoDe = {};
   (campanha.metricas || []).forEach(m => { pesoDe[m.chave] = m.peso; });
@@ -436,14 +571,15 @@ router.get('/campanhas/:id/placar', async (req, res) => {
   };
 
   // ── Famílias vindas do registro de auditoria ──────────────────
-  const precisaLog = ['constancia', 'planejamento', 'operacao', 'participacao'].some(f => pesoDe[f]);
+  const soObjetivo = campanha.tipo === 'objetivo';
+  const precisaLog = !soObjetivo && ['constancia', 'participacao'].some(f => pesoDe[f]);
   if (precisaLog) {
     const { data: registros } = await supabase
       .from('audit_logs')
       .select('user_id, acao, created_at')
       .eq('company', me.company).eq('status', 'sucesso')
       .in('user_id', ids)
-      .in('acao', Object.keys(ACOES))
+      .in('acao', ACOES_DO_LOG)
       .gte('created_at', campanha.inicio).lte('created_at', fimDoDia(campanha.fim))
       .limit(50000);
 
@@ -462,6 +598,7 @@ router.get('/campanhas/:id/placar', async (req, res) => {
     Object.entries(balde).forEach(([k, vezes]) => {
       const [userId, acao] = k.split('|');
       const regra = ACOES[acao];
+      if (!regra) return;   // presença: marca o dia, não dá ponto
       const peso = pesoDe[regra.familia];
       if (!peso) return;
       somar(userId, regra.familia, Math.min(vezes, regra.tetoDia) * regra.base * peso);
@@ -474,8 +611,8 @@ router.get('/campanhas/:id/placar', async (req, res) => {
     }
   }
 
-  // ── Qualidade: as cinco que medem prazo ───────────────────────
-  if (pesoDe.qualidade) {
+  // ── Qualidade: as que medem prazo ─────────────────────────────
+  if (!soObjetivo && pesoDe.qualidade) {
     for (const regra of Object.values(QUALIDADE)) {
       const contados = await regra.contar(ids, campanha.inicio, campanha.fim);
       Object.entries(contados).forEach(([id, qtd]) => {
@@ -484,21 +621,60 @@ router.get('/campanhas/:id/placar', async (req, res) => {
     }
   }
 
-  const total = (id) => Object.values(pontos[id] || {}).reduce((s, v) => s + v, 0);
+  const totalAuto = (id) => Object.values(pontos[id] || {}).reduce((s, v) => s + v, 0);
+
+  // ── Objetivos: atingimento por pessoa, a partir dos lançamentos ─────
+  // Pontos de objetivo vão de 0 a 120 (média ponderada dos atingimentos
+  // × 100). Na campanha mista, os pontos automáticos são normalizados na
+  // mesma escala (o melhor da campanha = 100) e os dois lados entram com o
+  // peso escolhido pelo líder.
+  const objetivosCfg = campanha.tipo === 'automatica' ? [] : (campanha.objetivos || []);
+  const objPorPessoa = {};
+  if (objetivosCfg.length) {
+    const { data: lancamentos } = await supabase
+      .from('resultados_torneio').select('objetivo_id, participante_id, valor, periodo_ref, created_at')
+      .eq('campanha_id', campanha.id);
+    const somaPesos = objetivosCfg.reduce((t, o) => t + o.peso, 0) || 1;
+    ids.forEach(id => {
+      const detalhe = objetivosCfg.map(o => {
+        const meus = (lancamentos || []).filter(l => l.participante_id === id && l.objetivo_id === o.id);
+        const valor = apurar(o, meus);
+        const atingimento = atingimentoDe(o, valor);
+        return { id: o.id, nome: o.nome, unidade: o.unidade, alvo: o.alvo, direcao: o.direcao, apuracao: o.apuracao, peso: o.peso, valor, atingimento, lancamentos: meus.length };
+      });
+      const score = detalhe.reduce((t, d) => t + (d.atingimento || 0) * d.peso, 0) / somaPesos * 100;
+      objPorPessoa[id] = { detalhe, score: Math.round(score) };
+    });
+  }
+
+  const pesoObj = campanha.tipo === 'objetivo' ? 100 : campanha.tipo === 'mista' ? (campanha.peso_objetivo || 50) : 0;
+  const maxAuto = Math.max(1, ...ids.map(totalAuto));
+  const totalDe = (id) => {
+    if (campanha.tipo === 'automatica') return totalAuto(id);
+    const obj = objPorPessoa[id]?.score || 0;
+    if (campanha.tipo === 'objetivo') return obj;
+    const autoNorm = totalAuto(id) / maxAuto * 100;
+    return Math.round(autoNorm * (100 - pesoObj) / 100 + obj * pesoObj / 100);
+  };
 
   const individual = (pessoas || [])
     .map(p => ({
       id: p.id, nome: p.full_name, setor: p.sector, avatar_url: p.avatar_url,
-      pontos: total(p.id),
-      porFamilia: pontos[p.id] || {},
+      pontos: totalDe(p.id),
+      pontosAutomaticos: totalAuto(p.id),
+      porFamilia: { ...(pontos[p.id] || {}), ...(objetivosCfg.length ? { objetivo: objPorPessoa[p.id]?.score || 0 } : {}) },
+      objetivos: objPorPessoa[p.id]?.detalhe || [],
     }))
     .sort((a, b) => b.pontos - a.pontos);
 
   // Equipes montadas à mão têm prioridade. Se a loja ainda não montou
   // nenhuma, cai no setor — assim o torneio funciona desde o primeiro dia,
   // e as equipes entram quando o gestor tiver montado.
-  const { data: equipesMontadas } = await supabase
-    .from('equipes_torneio').select('id, nome, membros').eq('company', me.company);
+  // Equipes montadas valem para torneio da loja; o de equipe do líder
+  // agrupa por setor dos participantes.
+  const { data: equipesMontadas } = campanha.escopo === 'equipe'
+    ? { data: [] }
+    : await supabase.from('equipes_torneio').select('id, nome, membros').eq('company', me.company);
 
   const usandoEquipes = (equipesMontadas || []).length > 0;
   const pontoDe = Object.fromEntries(individual.map(p => [p.id, p.pontos]));
@@ -534,11 +710,16 @@ router.get('/campanhas/:id/placar', async (req, res) => {
   const alocados = new Set((equipesMontadas || []).flatMap(e => e.membros || []));
   const foraDeEquipe = usandoEquipes ? individual.filter(p => !alocados.has(p.id)).length : 0;
 
-  const familias = (campanha.metricas || [])
+  const familias = soObjetivo ? [] : (campanha.metricas || [])
     .filter(m => FAMILIAS[m.chave])
     .map(m => ({ chave: m.chave, nome: FAMILIAS[m.chave].nome, peso: m.peso }));
+  if (objetivosCfg.length) familias.push({ chave: 'objetivo', nome: 'Objetivos', peso: pesoObj, ehObjetivo: true });
 
-  res.json({ campanha, individual, setores, familias, usandoEquipes, foraDeEquipe });
+  res.json({
+    campanha: { ...campanha, frequencia_texto: FREQUENCIAS[campanha.frequencia_apuracao] || null },
+    individual, setores, familias, usandoEquipes, foraDeEquipe,
+    objetivos: objetivosCfg, souApurador: ehApurador(campanha, me), tetoAtingimento: TETO_ATINGIMENTO,
+  });
 });
 
 // GET /api/gamificacao/campanhas/:id/extrato?requester_id=&user_id=
@@ -558,14 +739,14 @@ router.get('/campanhas/:id/extrato', async (req, res) => {
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
   const alvoId = req.query.user_id || me.id;
-  if (alvoId !== me.id && !podeCriar(me)) {
-    return res.status(403).json({ error: 'Você só pode ver o seu próprio extrato.' });
-  }
 
   const { data: campanha } = await supabase
     .from('campanhas_gamificacao').select('*').eq('id', req.params.id).maybeSingle();
   if (!campanha || campanha.company !== me.company) {
     return res.status(404).json({ error: 'Campanha não encontrada' });
+  }
+  if (alvoId !== me.id && !ehApurador(campanha, me)) {
+    return res.status(403).json({ error: 'Você só pode ver o seu próprio extrato.' });
   }
 
   const { data: pessoa } = await supabase
@@ -588,8 +769,9 @@ router.get('/campanhas/:id/extrato', async (req, res) => {
   const porAcaoDia = {};
   const diasAtivos = new Set();
   (registros || []).forEach(r => {
-    if (!ACOES[r.acao]) return;   // ação registrada que não pontua
     const dia = diaDe(r.created_at);
+    if (ACOES_PRESENCA.includes(r.acao)) { diasAtivos.add(dia); return; }   // marca o dia, não pontua
+    if (!ACOES[r.acao]) return;   // ação registrada que não entra no jogo
     const k = `${r.acao}|${dia}`;
     porAcaoDia[k] = (porAcaoDia[k] || 0) + 1;
     diasAtivos.add(dia);
@@ -655,6 +837,78 @@ router.get('/campanhas/:id/extrato', async (req, res) => {
   });
 });
 
+// ─── Resultados dos objetivos ───────────────────────────────────────
+//
+// Quem lança é o apurador (criador, quem ele delegou, ou admin). Cada
+// lançamento fica com quem lançou e quando — é o contraditório da
+// campanha por objetivo, como o extrato é o da automática.
+
+// GET /api/gamificacao/campanhas/:id/resultados?requester_id=
+router.get('/campanhas/:id/resultados', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const { data: c } = await supabase.from('campanhas_gamificacao').select('*').eq('id', req.params.id).maybeSingle();
+  if (!c || c.company !== me.company || !podeVer(c, me)) return res.status(404).json({ error: 'Campanha não encontrada' });
+
+  const { data } = await supabase.from('resultados_torneio')
+    .select('id, objetivo_id, participante_id, valor, periodo_ref, observacao, created_at, lancado_por, participante:participante_id(full_name), lancador:lancado_por(full_name)')
+    .eq('campanha_id', c.id).order('created_at', { ascending: false });
+  res.json(data || []);
+});
+
+// POST /api/gamificacao/campanhas/:id/resultados
+//   { requester_id, objetivo_id, participante_id, valor, periodo_ref, observacao }
+router.post('/campanhas/:id/resultados', async (req, res) => {
+  const me = await getPerfil(req.body?.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const { data: c } = await supabase.from('campanhas_gamificacao').select('*').eq('id', req.params.id).maybeSingle();
+  if (!c || c.company !== me.company) return res.status(404).json({ error: 'Campanha não encontrada' });
+  if (!ehApurador(c, me)) return res.status(403).json({ error: 'Só o apurador deste torneio lança resultados.' });
+  if (!c.ativa) return res.status(400).json({ error: 'Torneio encerrado não recebe resultado.' });
+
+  const { objetivo_id, participante_id, valor, periodo_ref, observacao } = req.body || {};
+  const objetivo = (c.objetivos || []).find(o => o.id === objetivo_id);
+  if (!objetivo) return res.status(400).json({ error: 'Objetivo não encontrado neste torneio.' });
+  const v = Number(valor);
+  if (!Number.isFinite(v) || v < 0) return res.status(400).json({ error: 'Informe um valor válido (zero ou mais).' });
+
+  // Participante tem que estar na campanha (equipe) ou na loja (loja).
+  const { data: alvo } = await supabase.from('profiles').select('id, company, full_name').eq('id', participante_id).maybeSingle();
+  if (!alvo || alvo.company !== c.company) return res.status(400).json({ error: 'Participante inválido.' });
+  if (c.escopo === 'equipe' && !(c.participantes || []).includes(participante_id)) {
+    return res.status(400).json({ error: 'Essa pessoa não participa deste torneio.' });
+  }
+
+  const { data, error } = await supabase.from('resultados_torneio').insert({
+    campanha_id: c.id, objetivo_id, participante_id, valor: v,
+    periodo_ref: /^\d{4}-\d{2}-\d{2}$/.test(periodo_ref || '') ? periodo_ref : null,
+    observacao: String(observacao || '').trim().slice(0, 200) || null,
+    lancado_por: me.id,
+  }).select().single();
+  if (error) {
+    logError({ company: c.company, user_id: me.id, acao: 'lancar_resultado_torneio', tabela: 'resultados_torneio', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: 'Não foi possível salvar o resultado.' });
+  }
+  logAction({ company: c.company, user_id: me.id, acao: 'lancar_resultado_torneio', tabela: 'resultados_torneio',
+    depois: { campanha: c.nome, objetivo: objetivo.nome, participante: alvo.full_name, valor: v, periodo_ref: data.periodo_ref } });
+  res.json(data);
+});
+
+// DELETE /api/gamificacao/campanhas/:id/resultados/:rid?requester_id=
+router.delete('/campanhas/:id/resultados/:rid', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const { data: c } = await supabase.from('campanhas_gamificacao').select('*').eq('id', req.params.id).maybeSingle();
+  if (!c || c.company !== me.company) return res.status(404).json({ error: 'Campanha não encontrada' });
+  if (!ehApurador(c, me)) return res.status(403).json({ error: 'Só o apurador deste torneio apaga resultados.' });
+
+  const { data: r } = await supabase.from('resultados_torneio').select('*').eq('id', req.params.rid).eq('campanha_id', c.id).maybeSingle();
+  if (!r) return res.status(404).json({ error: 'Resultado não encontrado' });
+  await supabase.from('resultados_torneio').delete().eq('id', r.id);
+  logAction({ company: c.company, user_id: me.id, acao: 'apagar_resultado_torneio', tabela: 'resultados_torneio', antes: { campanha: c.nome, objetivo_id: r.objetivo_id, participante_id: r.participante_id, valor: r.valor } });
+  res.json({ ok: true });
+});
+
 // ─── Nível: progresso permanente ────────────────────────────────────
 //
 // Mecânica DIFERENTE do torneio, não uma variação dele. Torneio tem fim e
@@ -698,7 +952,7 @@ router.get('/nivel', async (req, res) => {
   const { data: registros } = await supabase
     .from('audit_logs').select('acao, created_at')
     .eq('company', me.company).eq('status', 'sucesso').eq('user_id', alvoId)
-    .in('acao', Object.keys(ACOES))
+    .in('acao', ACOES_DO_LOG)
     .limit(50000);
 
   // O mesmo teto por dia do torneio. Sem ele, o nível seria só contagem
@@ -715,7 +969,7 @@ router.get('/nivel', async (req, res) => {
   Object.entries(balde).forEach(([k, vezes]) => {
     const [acao] = k.split('|');
     const regra = ACOES[acao];
-    pontos += Math.min(vezes, regra.tetoDia) * regra.base;
+    if (regra) pontos += Math.min(vezes, regra.tetoDia) * regra.base;
   });
   pontos += dias.size * PONTOS_POR_DIA_ATIVO;
 
@@ -743,3 +997,5 @@ router.get('/nivel', async (req, res) => {
 });
 
 module.exports = router;
+// Exposto para teste das regras de objetivo.
+module.exports._regras = { apurar, atingimentoDo: atingimentoDe, validarObjetivos, ACOES, ACOES_PRESENCA, QUALIDADE, TETO_ATINGIMENTO };

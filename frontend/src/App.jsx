@@ -115,6 +115,7 @@ const PlanoAcao              = lazy(() => import('./pages/PlanoAcao'));
 const LogsAuditoria          = lazy(() => import('./pages/LogsAuditoria'));
 const Produtividade          = lazy(() => import('./pages/Produtividade'));
 const Torneios               = lazy(() => import('./pages/Torneios'));
+const Desempenho             = lazy(() => import('./pages/Desempenho'));
 
 // Módulo que existe, o cargo permite, mas a loja não assinou.
 //
@@ -459,6 +460,7 @@ function AppContent() {
     organograma:        () => has('organograma')        ? <Organograma userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     pdca:               () => has('pdca')               ? <PlanoAcao userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
     produtividade:      () => has('produtividade')       ? <Produtividade userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
+    desempenho:         () => has('desempenho')         ? <Desempenho userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     torneio:            () => has('torneio')            ? <Torneios userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     logs:               () => has('logs')               ? <LogsAuditoria userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
   };

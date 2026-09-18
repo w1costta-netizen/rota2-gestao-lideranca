@@ -72,6 +72,25 @@ function BadgeCd({ cd }) {
     : <span style={{ fontSize: 11, fontWeight: 700, color: COR.vermelho, background: `${COR.vermelho}14`, borderRadius: 99, padding: '2px 8px' }}>sem CD</span>;
 }
 
+// Cinco semanas de venda. Na extração, SEMANA_1 é a mais recente e SEMANA_5 a
+// mais antiga (provado: nos itens com 14+ dias sem venda, SEMANA_1 é sempre
+// zero). Desenha invertido, da mais antiga à mais recente, para ler como
+// linha do tempo. Semana zerada vira uma barra vermelha de 2px.
+function Semanas({ sw }) {
+  const semanas = [...(sw || [])].reverse();
+  const max = Math.max(...semanas, 1);
+  return (
+    <div title={'5 semanas (antiga → recente): ' + semanas.map(v => brl(v)).join(' · ')}
+      style={{ display: 'inline-flex', alignItems: 'flex-end', gap: 2, height: 18 }}>
+      {semanas.map((v, idx) => (
+        <span key={idx} style={{ width: 6, borderRadius: 1,
+          height: v > 0 ? Math.max(3, Math.round((v / max) * 18)) : 2,
+          background: v > 0 ? COR.azul : COR.vermelho }}/>
+      ))}
+    </div>
+  );
+}
+
 const TH = ({ children, alinha = 'left' }) => (
   <th style={{ textAlign: alinha, padding: '8px 10px', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)',
                textTransform: 'uppercase', letterSpacing: .3, whiteSpace: 'nowrap', borderBottom: '1px solid var(--border)' }}>{children}</th>
@@ -85,13 +104,14 @@ function Tabela({ linhas, comBadgeCd, pagina, porPagina }) {
   const visiveis = porPagina ? linhas.slice(inicio, inicio + porPagina) : linhas;
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1100 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 1500 }}>
         <thead><tr>
           <TH>Código</TH><TH>Descrição</TH><TH>Portfólio</TH><TH>Seção</TH><TH>Fornecedor</TH>
           <TH alinha="right">{comBadgeCd ? 'CD' : 'CD (cxs)'}</TH>
           <TH alinha="right">Venda média/dia</TH><TH alinha="right">Preço</TH>
           <TH>Última venda</TH><TH>Dias s/ venda</TH><TH>Últ. recebimento</TH>
           <TH alinha="right">Perda/dia</TH><TH alinha="right">Venda perdida</TH>
+          <TH alinha="right">Mês ant.</TH><TH alinha="right">Mês atual</TH><TH>5 semanas</TH><TH alinha="right">Queda no mês</TH>
         </tr></thead>
         <tbody>
           {visiveis.map(i => (
@@ -108,10 +128,15 @@ function Tabela({ linhas, comBadgeCd, pagina, porPagina }) {
               <TD>{dataBR(i.rc)}</TD>
               <TD alinha="right">{brl(i.vpDia)}</TD>
               <TD alinha="right" style={{ fontWeight: 700, color: COR.vermelho }}>{brl(i.vp)}</TD>
+              <TD alinha="right">{brl(i.va)}</TD>
+              <TD alinha="right">{brl(i.vendidoMes)}</TD>
+              <TD><Semanas sw={i.sw}/></TD>
+              <TD alinha="right" style={{ fontWeight: 700, color: i.queda > 0 ? COR.vermelho : 'var(--text-muted)' }}
+                  title={`esperado até o dia da extração: ${brl(i.esperadoMes)} · vendido: ${brl(i.vendidoMes)}`}>{brl(i.queda)}</TD>
             </tr>
           ))}
           {visiveis.length === 0 && (
-            <tr><td colSpan={13} style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Nenhum item nesta seleção.</td></tr>
+            <tr><td colSpan={17} style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Nenhum item nesta seleção.</td></tr>
           )}
         </tbody>
       </table>
@@ -144,9 +169,13 @@ export default function RupturaVendaPerdida({ bloco }) {
 
   const exportar = () => {
     const linha = i => [i.c, i.d, i.portfolio, i.departamento, i.secao, i.fornecedor, i.cd, i.vm, i.pr,
-                        dataBR(i.uv), i.dias ?? '', dataBR(i.rc), Math.round(i.vpDia), Math.round(i.vp)];
+                        dataBR(i.uv), i.dias ?? '', dataBR(i.rc), Math.round(i.vpDia), Math.round(i.vp),
+                        Math.round(i.va), Math.round(i.vendidoMes), Math.round(i.esperadoMes), Math.round(i.queda),
+                        ...[...(i.sw || [])].reverse().map(v => Math.round(v))];
     const colunas = ['Código', 'Descrição', 'Portfólio', 'Departamento', 'Seção', 'Fornecedor', 'Estoque CD (cxs)',
-                     'Venda média/dia', 'Preço', 'Última venda', 'Dias sem venda', 'Último recebimento', 'Venda perdida/dia', 'Venda perdida'];
+                     'Venda média/dia', 'Preço', 'Última venda', 'Dias sem venda', 'Último recebimento', 'Venda perdida/dia', 'Venda perdida',
+                     'Venda mês anterior', 'Venda mês atual', `Esperado até dia ${k.diaDoMes}`, 'Queda no mês',
+                     'Semana -5', 'Semana -4', 'Semana -3', 'Semana -2', 'Semana -1'];
     gerarExcel({
       nomeArquivo: `Ruptura_${r.dataExtracao}`,
       abas: [
@@ -226,6 +255,8 @@ export default function RupturaVendaPerdida({ bloco }) {
         <KPI valor={n0(k.rupturaCd)} rotulo="Ruptura com estoque no CD" sub={`reposição imediata · ${pct(k.pctRupturaCd)} da ruptura`} cor={COR.amarelo}/>
         <KPI valor={brl(k.vendaPerdida)} rotulo={`Venda perdida (${janela === 'todos' ? 'todos' : janela + 'd'})`} sub={`${n0(k.rupturaJanela)} itens, ${rotuloJanela}`} cor={COR.vermelho}/>
         <KPI valor={brl(k.vendaPerdidaDia)} rotulo="Venda perdida por dia" sub="soma da venda média × preço" cor={COR.vermelho}/>
+        <KPI valor={brl(k.quedaObservada)} rotulo="Queda observada no mês"
+          sub={`vendeu ${brl(k.vendidoMes)} de ${brl(k.esperadoMes)} esperados até o dia ${k.diaDoMes}`} cor={COR.vermelho}/>
         <KPI valor={brl(k.vendaMesAntRisco)} rotulo="Venda mês anterior em risco" sub="dos itens em ruptura na janela" cor={COR.cinza}/>
       </div>
 
@@ -296,7 +327,11 @@ export default function RupturaVendaPerdida({ bloco }) {
         <b>Dias sem venda</b> = data da extração − última venda.{' '}
         <b>Venda perdida por dia</b> = venda média × preço médio; <b>venda perdida</b> = por dia × dias sem venda (mínimo 1).{' '}
         <b>Janela</b> = só itens com até N dias sem venda, para deixar de fora sazonais que seguem ativos no cadastro.{' '}
-        <b>% ruptura</b> = ruptura ÷ ativos com venda; o percentual sobre todos os ativos aparece como secundário.
+        <b>% ruptura</b> = ruptura ÷ ativos com venda; o percentual sobre todos os ativos aparece como secundário.{' '}
+        <b>Queda observada</b> = fato contra fato: o ritmo do item é a média das semanas em que ele vendeu (entre as 5 últimas — as
+        zeradas são a própria ruptura e ficam fora); esse ritmo projetado até o dia {k.diaDoMes} é o <b>esperado</b>, e a queda é o
+        esperado menos o que o mês atual de fato registrou (nunca negativa). Sem semana com venda, usa o mês anterior proporcional aos dias.{' '}
+        <b>5 semanas</b> = barras da mais antiga (esquerda) à mais recente (direita); barra vermelha = semana sem venda.
       </div>
     </div>
   );

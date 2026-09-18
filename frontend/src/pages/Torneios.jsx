@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trophy, Plus, X, Users, User, Medal, HelpCircle, CalendarCheck, Lightbulb, UserPlus, Pencil, Trash2, AlertTriangle, FileSearch } from 'lucide-react';
+import { Trophy, Plus, X, Users, User, Medal, HelpCircle, CalendarCheck, Lightbulb, UserPlus, Pencil, Trash2, AlertTriangle, FileSearch, Target, ClipboardList } from 'lucide-react';
 import api from '../api';
 import Avatar from '../components/Avatar';
 import { useToast } from '../components/Toast';
@@ -315,6 +315,121 @@ function ModalEquipes({ userId, aoFechar, toast }) {
   );
 }
 
+// Lançamento de resultados — a apuração da campanha por objetivo.
+//
+// Só o apurador chega aqui. Cada lançamento mostra quem lançou e quando,
+// e pode ser apagado pelo apurador — o histórico é o contraditório: a
+// pessoa vê exatamente que número entrou na conta dela.
+function ModalResultados({ userId, campanha, participantes, aoFechar, aoMudar, toast }) {
+  const [lista, setLista] = useState(null);
+  const [form, setForm] = useState({ objetivo_id: campanha.objetivos?.[0]?.id || '', participante_id: participantes[0]?.id || '', valor: '', periodo_ref: hoje(), observacao: '' });
+  const [salvando, setSalvando] = useState(false);
+
+  const carregar = async () => {
+    try {
+      const r = await api.get(`/gamificacao/campanhas/${campanha.id}/resultados?requester_id=${userId}`);
+      setLista(r.data || []);
+    } catch { toast('Não foi possível carregar os lançamentos.', 'error'); }
+  };
+  useEffect(() => { carregar(); }, []);
+
+  const objetivoDe = id => (campanha.objetivos || []).find(o => o.id === id);
+
+  const lancar = async () => {
+    if (!form.objetivo_id || !form.participante_id) return toast('Escolha o objetivo e a pessoa.', 'error');
+    if (form.valor === '' || Number(form.valor) < 0) return toast('Informe o valor apurado.', 'error');
+    setSalvando(true);
+    try {
+      await api.post(`/gamificacao/campanhas/${campanha.id}/resultados`, { requester_id: userId, ...form, valor: Number(form.valor) });
+      setForm(f => ({ ...f, valor: '', observacao: '' }));
+      toast('Resultado lançado.');
+      carregar(); aoMudar();
+    } catch (e) { toast(e?.response?.data?.error || 'Não foi possível lançar.', 'error'); }
+    setSalvando(false);
+  };
+
+  const apagar = async (r) => {
+    if (!confirm('Apagar este lançamento? O placar recalcula na hora.')) return;
+    try {
+      await api.delete(`/gamificacao/campanhas/${campanha.id}/resultados/${r.id}?requester_id=${userId}`);
+      carregar(); aoMudar();
+    } catch (e) { toast(e?.response?.data?.error || 'Não foi possível apagar.', 'error'); }
+  };
+
+  const obj = objetivoDe(form.objetivo_id);
+  return (
+    <div className="modal-overlay" onClick={ev => ev.target === ev.currentTarget && aoFechar()}>
+      <div className="modal" style={{ maxWidth: 600 }}>
+        <div className="modal-header">
+          <span className="modal-title">Lançar resultado</span>
+          <button className="btn-icon" onClick={aoFechar}><X size={16}/></button>
+        </div>
+        <div className="modal-body">
+          <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 12 }}>
+            Apuração <strong style={{ color: 'var(--text)' }}>{campanha.frequencia_texto || 'no fim'}</strong>.
+            {' '}Cada lançamento fica registrado com o seu nome; a pessoa vê o número no placar dela.
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div className="form-group">
+              <label className="form-label">Objetivo</label>
+              <select className="select" value={form.objetivo_id} onChange={e => setForm(f => ({ ...f, objetivo_id: e.target.value }))}>
+                {(campanha.objetivos || []).map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Pessoa</label>
+              <select className="select" value={form.participante_id} onChange={e => setForm(f => ({ ...f, participante_id: e.target.value }))}>
+                {participantes.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Valor apurado{obj ? ` (${obj.unidade})` : ''}</label>
+              <input className="input" type="number" min={0} step="any" value={form.valor}
+                onChange={e => setForm(f => ({ ...f, valor: e.target.value }))}
+                placeholder={obj ? `meta: ${obj.alvo} ${obj.unidade}` : ''}/>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Data de referência</label>
+              <input className="input" type="date" value={form.periodo_ref} onChange={e => setForm(f => ({ ...f, periodo_ref: e.target.value }))}/>
+            </div>
+          </div>
+          {obj && (
+            <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: -4, marginBottom: 10 }}>
+              {obj.apuracao === 'soma' ? 'Este objetivo SOMA os lançamentos.' : 'Este objetivo usa o ÚLTIMO valor lançado.'}
+              {' '}{obj.direcao === 'menor' ? 'Menor é melhor.' : 'Maior é melhor.'}
+            </div>
+          )}
+          <div className="form-group">
+            <label className="form-label">Observação (opcional)</label>
+            <input className="input" maxLength={200} value={form.observacao} onChange={e => setForm(f => ({ ...f, observacao: e.target.value }))} placeholder="Ex: fechamento da semana 2"/>
+          </div>
+          <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }} onClick={lancar} disabled={salvando}>
+            {salvando ? 'Lançando...' : 'Lançar resultado'}
+          </button>
+
+          <div style={{ fontWeight: 800, fontSize: 13, margin: '18px 0 6px' }}>Lançamentos ({lista?.length ?? '…'})</div>
+          {!lista ? <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Carregando...</p>
+            : lista.length === 0 ? <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Nenhum resultado lançado ainda.</p>
+            : lista.map(r => {
+              const o = objetivoDe(r.objetivo_id);
+              return (
+                <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div><strong>{r.participante?.full_name || '—'}</strong> · {o?.nome || r.objetivo_id}: <strong>{r.valor} {o?.unidade || ''}</strong></div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      ref. {formatarData(r.periodo_ref)} · lançado por {r.lancador?.full_name || '—'} em {new Date(r.created_at).toLocaleDateString('pt-BR')}{r.observacao ? ` · ${r.observacao}` : ''}
+                    </div>
+                  </div>
+                  <button className="btn-icon" title="Apagar" style={{ color: 'var(--danger)' }} onClick={() => apagar(r)}><Trash2 size={14}/></button>
+                </div>
+              );
+            })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Como pontuar — a tela mais importante depois do placar. Quem não sabe
 // como subir não muda de comportamento, e o torneio vira decoração. As
 // regras vêm do servidor, geradas pelo mesmo código que calcula os pontos:
@@ -410,8 +525,10 @@ function ModalRegras({ regras, aoFechar }) {
                   <div className="card" style={{ background: 'var(--surface-2)' }}>
                     <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Três coisas que valem saber</div>
                     <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12.5, lineHeight: 1.75, color: 'var(--text-muted)' }}>
-                      <li><strong style={{ color: 'var(--text)' }}>Tarefa sem prazo não pontua</strong> na
-                        família Qualidade — só conta quem cumpre um prazo que existia.</li>
+                      <li><strong style={{ color: 'var(--text)' }}>Só entra o que qualquer pessoa pode fazer.</strong> Importar
+                        estoque, conferência de seção, caixas e flyers ficam fora — são função de alguns cargos.</li>
+                      <li><strong style={{ color: 'var(--text)' }}>Tarefa sem prazo não pontua</strong> em
+                        Entregas no prazo — só conta quem cumpre um prazo que existia. Criar tarefa, lista ou anotação marca o dia (constância), mas não dá ponto.</li>
                       <li><strong style={{ color: 'var(--text)' }}>Só abrir telas não pontua.</strong> O que
                         conta é o que você faz e registra, não o que você olha.</li>
                       <li><strong style={{ color: 'var(--text)' }}>Setor é comparado por média</strong>, não
@@ -439,9 +556,16 @@ export default function Torneios({ userId, profile }) {
 
   const [criando, setCriando]   = useState(false);
   const [catalogo, setCatalogo] = useState([]);
+  // Quem pode criar, e para quem: admin para a loja; líder para a cadeia
+  // de subordinados dele. Vem do servidor, que é quem decide de verdade.
+  const [contexto, setContexto] = useState(null);
+  const [lancando, setLancando] = useState(false);
+  const OBJETIVO_VAZIO = { nome: '', unidade: 'R$', alvo: '', direcao: 'maior', apuracao: 'soma', peso: 1 };
   const FORM_VAZIO = {
     nome: '', inicio: hoje(), fim: '', metricas: {}, tema: 'classico',
     premiosIndividual: ['', '', ''], premiosEquipes: ['', '', ''],
+    escopo: 'loja', participantes: [], tipo: 'automatica', objetivos: [{ ...OBJETIVO_VAZIO }],
+    apuradores: [], frequencia_apuracao: 'semanal', peso_objetivo: 50,
   };
   const [form, setForm] = useState(FORM_VAZIO);
   const [salvando, setSalvando] = useState(false);
@@ -460,7 +584,17 @@ export default function Torneios({ userId, profile }) {
     setCarregando(false);
   };
 
-  useEffect(() => { if (userId) carregar(); }, [userId]);
+  useEffect(() => {
+    if (!userId) return;
+    carregar();
+    api.get(`/gamificacao/contexto?requester_id=${userId}`)
+      .then(r => {
+        setContexto(r.data);
+        if (!r.data.escopoLoja) setForm(f => ({ ...f, escopo: 'equipe' }));
+      })
+      .catch(() => setContexto({ podeCriar: false, escopoLoja: false, subordinados: [], pessoasLoja: [] }));
+  }, [userId]);
+  const podeCriarTorneio = ehGestor || !!contexto?.podeCriar;
 
   const abrir = async (c) => {
     setAberta(c); setPlacar(null); setVerTodos(false);
@@ -488,7 +622,11 @@ export default function Torneios({ userId, profile }) {
       .map(([chave, peso]) => ({ chave, peso }));
     if (!form.nome.trim()) return toast('Dê um nome ao torneio.', 'error');
     if (!form.fim) return toast('Defina a data de encerramento.', 'error');
-    if (!metricas.length) return toast('Escolha pelo menos uma família de pontos.', 'error');
+    if (form.tipo !== 'objetivo' && !metricas.length) return toast('Escolha pelo menos uma família de pontos.', 'error');
+    if (form.escopo === 'equipe' && !form.participantes.length) return toast('Escolha quem participa.', 'error');
+    const objetivos = form.tipo === 'automatica' ? [] : form.objetivos.filter(o => o.nome.trim() || o.alvo !== '');
+    if (form.tipo !== 'automatica' && !objetivos.length) return toast('Defina pelo menos um objetivo.', 'error');
+    if (objetivos.some(o => !o.nome.trim() || !(Number(o.alvo) > 0))) return toast('Cada objetivo precisa de nome e meta maior que zero.', 'error');
 
     setSalvando(true);
     try {
@@ -496,6 +634,9 @@ export default function Torneios({ userId, profile }) {
         requester_id: userId, nome: form.nome,
         inicio: form.inicio, fim: form.fim, metricas, tema: form.tema,
         premios: { individual: form.premiosIndividual, equipes: form.premiosEquipes },
+        escopo: form.escopo, participantes: form.participantes,
+        tipo: form.tipo, objetivos, apuradores: form.apuradores,
+        frequencia_apuracao: form.frequencia_apuracao, peso_objetivo: form.peso_objetivo,
       });
       toast('Torneio criado!');
       setCriando(false);
@@ -542,6 +683,11 @@ export default function Torneios({ userId, profile }) {
     const eu = minhaPos >= 0 ? placar.individual[minhaPos] : null;
     const topo = placar?.individual?.slice(0, 3) || [];
     const lista = verTodos ? placar?.individual || [] : topo;
+    const temObjetivos = (placar?.objetivos || []).length > 0;
+    const souApurador = !!placar?.souApurador;
+    const veExtrato = (id) => ehGestor || souApurador || id === userId;
+    const pctDe = (a) => a == null ? '—' : `${Math.round(a * 100)}%`;
+    const corAting = (a) => a == null ? 'var(--text-muted)' : a >= 1 ? '#16a34a' : a >= 0.8 ? '#d97706' : '#dc2626';
 
     return (
       <div>
@@ -556,13 +702,43 @@ export default function Torneios({ userId, profile }) {
               {!aberta.ativa ? ' · Encerrado' : ''}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+            {temObjetivos && souApurador && aberta.ativa && (
+              <button className="btn btn-primary btn-sm" onClick={() => setLancando(true)}>
+                <ClipboardList size={14}/> Lançar resultado
+              </button>
+            )}
             <button className="btn btn-sm" onClick={abrirRegras}>
               <HelpCircle size={14}/> Como pontuar
             </button>
             <button className="btn btn-sm" onClick={() => setAberta(null)}>← Voltar</button>
           </div>
         </div>
+
+        {/* Objetivos e apuração — SEMPRE visíveis. Meta que ninguém sabe
+            qual é não move ninguém; apuração que ninguém sabe quem faz vira
+            desconfiança. */}
+        {temObjetivos && (
+          <div className="card" style={{ marginBottom: 12, borderLeft: `4px solid ${T.cores.principal}`, borderRadius: '0 12px 12px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800, fontSize: 13.5, marginBottom: 6 }}>
+              <Target size={15} color={T.cores.principal}/> Objetivos
+              {aberta.tipo === 'mista' && <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600 }}>· {aberta.peso_objetivo}% do placar; o resto vem das ações do app</span>}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+              {placar.objetivos.map(o => (
+                <span key={o.id} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 99, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                  <strong>{o.nome}</strong> {o.direcao === 'menor' ? '≤' : '≥'} {o.alvo} {o.unidade}
+                  <span style={{ color: 'var(--text-muted)' }}> · {o.apuracao === 'soma' ? 'soma' : 'último valor'} · peso {o.peso}</span>
+                </span>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+              <strong style={{ color: 'var(--text)' }}>Apuração {placar.campanha.frequencia_texto || 'no fim'}</strong>
+              {aberta.apuradores_nomes?.length ? <> · lançada por <strong style={{ color: 'var(--text)' }}>{aberta.apuradores_nomes.join(', ')}</strong></> : ''}
+              {' '}· teto de {Math.round((placar.tetoAtingimento || 1.2) * 100)}% por objetivo — meta estourada não decide sozinha.
+            </div>
+          </div>
+        )}
 
         {placar?.foraDeEquipe > 0 && (
           <div className="card" style={{ marginBottom: 12, display: 'flex', gap: 10, alignItems: 'flex-start',
@@ -579,13 +755,13 @@ export default function Torneios({ userId, profile }) {
           <div className="card" style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.6 }}>
               <strong style={{ color: 'var(--text)' }}>Famílias que contam:</strong>{' '}
-              {(placar.familias || []).map(d => `${d.nome} (peso ${d.peso})`).join(' · ')}
+              {(placar.familias || []).map(d => d.ehObjetivo ? `${d.nome} (${d.peso}% do placar)` : `${d.nome} (peso ${d.peso})`).join(' · ')}
             </div>
           </div>
         )}
 
         <div style={{ display: 'flex', gap: 4, borderBottom: '1px solid var(--border)', marginBottom: 18 }}>
-          {[['setores', T.grupos, Users], ['individual', 'Individual', User]].map(([k, r, Ic]) => (
+          {[['setores', T.grupos, Users], ['individual', 'Individual', User], ...(temObjetivos ? [['objetivos', 'Objetivos', Target]] : [])].map(([k, r, Ic]) => (
             <button key={k} onClick={() => setAba(k)} style={{
               padding: '9px 16px', fontSize: 13, fontWeight: 700, background: 'none', border: 'none',
               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
@@ -598,6 +774,43 @@ export default function Torneios({ userId, profile }) {
         {!placar ? (
           <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>
             Calculando o placar...
+          </div>
+        ) : aba === 'objetivos' ? (
+          <div className="card">
+            <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.6 }}>
+              Apuração visível para todos os participantes: cada um vê o próprio número e a meta.
+              {souApurador ? ' Você é apurador — pode lançar e corrigir resultados.' : ''}
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
+                <thead><tr>
+                  <th style={{ textAlign: 'left', padding: '8px 6px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Pessoa</th>
+                  {placar.objetivos.map(o => (
+                    <th key={o.id} style={{ textAlign: 'center', padding: '8px 6px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                      {o.nome}<br/><span style={{ fontWeight: 400, textTransform: 'none' }}>{o.direcao === 'menor' ? '≤' : '≥'} {o.alvo} {o.unidade}</span>
+                    </th>
+                  ))}
+                  <th style={{ textAlign: 'center', padding: '8px 6px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Objetivos</th>
+                </tr></thead>
+                <tbody>
+                  {(ehGestor || souApurador ? placar.individual : placar.individual.filter(p => p.id === userId)).map(p => (
+                    <tr key={p.id}>
+                      <td style={{ padding: '8px 6px', borderBottom: '1px solid var(--border)', fontSize: 13, fontWeight: p.id === userId ? 800 : 600, whiteSpace: 'nowrap' }}>{p.nome}{p.id === userId ? ' (você)' : ''}</td>
+                      {p.objetivos.map(d => (
+                        <td key={d.id} style={{ textAlign: 'center', padding: '8px 6px', borderBottom: '1px solid var(--border)', fontSize: 12.5 }}>
+                          <div style={{ fontWeight: 800, color: corAting(d.atingimento) }}>{pctDe(d.atingimento)}</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{d.valor == null ? 'sem lançamento' : `${d.valor} ${d.unidade}`}</div>
+                        </td>
+                      ))}
+                      <td style={{ textAlign: 'center', padding: '8px 6px', borderBottom: '1px solid var(--border)', fontWeight: 800, fontSize: 14 }}>{p.porFamilia?.objetivo ?? 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!(ehGestor || souApurador) && (
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 8 }}>A tabela completa é do apurador; o pódio está na aba Individual.</div>
+            )}
           </div>
         ) : aba === 'setores' ? (
           <div className="card">
@@ -640,11 +853,11 @@ export default function Torneios({ userId, profile }) {
                 ? <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Ninguém pontuou ainda.</p>
                 : lista.map((p, i) => (
                   <div key={p.id}
-                    onClick={() => (ehGestor || p.id === userId) && setExtratoDe(p.id)}
-                    title={(ehGestor || p.id === userId) ? 'Ver de onde vieram estes pontos' : undefined}
+                    onClick={() => veExtrato(p.id) && setExtratoDe(p.id)}
+                    title={veExtrato(p.id) ? 'Ver de onde vieram estes pontos' : undefined}
                     style={{
                       display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0',
-                      cursor: (ehGestor || p.id === userId) ? 'pointer' : 'default',
+                      cursor: veExtrato(p.id) ? 'pointer' : 'default',
                       borderBottom: i < lista.length - 1 ? '1px solid var(--border)' : 'none',
                     }}>
                     <span style={{
@@ -716,7 +929,7 @@ export default function Torneios({ userId, profile }) {
 
             {/* Lista completa só para quem administra: é informação de
                 gestão, não de vitrine. */}
-            {ehGestor && placar.individual.length > 3 && (
+            {(ehGestor || souApurador) && placar.individual.length > 3 && (
               <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }}
                 onClick={() => setVerTodos(v => !v)}>
                 {verTodos ? 'Mostrar só o pódio' : `Ver todos (${placar.individual.length})`}
@@ -729,6 +942,11 @@ export default function Torneios({ userId, profile }) {
         {extratoDe && (
           <ModalExtrato userId={userId} campanhaId={aberta.id} pessoaId={extratoDe}
             toast={toast} aoFechar={() => setExtratoDe(null)}/>
+        )}
+        {lancando && placar && (
+          <ModalResultados userId={userId} campanha={placar.campanha} toast={toast}
+            participantes={placar.individual.map(p => ({ id: p.id, nome: p.nome }))}
+            aoFechar={() => setLancando(false)} aoMudar={() => abrir(aberta)}/>
         )}
       </div>
     );
@@ -751,7 +969,7 @@ export default function Torneios({ userId, profile }) {
               <Users size={14}/> Equipes
             </button>
           )}
-          {ehGestor && (
+          {podeCriarTorneio && (
             <button className="btn btn-primary btn-sm" onClick={abrirCriacao}>
               <Plus size={14}/> Novo torneio
             </button>
@@ -785,11 +1003,26 @@ export default function Torneios({ userId, profile }) {
                   {formatarData(c.inicio)} a {formatarData(c.fim)}
                   {c.premio ? ` · ${c.premio}` : ''}
                 </div>
+                {/* Escopo, tipo e apuração ficam claros no cartão — é a
+                    regra combinada: o líder escolhe, e todo mundo sabe. */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
+                    {c.escopo === 'equipe' ? `Equipe · ${(c.participantes || []).length} pessoa(s)${c.criador_nome ? ` · de ${c.criador_nome.split(' ')[0]}` : ''}` : 'Loja inteira'}
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
+                    {c.tipo === 'objetivo' ? 'Por objetivo' : c.tipo === 'mista' ? `Mista · ${c.peso_objetivo}% objetivos` : 'Automático'}
+                  </span>
+                  {c.tipo !== 'automatica' && (
+                    <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: 'rgba(232,98,42,.1)', color: 'var(--primary)' }}>
+                      Apuração {c.frequencia_texto || 'no fim'}{c.apuradores_nomes?.length ? ` · por ${c.apuradores_nomes.map(n => n.split(' ')[0]).join(', ')}` : ''}
+                    </span>
+                  )}
+                </div>
               </div>
               <button className="btn btn-sm" onClick={() => abrir(c)}>
                 <Medal size={13}/> Ver placar
               </button>
-              {ehGestor && c.ativa && (
+              {(ehGestor || c.criado_por === userId) && c.ativa && (
                 <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => encerrar(c)}>
                   Encerrar
                 </button>
@@ -849,6 +1082,157 @@ export default function Torneios({ userId, profile }) {
                   onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
                   placeholder="Ex: Desafio de Setembro"/>
               </div>
+
+              {/* PARA QUEM. Admin escolhe loja ou equipe; líder só cria para a
+                  própria cadeia de subordinados — e não concorre nela. */}
+              <div className="form-group">
+                <label className="form-label">Para quem</label>
+                {contexto?.escopoLoja ? (
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    {[['loja', 'Loja inteira'], ['equipe', 'Uma equipe']].map(([v, r]) => (
+                      <button key={v} type="button" onClick={() => setForm(f => ({ ...f, escopo: v }))}
+                        style={{ padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                                 border: `1px solid ${form.escopo === v ? 'var(--primary)' : 'var(--border)'}`,
+                                 background: form.escopo === v ? 'rgba(232,98,42,.08)' : 'transparent',
+                                 color: form.escopo === v ? 'var(--primary)' : 'var(--text-muted)' }}>{r}</button>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>
+                    Sua equipe: só quem responde a você entra. Você não concorre — você apura.
+                  </div>
+                )}
+                {form.escopo === 'equipe' && (
+                  <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
+                    {(contexto?.escopoLoja ? contexto?.pessoasLoja : contexto?.subordinados || []).filter(p => p.id !== userId).map(p => {
+                      const dentro = form.participantes.includes(p.id);
+                      return (
+                        <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
+                          <input type="checkbox" checked={dentro}
+                            onChange={() => setForm(f => ({ ...f, participantes: dentro ? f.participantes.filter(i => i !== p.id) : [...f.participantes, p.id] }))}/>
+                          <span style={{ fontSize: 13, fontWeight: 600, flex: 1 }}>{p.full_name}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.sector || ''}</span>
+                        </label>
+                      );
+                    })}
+                    {(contexto?.escopoLoja ? contexto?.pessoasLoja : contexto?.subordinados || []).length === 0 && (
+                      <div style={{ padding: 12, fontSize: 12.5, color: 'var(--text-muted)' }}>Ninguém responde a você no organograma ainda.</div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* TIPO. Automático = pontos do app. Por objetivo = metas de
+                  resultado lançadas pelo apurador. Mista = os dois. */}
+              <div className="form-group">
+                <label className="form-label">Como pontua</label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  {[['automatica', 'Automático', 'Pontos do que a equipe já faz no app'], ['objetivo', 'Por objetivo', 'Metas de resultado (venda, ruptura, perda…) lançadas pelo apurador'], ['mista', 'Mista', 'Objetivos + ações do app, com peso']].map(([v, r, d]) => (
+                    <button key={v} type="button" onClick={() => setForm(f => ({ ...f, tipo: v }))}
+                      style={{ textAlign: 'left', padding: '9px 10px', borderRadius: 10, cursor: 'pointer',
+                               border: `1.5px solid ${form.tipo === v ? 'var(--primary)' : 'var(--border)'}`,
+                               background: form.tipo === v ? 'rgba(232,98,42,.08)' : 'var(--surface-2)' }}>
+                      <div style={{ fontWeight: 700, fontSize: 12.5, color: form.tipo === v ? 'var(--primary)' : 'var(--text)' }}>{r}</div>
+                      <div style={{ fontSize: 10.5, color: 'var(--text-muted)', lineHeight: 1.4 }}>{d}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {form.tipo !== 'automatica' && (
+                <>
+                  <div className="form-group">
+                    <label className="form-label">Objetivos (até 5)</label>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+                      Meta numérica e clara. Atingimento = resultado ÷ meta, com teto de 120% — quem faz 55 de 50 empata com quem faz 110 de 100.
+                    </div>
+                    {form.objetivos.map((o, i) => (
+                      <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                          <input className="input" style={{ flex: 1 }} maxLength={80} value={o.nome} placeholder="Ex: Venda de perecíveis"
+                            onChange={e => setForm(f => { const v = [...f.objetivos]; v[i] = { ...v[i], nome: e.target.value }; return { ...f, objetivos: v }; })}/>
+                          {form.objetivos.length > 1 && (
+                            <button type="button" className="btn-icon" style={{ color: 'var(--danger)' }}
+                              onClick={() => setForm(f => ({ ...f, objetivos: f.objetivos.filter((_, j) => j !== i) }))}><Trash2 size={14}/></button>
+                          )}
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: 8 }}>
+                          <div>
+                            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginBottom: 3 }}>Meta</div>
+                            <input className="input" type="number" min={0} step="any" value={o.alvo} placeholder="0"
+                              onChange={e => setForm(f => { const v = [...f.objetivos]; v[i] = { ...v[i], alvo: e.target.value }; return { ...f, objetivos: v }; })}/>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginBottom: 3 }}>Unidade</div>
+                            <select className="select" value={o.unidade} onChange={e => setForm(f => { const v = [...f.objetivos]; v[i] = { ...v[i], unidade: e.target.value }; return { ...f, objetivos: v }; })}>
+                              {(contexto?.unidades || ['R$', '%', 'un']).map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginBottom: 3 }}>Direção</div>
+                            <select className="select" value={o.direcao} onChange={e => setForm(f => { const v = [...f.objetivos]; v[i] = { ...v[i], direcao: e.target.value }; return { ...f, objetivos: v }; })}>
+                              <option value="maior">Maior é melhor</option><option value="menor">Menor é melhor</option>
+                            </select>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginBottom: 3 }}>Apuração</div>
+                            <select className="select" value={o.apuracao} onChange={e => setForm(f => { const v = [...f.objetivos]; v[i] = { ...v[i], apuracao: e.target.value }; return { ...f, objetivos: v }; })}>
+                              <option value="soma">Soma dos lançamentos</option><option value="ultimo">Último valor lançado</option>
+                            </select>
+                          </div>
+                          <div>
+                            <div style={{ fontSize: 10.5, color: 'var(--text-muted)', marginBottom: 3 }}>Peso (1–5)</div>
+                            <input className="input" type="number" min={1} max={5} value={o.peso}
+                              onChange={e => setForm(f => { const v = [...f.objetivos]; v[i] = { ...v[i], peso: Number(e.target.value) || 1 }; return { ...f, objetivos: v }; })}/>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {form.objetivos.length < 5 && (
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setForm(f => ({ ...f, objetivos: [...f.objetivos, { ...OBJETIVO_VAZIO }] }))}>
+                        <Plus size={13}/> Outro objetivo
+                      </button>
+                    )}
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: form.tipo === 'mista' ? '1fr 1fr' : '1fr', gap: 10 }}>
+                    <div className="form-group">
+                      <label className="form-label">Frequência da apuração</label>
+                      <select className="select" value={form.frequencia_apuracao} onChange={e => setForm(f => ({ ...f, frequencia_apuracao: e.target.value }))}>
+                        {Object.entries(contexto?.frequencias || { semanal: 'toda semana', quinzenal: 'a cada 15 dias', mensal: 'todo mês', final: 'no fim da campanha' }).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>Aparece no placar para todos.</div>
+                    </div>
+                    {form.tipo === 'mista' && (
+                      <div className="form-group">
+                        <label className="form-label">Peso dos objetivos: {form.peso_objetivo}%</label>
+                        <input type="range" min={10} max={90} step={10} value={form.peso_objetivo} style={{ width: '100%' }}
+                          onChange={e => setForm(f => ({ ...f, peso_objetivo: Number(e.target.value) }))}/>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{100 - form.peso_objetivo}% vem das ações do app.</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* APURADORES. Qualquer pessoa da loja — a apuração pode ser
+                      delegada. O criador sempre é apurador. */}
+                  <div className="form-group">
+                    <label className="form-label">Quem lança os resultados (além de você)</label>
+                    <div style={{ maxHeight: 160, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 10 }}>
+                      {(contexto?.pessoasLoja || []).filter(p => p.id !== userId).map(p => {
+                        const dentro = form.apuradores.includes(p.id);
+                        return (
+                          <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={dentro}
+                              onChange={() => setForm(f => ({ ...f, apuradores: dentro ? f.apuradores.filter(i => i !== p.id) : [...f.apuradores, p.id] }))}/>
+                            <span style={{ fontSize: 12.5, fontWeight: 600, flex: 1 }}>{p.full_name}</span>
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.sector || ''}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
               {/* Três colocações para cada disputa. O app anuncia e registra;
                   quem entrega o prêmio é a loja — o sistema não toca em
                   dinheiro, o que traria obrigação fiscal que você não quer. */}
@@ -890,6 +1274,7 @@ export default function Torneios({ userId, profile }) {
                 </div>
               </div>
 
+              {form.tipo !== 'objetivo' && (
               <div className="form-group">
                 <label className="form-label">O que conta ponto</label>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10, lineHeight: 1.5 }}>
@@ -915,6 +1300,7 @@ export default function Torneios({ userId, profile }) {
                   );
                 })}
               </div>
+              )}
 
               <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}
                 onClick={criar} disabled={salvando}>

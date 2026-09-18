@@ -108,6 +108,10 @@ export function montarBlocoRuptura(rows, nomeArquivo) {
       uv: dataISO(r.DT_ULTIMA_VENDA),
       rc: dataISO(r.DATA_ULTIMO_RECEBIMENTO),
       va: num(r.sum_VL_VENDAS_BRT_MES_ANTERIOR) ?? 0,
+      // Para a queda OBSERVADA: o que vendeu no mês atual e nas cinco
+      // semanas anteriores (1 = a mais recente). É fato, não projeção.
+      vt: num(r.sum_VL_VENDAS_BRT_MES_ATUAL) ?? 0,
+      sw: [1, 2, 3, 4, 5].map(n => Math.round((num(r[`sum_VL_VENDAS_BRT_SEMANA_${n}`]) ?? 0) * 100) / 100),
     });
   }
 
@@ -159,16 +163,40 @@ export function calcularRuptura(bloco, { janela = 30, filtros = {} } = {}) {
   const semVenda   = busca ? 0 : bloco.ativos_sem_venda.filter(t => passaDim(...t)).length;
   const suspensos  = busca ? 0 : bloco.suspensos.filter(t => passaDim(t[0], t[1], t[2], t[3])).length;
 
-  // Regras 3, 4, 6, 7 por item.
+  // Dia do mês da extração: quantos dias do mês atual já passaram. É o que
+  // permite comparar "o que vendeu até hoje" com "o que deveria ter vendido".
+  const diaDoMes = parseInt(String(bloco.data_extracao || '').slice(8, 10), 10) || 1;
+  const diasNoMes = (() => {
+    const [a, m] = String(bloco.data_extracao || '').split('-').map(Number);
+    return a && m ? new Date(Date.UTC(a, m, 0)).getUTCDate() : 30;
+  })();
+
+  // Regras 3, 4, 6, 7 por item, mais a queda observada.
   const enriquecidos = itensFiltrados.map(i => {
     const dias = diasEntre(i.uv, bloco.data_extracao);
     const ruptura = i.e <= 0 && i.vm > 0;
     const vpDia = i.vm * (i.pr || 0);
     const vp = vpDia * Math.max(1, dias ?? 1);
+
+    // QUEDA OBSERVADA. O ritmo do item é a média das semanas em que ele
+    // VENDIA (entre as cinco) — as semanas zeradas são a própria ruptura, e
+    // entrariam na média puxando o ritmo para baixo. Projetado até o dia da
+    // extração e comparado com o que o mês atual de fato registrou. Sem
+    // semana com venda, cai no mês anterior proporcional aos dias corridos.
+    const semanas = i.sw || [];
+    const comVenda = semanas.filter(v => v > 0);
+    const ritmoSemanal = comVenda.length
+      ? comVenda.reduce((a, b) => a + b, 0) / comVenda.length
+      : (i.va || 0) * 7 / diasNoMes;
+    const esperadoMes = ritmoSemanal * diaDoMes / 7;
+    const vendidoMes = i.vt || 0;
+    const queda = Math.max(0, esperadoMes - vendidoMes);
+
     return {
       ...i,
       portfolio: dic.p[i.pi], departamento: dic.dp[i.dpi], secao: dic.s[i.si], fornecedor: dic.f[i.fi],
       dias, faixa: faixaDe(dias), ruptura, temCd: ruptura && i.cd > 0, vpDia, vp,
+      ritmoSemanal, esperadoMes, vendidoMes, queda,
     };
   });
 
@@ -217,6 +245,11 @@ export function calcularRuptura(bloco, { janela = 30, filtros = {} } = {}) {
       vendaPerdida: soma(naJanela, 'vp'),
       vendaPerdidaDia: soma(naJanela, 'vpDia'),
       vendaMesAntRisco: soma(naJanela, 'va'),                       // regra 10
+      // Fato contra fato, nos itens da janela.
+      vendidoMes: soma(naJanela, 'vendidoMes'),
+      esperadoMes: soma(naJanela, 'esperadoMes'),
+      quedaObservada: soma(naJanela, 'queda'),
+      diaDoMes, diasNoMes,
     },
     faixas,
     porPortfolio:  agrupar(naJanela, 'portfolio'),

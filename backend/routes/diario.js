@@ -2,6 +2,7 @@ const express  = require('express');
 const router   = express.Router();
 const supabase = require('../supabase');
 const { registrarLog } = require('../lib/auditLog');
+const { enviarPush } = require('../lib/notificacoes');
 
 // ─────────────────────────────────────────────────────────────
 // Diário de Bordo — o que aconteceu na loja, dia a dia.
@@ -255,6 +256,119 @@ router.delete('/:id', async (req, res) => {
     company: atual.company, user_id: requester_id,
     antes: { id: req.params.id, trecho: (atual.texto || '').slice(0, 80) },
   });
+  res.json({ ok: true });
+});
+
+// ── Comentários do relato ─────────────────────────────────────
+// Mesmo formato do mural e dos comunicados, para o componente <Comentarios>
+// servir sem mudança. Todo mundo da loja comenta; editar só o autor; apagar
+// o autor ou um gestor. Reações ficam na tabela genérica `reacoes` com
+// tipo = 'diario', pela rota /api/reacoes que já existe.
+
+// GET /api/diario/:id/comentarios?requester_id=
+router.get('/:id/comentarios', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  // Comentário é da loja: quem não é dela não lê.
+  const { data: relato } = await supabase
+    .from('diario_bordo').select('company').eq('id', req.params.id).maybeSingle();
+  if (!relato) return res.status(404).json({ error: 'Relato não encontrado' });
+  if (me.access_level !== 'master' && relato.company !== me.company) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+
+  const { data, error } = await supabase
+    .from('diario_comentarios')
+    .select('*, author:user_id(full_name, avatar_url)')
+    .eq('diario_id', req.params.id)
+    .order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ error: 'Erro ao carregar os comentários.' });
+  res.json(data || []);
+});
+
+// POST /api/diario/:id/comentarios  { requester_id, text }
+router.post('/:id/comentarios', async (req, res) => {
+  const { requester_id, text } = req.body || {};
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  if (!text?.trim()) return res.status(400).json({ error: 'Escreva o comentário.' });
+  const me = await getPerfil(requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const { data: relato } = await supabase
+    .from('diario_bordo').select('company, user_id, texto').eq('id', req.params.id).maybeSingle();
+  if (!relato) return res.status(404).json({ error: 'Relato não encontrado' });
+  if (me.access_level !== 'master' && relato.company !== me.company) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+
+  const { data, error } = await supabase.from('diario_comentarios')
+    .insert({ diario_id: req.params.id, user_id: requester_id, text: text.trim().slice(0, 2000) })
+    .select('*, author:user_id(full_name, avatar_url)').single();
+  if (error) {
+    registrarLog('comentar_diario', 'diario_comentarios', 'erro', { company: relato.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: 'Erro ao salvar o comentário.' });
+  }
+  registrarLog('comentar_diario', 'diario_comentarios', 'sucesso', { company: relato.company, user_id: requester_id, depois: { relato: req.params.id } });
+
+  // Avisa só quem escreveu o relato — é a quem o comentário interessa.
+  if (relato.user_id && relato.user_id !== requester_id) {
+    enviarPush(
+      relato.user_id,
+      `💬 ${me.full_name || 'Alguém'} comentou no seu relato`,
+      `${(relato.texto || '').slice(0, 40)}… ${text.trim().slice(0, 60)}`,
+      'diario',
+      { company: relato.company, rota: req.originalUrl },
+    );
+  }
+  res.json(data);
+});
+
+// PUT /api/diario/comentarios/:cid — só o autor edita
+router.put('/comentarios/:cid', async (req, res) => {
+  const { requester_id, text } = req.body || {};
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  if (!text?.trim()) return res.status(400).json({ error: 'Escreva o comentário.' });
+
+  const { data: c } = await supabase.from('diario_comentarios').select('user_id').eq('id', req.params.cid).maybeSingle();
+  if (!c) return res.status(404).json({ error: 'Comentário não encontrado' });
+  if (c.user_id !== requester_id) return res.status(403).json({ error: 'Só o autor pode editar' });
+
+  const { data, error } = await supabase.from('diario_comentarios')
+    .update({ text: text.trim().slice(0, 2000), updated_at: new Date().toISOString() })
+    .eq('id', req.params.cid)
+    .select('*, author:user_id(full_name, avatar_url)').single();
+  if (error) {
+    registrarLog('editar_comentario_diario', 'diario_comentarios', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: 'Erro ao salvar o comentário.' });
+  }
+  registrarLog('editar_comentario_diario', 'diario_comentarios', 'sucesso', { user_id: requester_id, depois: { id: req.params.cid } });
+  res.json(data);
+});
+
+// DELETE /api/diario/comentarios/:cid?requester_id= — o autor ou um gestor
+router.delete('/comentarios/:cid', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const me = await getPerfil(requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const { data: c } = await supabase
+    .from('diario_comentarios').select('user_id, relato:diario_id(company)').eq('id', req.params.cid).maybeSingle();
+  if (!c) return res.status(404).json({ error: 'Comentário não encontrado' });
+  if (me.access_level !== 'master' && c.relato?.company !== me.company) {
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+  if (c.user_id !== requester_id && !ehGestor(me)) {
+    return res.status(403).json({ error: 'Só o autor ou um gestor pode apagar' });
+  }
+
+  const { error } = await supabase.from('diario_comentarios').delete().eq('id', req.params.cid);
+  if (error) {
+    registrarLog('excluir_comentario_diario', 'diario_comentarios', 'erro', { company: me.company, user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: 'Erro ao apagar o comentário.' });
+  }
+  registrarLog('excluir_comentario_diario', 'diario_comentarios', 'sucesso', { company: me.company, user_id: requester_id, antes: { id: req.params.cid } });
   res.json({ ok: true });
 });
 

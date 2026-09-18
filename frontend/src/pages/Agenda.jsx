@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, FileDown, Send, CalendarDays, Printer } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, FileDown, Send, CalendarDays, Printer, Repeat } from 'lucide-react';
 import { agendaAPI, leadersAPI, pdfAPI } from '../api';
 import api from '../api';
 import { useToast } from '../components/Toast';
@@ -8,7 +8,18 @@ import { getWeekStart, addDays, formatDate } from '../utils';
 
 const DAYS = ['segunda','terca','quarta','quinta','sexta','sabado','domingo'];
 const DAY_LABELS = { segunda:'Segunda', terca:'Terça', quarta:'Quarta', quinta:'Quinta', sexta:'Sexta', sabado:'Sábado', domingo:'Domingo' };
-const EMPTY_ITEM = { title: '', description: '', target_type: '', target_value: '', day_of_week: 'segunda', time: '', lembrete_minutos: null };
+const EMPTY_ITEM = { title: '', description: '', target_type: '', target_value: '', day_of_week: 'segunda', time: '', lembrete_minutos: null, recorrencia_semanas: 0, escopo: 'futuros' };
+
+// Compromisso fixo ("toda terça às 9h"): o servidor cria uma cópia por semana,
+// todas ligadas pelo serie_id. Por isso a duração é finita — sem ela, seriam
+// linhas sem fim.
+const RECORRENCIAS = [
+  { valor: 0,  rotulo: 'Só esta semana' },
+  { valor: 4,  rotulo: 'Toda semana, por 1 mês (4 semanas)' },
+  { valor: 13, rotulo: 'Toda semana, por 3 meses (13 semanas)' },
+  { valor: 26, rotulo: 'Toda semana, por 6 meses (26 semanas)' },
+  { valor: 52, rotulo: 'Toda semana, por 1 ano (52 semanas)' },
+];
 
 const WA_ICON = (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -85,7 +96,8 @@ export default function Agenda({ userId, profile }) {
   const nextWeek = () => setWeek(addDays(week, 7));
 
   const openNew  = (day) => { setEditing(null); setForm({ ...EMPTY_ITEM, day_of_week: day || 'segunda' }); setModal(true); };
-  const openEdit = (item) => { setEditing(item.id); setForm({ ...item }); setModal(true); };
+  const openEdit = (item) => { setEditing(item.id); setForm({ ...item, escopo: item.serie_id ? 'futuros' : 'este' }); setModal(true); };
+  const [removendo, setRemovendo] = useState(null); // item de série aguardando escolha do escopo
 
   // Determina líderes afetados pelo item (para WhatsApp rápido)
   const getAffectedLeaders = (item) => {
@@ -106,9 +118,11 @@ export default function Agenda({ userId, profile }) {
       if (editing) {
         const r = await agendaAPI.update(editing, { ...form, week_start: week, updated_by: userId });
         saved = r.data;
+        if (form.serie_id && form.escopo === 'futuros') toast('Alterado nesta semana e nas próximas');
       } else {
         const r = await agendaAPI.create({ ...form, week_start: week, created_by: userId, company: company || undefined });
         saved = r.data;
+        if (r.data?.criados > 1) toast(`Criado em ${r.data.criados} semanas`);
       }
       setModal(false);
       load();
@@ -118,11 +132,15 @@ export default function Agenda({ userId, profile }) {
     setSaving(false);
   };
 
-  const remove = async (id) => {
-    if (!confirm('Remover este item?')) return;
+  // Item de série pergunta o escopo (só este / este e os próximos) num modal;
+  // item comum segue com a confirmação simples de sempre.
+  const remove = async (item, escopo) => {
+    if (item.serie_id && !escopo) { setRemovendo(item); return; }
+    if (!item.serie_id && !confirm('Remover este item?')) return;
+    setRemovendo(null);
     try {
-      await agendaAPI.remove(id, userId);
-      toast('Item removido');
+      await api.delete(`/agenda/${item.id}`, { params: { requester_id: userId, ...(escopo ? { escopo } : {}) } });
+      toast(escopo === 'futuros' ? 'Removido desta semana em diante' : 'Item removido');
       load();
     } catch (e) { toast(e?.response?.data?.error || 'Erro ao remover', 'error'); }
   };
@@ -419,9 +437,15 @@ export default function Agenda({ userId, profile }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          {item.time && (
-                            <div style={{ fontSize: 11, fontWeight: 700, color: barColor, marginBottom: 3 }}>
+                          {(item.time || item.serie_id) && (
+                            <div style={{ fontSize: 11, fontWeight: 700, color: barColor, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
                               {item.time}
+                              {item.serie_id && (
+                                <span title="Compromisso fixo: repete toda semana"
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600, color: 'var(--text-muted)' }}>
+                                  <Repeat size={10} /> semanal
+                                </span>
+                              )}
                             </div>
                           )}
                           <div className="agenda-item-title">{item.title}</div>
@@ -433,7 +457,7 @@ export default function Agenda({ userId, profile }) {
                         {canManage && (
                           <div className="agenda-item-actions" style={{ flexShrink: 0 }}>
                             <button className="btn-icon" style={{ padding: 4 }} onClick={() => openEdit(item)}><Pencil size={12} /></button>
-                            <button className="btn-icon danger" style={{ padding: 4 }} onClick={() => remove(item.id)}><Trash2 size={12} /></button>
+                            <button className="btn-icon danger" style={{ padding: 4 }} onClick={() => remove(item)}><Trash2 size={12} /></button>
                           </div>
                         )}
                       </div>
@@ -560,6 +584,42 @@ export default function Agenda({ userId, profile }) {
             <input className="input" type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
           </div>
         </div>
+        {!editing && (
+          <div className="form-group">
+            <label className="form-label"><Repeat size={12} style={{ verticalAlign: -2 }} /> Repetir</label>
+            <select className="select" value={form.recorrencia_semanas || 0}
+              onChange={e => setForm(f => ({ ...f, recorrencia_semanas: Number(e.target.value) }))}>
+              {RECORRENCIAS.map(r => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
+            </select>
+            {form.recorrencia_semanas > 0 && (
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 5 }}>
+                Cria o compromisso toda {DAY_LABELS[form.day_of_week]?.toLowerCase()}{form.time ? ` às ${form.time}` : ''}, a partir da semana de {formatDate(week)}.
+                Depois dá para alterar ou remover só uma semana ou todas as seguintes.
+              </div>
+            )}
+          </div>
+        )}
+        {editing && form.serie_id && (
+          <div className="form-group">
+            <label className="form-label"><Repeat size={12} style={{ verticalAlign: -2 }} /> Compromisso fixo — aplicar a</label>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {[['este', 'Só esta semana'], ['futuros', 'Esta e as próximas']].map(([v, r]) => (
+                <button key={v} type="button" onClick={() => setForm(f => ({ ...f, escopo: v }))}
+                  style={{ padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                           border: `1px solid ${form.escopo === v ? 'var(--primary)' : 'var(--border)'}`,
+                           background: form.escopo === v ? 'rgba(232,98,42,.08)' : 'transparent',
+                           color: form.escopo === v ? 'var(--primary)' : 'var(--text-muted)' }}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            {form.escopo === 'este' && (
+              <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 5 }}>
+                Esta semana deixa de fazer parte da série; as outras continuam como estão.
+              </div>
+            )}
+          </div>
+        )}
         <div className="form-group">
           <label className="form-label">🔔 Lembrete</label>
           <select className="select" value={form.lembrete_minutos ?? ''}
@@ -652,6 +712,28 @@ export default function Agenda({ userId, profile }) {
           </div>
         )}
       </Modal>
+
+      {/* Modal — remover item de série: só esta semana ou daqui em diante */}
+      {removendo && (
+        <Modal open onClose={() => setRemovendo(null)} title="Remover compromisso fixo"
+          footer={<button className="btn btn-ghost" onClick={() => setRemovendo(null)}>Cancelar</button>}>
+          <p style={{ fontWeight: 700, marginBottom: 4 }}>{removendo.title}</p>
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 14 }}>
+            Este compromisso se repete toda semana. O que você quer remover?
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button className="btn btn-ghost" style={{ justifyContent: 'flex-start' }} onClick={() => remove(removendo, 'este')}>
+              Só esta semana ({formatDate(week)})
+            </button>
+            <button className="btn btn-ghost" style={{ justifyContent: 'flex-start', color: '#ef4444' }} onClick={() => remove(removendo, 'futuros')}>
+              Esta semana e todas as próximas
+            </button>
+          </div>
+          <p style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 12 }}>
+            As semanas anteriores ficam como estão.
+          </p>
+        </Modal>
+      )}
 
       {/* Modal de notificações pós-salvar */}
       {notify && (

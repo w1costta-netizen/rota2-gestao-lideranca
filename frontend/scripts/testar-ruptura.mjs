@@ -50,4 +50,21 @@ for (const chave of Object.keys(esperado)) {
   console.log((ok ? '  ok   ' : '  DIFF ') + chave.padEnd(20) + String(obtido[chave]).padStart(9) + '   esperado ' + esperado[chave]);
 }
 console.log(`\n${falhas ? falhas + ' DIVERGÊNCIA(S)' : 'todos os 15 números batem.'}`);
+
+// Queda observada (mês atual x ritmo das 5 semanas). Não há conferência
+// externa desses valores; o que se prova aqui são as invariantes.
+const brl = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+console.log(`\nqueda observada (janela 30) · dia ${k.diaDoMes}/${k.diasNoMes} do mês`);
+console.log(`  esperado até o dia ${k.diaDoMes}: ${brl(k.esperadoMes)} · vendido no mês: ${brl(k.vendidoMes)} · queda: ${brl(k.quedaObservada)}`);
+let invalidos = 0;
+for (const i of r.tabelaVp) {
+  if (!(i.queda >= 0) || i.queda > i.esperadoMes + 1e-6 || !Number.isFinite(i.esperadoMes)) invalidos++;
+}
+if (!(k.quedaObservada >= 0) || k.quedaObservada > k.esperadoMes + 1e-6) invalidos++;
+console.log(`  invariantes (0 <= queda <= esperado, em ${r.tabelaVp.length} itens): ${invalidos ? invalidos + ' INVÁLIDO(S)' : 'ok'}`);
+console.log('  top 3 por queda:');
+[...r.tabelaVp].sort((a, b) => b.queda - a.queda).slice(0, 3).forEach(i => {
+  console.log(`    ${String(i.c).padEnd(10)} ${i.d.slice(0, 32).padEnd(33)} semanas antiga→recente [${[...i.sw].reverse().map(v => Math.round(v)).join(', ')}] esperado ${brl(i.esperadoMes)} vendido ${brl(i.vendidoMes)} queda ${brl(i.queda)}`);
+});
+falhas += invalidos;
 process.exit(falhas ? 1 : 0);

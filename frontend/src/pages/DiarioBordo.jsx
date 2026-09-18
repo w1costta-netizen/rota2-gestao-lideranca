@@ -4,6 +4,8 @@ import api from '../api';
 import { useToast } from '../components/Toast';
 import Avatar from '../components/Avatar';
 import ExportMenu from '../components/ExportMenu';
+import ReacaoBar from '../components/ReacaoBar';
+import Comentarios from '../components/Comentarios';
 import { gerarPDF, gerarExcel } from '../lib/exportUtils';
 
 // ─────────────────────────────────────────────────────────────
@@ -60,6 +62,7 @@ export default function DiarioBordo({ userId, profile }) {
   const [busca, setBusca] = useState('');
 
   const [relatos, setRelatos] = useState([]);
+  const [reacoes, setReacoes] = useState({});
   const [carregando, setCarregando] = useState(true);
   const [editando, setEditando] = useState(null);
 
@@ -116,11 +119,43 @@ export default function DiarioBordo({ userId, profile }) {
       if (filtroCat) p.set('categoria', filtroCat);
       if (profile?.company) p.set('company', profile.company);
       const r = await api.get(`/diario?${p.toString()}`);
-      setRelatos(r.data || []);
+      const lista = r.data || [];
+      setRelatos(lista);
+      // Reações vêm da tabela genérica, mesma rota do Mural e dos Comunicados.
+      if (lista.length) {
+        const ids = lista.map(x => x.id).join(',');
+        api.get(`/reacoes?tipo=diario&item_ids=${ids}&user_id=${userId}`)
+          .then(rr => setReacoes(rr.data || {}))
+          .catch(() => {});
+      } else {
+        setReacoes({});
+      }
     } catch {
       toast('Não foi possível carregar o diário.', 'error');
     }
     setCarregando(false);
+  };
+
+  // Mesma atualização otimista do Mural: o servidor diz o que fez (added,
+  // changed, removed) e a tela ajusta a contagem sem recarregar a lista.
+  const toggleReacao = async (itemId, emoji) => {
+    try {
+      const { data } = await api.post('/reacoes/toggle', { tipo: 'diario', item_id: itemId, user_id: userId, emoji });
+      setReacoes(prev => {
+        const item = { ...(prev[itemId] || {}) };
+        if (data.old_emoji && data.old_emoji !== emoji) {
+          const old = item[data.old_emoji] || { count: 0, mine: false };
+          item[data.old_emoji] = { count: Math.max(0, old.count - 1), mine: false };
+        }
+        if (!item[emoji]) item[emoji] = { count: 0, mine: false };
+        if (data.action === 'added' || data.action === 'changed') {
+          item[emoji] = { count: item[emoji].count + 1, mine: true };
+        } else {
+          item[emoji] = { count: Math.max(0, item[emoji].count - 1), mine: false };
+        }
+        return { ...prev, [itemId]: item };
+      });
+    } catch { toast('Erro ao reagir.', 'error'); }
   };
 
   useEffect(() => { if (userId) carregar(); }, [userId, modo, dia, de, ate, filtroCat, profile?.company]);
@@ -367,6 +402,11 @@ export default function DiarioBordo({ userId, profile }) {
                     <div style={{ fontSize:13.5, lineHeight:1.6, whiteSpace:'pre-wrap', wordBreak:'break-word' }}>
                       {r.texto}
                     </div>
+                    {/* Todo mundo da loja reage e comenta; apagar comentário
+                        alheio é só gestor (moderação), como no Mural. */}
+                    <ReacaoBar itemId={r.id} userId={userId} tipo="diario"
+                      reacoes={reacoes[r.id]} onToggle={toggleReacao}/>
+                    <Comentarios recurso="diario" itemId={r.id} userId={userId} podeModerar={ehGestor}/>
                   </div>
                 );
               })}

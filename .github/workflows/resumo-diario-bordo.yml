@@ -1,0 +1,23 @@
+# Manda ao gerente da loja (quem comprou o acesso) o que a equipe lançou no
+# Diário de Bordo no dia anterior.
+#
+# 06:00 UTC = 03:00 em Brasília. A rota só manda para a loja que ainda não
+# recebeu o resumo daquele dia, então chamar de novo não duplica nada.
+
+name: Diário de Bordo por e-mail
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/resumo/diario-bordo
+        run: |
+          resposta=$(curl -s --max-time 280 -X POST \
+            https://rota2-gestao-lideranca.onrender.com/api/resumo/diario-bordo)
+          echo "Resposta: $resposta"
+          echo "$resposta" | grep -q '"ok":true' || echo "::warning::O resumo do diário não respondeu ok"

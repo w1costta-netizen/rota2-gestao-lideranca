@@ -314,6 +314,34 @@ export default function Profile() {
         </div>
       </div>
 
+      {/* Diário de Bordo por e-mail — só para quem é gerente da loja (admin),
+          que é quem o servidor escolhe como destinatário. */}
+      {['admin', 'master'].includes(profile?.access_level) && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>Diário de Bordo por e-mail</div>
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+                Às 3h da manhã, tudo o que a equipe lançou no Diário de Bordo no dia anterior.
+                Dia sem relato não gera e-mail.
+              </p>
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0 }}>
+              <input type="checkbox" checked={profile?.email_diario !== false}
+                onChange={async e => {
+                  const ligado = e.target.checked;
+                  try {
+                    await api.put('/resumo/preferencia', { requester_id: session?.user?.id, email_diario: ligado });
+                    await loadProfile(session?.user?.id);
+                    toast(ligado ? 'Diário por e-mail ligado.' : 'Diário por e-mail desligado.');
+                  } catch { toast('Não foi possível salvar.', 'error'); }
+                }}/>
+              <span style={{ fontSize: 13 }}>{profile?.email_diario !== false ? 'Ligado' : 'Desligado'}</span>
+            </label>
+          </div>
+        </div>
+      )}
+
       {/* Preview da nova foto */}
       {(photoPreview || photoError) && (
         <div className="card" style={{ marginBottom: 20, border: photoError ? '1.5px solid var(--danger)' : '1.5px solid var(--accent)' }}>

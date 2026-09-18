@@ -33,6 +33,7 @@ app.use('/api/resumo',       require('./routes/resumo'));
 app.use('/api/pdca',         require('./routes/pdca'));
 app.use('/api/logs',         require('./routes/logs'));
 app.use('/api/produtividade', require('./routes/produtividade'));
+app.use('/api/desempenho',    require('./routes/desempenho'));
 app.use('/api/listas',       require('./routes/listas'));
 app.use('/api/anotacoes',    require('./routes/anotacoes'));
 app.use('/api/diario',       require('./routes/diario'));
