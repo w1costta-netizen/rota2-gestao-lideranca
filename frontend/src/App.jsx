@@ -45,8 +45,18 @@ const lazy = (fn) => React.lazy(async () => {
     try { sessionStorage.removeItem(CHAVE_RECARGA); } catch { /* modo privado */ }
   };
 
-  try {
+  // Módulo sem `default` é falha, não sucesso: o Vite devolve undefined
+  // quando o arquivo de uma versão antiga não existe mais e o erro foi
+  // cancelado em algum lugar. Tratar como erro cai na recarga abaixo em
+  // vez de estourar dentro do React.
+  const carregar = async () => {
     const modulo = await fn();
+    if (!modulo || !modulo.default) throw new Error('Módulo vazio — versão antiga do app');
+    return modulo;
+  };
+
+  try {
+    const modulo = await carregar();
     marcarSucesso();
     return modulo;
   } catch {
@@ -55,7 +65,7 @@ const lazy = (fn) => React.lazy(async () => {
     // muitas falhas são só uma corrida perdida por pouco.
     try {
       await espera(1500);
-      const modulo = await fn();
+      const modulo = await carregar();
       marcarSucesso();
       return modulo;
     } catch (erro) {

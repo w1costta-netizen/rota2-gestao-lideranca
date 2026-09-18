@@ -18,6 +18,11 @@ const SINAIS = [
   'importing a module script failed',
   'unable to preload css',
   'failed to load module script',
+  // Módulo que "carregou" vazio: é o que o React vê quando o Vite devolve
+  // undefined no lugar do arquivo que não existe mais (ver abaixo).
+  "reading 'default'",
+  '_result.default',
+  'módulo vazio',
 ];
 
 // O erro é de "versão antiga em cache" e não um bug real da tela?
@@ -44,13 +49,17 @@ export function recarregarPorVersaoNova() {
 }
 
 // O Vite avisa por este evento quando falha ao carregar um pedaço do app.
-// Pega os casos que acontecem fora da renderização do React.
+//
+// NUNCA chamar e.preventDefault() aqui. Com o evento cancelado, o Vite não
+// lança o erro: o import resolve com `undefined`, o React.lazy tenta ler
+// `.default` de undefined e a pessoa vê "Algo deu errado" — foram 22
+// falhas em 8 pessoas entre 01/09 e 18/09, quase nenhuma no horário de
+// deploy. Deixando o erro seguir, o lazy() do App.jsx faz o que sabe:
+// tenta de novo e recarrega. O evento fica só como reforço para imports
+// fora do React (html2pdf, por exemplo).
 export function monitorarVersaoNova() {
   window.addEventListener('vite:preloadError', (e) => {
-    if (ehErroDeVersaoAntiga(e?.payload)) {
-      e.preventDefault?.();
-      recarregarPorVersaoNova();
-    }
+    if (ehErroDeVersaoAntiga(e?.payload)) recarregarPorVersaoNova();
   });
 
   window.addEventListener('unhandledrejection', (e) => {
