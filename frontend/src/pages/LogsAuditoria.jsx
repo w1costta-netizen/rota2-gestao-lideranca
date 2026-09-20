@@ -148,7 +148,7 @@ const ACAO_LABEL = {
   editar_perfil: 'Editou o próprio perfil',
   concluir_boas_vindas: 'Concluiu as boas-vindas',
   ativar_conta_hotmart: 'Ativou conta (Hotmart)',
-  webhook_hotmart: 'Recebeu compra (Hotmart)',
+  webhook_hotmart: 'Evento da Hotmart',
 
   // Notificações e erros de tela
   testar_notificacao: 'Testou notificação',
@@ -163,6 +163,30 @@ const ACAO_LABEL = {
   concluir_treinamento_produtividade: 'Concluiu treinamento',
   listar_tarefas: 'Carregou as tarefas',
 };
+
+// O webhook da Hotmart grava uma ação só (webhook_hotmart) e o evento fica
+// no detalhe. Sem isto, compra, cancelamento e reembolso apareciam todos
+// como "Recebeu compra" — e um cancelamento parecia uma venda.
+const EVENTO_HOTMART = {
+  PURCHASE_APPROVED:         'Compra aprovada (Hotmart)',
+  PURCHASE_COMPLETE:         'Compra concluída (Hotmart)',
+  SUBSCRIPTION_CANCELLATION: 'Assinatura cancelada (Hotmart)',
+  PURCHASE_REFUNDED:         'Reembolso (Hotmart)',
+  PURCHASE_CHARGEBACK:       'Chargeback (Hotmart)',
+  PURCHASE_DELAYED:          'Pagamento atrasado (Hotmart)',
+  PURCHASE_PROTEST:          'Pagamento contestado (Hotmart)',
+  PURCHASE_CANCELED:         'Compra cancelada (Hotmart)',
+  PURCHASE_EXPIRED:          'Compra expirada (Hotmart)',
+  PURCHASE_BILLET_PRINTED:   'Boleto emitido (Hotmart)',
+};
+function rotuloAcao(log) {
+  if (log?.acao === 'webhook_hotmart') {
+    const ev = log?.depois?.evento;
+    if (ev) return EVENTO_HOTMART[ev] || `${ev} (Hotmart)`;
+    if (log?.erro_mensagem) return 'Webhook Hotmart rejeitado';
+  }
+  return ACAO_LABEL[log?.acao] || log?.acao;
+}
 
 function formatData(iso) {
   return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -284,7 +308,7 @@ export default function LogsAuditoria({ userId, profile }) {
                 rows: list.map(l => ({
                   data: formatData(l.created_at),
                   status: l.status === 'falha' ? 'Falha' : 'Sucesso',
-                  acao: ACAO_LABEL[l.acao] || l.acao,
+                  acao: rotuloAcao(l),
                   tabela: l.tabela || '',
                   usuario: l.usuario?.full_name || 'Sistema',
                   empresa: l.company || '',
@@ -300,7 +324,7 @@ export default function LogsAuditoria({ userId, profile }) {
                 rows: list.map(l => [
                   formatData(l.created_at),
                   l.status === 'falha' ? 'Falha' : 'Sucesso',
-                  ACAO_LABEL[l.acao] || l.acao,
+                  rotuloAcao(l),
                   l.tabela || '',
                   l.usuario?.full_name || 'Sistema',
                   l.company || '',
@@ -406,7 +430,7 @@ export default function LogsAuditoria({ userId, profile }) {
                 : <CheckCircle2 size={16} style={{ color:'#10b981', flexShrink:0, marginTop:2 }}/>}
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:2 }}>
-                  <span style={{ fontWeight:700, fontSize:13 }}>{ACAO_LABEL[log.acao] || log.acao}</span>
+                  <span style={{ fontWeight:700, fontSize:13 }}>{rotuloAcao(log)}</span>
                   {log.tabela && <span style={{ fontSize:11, color:'var(--text-muted)' }}>· {log.tabela}</span>}
                   {(isMaster || empresasExtras.length > 0) && log.company && (
                     <span style={{ fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:5,
