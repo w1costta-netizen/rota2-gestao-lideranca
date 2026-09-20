@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { Plus, Pencil, Trash2, Camera, CheckCircle, Circle, FileText, ChevronRight, X, ArrowLeft, Upload, Loader, Download, FileSpreadsheet, Sparkles, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Camera, CheckCircle, Circle, FileText, ChevronRight, X, ArrowLeft, Upload, Loader, Download, FileSpreadsheet, Sparkles, AlertTriangle, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import api from '../api';
 import { comprimirImagem } from '../lib/imagem';
@@ -194,7 +194,20 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
 
   const totalItens = itens.length;
   // Um item conta como concluído com foto OU sinalizado (ruptura / armazenado e não exposto)
-  const validados  = itens.filter(i => i.campanha_evidencias?.length > 0 || i.sinalizacao).length;
+  const estaPronto = i => (i.campanha_evidencias?.length > 0) || !!i.sinalizacao;
+  const validados  = itens.filter(estaPronto).length;
+
+  // O QUE FALTA PRIMEIRO. A lista segue a ordem do flyer, e conforme a
+  // pessoa conclui, os pendentes ficam espalhados entre os prontos — ela
+  // rolava a lista inteira procurando. Abre em "Faltam": cada item concluído
+  // sai da vista, e sobra só o que precisa de foto. Busca para achar um
+  // item pelo nome sem rolar.
+  const [filtroLista, setFiltroLista] = useState('faltam');   // faltam | prontos | todos
+  const [buscaItem, setBuscaItem] = useState('');
+  const termoItem = buscaItem.trim().toLowerCase();
+  const itensVisiveis = itens.filter(i =>
+    (filtroLista === 'todos' ? true : filtroLista === 'prontos' ? estaPronto(i) : !estaPronto(i))
+    && (!termoItem || `${i.descricao || ''} ${i.categoria || ''}`.toLowerCase().includes(termoItem)));
   const sinalizadosRuptura   = itens.filter(i => i.sinalizacao === 'ruptura').length;
   const sinalizadosNaoExposto = itens.filter(i => i.sinalizacao === 'nao_exposto').length;
   const progresso  = totalItens ? Math.round((validados / totalItens) * 100) : 0;
@@ -720,9 +733,34 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
 
       {loading && <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 32 }}>Carregando...</div>}
 
+      {/* Filtro e busca da lista */}
+      {itens.length > 0 && (
+        <div className="card" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '10px 12px', marginBottom: 12,
+                                       position: 'sticky', top: 0, zIndex: 5 }}>
+          {[['faltam', `Faltam (${itens.length - validados})`], ['prontos', `Prontos (${validados})`], ['todos', `Todos (${itens.length})`]].map(([id, rot]) => (
+            <button key={id} onClick={() => setFiltroLista(id)}
+              style={{ padding: '6px 12px', borderRadius: 99, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                       border: `1px solid ${filtroLista === id ? 'var(--primary)' : 'var(--border)'}`,
+                       background: filtroLista === id ? 'var(--primary)' : 'transparent',
+                       color: filtroLista === id ? '#fff' : 'var(--text-muted)' }}>{rot}</button>
+          ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 180px', background: 'var(--surface-2)', borderRadius: 'var(--radius)', padding: '6px 10px' }}>
+            <Search size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }}/>
+            <input value={buscaItem} onChange={e => setBuscaItem(e.target.value)} placeholder="Buscar item" spellCheck={false}
+              style={{ border: 'none', background: 'none', outline: 'none', width: '100%', fontSize: 13, color: 'var(--text)' }}/>
+            {buscaItem && <button onClick={() => setBuscaItem('')} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0, display: 'flex' }}><X size={14}/></button>}
+          </div>
+        </div>
+      )}
+
       {/* Lista de itens */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {itens.map(item => {
+        {!loading && itens.length > 0 && itensVisiveis.length === 0 && (
+          <div className="card" style={{ textAlign: 'center', padding: 26, color: 'var(--text-muted)', fontSize: 13.5 }}>
+            {termoItem ? 'Nenhum item com esse nome.' : filtroLista === 'faltam' ? '🎉 Nada faltando — todos os itens têm foto ou sinalização.' : 'Nenhum item pronto ainda.'}
+          </div>
+        )}
+        {itensVisiveis.map(item => {
           const evs = item.campanha_evidencias || [];
           const sinal = item.sinalizacao; // 'ruptura' | 'nao_exposto' | null
           const ok  = evs.length > 0 || !!sinal;
