@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Metas — protótipo</title>
+<style>
+  :root { --primary:#E8681A; --roxo:#2E1A47; --bg:#f4f4f7; --surface:#fff; --surface-2:#f1f1f5; --border:#e3e3ea; --text:#1d1d24; --muted:#6b6b7b; --verde:#16a34a; --amarelo:#d97706; --vermelho:#dc2626; --azul:#2563eb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); color:var(--text); font-size:14px; }
+  .topo { background:var(--roxo); color:#fff; padding:14px 18px; display:flex; align-items:center; gap:12px; }
+  .topo b { font-size:16px; } .topo small { opacity:.75; }
+  .pagina { max-width:1100px; margin:0 auto; padding:16px; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+  h2 { font-size:16px; margin:0 0 4px; } h3 { font-size:13.5px; margin:0 0 8px; }
+  .muted { color:var(--muted); font-size:12.5px; }
+  .linha { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .btn { border:1px solid var(--border); background:var(--surface); border-radius:9px; padding:8px 12px; font-weight:600; cursor:pointer; font-size:13px; color:var(--text); }
+  .btn.primario { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .btn.mini { padding:5px 9px; font-size:12px; }
+  .btn.ativo { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .input, select { border:1px solid var(--border); border-radius:9px; padding:8px 10px; font-size:13.5px; background:var(--surface); color:var(--text); width:100%; }
+  label { display:block; font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.3px; margin:8px 0 4px; }
+  .grade { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px,1fr)); gap:10px; }
+  .painel { display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:10px; }
+  .medida { background:var(--surface-2); border-radius:12px; padding:12px; cursor:pointer; border:1.5px solid transparent; }
+  .medida:hover { border-color:var(--primary); }
+  .medida .r { font-size:11px; color:var(--muted); font-weight:700; text-transform:uppercase; }
+  .medida .v { font-size:22px; font-weight:800; margin-top:2px; font-variant-numeric:tabular-nums; }
+  .medida .s { font-size:11.5px; color:var(--muted); }
+  .selo { display:inline-block; font-size:11px; font-weight:700; border-radius:99px; padding:3px 9px; }
+  .tipo-btn { flex:1; min-width:150px; text-align:left; padding:10px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface-2); cursor:pointer; }
+  .tipo-btn.on { border-color:var(--primary); background:#fff3ec; }
+  .tipo-btn b { display:block; font-size:13px; } .tipo-btn span { font-size:11px; color:var(--muted); }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { padding:7px 8px; border-bottom:1px solid var(--border); text-align:left; }
+  th { font-size:11px; color:var(--muted); text-transform:uppercase; }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
+  .ind { cursor:pointer; border-left:4px solid var(--primary); border-radius:0 12px 12px 0; }
+  .ind:hover { background:#fffaf6; }
+  svg text { font-family:inherit; }
+  .modal-fundo { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; padding:14px; z-index:50; }
+  .modal { background:var(--surface); border-radius:14px; width:100%; max-width:600px; max-height:92vh; overflow:auto; padding:16px 18px; }
+  .aviso { background:#fff3ec; border:1px solid #f7c9ad; border-radius:10px; padding:8px 12px; font-size:12.5px; }
+  .barra { height:10px; border-radius:99px; background:#e6e6ec; overflow:hidden; }
+  .barra > div { height:100%; border-radius:99px; transition:width .4s; }
+  @media (max-width:640px) { .medida .v { font-size:18px; } }
+</style>
+</head>
+<body>
+<div class="topo"><span style="font-size:20px">🎯</span><div><b>Metas</b><br><small>Protótipo — dados ficam só neste navegador.</small></div></div>
+<div class="pagina" id="app"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// PROTÓTIPO. Sem backend: tudo em localStorage.
+//
+// UMA META, ATÉ TRÊS MEDIDAS. "Venda de Bazar" é quantidade + R$ + % ao
+// mesmo tempo; "Faltas" é só quantidade. Quem cria marca as medidas que
+// fazem sentido; o lançamento pede os números juntos, numa data só; e a
+// tela mostra os três lado a lado (painel), com detalhe de um por vez.
+// A regra de "qual gráfico" está em graficoAutomatico().
+// ─────────────────────────────────────────────────────────────
+const MEDIDAS = {
+  quantidade: { nome: 'Quantidade', curto: 'Qtd', ex: 'Ex.: 1.200 unidades, 14 faltas, 300 itens', fmt: v => Math.round(v).toLocaleString('pt-BR'), passo: 1 },
+  reais:      { nome: 'Valor em R$', curto: 'R$', ex: 'Ex.: R$ 450.000 de venda, R$ 8.000 de perda', fmt: v => 'R$ ' + Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 }), passo: 0.01 },
+  percentual: { nome: 'Percentual (%)', curto: '%', ex: 'Ex.: 5% de ruptura, 100% da meta', fmt: v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%', passo: 0.1 },
+};
+const ORDEM = ['quantidade', 'reais', 'percentual'];
+const FREQ = { diario: 'Diário', semanal: 'Semanal', mensal: 'Mensal' };
+const hoje = () => new Date().toISOString().slice(0, 10);
+const br = iso => iso ? iso.split('-').reverse().join('/') : '';
+const dias = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
+
+// medidas: { quantidade: {inicial, meta}, reais: {...}, percentual: {...} } — só as usadas.
+// medicoes: [{ data, valores: { quantidade, reais, percentual } }]
+const EXEMPLO = {
+  planos: [{ id: 'p1', titulo: 'Reduzir ruptura em Perecíveis', meta: 'Ruptura de 12% para menos de 5% até 31/10' },
+           { id: 'p2', titulo: 'Aumentar venda de Bazar', meta: 'Venda mensal de R$ 380 mil para R$ 450 mil' },
+           { id: 'p3', titulo: 'Reduzir fila no caixa', meta: 'Tempo de espera abaixo de 5 minutos' }],
+  metas: [
+    { id: 'm1', plano_id: 'p2', nome: 'Venda de Bazar', direcao: 'aumentar', prazo: '2026-12-31', freq: 'mensal', grafico: 'auto',
+      medidas: { quantidade: { inicial: 9800, meta: 12000 }, reais: { inicial: 380000, meta: 450000 }, percentual: { inicial: 84, meta: 100 } },
+      medicoes: [
+        { data: '2026-06-30', valores: { quantidade: 9800, reais: 380000, percentual: 84.4 } },
+        { data: '2026-07-31', valores: { quantidade: 10150, reais: 392000, percentual: 87.1 } },
+        { data: '2026-08-31', valores: { quantidade: 10400, reais: 401500, percentual: 89.2 } },
+        { data: '2026-09-30', valores: { quantidade: 10900, reais: 418000, percentual: 92.9 } },
+      ] },
+    { id: 'm2', plano_id: 'p1', nome: 'Ruptura Perecíveis', direcao: 'reduzir', prazo: '2026-10-31', freq: 'semanal', grafico: 'auto',
+      medidas: { quantidade: { inicial: 412, meta: 150 }, reais: { inicial: 217000, meta: 60000 }, percentual: { inicial: 12, meta: 5 } },
+      medicoes: [
+        { data: '2026-08-31', valores: { quantidade: 412, reais: 217000, percentual: 12 } },
+        { data: '2026-09-07', valores: { quantidade: 371, reais: 190000, percentual: 10.4 } },
+        { data: '2026-09-14', valores: { quantidade: 330, reais: 168000, percentual: 9.1 } },
+        { data: '2026-09-21', valores: { quantidade: 299, reais: 151000, percentual: 8.2 } },
+      ] },
+    { id: 'm3', plano_id: null, nome: 'Faltas no mês', direcao: 'reduzir', prazo: '2026-12-31', freq: 'mensal', grafico: 'auto',
+      medidas: { quantidade: { inicial: 14, meta: 6 } },
+      medicoes: [{ data: '2026-07-31', valores: { quantidade: 14 } }, { data: '2026-08-31', valores: { quantidade: 11 } }, { data: '2026-09-30', valores: { quantidade: 9 } }] },
+  ],
+};
+let S = JSON.parse(localStorage.getItem('metas-prototipo-v2') || 'null') || JSON.parse(JSON.stringify(EXEMPLO));
+const salvar = () => localStorage.setItem('metas-prototipo-v2', JSON.stringify(S));
+let tela = { filtro: 'todas', meta: null, medida: null, modal: null };
+const planoDe = id => S.planos.find(p => p.id === id);
+const medidasDe = m => ORDEM.filter(k => m.medidas[k]);
+
+// ── Análise de UMA medida de uma meta ─────────────────────────
+function analisar(m, k) {
+  const T = MEDIDAS[k], cfg = m.medidas[k];
+  const ms = [...m.medicoes].filter(x => x.valores[k] != null).sort((a, b) => a.data.localeCompare(b.data)).map(x => [x.data, x.valores[k]]);
+  const atual = ms.length ? ms[ms.length - 1][1] : cfg.inicial;
+  const dataAtual = ms.length ? ms[ms.length - 1][0] : null;
+  const percurso = cfg.meta - cfg.inicial, andado = atual - cfg.inicial;
+  const pct = percurso === 0 ? 100 : Math.max(0, Math.min(120, andado / percurso * 100));
+  const atingiu = m.direcao === 'reduzir' ? atual <= cfg.meta : atual >= cfg.meta;
+  const restam = dias(hoje(), m.prazo);
+  let projecao = null, chega = null;
+  if (ms.length >= 2) {
+    const x = ms.map(p => dias(ms[0][0], p[0])), y = ms.map(p => p[1]);
+    const n = x.length, mx = x.reduce((a, b) => a + b) / n, my = y.reduce((a, b) => a + b) / n;
+    const b = x.reduce((s, xi, j) => s + (xi - mx) * (y[j] - my), 0) / (x.reduce((s, xi) => s + (xi - mx) ** 2, 0) || 1);
+    projecao = my + b * (dias(ms[0][0], m.prazo) - mx);
+    chega = m.direcao === 'reduzir' ? projecao <= cfg.meta : projecao >= cfg.meta;
+  }
+  const cor = atingiu ? 'var(--verde)' : pct >= 60 ? 'var(--azul)' : pct >= 30 ? 'var(--amarelo)' : 'var(--vermelho)';
+  const frase = atingiu ? `Meta atingida: ${T.fmt(atual)} contra ${T.fmt(cfg.meta)}.`
+    : ms.length < 2 ? 'Ainda sem tendência — lance pelo menos 2 vezes.'
+    : restam < 0 ? `Prazo vencido há ${-restam} dias; ficou em ${T.fmt(atual)} (${Math.round(pct)}% do caminho).`
+    : chega ? `No ritmo atual chega em ${T.fmt(projecao)} no prazo — a meta é ${T.fmt(cfg.meta)}. Continue.`
+    : `No ritmo atual chegaria em ${T.fmt(projecao)}, e a meta é ${T.fmt(cfg.meta)}. Precisa acelerar: faltam ${restam} dias.`;
+  return { T, cfg, ms, atual, dataAtual, pct, atingiu, restam, projecao, chega, cor, frase };
+}
+// Resumo da meta inteira: a medida "principal" para o card é a de menor
+// progresso (é a que segura o resultado), e a meta só é "atingida" com todas.
+function resumo(m) {
+  const ks = medidasDe(m); const as = ks.map(k => analisar(m, k));
+  const pior = as.reduce((p, a) => a.pct < p.pct ? a : p, as[0]);
+  return { ks, as, pct: Math.round(as.reduce((s, a) => s + a.pct, 0) / as.length), atingiu: as.every(a => a.atingiu), cor: pior.cor, pior };
+}
+function graficoAutomatico(m, a) { return (m.freq === 'mensal' || a.ms.length <= 3) ? 'barras' : 'linha'; }
+
+// ── Gráficos SVG ──────────────────────────────────────────────
+function svgLinha(m, a, mini) {
+  const W = 640, H = mini ? 120 : 220, P = mini ? { l: 44, r: 8, t: 8, b: 18 } : { l: 56, r: 16, t: 14, b: 30 };
+  const pts = a.ms; if (!pts.length) return '<div class="muted">Sem lançamentos.</div>';
+  const ys = [...pts.map(p => p[1]), a.cfg.meta, a.cfg.inicial];
+  let y0 = Math.min(...ys), y1 = Math.max(...ys); const pad = (y1 - y0 || 1) * .15; y0 -= pad; y1 += pad;
+  const x0 = pts[0][0], x1 = pts[pts.length - 1][0] > m.prazo ? pts[pts.length - 1][0] : m.prazo;
+  const sx = d => P.l + dias(x0, d) / (dias(x0, x1) || 1) * (W - P.l - P.r);
+  const sy = v => P.t + (1 - (v - y0) / (y1 - y0)) * (H - P.t - P.b);
+  const cam = pts.map((p, k) => (k ? 'L' : 'M') + sx(p[0]).toFixed(1) + ' ' + sy(p[1]).toFixed(1)).join(' ');
+  const grade = (mini ? [0, 1] : [0, .25, .5, .75, 1]).map(f => { const v = y0 + f * (y1 - y0); return `<line x1="${P.l}" x2="${W - P.r}" y1="${sy(v)}" y2="${sy(v)}" stroke="#e9e9ee"/><text x="${P.l - 5}" y="${sy(v) + 4}" font-size="${mini ? 9 : 10}" fill="#888" text-anchor="end">${a.T.fmt(v)}</text>`; }).join('');
+  const proj = a.projecao != null && a.restam > 0 ? `<line x1="${sx(pts[pts.length - 1][0])}" y1="${sy(pts[pts.length - 1][1])}" x2="${sx(m.prazo)}" y2="${sy(Math.max(y0, Math.min(y1, a.projecao)))}" stroke="${a.chega ? '#16a34a' : '#dc2626'}" stroke-dasharray="4 4" stroke-width="1.5"/>` : '';
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-height:${mini ? 140 : 260}px">${grade}
+    <line x1="${P.l}" x2="${W - P.r}" y1="${sy(a.cfg.meta)}" y2="${sy(a.cfg.meta)}" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6 3"/>
+    <text x="${W - P.r}" y="${sy(a.cfg.meta) - 4}" font-size="10" fill="#16a34a" text-anchor="end">meta ${a.T.fmt(a.cfg.meta)}</text>${proj}
+    <path d="${cam}" fill="none" stroke="var(--primary)" stroke-width="2.5"/>
+    ${pts.map(p => `<circle cx="${sx(p[0])}" cy="${sy(p[1])}" r="${mini ? 3 : 4}" fill="var(--primary)"><title>${br(p[0])}: ${a.T.fmt(p[1])}</title></circle>`).join('')}
+    <text x="${sx(x0)}" y="${H - 6}" font-size="10" fill="#888">${br(x0)}</text>
+    <text x="${sx(m.prazo)}" y="${H - 6}" font-size="10" fill="#888" text-anchor="end">prazo ${br(m.prazo)}</text></svg>`;
+}
+function svgBarras(m, a, mini) {
+  const W = 640, H = mini ? 120 : 220, P = mini ? { l: 44, r: 8, t: 14, b: 18 } : { l: 56, r: 16, t: 18, b: 30 };
+  const pts = a.ms.slice(-12); if (!pts.length) return '<div class="muted">Sem lançamentos.</div>';
+  const y1 = Math.max(...pts.map(p => p[1]), a.cfg.meta) * 1.12, y0 = 0;
+  const sy = v => P.t + (1 - (v - y0) / (y1 - y0)) * (H - P.t - P.b);
+  const bw = (W - P.l - P.r) / pts.length;
+  const rot = d => m.freq === 'mensal' ? new Date(d + 'T12:00:00Z').toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' }) : br(d).slice(0, 5);
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-height:${mini ? 140 : 260}px">
+    ${[0, 1].map(f => { const v = y0 + f * (y1 - y0); return `<line x1="${P.l}" x2="${W - P.r}" y1="${sy(v)}" y2="${sy(v)}" stroke="#e9e9ee"/><text x="${P.l - 5}" y="${sy(v) + 4}" font-size="${mini ? 9 : 10}" fill="#888" text-anchor="end">${a.T.fmt(v)}</text>`; }).join('')}
+    ${pts.map((p, k) => { const ok = m.direcao === 'reduzir' ? p[1] <= a.cfg.meta : p[1] >= a.cfg.meta; const x = P.l + k * bw + bw * .18; return `<rect x="${x}" y="${sy(p[1])}" width="${bw * .64}" height="${sy(0) - sy(p[1])}" rx="4" fill="${ok ? '#16a34a' : 'var(--primary)'}"><title>${br(p[0])}: ${a.T.fmt(p[1])}</title></rect>${mini ? '' : `<text x="${x + bw * .32}" y="${sy(p[1]) - 4}" font-size="10" text-anchor="middle" fill="#444">${a.T.fmt(p[1])}</text>`}<text x="${x + bw * .32}" y="${H - 6}" font-size="10" text-anchor="middle" fill="#888">${rot(p[0])}</text>`; }).join('')}
+    <line x1="${P.l}" x2="${W - P.r}" y1="${sy(a.cfg.meta)}" y2="${sy(a.cfg.meta)}" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6 3"/>
+    <text x="${W - P.r}" y="${sy(a.cfg.meta) - 4}" font-size="10" fill="#16a34a" text-anchor="end">meta ${a.T.fmt(a.cfg.meta)}</text></svg>`;
+}
+function progresso(a) {
+  return `<div style="margin:6px 0 2px;display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted)"><span>Começou em <b style="color:var(--text)">${a.T.fmt(a.cfg.inicial)}</b></span><span>Quer chegar em <b style="color:var(--text)">${a.T.fmt(a.cfg.meta)}</b></span></div>
+  <div class="barra"><div style="width:${Math.min(100, a.pct)}%;background:${a.cor}"></div></div>
+  <div style="font-size:12px;margin-top:5px">Hoje está em <b>${a.T.fmt(a.atual)}</b> — já andou <b style="color:${a.cor}">${Math.round(a.pct)}%</b> do caminho até a meta</div>`;
+}
+function graficoDe(m, a, mini) {
+  const t = m.grafico === 'auto' ? graficoAutomatico(m, a) : m.grafico;
+  return t === 'linha' ? svgLinha(m, a, mini) : t === 'barras' ? svgBarras(m, a, mini) : progresso(a);
+}
+
+// ── Telas ─────────────────────────────────────────────────────
+function render() { const el = document.getElementById('app'); tela.meta ? renderMeta(el) : renderMetas(el); }
+
+function cardMeta(m) {
+  const r = resumo(m); const p = planoDe(m.plano_id);
+  return `<div class="card ind" style="border-left-color:${r.cor}" onclick="abrirMeta('${m.id}')">
+    <div class="linha" style="justify-content:space-between"><b>${m.nome}</b><span class="selo" style="background:${r.cor}22;color:${r.cor}">${r.atingiu ? 'Meta atingida' : r.pct + '% do caminho'}</span></div>
+    <div class="muted">${m.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · até ${br(m.prazo)} · ${FREQ[m.freq].toLowerCase()}${p ? ` · 🎯 ${p.titulo}` : ''}</div>
+    <div class="painel" style="margin-top:8px;grid-template-columns:repeat(${r.ks.length},1fr)">
+      ${r.as.map((a, i) => `<div><div class="muted" style="font-weight:700">${MEDIDAS[r.ks[i]].curto} · <b style="color:${a.cor}">${a.T.fmt(a.atual)}</b> <span style="font-weight:400">/ ${a.T.fmt(a.cfg.meta)}</span></div><div class="barra" style="height:7px;margin-top:4px"><div style="width:${Math.min(100, a.pct)}%;background:${a.cor}"></div></div></div>`).join('')}
+    </div></div>`;
+}
+function renderMetas(el) {
+  const todas = S.metas;
+  const lista = tela.filtro === 'todas' ? todas : tela.filtro === 'livres' ? todas.filter(m => !m.plano_id) : todas.filter(m => m.plano_id === tela.filtro);
+  const atingidas = todas.filter(m => resumo(m).atingiu).length;
+  el.innerHTML = `
+    <div class="card">
+      <div class="linha" style="justify-content:space-between"><div><h2>Metas da loja</h2><div class="muted">${todas.length} meta(s) · ${atingidas} atingida(s). Aqui ficam as metas com número: as da loja e as de cada plano de ação. Todo plano do PDCA aparece nos filtros abaixo.</div></div>
+        <button class="btn primario" onclick="abrirNova()">+ Nova meta</button></div>
+      <div class="linha" style="margin-top:10px">
+        <button class="btn mini ${tela.filtro === 'todas' ? 'ativo' : ''}" onclick="tela.filtro='todas';render()">Todas (${todas.length})</button>
+        <button class="btn mini ${tela.filtro === 'livres' ? 'ativo' : ''}" onclick="tela.filtro='livres';render()">Da loja (${todas.filter(m => !m.plano_id).length})</button>
+        ${S.planos.map(p => `<button class="btn mini ${tela.filtro === p.id ? 'ativo' : ''}" onclick="tela.filtro='${p.id}';render()">🎯 ${p.titulo} (${todas.filter(m => m.plano_id === p.id).length})</button>`).join('')}
+      </div></div>
+    ${lista.map(cardMeta).join('') || (S.planos.some(p => p.id === tela.filtro)
+        ? `<div class="card"><b>Este plano de ação ainda não tem meta com número.</b><div class="muted" style="margin-top:4px">A meta escrita no plano ("${planoDe(tela.filtro).meta || 'sem texto'}") é só texto. Crie a meta com número para acompanhar no gráfico.</div><button class="btn primario mini" style="margin-top:10px" onclick="abrirNova()">+ Criar a primeira meta deste plano</button></div>`
+        : '<div class="card muted">Nenhuma meta aqui ainda. Clique em "+ Nova meta".</div>')}
+    <div class="linha"><button class="btn mini" onclick="if(confirm('Voltar aos dados de exemplo?')){localStorage.removeItem('metas-prototipo-v2');S=JSON.parse(JSON.stringify(EXEMPLO));render();}">Restaurar exemplo</button></div>
+    ${tela.modal === 'nova' ? modalNova() : ''}`;
+}
+
+function renderMeta(el) {
+  const m = S.metas.find(x => x.id === tela.meta); const r = resumo(m); const pl = planoDe(m.plano_id);
+  const foco = tela.medida && m.medidas[tela.medida] ? tela.medida : null;
+  const ordenadas = [...m.medicoes].sort((a, b) => b.data.localeCompare(a.data));
+  el.innerHTML = `<div class="linha" style="margin-bottom:10px"><button class="btn mini" onclick="tela.meta=null;tela.medida=null;render()">← Metas</button></div>
+    <div class="card">
+      <div class="linha" style="justify-content:space-between"><div><h2>${m.nome}</h2><div class="muted">${m.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · prazo ${br(m.prazo)} · ${FREQ[m.freq].toLowerCase()}${pl ? ` · 🎯 ${pl.titulo}` : ' · meta da loja (sem plano)'}</div></div>
+        <div class="linha"><span class="selo" style="background:${r.cor}22;color:${r.cor}">${r.atingiu ? 'Meta atingida' : r.pct + '% do caminho'}</span><button class="btn primario" onclick="tela.modal='lancar';render()">+ Lançar</button></div></div>
+      <div class="aviso" style="margin-top:10px">${r.atingiu ? 'Todas as medidas bateram a meta. 🎉' : `<b>${r.pior.T.fmt(r.pior.atual)}</b> ${MEDIDAS[r.ks[r.as.indexOf(r.pior)]].curto === '%' ? '' : '(' + MEDIDAS[r.ks[r.as.indexOf(r.pior)]].nome.toLowerCase() + ') '}é o que mais segura o resultado: ${r.pior.frase}`}</div>
+    </div>
+
+    <div class="card">
+      <div class="linha" style="justify-content:space-between;margin-bottom:8px"><h3 style="margin:0">${foco ? MEDIDAS[foco].nome : 'Painel — as medidas lado a lado'}</h3>
+        <div class="linha">
+          ${foco ? `<button class="btn mini" onclick="tela.medida=null;render()">◫ Ver painel</button>` : ''}
+          ${[['auto', 'Automático'], ['linha', 'Linha'], ['barras', 'Barras'], ['progresso', 'Progresso']].map(([k, t]) => `<button class="btn mini ${m.grafico === k ? 'ativo' : ''}" onclick="setGrafico('${m.id}','${k}')">${t}</button>`).join('')}
+        </div></div>
+      ${foco ? (() => { const a = analisar(m, foco); return `
+        <div class="grade" style="margin-bottom:8px">
+          <div class="medida" style="cursor:default"><div class="r">Atual</div><div class="v" style="color:${a.cor}">${a.T.fmt(a.atual)}</div><div class="s">${a.dataAtual ? br(a.dataAtual) : 'partida'}</div></div>
+          <div class="medida" style="cursor:default"><div class="r">Meta</div><div class="v">${a.T.fmt(a.cfg.meta)}</div><div class="s">até ${br(m.prazo)}</div></div>
+          <div class="medida" style="cursor:default"><div class="r">Do caminho</div><div class="v" style="color:${a.cor}">${Math.round(a.pct)}%</div><div class="s">saiu de ${a.T.fmt(a.cfg.inicial)}</div></div>
+          <div class="medida" style="cursor:default"><div class="r">Prazo</div><div class="v">${a.restam >= 0 ? a.restam + 'd' : 'vencido'}</div><div class="s">${a.restam >= 0 ? 'restantes' : -a.restam + ' dias atrás'}</div></div>
+        </div>
+        <div class="aviso" style="margin-bottom:8px">${a.frase}</div>
+        ${graficoDe(m, a, false)}${(m.grafico === 'auto' ? graficoAutomatico(m, a) : m.grafico) !== 'progresso' ? progresso(a) : ''}`; })()
+      : `<div class="muted" style="margin-bottom:8px">Cada quadro é uma forma de medir a mesma meta. Toque num quadro para ver o gráfico grande e se, no ritmo atual, chega no prazo.</div>
+        <div class="painel">${r.ks.map((k, i) => { const a = r.as[i]; return `<div class="medida" onclick="tela.medida='${k}';render()">
+          <div class="linha" style="justify-content:space-between"><span class="r">${MEDIDAS[k].nome}</span><span class="selo" style="background:${a.cor}22;color:${a.cor}">${Math.round(a.pct)}%</span></div>
+          <div class="v" style="color:${a.cor}">${a.T.fmt(a.atual)} <span class="s" style="font-size:12px;font-weight:600">/ ${a.T.fmt(a.cfg.meta)}</span></div>
+          ${graficoDe(m, a, true)}</div>`; }).join('')}</div>`}
+    </div>
+
+    <div class="card"><h3>Lançamentos</h3>
+      <table><thead><tr><th>Data</th>${r.ks.map(k => `<th class="n">${MEDIDAS[k].curto}</th>`).join('')}<th></th></tr></thead><tbody>
+      ${ordenadas.map(x => `<tr><td>${br(x.data)}</td>${r.ks.map(k => `<td class="n"><b>${x.valores[k] != null ? MEDIDAS[k].fmt(x.valores[k]) : '—'}</b></td>`).join('')}<td class="n"><button class="btn mini" onclick="apagarLanc('${m.id}','${x.data}')">✕</button></td></tr>`).join('') || `<tr><td colspan="${r.ks.length + 2}" class="muted">Nenhum lançamento.</td></tr>`}
+      </tbody></table></div>
+    ${tela.modal === 'lancar' ? modalLancar(m) : ''}`;
+}
+
+// ── Modais ────────────────────────────────────────────────────
+let nova = null;
+function abrirMeta(id) { tela.meta = id; tela.medida = null; tela.modal = null; render(); }
+function setGrafico(id, g) { S.metas.find(x => x.id === id).grafico = g; salvar(); render(); }
+function abrirNova() {
+  nova = { nome: '', direcao: 'aumentar', prazo: '', freq: 'mensal', plano_id: (S.planos.some(p => p.id === tela.filtro) ? tela.filtro : ''),
+           usa: { quantidade: false, reais: true, percentual: false }, val: { quantidade: { inicial: '', meta: '' }, reais: { inicial: '', meta: '' }, percentual: { inicial: '', meta: '' } } };
+  tela.modal = 'nova'; render();
+}
+function modalNova() {
+  const ks = ORDEM.filter(k => nova.usa[k]);
+  return `<div class="modal-fundo" onclick="if(event.target===this){tela.modal=null;render()}"><div class="modal">
+    <h2>Nova meta</h2>
+    <div class="muted">Em 4 passos: o que medir · como medir · de onde sai e onde quer chegar · até quando.</div>
+
+    <label>1. O que você quer acompanhar?</label>
+    <input class="input" value="${nova.nome}" oninput="nova.nome=this.value" placeholder="Ex.: Venda de Bazar · Ruptura de Perecíveis · Faltas no mês">
+
+    <label>2. O número precisa subir ou descer?</label>
+    <div class="linha">${[['aumentar', '⬆ Subir — quanto maior, melhor (venda, conversão)'], ['reduzir', '⬇ Descer — quanto menor, melhor (ruptura, perda, faltas)']].map(([k, t]) => `<button class="btn ${nova.direcao === k ? 'ativo' : ''}" onclick="nova.direcao='${k}';render()">${t}</button>`).join('')}</div>
+
+    <label>3. Como você mede? <span style="font-weight:400;text-transform:none">Pode marcar mais de uma — elas aparecem lado a lado.</span></label>
+    <div class="linha">${ORDEM.map(k => `<div class="tipo-btn ${nova.usa[k] ? 'on' : ''}" onclick="nova.usa['${k}']=!nova.usa['${k}'];render()"><b>${nova.usa[k] ? '☑' : '☐'} ${MEDIDAS[k].nome}</b><span>${MEDIDAS[k].ex}</span></div>`).join('')}</div>
+    ${ks.length ? `<div class="muted" style="margin-top:8px">Para cada medida marcada: <b>hoje está em</b> (o número de partida) e <b>quer chegar em</b> (a meta).</div>` : `<div class="aviso" style="margin-top:8px">Marque pelo menos uma forma de medir.</div>`}
+    ${ks.map(k => `<div style="border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-top:8px"><b style="font-size:12.5px">${MEDIDAS[k].nome}</b>
+      <div class="grade">
+        <div><label style="margin-top:4px">Hoje está em</label><input class="input" type="number" step="${MEDIDAS[k].passo}" value="${nova.val[k].inicial}" oninput="nova.val['${k}'].inicial=this.value" placeholder="${k === 'reais' ? 'ex.: 380000' : k === 'percentual' ? 'ex.: 12' : 'ex.: 9800'}"></div>
+        <div><label style="margin-top:4px">Quer chegar em</label><input class="input" type="number" step="${MEDIDAS[k].passo}" value="${nova.val[k].meta}" oninput="nova.val['${k}'].meta=this.value" placeholder="${k === 'reais' ? 'ex.: 450000' : k === 'percentual' ? 'ex.: 5' : 'ex.: 12000'}"></div>
+      </div></div>`).join('')}
+
+    <label>4. Até quando, e de quanto em quanto tempo você lança o número?</label>
+    <div class="grade">
+      <div><input class="input" type="date" value="${nova.prazo}" oninput="nova.prazo=this.value"><div class="muted" style="margin-top:3px">Prazo final da meta</div></div>
+      <div><select oninput="nova.freq=this.value">${Object.entries(FREQ).map(([k, t]) => `<option value="${k}" ${nova.freq === k ? 'selected' : ''}>Lanço ${t === 'Diário' ? 'todo dia' : t === 'Semanal' ? 'toda semana' : 'todo mês'}</option>`).join('')}</select><div class="muted" style="margin-top:3px">Mensal vira gráfico de barras; diário/semanal vira linha com tendência</div></div>
+    </div>
+
+    <label>Essa meta faz parte de um plano de ação? <span style="font-weight:400;text-transform:none">(opcional)</span></label>
+    <select oninput="nova.plano_id=this.value"><option value="">Não — é uma meta da loja</option>${S.planos.map(p => `<option value="${p.id}" ${nova.plano_id === p.id ? 'selected' : ''}>🎯 ${p.titulo}</option>`).join('')}</select>
+    <div class="muted" style="margin-top:3px">Todos os planos do PDCA aparecem aqui. Ligando, a meta também fica visível dentro do plano.</div>
+
+    <div class="linha" style="justify-content:flex-end;margin-top:14px"><button class="btn" onclick="tela.modal=null;render()">Cancelar</button><button class="btn primario" onclick="salvarNova()">Criar meta</button></div>
+  </div></div>`;
+}
+function salvarNova() {
+  const ks = ORDEM.filter(k => nova.usa[k]);
+  if (!nova.nome.trim()) return alert('Diga o que você quer acompanhar (passo 1).');
+  if (!ks.length) return alert('Marque pelo menos uma forma de medir (passo 3).');
+  if (ks.some(k => nova.val[k].inicial === '' || nova.val[k].meta === '')) return alert('Em cada medida marcada, preencha "hoje está em" e "quer chegar em".');
+  if (!nova.prazo) return alert('Informe até quando (passo 4).');
+  const medidas = {}; ks.forEach(k => { medidas[k] = { inicial: Number(nova.val[k].inicial), meta: Number(nova.val[k].meta) }; });
+  S.metas.push({ id: 'm' + Date.now(), plano_id: nova.plano_id || null, nome: nova.nome.trim(), direcao: nova.direcao, prazo: nova.prazo, freq: nova.freq, grafico: 'auto', medidas, medicoes: [] });
+  salvar(); tela.modal = null; render();
+}
+let lanc = { data: hoje(), valores: {} };
+function modalLancar(m) {
+  const ks = medidasDe(m);
+  return `<div class="modal-fundo" onclick="if(event.target===this){tela.modal=null;render()}"><div class="modal">
+    <h2>Lançar número — ${m.nome}</h2><div class="muted">Informe a data e como ficou o número nesse dia/semana/mês. Se lançar duas vezes na mesma data, vale o último.</div>
+    <label>Data do lançamento</label><input class="input" type="date" value="${lanc.data}" oninput="lanc.data=this.value">
+    <div class="grade">${ks.map(k => `<div><label>${MEDIDAS[k].nome} — como ficou</label><input class="input" type="number" step="${MEDIDAS[k].passo}" value="${lanc.valores[k] ?? ''}" oninput="lanc.valores['${k}']=this.value" placeholder="a meta é ${MEDIDAS[k].fmt(m.medidas[k].meta)}"></div>`).join('')}</div>
+    <div class="linha" style="justify-content:flex-end;margin-top:14px"><button class="btn" onclick="tela.modal=null;render()">Cancelar</button><button class="btn primario" onclick="salvarLanc('${m.id}')">Lançar</button></div>
+  </div></div>`;
+}
+function salvarLanc(id) {
+  const m = S.metas.find(x => x.id === id); const ks = medidasDe(m);
+  if (!lanc.data) return alert('Informe a data.');
+  const valores = {}; ks.forEach(k => { if (lanc.valores[k] !== '' && lanc.valores[k] != null) valores[k] = Number(lanc.valores[k]); });
+  if (!Object.keys(valores).length) return alert('Informe pelo menos um número.');
+  m.medicoes = m.medicoes.filter(x => x.data !== lanc.data); m.medicoes.push({ data: lanc.data, valores });
+  salvar(); lanc = { data: hoje(), valores: {} }; tela.modal = null; render();
+}
+function apagarLanc(id, data) { if (!confirm('Apagar este lançamento?')) return; const m = S.metas.find(x => x.id === id); m.medicoes = m.medicoes.filter(x => x.data !== data); salvar(); render(); }
+render();
+</script>
+</body>
+</html>

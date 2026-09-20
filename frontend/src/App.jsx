@@ -122,6 +122,7 @@ const Estoque                = lazy(() => import('./pages/Estoque'));
 const ImportadorEstoque      = lazy(() => import('./pages/ImportadorEstoque'));
 const Organograma            = lazy(() => import('./pages/Organograma'));
 const PlanoAcao              = lazy(() => import('./pages/PlanoAcao'));
+const Metas                  = lazy(() => import('./pages/Metas'));
 const LogsAuditoria          = lazy(() => import('./pages/LogsAuditoria'));
 const Produtividade          = lazy(() => import('./pages/Produtividade'));
 const Torneios               = lazy(() => import('./pages/Torneios'));
@@ -468,6 +469,7 @@ function AppContent() {
     estoque:          () => has('estoque')          ? <Estoque profile={effectiveProfile} />           : negado('estoque', 'Estoque'),
     importador_estoque: () => has('importador_estoque') ? <ImportadorEstoque profile={effectiveProfile} /> : negado('importador_estoque', 'Importador de Estoque'),
     organograma:        () => has('organograma')        ? <Organograma userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
+    metas:              () => has('metas')              ? <Metas userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     pdca:               () => has('pdca')               ? <PlanoAcao userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
     produtividade:      () => has('produtividade')       ? <Produtividade userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
     desempenho:         () => has('desempenho')         ? <Desempenho userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
