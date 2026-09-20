@@ -52,6 +52,32 @@ function StatCard({ icon: Icon, color, bg, value, label, onClick }) {
   );
 }
 
+// Convite para avaliar o app: aparece uma vez, 14 dias depois do cadastro
+// (regra do servidor), e some com "agora não" por 60 dias ou quando a
+// pessoa avalia. Não é modal: é um cartão, e o resto do Dashboard segue.
+function ConviteAvaliacao({ userId, setPage }) {
+  const [mostrar, setMostrar] = useState(false);
+  useEffect(() => {
+    if (!userId) return;
+    api.get(`/avaliacoes/minha?requester_id=${userId}`).then(r => setMostrar(!!r.data?.convidar)).catch(() => {});
+  }, [userId]);
+  if (!mostrar) return null;
+  const adiar = () => { setMostrar(false); api.post('/avaliacoes/adiar', { requester_id: userId }).catch(() => {}); };
+  return (
+    <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', borderLeft: '4px solid #F5B301', borderRadius: '0 12px 12px 0' }}>
+      <span style={{ fontSize: 26 }}>⭐</span>
+      <div style={{ flex: 1, minWidth: 200 }}>
+        <div style={{ fontWeight: 700, fontSize: 14 }}>Já faz duas semanas que você usa o Rota Líder</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Conta pra gente o que mudou no seu dia a dia? Leva um minuto.</div>
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button className="btn btn-ghost btn-sm" onClick={adiar}>Agora não</button>
+        <button className="btn btn-primary btn-sm" onClick={() => setPage?.('opiniao')}>Avaliar</button>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard({ setPage, profile: propProfile }) {
   const { session, profile: authProfile } = useAuth();
   const profile  = propProfile || authProfile;
@@ -171,6 +197,8 @@ export default function Dashboard({ setPage, profile: propProfile }) {
           </div>
         </div>
       </div>
+
+      <ConviteAvaliacao userId={userId} setPage={setPage}/>
 
       {/* Nível: progresso permanente, independente de campanha. Fica no
           alto porque é o que a pessoa vê primeiro ao abrir o app — e é o

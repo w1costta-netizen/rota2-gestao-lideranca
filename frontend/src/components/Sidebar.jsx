@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Lock, Trophy, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, MessageCircle, PenTool, MonitorDot, Activity, Goal } from 'lucide-react';
+import { Lock, Trophy, CalendarDays, LayoutGrid, LogOut, UserCircle, ShoppingCart, CalendarRange, ShieldCheck, Megaphone, CheckSquare, LayoutList, Tag, Camera, BarChart2, FolderOpen, Store, Package, PackagePlus, GitBranch, ChevronDown, ChevronRight, MessageSquare, Clock, Briefcase, TrendingUp, ClipboardCheck, Sun, Moon, Navigation, Target, Shield, GraduationCap, ListChecks, StickyNote, BookOpen, MessageCircle, PenTool, MonitorDot, Activity, Goal, MessageSquareHeart, Star } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { hasPermission, moduloNaoContratado } from '../lib/permissions';
 import { useTheme } from '../contexts/ThemeContext';
@@ -93,6 +93,8 @@ const NAV_GROUPS = [
       { id: 'profile',     label: 'Meu Perfil',  icon: UserCircle,  perm: null },
       { id: 'organograma', label: 'Organograma', icon: GitBranch,   perm: 'organograma' },
       { id: 'logs',        label: 'Logs de Auditoria', icon: Shield, perm: 'logs' },
+      { id: 'opiniao',     label: 'Sua opinião', icon: MessageSquareHeart, perm: 'opiniao' },
+      { id: 'depoimentos', label: 'Depoimentos', icon: Star,        perm: 'depoimentos' },
     ],
   },
 ];

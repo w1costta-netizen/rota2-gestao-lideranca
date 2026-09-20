@@ -123,6 +123,8 @@ const ImportadorEstoque      = lazy(() => import('./pages/ImportadorEstoque'));
 const Organograma            = lazy(() => import('./pages/Organograma'));
 const PlanoAcao              = lazy(() => import('./pages/PlanoAcao'));
 const Metas                  = lazy(() => import('./pages/Metas'));
+const SuaOpiniao             = lazy(() => import('./pages/SuaOpiniao'));
+const Depoimentos            = lazy(() => import('./pages/Depoimentos'));
 const LogsAuditoria          = lazy(() => import('./pages/LogsAuditoria'));
 const Produtividade          = lazy(() => import('./pages/Produtividade'));
 const Torneios               = lazy(() => import('./pages/Torneios'));
@@ -242,6 +244,21 @@ function AppContent() {
   }, []);
   const [authPage, setAuthPage] = useState('login');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // A última página é da CONTA, não do aparelho. Sem isto, quem entra com
+  // outra conta no mesmo celular (loja com aparelho compartilhado, teste de
+  // cadastro) caía na tela que a conta anterior deixou aberta — inclusive
+  // num módulo com cadeado, logo depois das boas-vindas.
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid) return;
+    try {
+      if (localStorage.getItem('current_page_user') !== uid) {
+        localStorage.setItem('current_page_user', uid);
+        setPage('dashboard');
+      }
+    } catch { /* aba anônima */ }
+  }, [session?.user?.id, setPage]);
   const [viewingStore, setViewingStore] = useState(() =>
     localStorage.getItem('master_viewing_store') || ''
   );
@@ -410,7 +427,7 @@ function AppContent() {
   if (profile && !profile.aceite_termos_em) {
     return (
       <div className="auth-page">
-        <AceiteTermos userId={userId} onAceito={() => window.location.reload()} />
+        <AceiteTermos userId={userId} onAceito={() => { setPage('dashboard'); window.location.reload(); }} />
       </div>
     );
   }
@@ -419,7 +436,7 @@ function AppContent() {
   const welcomeDone = localStorage.getItem(`welcome_done_${userId}`);
   if (profile?.first_access && !welcomeDone) {
     return (
-      <Welcome userId={userId} onFinish={() => window.location.reload()} />
+      <Welcome userId={userId} onFinish={() => { setPage('dashboard'); window.location.reload(); }} />
     );
   }
 
@@ -474,6 +491,8 @@ function AppContent() {
     produtividade:      () => has('produtividade')       ? <Produtividade userId={userId} profile={effectiveProfile} setPage={setPage} /> : <AccessDenied />,
     desempenho:         () => has('desempenho')         ? <Desempenho userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
     torneio:            () => has('torneio')            ? <Torneios userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
+    opiniao:            () => has('opiniao')            ? <SuaOpiniao userId={userId} /> : <AccessDenied />,
+    depoimentos:        () => has('depoimentos')        ? <Depoimentos userId={userId} /> : <AccessDenied />,
     logs:               () => has('logs')               ? <LogsAuditoria userId={userId} profile={effectiveProfile} /> : <AccessDenied />,
   };
 
