@@ -11,6 +11,11 @@ async function getProfile(id) {
 }
 const canManage = p => p && ['admin', 'supervisor', 'lider', 'master'].includes(p.access_level);
 
+// Cor escolhida pela pessoa (opcional). Sem cor, a tela usa a do destino
+// (geral/setor/pessoas), como sempre foi.
+const CORES_AGENDA = ['azul', 'verde', 'roxo', 'rosa', 'laranja', 'amarelo', 'vermelho', 'cinza'];
+const corValida = c => (CORES_AGENDA.includes(c) ? c : null);
+
 const DIA_POR_EXTENSO = {
   segunda:'Segunda', terca:'Terça', quarta:'Quarta', quinta:'Quinta',
   sexta:'Sexta', sabado:'Sábado', domingo:'Domingo',
@@ -97,7 +102,7 @@ const MAX_SEMANAS = 52;
 
 // POST /api/agenda — cria item (ou uma série semanal) e dispara push
 router.post('/', async (req, res) => {
-  const { title, description, week_start, target_type, target_value, day_of_week, time, created_by, lembrete_minutos, recorrencia_semanas } = req.body;
+  const { title, description, week_start, target_type, target_value, day_of_week, time, created_by, lembrete_minutos, recorrencia_semanas, cor } = req.body;
   if (!title || !week_start || !target_type || !day_of_week)
     return res.status(400).json({ error: 'Campos obrigatórios: title, week_start, target_type, day_of_week' });
   if (!created_by) return res.status(401).json({ error: 'created_by obrigatório' });
@@ -113,7 +118,7 @@ router.post('/', async (req, res) => {
 
   const semanas = Math.min(MAX_SEMANAS, Math.max(1, parseInt(recorrencia_semanas, 10) || 1));
   const serie_id = semanas > 1 ? crypto.randomUUID() : null;
-  const base = { title, description: description || '', target_type, target_value: target_value || '', day_of_week, time: time || '', company, created_by: created_by || null, lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false, serie_id };
+  const base = { title, description: description || '', target_type, target_value: target_value || '', day_of_week, time: time || '', company, created_by: created_by || null, lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false, serie_id, cor: corValida(cor) };
   const linhas = Array.from({ length: semanas }, (_, i) => ({ ...base, week_start: somarDias(week_start, 7 * i) }));
 
   const { data: criados, error } = await supabase.from('agenda_items').insert(linhas).select();
@@ -140,7 +145,7 @@ router.post('/', async (req, res) => {
 
 // PUT /api/agenda/:id — atualiza item e dispara push
 router.put('/:id', async (req, res) => {
-  const { title, description, week_start, target_type, target_value, day_of_week, time, updated_by, lembrete_minutos } = req.body;
+  const { title, description, week_start, target_type, target_value, day_of_week, time, updated_by, lembrete_minutos, cor } = req.body;
   if (!updated_by) return res.status(401).json({ error: 'updated_by obrigatório' });
   const meUpdate = await getProfile(updated_by);
   if (!meUpdate || !canManage(meUpdate)) return res.status(403).json({ error: 'Acesso negado' });
@@ -151,7 +156,7 @@ router.put('/:id', async (req, res) => {
     company = me?.company;
   }
 
-  const mudancas = { title, description: description || '', target_type, target_value: target_value || '', day_of_week, time: time || '', lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false };
+  const mudancas = { title, description: description || '', target_type, target_value: target_value || '', day_of_week, time: time || '', lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false, cor: corValida(cor) };
 
   // Item de série: `escopo: 'futuros'` aplica a mudança a esta semana e às
   // seguintes da mesma série (cada uma mantém a própria week_start). Sem

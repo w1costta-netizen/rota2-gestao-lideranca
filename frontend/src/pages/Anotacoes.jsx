@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Mic, Trash2, X, Pin, PinOff, Search, Archive, ArchiveRestore, StickyNote } from 'lucide-react';
+import { Plus, Mic, Trash2, X, Pin, PinOff, Search, Archive, ArchiveRestore, StickyNote, Share2, MessageCircle, FileText } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
 import ExportMenu from '../components/ExportMenu';
-import { gerarPDF } from '../lib/exportUtils';
+import { gerarPDF, gerarPDFTexto, compartilharWhatsApp, compartilharArquivo } from '../lib/exportUtils';
 
 // ─────────────────────────────────────────────────────────────
 // Anotações pessoais — modelo Google Keep: cartão colorido, fixar no topo,
@@ -172,7 +172,7 @@ export default function Anotacoes({ userId }) {
   //
   // Retrato, e não paisagem como os outros relatórios: anotação é texto
   // corrido, e paisagem daria linhas largas demais para ler.
-  const exportarPDF = () => {
+  const exportarPDF = (saida = 'download') => {
     if (!visiveis.length) { toast('Não há anotações para exportar.', 'error'); return; }
     const emLinha = a => ({
       titulo: a.titulo?.trim() || '(sem título)',
@@ -192,14 +192,43 @@ export default function Anotacoes({ userId }) {
       titulo: fixadas.length ? 'Demais anotações' : null,
       colunas, rows: demais.map(emLinha),
     });
-    gerarPDF({
+    return gerarPDF({
       titulo: vendoArquivadas ? 'Anotações arquivadas' : 'Minhas anotações',
       subtitulo: `${visiveis.length} anotação(ões)`
         + (termo ? ` · busca por "${termo}"` : '')
         + ` · ${new Date().toLocaleDateString('pt-BR')}`,
       secoes,
       orientacao: 'portrait',
+      saida,
     });
+  };
+
+  // ── Compartilhar ──────────────────────────────────────────────
+  // WhatsApp em texto: a anotação vai como mensagem, pronta para ler.
+  // PDF: no celular abre a folha de compartilhar (WhatsApp entre as
+  // opções); no PC baixa o PDF e abre o WhatsApp para anexar.
+  const textoDe = (a) => `${a.titulo?.trim() ? `*${a.titulo.trim()}*\n` : ''}${a.texto?.trim() || ''}`.trim();
+  const textoDeTodas = () => {
+    const cab = `*${vendoArquivadas ? 'Anotações arquivadas' : 'Minhas anotações'}* · ${visiveis.length}\n\n`;
+    return cab + [...fixadas, ...demais].map(a => `📌 ${textoDe(a) || '(sem texto)'}`).join('\n\n');
+  };
+  const avisar = (resultado) => {
+    if (resultado === 'baixado') toast('PDF baixado. No WhatsApp, anexe o arquivo que acabou de baixar.');
+  };
+  const [menuDe, setMenuDe] = useState(null);   // anotação com o menu de compartilhar aberto
+
+  const whatsAnotacao = (a) => compartilharWhatsApp(textoDe(a) || '(sem texto)');
+  const pdfAnotacao = (a, saida) => gerarPDFTexto({
+    titulo: a.titulo?.trim() || 'Anotação',
+    subtitulo: a.created_at ? `Criada em ${new Date(a.created_at).toLocaleDateString('pt-BR')}` : '',
+    blocos: [{ texto: a.texto?.trim() || '—' }],
+    saida,
+  });
+  const pdfAnotacaoWhats = async (a) => avisar(await compartilharArquivo({ ...pdfAnotacao(a, 'blob'), texto: a.titulo?.trim() || 'Anotação' }));
+  const whatsTodas = () => { if (!visiveis.length) return toast('Não há anotações para enviar.', 'error'); compartilharWhatsApp(textoDeTodas()); };
+  const pdfTodasWhats = async () => {
+    if (!visiveis.length) return toast('Não há anotações para enviar.', 'error');
+    avisar(await compartilharArquivo({ ...exportarPDF('blob'), texto: vendoArquivadas ? 'Anotações arquivadas' : 'Minhas anotações' }));
   };
 
   if (carregando) {
@@ -241,7 +270,36 @@ export default function Anotacoes({ userId }) {
             {a.texto}
           </div>
         )}
-        <div style={{ display:'flex', gap:16, marginTop:12 }}>
+        <div style={{ display:'flex', gap:16, marginTop:12, position:'relative' }}>
+          {/* Compartilhar: menu pequeno com as três saídas. Fecha ao clicar
+              fora (o overlay) ou ao escolher. */}
+          <button
+            onClick={(e) => { e.stopPropagation(); setMenuDe(menuDe === a.id ? null : a.id); }}
+            title="Compartilhar"
+            aria-label="Compartilhar anotação"
+            style={botaoIcone}>
+            <Share2 size={17}/>
+          </button>
+          {menuDe === a.id && (
+            <>
+              <div onClick={(e) => { e.stopPropagation(); setMenuDe(null); }} style={{ position:'fixed', inset:0, zIndex:40 }}/>
+              <div onClick={(e) => e.stopPropagation()}
+                style={{ position:'absolute', left:0, bottom:'calc(100% + 6px)', zIndex:41, background:'var(--surface)', color:'var(--text)',
+                         border:'1px solid var(--border)', borderRadius:10, boxShadow:'0 8px 24px rgba(0,0,0,.18)', minWidth:210, overflow:'hidden' }}>
+                {[
+                  [<MessageCircle size={14} color="#25D366"/>, 'Enviar no WhatsApp', () => whatsAnotacao(a)],
+                  [<FileText size={14} color="#ef4444"/>, 'Baixar PDF', () => pdfAnotacao(a)],
+                  [<MessageCircle size={14} color="#25D366"/>, 'Enviar PDF no WhatsApp', () => pdfAnotacaoWhats(a)],
+                ].map(([icone, rotulo, fn]) => (
+                  <button key={rotulo} onClick={() => { setMenuDe(null); fn(); }}
+                    style={{ display:'flex', alignItems:'center', gap:9, width:'100%', padding:'10px 14px', background:'none', border:'none',
+                             cursor:'pointer', fontSize:13, color:'var(--text)', textAlign:'left' }}>
+                    {icone} {rotulo}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); alternar(a, 'arquivada'); }}
             title={a.arquivada ? 'Tirar do arquivo' : 'Arquivar'}
@@ -271,7 +329,7 @@ export default function Anotacoes({ userId }) {
           </p>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-          <ExportMenu onPDF={exportarPDF} label="Exportar" disabled={!visiveis.length}/>
+          <ExportMenu onPDF={() => exportarPDF()} onWhatsApp={whatsTodas} onPDFWhatsApp={pdfTodasWhats} label="Exportar" disabled={!visiveis.length}/>
           <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => setVendoArquivadas(v => !v)}>
             <Archive size={14}/> {vendoArquivadas ? 'Ver ativas' : 'Arquivadas'}
           </button>

@@ -22,7 +22,7 @@ export const limparParaPDF = (t) => String(t ?? '').replace(FORA_DO_WINANSI, '')
  * secoes: [{ titulo, colunas: [{header, dataKey}], rows: [{}] }]
  * orientacao: 'landscape' (padrão) ou 'portrait', para texto corrido
  */
-export function gerarPDF({ titulo, subtitulo, secoes = [], orientacao = 'landscape' }) {
+export function gerarPDF({ titulo, subtitulo, secoes = [], orientacao = 'landscape', saida = 'download' }) {
   const doc = new jsPDF({ orientation: orientacao, unit: 'pt', format: 'a4' });
   const W = doc.internal.pageSize.getWidth();
 
@@ -79,7 +79,77 @@ export function gerarPDF({ titulo, subtitulo, secoes = [], orientacao = 'landsca
     startY = doc.lastAutoTable.finalY + 12;
   });
 
-  doc.save(`${limparParaPDF(titulo).replace(/\s+/g, '_')}_${dataHoje()}.pdf`);
+  const nome = `${limparParaPDF(titulo).replace(/\s+/g, '_')}_${dataHoje()}.pdf`;
+  // 'blob' devolve o arquivo em vez de baixar — para compartilhar (WhatsApp).
+  if (saida === 'blob') return { blob: doc.output('blob'), nome };
+  doc.save(nome);
+}
+
+/**
+ * gerarPDFTexto({ titulo, subtitulo, blocos, saida })
+ * Documento de texto corrido (não tabela): uma anotação, um relato.
+ * blocos: [{ titulo, texto, rodape }]
+ */
+export function gerarPDFTexto({ titulo, subtitulo, blocos = [], saida = 'download' }) {
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+  const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
+  const M = 48, largura = W - 2 * M;
+  let y = 56;
+  const rodapePagina = () => {
+    doc.setFontSize(7); doc.setTextColor(150);
+    doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')}`, M, H - 14);
+    doc.text('Rota Líder · rotalider.com.br', W - M, H - 14, { align: 'right' });
+    doc.setTextColor(0);
+  };
+  const garante = (alt) => { if (y + alt > H - 40) { rodapePagina(); doc.addPage(); y = 56; } };
+
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+  doc.text(limparParaPDF(titulo), M, y); y += 8;
+  if (subtitulo) { doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(120); y += 12; doc.text(limparParaPDF(subtitulo), M, y); doc.setTextColor(0); }
+  y += 22;
+
+  blocos.forEach((b, i) => {
+    if (i > 0) { garante(20); doc.setDrawColor(225); doc.line(M, y, W - M, y); y += 16; }
+    if (b.titulo) {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(12);
+      const linhas = doc.splitTextToSize(limparParaPDF(b.titulo), largura);
+      garante(linhas.length * 15); doc.text(linhas, M, y); y += linhas.length * 15;
+    }
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5);
+    const linhas = doc.splitTextToSize(limparParaPDF(b.texto || ''), largura);
+    linhas.forEach(l => { garante(14); doc.text(l, M, y); y += 14; });
+    if (b.rodape) { doc.setFontSize(8); doc.setTextColor(140); garante(12); doc.text(limparParaPDF(b.rodape), M, y + 2); doc.setTextColor(0); y += 14; }
+    y += 6;
+  });
+  rodapePagina();
+
+  const nome = `${limparParaPDF(titulo).replace(/\s+/g, '_')}_${dataHoje()}.pdf`;
+  if (saida === 'blob') return { blob: doc.output('blob'), nome };
+  doc.save(nome);
+}
+
+/**
+ * compartilharArquivo({ blob, nome, texto })
+ * No celular abre a folha de compartilhar do sistema (WhatsApp entre as
+ * opções) com o arquivo anexado. Onde isso não existe (PC), baixa o
+ * arquivo e abre o WhatsApp com o texto — a pessoa anexa o PDF baixado.
+ * Devolve 'compartilhado' | 'baixado' | 'cancelado'.
+ */
+export async function compartilharArquivo({ blob, nome, texto = '' }) {
+  try {
+    const arquivo = new File([blob], nome, { type: 'application/pdf' });
+    if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+      await navigator.share({ files: [arquivo], title: nome, text: texto });
+      return 'compartilhado';
+    }
+  } catch (e) {
+    if (e?.name === 'AbortError') return 'cancelado';
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  if (texto) compartilharWhatsApp(texto);
+  return 'baixado';
 }
 
 /* ── EXCEL ──────────────────────────────────────────────────────── */

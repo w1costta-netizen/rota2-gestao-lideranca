@@ -47,6 +47,30 @@ function validarMedidas(medidas) {
   return { medidas: limpas };
 }
 
+// Desdobramento por setor: cada setor tem partida e alvo só nas medidas
+// que a meta usa. Nome curto e único; até 12 setores.
+function validarSetores(setores, medidasDaMeta) {
+  if (!Array.isArray(setores) || !setores.length) return { setores: [] };
+  const vistos = new Set(); const limpos = [];
+  for (const st of setores.slice(0, 12)) {
+    const nome = String(st?.nome || '').trim().slice(0, 40);
+    if (!nome) return { erro: 'Setor sem nome.' };
+    if (vistos.has(nome.toLowerCase())) return { erro: `Setor "${nome}" repetido.` };
+    vistos.add(nome.toLowerCase());
+    const medidas = {};
+    for (const k of Object.keys(medidasDaMeta)) {
+      const m = st?.medidas?.[k];
+      if (!m) continue;
+      const inicial = Number(m.inicial), meta = Number(m.meta);
+      if (!Number.isFinite(inicial) || !Number.isFinite(meta)) return { erro: `Em "${nome}" (${k}), preencha "hoje está em" e "quer chegar em".` };
+      medidas[k] = { inicial, meta };
+    }
+    if (!Object.keys(medidas).length) return { erro: `O setor "${nome}" precisa de partida e meta em pelo menos uma medida.` };
+    limpos.push({ nome, medidas });
+  }
+  return { setores: limpos };
+}
+
 async function metaDaLoja(id, company) {
   const { data } = await supabase.from('metas').select('*').eq('id', id).maybeSingle();
   if (!data || data.company !== company) return null;
@@ -62,17 +86,18 @@ router.get('/', async (req, res) => {
   const company = lojaDe(me, req.query.company);
   if (!company) return res.json({ metas: [], planos: [], podeGerir: false });
 
-  const [{ data: metas, error }, { data: planos }] = await Promise.all([
+  const [{ data: metas, error }, { data: planos }, { data: setoresLoja }] = await Promise.all([
     supabase.from('metas').select('*, criador:criado_por(full_name)')
       .eq('company', company).eq('ativa', true).order('created_at', { ascending: false }),
     supabase.from('planos_acao').select('id, titulo, meta, status')
       .eq('company', company).order('criado_em', { ascending: false }),
+    supabase.from('company_sectors').select('sector_name').eq('company', company).order('sort_order'),
   ]);
   if (error) return res.status(500).json({ error: 'Erro ao carregar as metas.' });
 
   const ids = (metas || []).map(m => m.id);
   const { data: lanc } = ids.length
-    ? await supabase.from('metas_lancamentos').select('meta_id, data, valores, lancado_por, created_at, quem:lancado_por(full_name)')
+    ? await supabase.from('metas_lancamentos').select('meta_id, data, setor, valores, lancado_por, created_at, quem:lancado_por(full_name)')
         .in('meta_id', ids).order('data')
     : { data: [] };
   const porMeta = {};
@@ -81,6 +106,7 @@ router.get('/', async (req, res) => {
   res.json({
     metas: (metas || []).map(m => ({ ...m, lancamentos: porMeta[m.id] || [] })),
     planos: planos || [],
+    setoresLoja: (setoresLoja || []).map(s => s.sector_name).filter(Boolean),
     podeGerir: ehGestor(me),
   });
 });
@@ -93,11 +119,13 @@ router.post('/', async (req, res) => {
   const company = lojaDe(me, req.body?.company);
   if (!company) return res.status(400).json({ error: 'Sem loja definida' });
 
-  const { nome, direcao, prazo, frequencia, medidas, plano_id } = req.body || {};
+  const { nome, direcao, prazo, frequencia, medidas, plano_id, setores } = req.body || {};
   if (!nome?.trim()) return res.status(400).json({ error: 'Diga o que você quer acompanhar.' });
   if (!ehData(prazo)) return res.status(400).json({ error: 'Informe até quando.' });
   const v = validarMedidas(medidas);
   if (v.erro) return res.status(400).json({ error: v.erro });
+  const vs = validarSetores(setores, v.medidas);
+  if (vs.erro) return res.status(400).json({ error: vs.erro });
 
   // O plano, se vier, tem que ser desta loja — senão a meta apareceria
   // dentro do plano de outro cliente.
@@ -112,13 +140,13 @@ router.post('/', async (req, res) => {
     company, plano_id: planoFinal, nome: nome.trim().slice(0, 80),
     direcao: DIRECOES.includes(direcao) ? direcao : 'aumentar',
     prazo, frequencia: FREQUENCIAS.includes(frequencia) ? frequencia : 'mensal',
-    medidas: v.medidas, criado_por: me.id,
+    medidas: v.medidas, setores: vs.setores, criado_por: me.id,
   }).select('*, criador:criado_por(full_name)').single();
   if (error) {
     registrarLog('criar_meta', 'metas', 'erro', { company, user_id: me.id, rota: req.originalUrl, erro: error.message });
     return res.status(500).json({ error: 'Não foi possível criar a meta.' });
   }
-  registrarLog('criar_meta', 'metas', 'sucesso', { company, user_id: me.id, depois: { id: data.id, nome: data.nome, medidas: Object.keys(v.medidas), plano_id: planoFinal } });
+  registrarLog('criar_meta', 'metas', 'sucesso', { company, user_id: me.id, depois: { id: data.id, nome: data.nome, medidas: Object.keys(v.medidas), setores: vs.setores.map(s => s.nome), plano_id: planoFinal } });
   res.json({ ...data, lancamentos: [] });
 });
 
@@ -129,7 +157,7 @@ router.put('/:id', async (req, res) => {
   const meta = await metaDaLoja(req.params.id, lojaDe(me, req.body?.company));
   if (!meta) return res.status(404).json({ error: 'Meta não encontrada' });
 
-  const { nome, direcao, prazo, frequencia, medidas, plano_id, grafico, ativa } = req.body || {};
+  const { nome, direcao, prazo, frequencia, medidas, plano_id, grafico, ativa, setores } = req.body || {};
   const mudancas = { updated_at: new Date().toISOString() };
   if (grafico !== undefined && GRAFICOS.includes(grafico)) mudancas.grafico = grafico;
 
@@ -141,6 +169,7 @@ router.put('/:id', async (req, res) => {
     if (prazo !== undefined) { if (!ehData(prazo)) return res.status(400).json({ error: 'Prazo inválido.' }); mudancas.prazo = prazo; }
     if (frequencia !== undefined && FREQUENCIAS.includes(frequencia)) mudancas.frequencia = frequencia;
     if (medidas !== undefined) { const v = validarMedidas(medidas); if (v.erro) return res.status(400).json({ error: v.erro }); mudancas.medidas = v.medidas; }
+    if (setores !== undefined) { const vs = validarSetores(setores, mudancas.medidas || meta.medidas); if (vs.erro) return res.status(400).json({ error: vs.erro }); mudancas.setores = vs.setores; }
     if (ativa !== undefined) mudancas.ativa = !!ativa;
     if (plano_id !== undefined) {
       if (plano_id) {
@@ -185,9 +214,13 @@ router.post('/:id/lancamentos', async (req, res) => {
 
   const { data, valores } = req.body || {};
   if (!ehData(data)) return res.status(400).json({ error: 'Informe a data do lançamento.' });
-  // Só as medidas que a meta tem; número válido (zero vale).
+  // '' = total da loja; senão tem que ser um setor da meta.
+  const setor = String(req.body?.setor || '').trim();
+  const cfgSetor = setor ? (meta.setores || []).find(s => s.nome === setor) : null;
+  if (setor && !cfgSetor) return res.status(400).json({ error: `O setor "${setor}" não faz parte desta meta.` });
+  // Só as medidas que a meta (ou o setor) tem; número válido (zero vale).
   const limpos = {};
-  for (const k of Object.keys(meta.medidas || {})) {
+  for (const k of Object.keys(cfgSetor ? cfgSetor.medidas : (meta.medidas || {}))) {
     if (valores?.[k] === undefined || valores?.[k] === null || valores?.[k] === '') continue;
     const n = Number(valores[k]);
     if (!Number.isFinite(n)) return res.status(400).json({ error: `Valor inválido em "${k}".` });
@@ -196,13 +229,13 @@ router.post('/:id/lancamentos', async (req, res) => {
   if (!Object.keys(limpos).length) return res.status(400).json({ error: 'Informe pelo menos um número.' });
 
   const { data: salvo, error } = await supabase.from('metas_lancamentos')
-    .upsert({ meta_id: meta.id, data, valores: limpos, lancado_por: me.id, created_at: new Date().toISOString() }, { onConflict: 'meta_id,data' })
-    .select('meta_id, data, valores, lancado_por, created_at, quem:lancado_por(full_name)').single();
+    .upsert({ meta_id: meta.id, data, setor, valores: limpos, lancado_por: me.id, created_at: new Date().toISOString() }, { onConflict: 'meta_id,data,setor' })
+    .select('meta_id, data, setor, valores, lancado_por, created_at, quem:lancado_por(full_name)').single();
   if (error) {
     registrarLog('lancar_meta', 'metas_lancamentos', 'erro', { company: meta.company, user_id: me.id, rota: req.originalUrl, erro: error.message });
     return res.status(500).json({ error: 'Não foi possível lançar.' });
   }
-  registrarLog('lancar_meta', 'metas_lancamentos', 'sucesso', { company: meta.company, user_id: me.id, depois: { meta: meta.nome, data, valores: limpos } });
+  registrarLog('lancar_meta', 'metas_lancamentos', 'sucesso', { company: meta.company, user_id: me.id, depois: { meta: meta.nome, data, setor: setor || 'total', valores: limpos } });
   res.json(salvo);
 });
 
@@ -215,13 +248,14 @@ router.delete('/:id/lancamentos/:data', async (req, res) => {
   if (!ehData(req.params.data)) return res.status(400).json({ error: 'Data inválida' });
 
   // Quem lançou apaga o próprio; gestor apaga qualquer um.
-  const { data: l } = await supabase.from('metas_lancamentos').select('id, lancado_por, valores').eq('meta_id', meta.id).eq('data', req.params.data).maybeSingle();
+  const setor = String(req.query.setor || '').trim();
+  const { data: l } = await supabase.from('metas_lancamentos').select('id, lancado_por, valores').eq('meta_id', meta.id).eq('data', req.params.data).eq('setor', setor).maybeSingle();
   if (!l) return res.status(404).json({ error: 'Lançamento não encontrado' });
   if (l.lancado_por !== me.id && !ehGestor(me)) return res.status(403).json({ error: 'Só quem lançou ou um gestor apaga.' });
 
   const { error } = await supabase.from('metas_lancamentos').delete().eq('id', l.id);
   if (error) return res.status(500).json({ error: 'Não foi possível apagar.' });
-  registrarLog('apagar_lancamento_meta', 'metas_lancamentos', 'sucesso', { company: meta.company, user_id: me.id, antes: { meta: meta.nome, data: req.params.data, valores: l.valores } });
+  registrarLog('apagar_lancamento_meta', 'metas_lancamentos', 'sucesso', { company: meta.company, user_id: me.id, antes: { meta: meta.nome, data: req.params.data, setor: setor || 'total', valores: l.valores } });
   res.json({ ok: true });
 });
 

@@ -8,7 +8,24 @@ import { getWeekStart, addDays, formatDate } from '../utils';
 
 const DAYS = ['segunda','terca','quarta','quinta','sexta','sabado','domingo'];
 const DAY_LABELS = { segunda:'Segunda', terca:'Terça', quarta:'Quarta', quinta:'Quinta', sexta:'Sexta', sabado:'Sábado', domingo:'Domingo' };
-const EMPTY_ITEM = { title: '', description: '', target_type: '', target_value: '', day_of_week: 'segunda', time: '', lembrete_minutos: null, recorrencia_semanas: 0, escopo: 'futuros' };
+const EMPTY_ITEM = { title: '', description: '', target_type: '', target_value: '', day_of_week: 'segunda', time: '', lembrete_minutos: null, recorrencia_semanas: 0, escopo: 'futuros', cor: null };
+
+// Cor do item, escolhida pela pessoa (como nas Anotações). Sem cor, vale a
+// do destino — verde geral, amarelo setor, roxo pessoas — que já existia e
+// continua significando algo. A cor pinta a barra, o horário e um fundo
+// leve; o destino segue escrito no cartão.
+const CORES = {
+  azul:     { cor: '#1565C0', nome: 'Azul' },
+  verde:    { cor: '#2E7D32', nome: 'Verde' },
+  roxo:     { cor: '#5E35B1', nome: 'Roxo' },
+  rosa:     { cor: '#C2185B', nome: 'Rosa' },
+  laranja:  { cor: '#E8681A', nome: 'Laranja' },
+  amarelo:  { cor: '#D4A90A', nome: 'Amarelo' },
+  vermelho: { cor: '#C62828', nome: 'Vermelho' },
+  cinza:    { cor: '#616161', nome: 'Cinza' },
+};
+const corDoItem = (item) => CORES[item.cor]?.cor
+  || (item.target_type === 'geral' ? '#10b981' : item.target_type === 'setor' ? '#f59e0b' : '#6366f1');
 
 // Compromisso fixo ("toda terça às 9h"): o servidor cria uma cópia por semana,
 // todas ligadas pelo serie_id. Por isso a duração é finita — sem ela, seriam
@@ -274,7 +291,7 @@ export default function Agenda({ userId, profile }) {
                   return p ? p.full_name.split(' ')[0] : '';
                 }).filter(Boolean).join(', ') : 'Individual';
             return `<tr>
-              <td style="padding:6px 8px;width:70px;font-weight:600;color:#333;">${i.time || '—'}</td>
+              <td style="padding:6px 8px;width:70px;font-weight:600;color:${corDoItem(i)};border-left:4px solid ${corDoItem(i)};">${i.time || '—'}</td>
               <td style="padding:6px 8px;">
                 <div style="font-weight:600;font-size:13px;">${i.title}</div>
                 ${i.description ? `<div style="font-size:11px;color:#666;margin-top:2px;">${i.description}</div>` : ''}
@@ -431,9 +448,9 @@ export default function Agenda({ userId, profile }) {
             ) : (
               byDay[day].map(item => {
                 const { label, cls } = targetLabel(item);
-                const barColor = item.target_type === 'geral' ? '#10b981' : item.target_type === 'setor' ? '#f59e0b' : '#6366f1';
+                const barColor = corDoItem(item);
                 return (
-                  <div className="agenda-item" key={item.id} style={{ borderLeft: `3px solid ${barColor}` }}>
+                  <div className="agenda-item" key={item.id} style={{ borderLeft: `3px solid ${barColor}`, ...(item.cor ? { background: `${barColor}14` } : {}) }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -582,6 +599,22 @@ export default function Agenda({ userId, profile }) {
           <div className="form-group" style={{ margin: 0 }}>
             <label className="form-label">Horário</label>
             <input className="input" type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">Cor <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(opcional)</span></label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button type="button" onClick={() => setForm(f => ({ ...f, cor: null }))} title="Sem cor — usa a cor do destino"
+              style={{ height: 26, padding: '0 10px', borderRadius: 99, fontSize: 11.5, fontWeight: 600, cursor: 'pointer',
+                       border: !form.cor ? '2px solid var(--text)' : '1px solid var(--border)', background: 'transparent', color: 'var(--text-muted)' }}>
+              Automática
+            </button>
+            {Object.entries(CORES).map(([chave, c]) => (
+              <button key={chave} type="button" title={c.nome} aria-label={`Cor ${c.nome}`}
+                onClick={() => setForm(f => ({ ...f, cor: chave }))}
+                style={{ width: 26, height: 26, borderRadius: '50%', cursor: 'pointer', background: c.cor,
+                         border: form.cor === chave ? '3px solid var(--text)' : '1px solid var(--border)' }}/>
+            ))}
           </div>
         </div>
         {!editing && (

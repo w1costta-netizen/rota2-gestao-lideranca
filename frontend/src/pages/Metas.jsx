@@ -27,11 +27,42 @@ const hoje = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
 const br = iso => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '');
 const dias = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
 const medidasDe = m => ORDEM.filter(k => m.medidas?.[k]);
+const setoresDe = m => (Array.isArray(m.setores) ? m.setores : []);
+const TOTAL = '';   // setor '' = total da loja
 
-// ── Cálculo de uma medida ────────────────────────────────────
-function analisar(m, k) {
-  const T = MEDIDAS[k], cfg = m.medidas[k];
-  const ms = (m.lancamentos || []).filter(l => l.valores?.[k] != null).map(l => [String(l.data).slice(0, 10), Number(l.valores[k])]).sort((a, b) => a[0].localeCompare(b[0]));
+// Série de uma medida: do setor pedido, ou do total.
+//
+// TOTAL COM SETORES: quantidade e R$ somam os setores lançados na data
+// (um lançamento explícito do total, se houver, ganha). Percentual não
+// soma: usa o lançado no total; sem ele, média ponderada pelo R$ dos
+// setores (ou simples, quando não há R$).
+function serie(m, k, setor) {
+  const ls = m.lancamentos || [];
+  const de = (st) => ls.filter(l => (l.setor || '') === st && l.valores?.[k] != null).map(l => [String(l.data).slice(0, 10), Number(l.valores[k])]);
+  if (setor || !setoresDe(m).length) return de(setor || TOTAL).sort((a, b) => a[0].localeCompare(b[0]));
+
+  const explicito = Object.fromEntries(de(TOTAL));
+  const porData = {};
+  ls.filter(l => l.setor && l.valores?.[k] != null).forEach(l => {
+    const d = String(l.data).slice(0, 10);
+    (porData[d] = porData[d] || []).push({ v: Number(l.valores[k]), peso: Number(l.valores?.reais) || 0 });
+  });
+  const datas = new Set([...Object.keys(explicito), ...Object.keys(porData)]);
+  return [...datas].map(d => {
+    if (explicito[d] != null) return [d, explicito[d]];
+    const xs = porData[d];
+    if (k !== 'percentual') return [d, xs.reduce((s, x) => s + x.v, 0)];
+    const somaPeso = xs.reduce((s, x) => s + x.peso, 0);
+    return [d, somaPeso > 0 ? xs.reduce((s, x) => s + x.v * x.peso, 0) / somaPeso : xs.reduce((s, x) => s + x.v, 0) / xs.length];
+  }).sort((a, b) => a[0].localeCompare(b[0]));
+}
+
+// ── Cálculo de uma medida (do total ou de um setor) ──────────
+function analisar(m, k, setor = TOTAL) {
+  const T = MEDIDAS[k];
+  const cfg = setor ? setoresDe(m).find(s => s.nome === setor)?.medidas?.[k] : m.medidas[k];
+  if (!cfg) return null;
+  const ms = serie(m, k, setor);
   const atual = ms.length ? ms[ms.length - 1][1] : cfg.inicial;
   const dataAtual = ms.length ? ms[ms.length - 1][0] : null;
   const percurso = cfg.meta - cfg.inicial, andado = atual - cfg.inicial;
@@ -53,12 +84,12 @@ function analisar(m, k) {
     : restam < 0 ? `Prazo vencido há ${-restam} dias; ficou em ${T.fmt(atual)} (${Math.round(pct)}% do caminho).`
     : chega ? `No ritmo atual chega em ${T.fmt(projecao)} no prazo — a meta é ${T.fmt(cfg.meta)}. Continue.`
     : `No ritmo atual chegaria em ${T.fmt(projecao)}, e a meta é ${T.fmt(cfg.meta)}. Precisa acelerar: faltam ${restam} dias.`;
-  return { k, T, cfg, ms, atual, dataAtual, pct, atingiu, restam, projecao, chega, cor, frase };
+  return { k, setor, T, cfg, ms, atual, dataAtual, pct, atingiu, restam, projecao, chega, cor, frase };
 }
 // A medida de menor progresso é a que segura o resultado; a meta só é
 // "atingida" quando todas batem.
-function resumo(m) {
-  const as = medidasDe(m).map(k => analisar(m, k));
+function resumo(m, setor = TOTAL) {
+  const as = medidasDe(m).map(k => analisar(m, k, setor)).filter(Boolean);
   const pior = as.reduce((p, a) => (a.pct < p.pct ? a : p), as[0]);
   return { as, pct: as.length ? Math.round(as.reduce((s, a) => s + a.pct, 0) / as.length) : 0, atingiu: as.length > 0 && as.every(a => a.atingiu), cor: pior?.cor || COR.vermelho, pior };
 }
@@ -141,14 +172,15 @@ export default function Metas({ userId, profile }) {
   const company = profile?.company || '';
   const q = `requester_id=${userId}${company ? `&company=${encodeURIComponent(company)}` : ''}`;
 
-  const [dados, setDados] = useState({ metas: [], planos: [], podeGerir: false });
+  const [dados, setDados] = useState({ metas: [], planos: [], setoresLoja: [], podeGerir: false });
   const [carregando, setCarregando] = useState(true);
   const [filtro, setFiltro] = useState('todas');
   const [abertaId, setAbertaId] = useState(null);
   const [medida, setMedida] = useState(null);
+  const [setorFoco, setSetorFoco] = useState(TOTAL);   // '' = total
   const [modal, setModal] = useState(null);        // 'nova' | 'lancar'
   const [nova, setNova] = useState(null);
-  const [lanc, setLanc] = useState({ data: hoje(), valores: {} });
+  const [lanc, setLanc] = useState({ data: hoje(), valores: {}, porSetor: {} });
   const [salvando, setSalvando] = useState(false);
 
   const carregar = async () => {
@@ -165,7 +197,8 @@ export default function Metas({ userId, profile }) {
   // ── Ações ──────────────────────────────────────────────────
   const abrirNova = () => {
     setNova({ nome: '', direcao: 'aumentar', prazo: '', frequencia: 'mensal', plano_id: dados.planos.some(p => p.id === filtro) ? filtro : '',
-              usa: { quantidade: false, reais: true, percentual: false }, val: { quantidade: { inicial: '', meta: '' }, reais: { inicial: '', meta: '' }, percentual: { inicial: '', meta: '' } } });
+              usa: { quantidade: false, reais: true, percentual: false }, val: { quantidade: { inicial: '', meta: '' }, reais: { inicial: '', meta: '' }, percentual: { inicial: '', meta: '' } },
+              porSetor: false, setores: [], novoSetor: '' });
     setModal('nova');
   };
   const salvarNova = async () => {
@@ -175,28 +208,43 @@ export default function Metas({ userId, profile }) {
     if (ks.some(k => nova.val[k].inicial === '' || nova.val[k].meta === '')) return toast('Em cada medida marcada, preencha "hoje está em" e "quer chegar em".', 'error');
     if (!nova.prazo) return toast('Informe até quando (passo 4).', 'error');
     const medidas = {}; ks.forEach(k => { medidas[k] = { inicial: Number(nova.val[k].inicial), meta: Number(nova.val[k].meta) }; });
+    // Setores: só os marcados; cada um precisa de partida e meta nas medidas da meta.
+    const setores = nova.porSetor ? nova.setores.map(st => ({ nome: st.nome, medidas: Object.fromEntries(ks.filter(k => st.val?.[k]?.inicial !== '' && st.val?.[k]?.meta !== '' && st.val?.[k]).map(k => [k, { inicial: Number(st.val[k].inicial), meta: Number(st.val[k].meta) }])) })) : [];
+    if (nova.porSetor && !setores.length) return toast('Marque pelo menos um setor (passo 5) ou desligue "acompanhar por setor".', 'error');
+    const incompleto = setores.find(st => ks.some(k => !st.medidas[k]));
+    if (incompleto) return toast(`No setor "${incompleto.nome}", preencha "hoje está em" e "quer chegar em" em todas as medidas.`, 'error');
     setSalvando(true);
     try {
-      await api.post('/metas', { requester_id: userId, company: company || undefined, nome: nova.nome, direcao: nova.direcao, prazo: nova.prazo, frequencia: nova.frequencia, medidas, plano_id: nova.plano_id || null });
+      await api.post('/metas', { requester_id: userId, company: company || undefined, nome: nova.nome, direcao: nova.direcao, prazo: nova.prazo, frequencia: nova.frequencia, medidas, setores, plano_id: nova.plano_id || null });
       setModal(null); toast('Meta criada.'); carregar();
     } catch (e) { toast(e?.response?.data?.error || 'Não foi possível criar.', 'error'); }
     setSalvando(false);
   };
   const salvarLanc = async () => {
     const ks = medidasDe(aberta);
-    const valores = {}; ks.forEach(k => { if (lanc.valores[k] !== '' && lanc.valores[k] != null) valores[k] = Number(lanc.valores[k]); });
+    const limpar = (obj, chaves) => { const v = {}; chaves.forEach(k => { if (obj?.[k] !== '' && obj?.[k] != null) v[k] = Number(obj[k]); }); return v; };
     if (!lanc.data) return toast('Informe a data.', 'error');
-    if (!Object.keys(valores).length) return toast('Informe pelo menos um número.', 'error');
+    // Um pedido por linha preenchida: total (sem setor) e cada setor.
+    const pedidos = [];
+    const total = limpar(lanc.valores, ks);
+    if (Object.keys(total).length) pedidos.push({ setor: '', valores: total });
+    setoresDe(aberta).forEach(st => {
+      const v = limpar(lanc.porSetor[st.nome], Object.keys(st.medidas));
+      if (Object.keys(v).length) pedidos.push({ setor: st.nome, valores: v });
+    });
+    if (!pedidos.length) return toast('Informe pelo menos um número.', 'error');
     setSalvando(true);
     try {
-      await api.post(`/metas/${aberta.id}/lancamentos`, { requester_id: userId, company: company || undefined, data: lanc.data, valores });
-      setModal(null); setLanc({ data: hoje(), valores: {} }); toast('Lançado.'); carregar();
+      for (const pd of pedidos) {
+        await api.post(`/metas/${aberta.id}/lancamentos`, { requester_id: userId, company: company || undefined, data: lanc.data, ...pd });
+      }
+      setModal(null); setLanc({ data: hoje(), valores: {}, porSetor: {} }); toast('Lançado.'); carregar();
     } catch (e) { toast(e?.response?.data?.error || 'Não foi possível lançar.', 'error'); }
     setSalvando(false);
   };
-  const apagarLanc = async (data) => {
+  const apagarLanc = async (data, setor) => {
     if (!window.confirm('Apagar este lançamento?')) return;
-    try { await api.delete(`/metas/${aberta.id}/lancamentos/${data}?${q}`); carregar(); }
+    try { await api.delete(`/metas/${aberta.id}/lancamentos/${data}?${q}&setor=${encodeURIComponent(setor || '')}`); carregar(); }
     catch (e) { toast(e?.response?.data?.error || 'Não foi possível apagar.', 'error'); }
   };
   const apagarMeta = async (m) => {
@@ -222,15 +270,22 @@ export default function Metas({ userId, profile }) {
 
   // ── Tela da meta ────────────────────────────────────────────
   if (aberta) {
-    const r = resumo(aberta); const pl = planoDe(aberta.plano_id);
-    const foco = medida && aberta.medidas[medida] ? analisar(aberta, medida) : null;
+    const pl = planoDe(aberta.plano_id);
+    const sets = setoresDe(aberta);
+    const setorValido = setorFoco && sets.some(s => s.nome === setorFoco) ? setorFoco : TOTAL;
+    const r = resumo(aberta, setorValido);
+    const rTotal = setorValido ? resumo(aberta) : r;
+    const foco = medida ? analisar(aberta, medida, setorValido) : null;
     const tipoAtual = foco ? (aberta.grafico === 'auto' ? graficoAutomatico(aberta, foco) : aberta.grafico) : null;
     const ks = medidasDe(aberta);
-    const lancs = [...(aberta.lancamentos || [])].sort((a, b) => String(b.data).localeCompare(String(a.data)));
+    const lancs = [...(aberta.lancamentos || [])].sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(a.setor || '').localeCompare(String(b.setor || '')));
+    // Setor que mais segura o resultado: o de menor progresso médio.
+    const porSetor = sets.map(st => ({ nome: st.nome, r: resumo(aberta, st.nome) })).filter(x => x.r.as.length);
+    const setorPior = porSetor.length ? porSetor.reduce((p, x) => (x.r.pct < p.r.pct ? x : p), porSetor[0]) : null;
     return (
       <div>
         {cabecalho}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}><button className="btn btn-sm" onClick={() => { setAbertaId(null); setMedida(null); }}><ChevronLeft size={14}/> Metas</button></div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}><button className="btn btn-sm" onClick={() => { setAbertaId(null); setMedida(null); setSetorFoco(TOTAL); }}><ChevronLeft size={14}/> Metas</button></div>
 
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -241,21 +296,57 @@ export default function Metas({ userId, profile }) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Selo cor={r.cor}>{r.atingiu ? 'Meta atingida' : `${r.pct}% do caminho`}</Selo>
-              <button className="btn btn-primary btn-sm" onClick={() => { setLanc({ data: hoje(), valores: {} }); setModal('lancar'); }}><Plus size={14}/> Lançar</button>
+              <Selo cor={rTotal.cor}>{rTotal.atingiu ? 'Meta atingida' : `${rTotal.pct}% do caminho`}</Selo>
+              <button className="btn btn-primary btn-sm" onClick={() => { setLanc({ data: hoje(), valores: {}, porSetor: {} }); setModal('lancar'); }}><Plus size={14}/> Lançar</button>
               {dados.podeGerir && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => apagarMeta(aberta)}><Trash2 size={14}/></button>}
             </div>
           </div>
-          {r.pior && (
+          {rTotal.pior && (
             <div style={{ marginTop: 10, background: 'rgba(232,98,42,.08)', border: '1px solid rgba(232,98,42,.2)', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, lineHeight: 1.55 }}>
-              {r.atingiu ? 'Todas as medidas bateram a meta. 🎉' : <><b>{r.pior.T.nome}</b> é o que mais segura o resultado: {r.pior.frase}</>}
+              {rTotal.atingiu ? 'Todas as medidas bateram a meta. 🎉' : <><b>{rTotal.pior.T.nome}</b> é o que mais segura o resultado: {rTotal.pior.frase}</>}
+              {setorPior && !rTotal.atingiu && <> <b>{setorPior.nome}</b> é o setor mais atrasado ({setorPior.r.pct}% do caminho).</>}
             </div>
           )}
         </div>
 
+        {/* Por setor: a visão que vai para a reunião. Uma linha por setor
+            com atual / meta / % em cada medida; clique abre o gráfico do setor. */}
+        {sets.length > 0 && (
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+              <h3 style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>Por setor</h3>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Total = soma dos setores em quantidade e R$; o percentual do total é o lançado (ou média ponderada).</div>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead><tr>
+                  <th style={{ textAlign: 'left', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Setor</th>
+                  {ks.map(k => <th key={k} style={{ textAlign: 'right', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{MEDIDAS[k].curto} · atual / meta</th>)}
+                  <th style={{ textAlign: 'right', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Caminho</th>
+                </tr></thead>
+                <tbody>
+                  {[{ nome: TOTAL, r: rTotal }, ...porSetor].map(({ nome, r: rs }) => {
+                    const ativo = setorValido === nome;
+                    return (
+                      <tr key={nome || '__total'} onClick={() => { setSetorFoco(nome); setMedida(null); }} style={{ cursor: 'pointer', background: ativo ? 'rgba(232,98,42,.08)' : 'transparent' }}>
+                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontWeight: nome ? 600 : 800 }}>{nome || 'Total da loja'}</td>
+                        {ks.map(k => { const a = rs.as.find(x => x.k === k); return (
+                          <td key={k} style={{ padding: '8px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+                            {a ? <><b style={{ color: a.cor }}>{a.T.fmt(a.atual)}</b> <span style={{ color: 'var(--text-muted)' }}>/ {a.T.fmt(a.cfg.meta)}</span></> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                          </td>); })}
+                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', textAlign: 'right' }}><Selo cor={rs.cor}>{rs.atingiu ? 'atingiu' : `${rs.pct}%`}</Selo></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            <h3 style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>{foco ? foco.T.nome : 'Painel — as medidas lado a lado'}</h3>
+            <h3 style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>{setorValido ? `${setorValido} — ` : sets.length ? 'Total da loja — ' : ''}{foco ? foco.T.nome : 'Painel — as medidas lado a lado'}</h3>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {foco && <button className="btn btn-sm" onClick={() => setMedida(null)}><LayoutGrid size={13}/> Ver painel</button>}
               {[['auto', 'Automático'], ['linha', 'Linha'], ['barras', 'Barras'], ['progresso', 'Progresso']].map(([g, t]) => (
@@ -309,20 +400,21 @@ export default function Metas({ userId, profile }) {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead><tr>
-                {['Data', ...ks.map(k => MEDIDAS[k].curto), 'Quem', ''].map((h, i) => <th key={i} style={{ textAlign: i > 0 && i <= ks.length ? 'right' : 'left', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>{h}</th>)}
+                {['Data', ...(sets.length ? ['Setor'] : []), ...ks.map(k => MEDIDAS[k].curto), 'Quem', ''].map((h, i) => <th key={i} style={{ textAlign: ks.map(k => MEDIDAS[k].curto).includes(h) ? 'right' : 'left', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {lancs.map(l => (
-                  <tr key={l.data}>
+                  <tr key={`${l.data}|${l.setor || ''}`}>
                     <td style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)' }}>{br(l.data)}</td>
+                    {sets.length > 0 && <td style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)', fontWeight: l.setor ? 500 : 700 }}>{l.setor || 'Total'}</td>}
                     {ks.map(k => <td key={k} style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{l.valores?.[k] != null ? MEDIDAS[k].fmt(l.valores[k]) : '—'}</td>)}
                     <td style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)' }}>{l.quem?.full_name?.split(' ')[0] || '—'}</td>
                     <td style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)', textAlign: 'right' }}>
-                      {(dados.podeGerir || l.lancado_por === userId) && <button className="btn-icon" onClick={() => apagarLanc(String(l.data).slice(0, 10))} title="Apagar"><X size={13}/></button>}
+                      {(dados.podeGerir || l.lancado_por === userId) && <button className="btn-icon" onClick={() => apagarLanc(String(l.data).slice(0, 10), l.setor || '')} title="Apagar"><X size={13}/></button>}
                     </td>
                   </tr>
                 ))}
-                {!lancs.length && <tr><td colSpan={ks.length + 3} style={{ padding: 14, color: 'var(--text-muted)', fontSize: 12.5 }}>Nenhum lançamento. Clique em "Lançar".</td></tr>}
+                {!lancs.length && <tr><td colSpan={ks.length + 3 + (sets.length ? 1 : 0)} style={{ padding: 14, color: 'var(--text-muted)', fontSize: 12.5 }}>Nenhum lançamento. Clique em "Lançar".</td></tr>}
               </tbody>
             </table>
           </div>
@@ -333,15 +425,50 @@ export default function Metas({ userId, profile }) {
           <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.55 }}>Informe a data e como ficou o número nesse dia/semana/mês. Se lançar duas vezes na mesma data, vale o último.</p>
           <Rotulo>Data do lançamento</Rotulo>
           <input type="date" style={inputStyle} value={lanc.data} onChange={e => setLanc(l => ({ ...l, data: e.target.value }))}/>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
-            {ks.map(k => (
-              <div key={k}>
-                <Rotulo>{MEDIDAS[k].nome} — como ficou</Rotulo>
-                <input type="number" step={MEDIDAS[k].passo} style={inputStyle} value={lanc.valores[k] ?? ''} placeholder={`a meta é ${MEDIDAS[k].fmt(aberta.medidas[k].meta)}`}
-                  onChange={e => setLanc(l => ({ ...l, valores: { ...l.valores, [k]: e.target.value } }))}/>
+          {sets.length === 0 ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+              {ks.map(k => (
+                <div key={k}>
+                  <Rotulo>{MEDIDAS[k].nome} — como ficou</Rotulo>
+                  <input type="number" step={MEDIDAS[k].passo} style={inputStyle} value={lanc.valores[k] ?? ''} placeholder={`a meta é ${MEDIDAS[k].fmt(aberta.medidas[k].meta)}`}
+                    onChange={e => setLanc(l => ({ ...l, valores: { ...l.valores, [k]: e.target.value } }))}/>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '8px 0 4px' }}>Uma linha por setor. Quantidade e R$ do total somam sozinhos{ks.includes('percentual') ? '; o % do total você lança na linha "Total" (ou deixa em branco para a média ponderada)' : ''}.</div>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead><tr><th style={{ textAlign: 'left', padding: '6px 4px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Setor</th>{ks.map(k => <th key={k} style={{ textAlign: 'left', padding: '6px 4px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{MEDIDAS[k].curto}</th>)}</tr></thead>
+                  <tbody>
+                    {sets.map(st => (
+                      <tr key={st.nome}>
+                        <td style={{ padding: '4px', fontWeight: 600, whiteSpace: 'nowrap' }}>{st.nome}</td>
+                        {ks.map(k => <td key={k} style={{ padding: '4px' }}>
+                          {st.medidas[k]
+                            ? <input type="number" step={MEDIDAS[k].passo} style={{ ...inputStyle, minWidth: 110 }} value={lanc.porSetor[st.nome]?.[k] ?? ''} placeholder={`meta ${MEDIDAS[k].fmt(st.medidas[k].meta)}`}
+                                onChange={e => setLanc(l => ({ ...l, porSetor: { ...l.porSetor, [st.nome]: { ...(l.porSetor[st.nome] || {}), [k]: e.target.value } } }))}/>
+                            : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                        </td>)}
+                      </tr>
+                    ))}
+                    {ks.includes('percentual') && (
+                      <tr>
+                        <td style={{ padding: '4px', fontWeight: 800, whiteSpace: 'nowrap' }}>Total</td>
+                        {ks.map(k => <td key={k} style={{ padding: '4px' }}>
+                          {k === 'percentual'
+                            ? <input type="number" step={0.1} style={{ ...inputStyle, minWidth: 110 }} value={lanc.valores.percentual ?? ''} placeholder={`meta ${MEDIDAS.percentual.fmt(aberta.medidas.percentual.meta)}`}
+                                onChange={e => setLanc(l => ({ ...l, valores: { ...l.valores, percentual: e.target.value } }))}/>
+                            : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>soma</span>}
+                        </td>)}
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </Modal>
       </div>
     );
@@ -382,7 +509,7 @@ export default function Metas({ userId, profile }) {
       ) : lista.map(m => {
         const r = resumo(m); const p = planoDe(m.plano_id);
         return (
-          <div key={m.id} className="card" onClick={() => { setAbertaId(m.id); setMedida(null); }}
+          <div key={m.id} className="card" onClick={() => { setAbertaId(m.id); setMedida(null); setSetorFoco(TOTAL); }}
             style={{ cursor: 'pointer', borderLeft: `4px solid ${r.cor}`, borderRadius: '0 12px 12px 0', marginBottom: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
               <b style={{ fontSize: 14 }}>{m.nome}</b><Selo cor={r.cor}>{r.atingiu ? 'Meta atingida' : `${r.pct}% do caminho`}</Selo>
@@ -396,6 +523,11 @@ export default function Metas({ userId, profile }) {
                 </div>
               ))}
             </div>
+            {setoresDe(m).length > 0 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                {setoresDe(m).map(st => { const rs = resumo(m, st.nome); return <Selo key={st.nome} cor={rs.cor}>{st.nome} · {rs.atingiu ? 'atingiu' : `${rs.pct}%`}</Selo>; })}
+              </div>
+            )}
           </div>
         );
       })}
@@ -445,6 +577,48 @@ export default function Metas({ userId, profile }) {
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Mensal vira gráfico de barras; diário/semanal vira linha com tendência</div>
                 </div>
               </div>
+              <Rotulo>5. Quer acompanhar por setor? <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional) — o total da loja e cada setor, como NAL, Mercearia, Perecíveis</span></Rotulo>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" style={escolha(!nova.porSetor)} onClick={() => set({ porSetor: false })}>Não — só o total</button>
+                <button type="button" style={escolha(nova.porSetor)} onClick={() => set({ porSetor: true })}>Sim — total + setores</button>
+              </div>
+              {nova.porSetor && (() => {
+                const vazio = () => Object.fromEntries(ks.map(k => [k, { inicial: '', meta: '' }]));
+                const ligar = (nome) => { if (!nome || nova.setores.some(s => s.nome.toLowerCase() === nome.toLowerCase())) return; set({ setores: [...nova.setores, { nome, val: vazio() }], novoSetor: '' }); };
+                const tirar = (nome) => set({ setores: nova.setores.filter(s => s.nome !== nome) });
+                const setValSetor = (nome, k, campo, v) => set({ setores: nova.setores.map(s => s.nome === nome ? { ...s, val: { ...s.val, [k]: { ...(s.val[k] || { inicial: '', meta: '' }), [campo]: v } } } : s) });
+                const sugestoes = (dados.setoresLoja || []).filter(n => !nova.setores.some(s => s.nome.toLowerCase() === n.toLowerCase()));
+                return (
+                  <div style={{ marginTop: 8 }}>
+                    {sugestoes.length > 0 && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 6 }}>
+                        {sugestoes.map(n => <button key={n} type="button" className="btn btn-sm" onClick={() => ligar(n)}>+ {n}</button>)}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input style={inputStyle} value={nova.novoSetor} maxLength={40} placeholder="Outro setor — digite e aperte Enter" onChange={e => set({ novoSetor: e.target.value })}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ligar(nova.novoSetor.trim()); } }}/>
+                      <button type="button" className="btn btn-sm" onClick={() => ligar(nova.novoSetor.trim())}>Adicionar</button>
+                    </div>
+                    {nova.setores.map(st => (
+                      <div key={st.nome} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginTop: 8 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <b style={{ fontSize: 12.5 }}>{st.nome}</b>
+                          <button type="button" className="btn-icon" onClick={() => tirar(st.nome)} title="Tirar setor"><X size={13}/></button>
+                        </div>
+                        {ks.map(k => (
+                          <div key={k} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                            <div><Rotulo>{MEDIDAS[k].nome} — hoje está em</Rotulo><input type="number" step={MEDIDAS[k].passo} style={inputStyle} value={st.val?.[k]?.inicial ?? ''} onChange={e => setValSetor(st.nome, k, 'inicial', e.target.value)}/></div>
+                            <div><Rotulo>Quer chegar em</Rotulo><input type="number" step={MEDIDAS[k].passo} style={inputStyle} value={st.val?.[k]?.meta ?? ''} onChange={e => setValSetor(st.nome, k, 'meta', e.target.value)}/></div>
+                          </div>
+                        ))}
+                      </div>
+                    ))}
+                    {ks.length > 0 && nova.setores.length > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Dica: a soma das metas dos setores costuma bater com a meta do total.</div>}
+                  </div>
+                );
+              })()}
+
               <Rotulo>Essa meta faz parte de um plano de ação? <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional)</span></Rotulo>
               <select className="select" value={nova.plano_id} onChange={e => set({ plano_id: e.target.value })}>
                 <option value="">Não — é uma meta da loja</option>

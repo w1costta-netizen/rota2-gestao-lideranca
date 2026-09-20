@@ -12,7 +12,7 @@ import { Download, FileSpreadsheet, FileText, MessageCircle, Mail, ChevronDown }
  *   label        — texto do botão (padrão: "Exportar")
  *   disabled     — desabilita o botão
  */
-export default function ExportMenu({ onPDF, onExcel, onWhatsApp, onEmail, label = 'Exportar', disabled }) {
+export default function ExportMenu({ onPDF, onExcel, onWhatsApp, onPDFWhatsApp, onEmail, label = 'Exportar', disabled }) {
   const [open, setOpen] = useState(false);
   const ref = useRef();
 
@@ -26,10 +26,16 @@ export default function ExportMenu({ onPDF, onExcel, onWhatsApp, onEmail, label 
     { icon: <FileText size={15} />,        label: 'Baixar PDF',       cor: '#ef4444', fn: onPDF,       show: !!onPDF },
     { icon: <FileSpreadsheet size={15} />, label: 'Baixar Excel',     cor: '#10b981', fn: onExcel,     show: !!onExcel },
     { icon: <MessageCircle size={15} />,   label: 'Enviar WhatsApp',  cor: '#25D366', fn: onWhatsApp,  show: !!onWhatsApp },
+    { icon: <MessageCircle size={15} />,   label: 'Enviar PDF no WhatsApp', cor: '#25D366', fn: onPDFWhatsApp, show: !!onPDFWhatsApp },
     { icon: <Mail size={15} />,            label: 'Enviar por Email', cor: '#3b82f6', fn: onEmail,     show: !!onEmail },
   ].filter(o => o.show);
 
   const handle = fn => { setOpen(false); fn?.(); };
+
+  // O menu abre alinhado à direita do botão. Quando o botão está encostado
+  // na borda esquerda (tela estreita, cabeçalho que quebrou linha), isso o
+  // jogava para fora da tela. Aqui ele abre para o lado que tem espaço.
+  const abreParaDireita = ref.current ? ref.current.getBoundingClientRect().left < 220 : false;
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
@@ -52,7 +58,7 @@ export default function ExportMenu({ onPDF, onExcel, onWhatsApp, onEmail, label 
 
       {open && (
         <div style={{
-          position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 200,
+          position: 'absolute', top: 'calc(100% + 6px)', ...(abreParaDireita ? { left: 0 } : { right: 0 }), zIndex: 200,
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.15)',
           minWidth: 190, overflow: 'hidden',
