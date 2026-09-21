@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import pdfjsWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { Plus, Pencil, Trash2, Camera, CheckCircle, Circle, FileText, ChevronRight, X, ArrowLeft, Upload, Loader, Download, FileSpreadsheet, Sparkles, AlertTriangle, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import api from '../api';
+import api, { cabecalhoSessao } from '../api';
 import { comprimirImagem } from '../lib/imagem';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -335,7 +335,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       }
       const base = import.meta.env.VITE_API_URL || '/api';
       const res = await fetch(`${base}/campanhas/${campanha.id}/extrair-itens`, {
-        method: 'POST', body: fd,
+        method: 'POST', body: fd, headers: await cabecalhoSessao(),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Erro ao processar');

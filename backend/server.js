@@ -8,6 +8,10 @@ app.use(cors({ origin: '*' }));
 // servidor (o Supabase corta gravações vindas do navegador em 8 s).
 app.use(express.json({ limit: '50mb' }));
 
+// Sessão obrigatória em toda a API (ver lib/sessao.js). Vem ANTES das rotas:
+// nenhuma delas precisa saber de token — só recebem chamadas já autenticadas.
+app.use(require('./lib/sessao').exigirSessao);
+
 app.use('/api/leaders',  require('./routes/leaders'));
 app.use('/api/agenda',   require('./routes/agenda'));
 app.use('/api/pdf',      require('./routes/pdf'));

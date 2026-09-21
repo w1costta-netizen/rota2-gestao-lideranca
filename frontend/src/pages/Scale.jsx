@@ -3,7 +3,7 @@ import {
   ChevronLeft, ChevronRight, Upload, FileSpreadsheet, FileText,
   Trash2, Calendar, Clock, BarChart2, Users, Loader,
 } from 'lucide-react';
-import { leadersAPI } from '../api';
+import { leadersAPI, cabecalhoSessao } from '../api';
 import { getWeekStart, addDays, formatDate } from '../utils';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
@@ -227,7 +227,7 @@ function ScaleImport() {
     if (!userId) return;
     setLoading(true);
     try {
-      const r = await fetch(`/api/scale/imports?user_id=${userId}`);
+      const r = await fetch(`/api/scale/imports?user_id=${userId}`, { headers: await cabecalhoSessao() });
       const data = await r.json();
       setImports(Array.isArray(data) ? data : []);
     } catch { toast('Erro ao carregar histórico', 'error'); }
@@ -251,7 +251,7 @@ function ScaleImport() {
     if (period) fd.append('period', period);
 
     try {
-      const r = await fetch('/api/scale/upload', { method: 'POST', body: fd });
+      const r = await fetch('/api/scale/upload', { method: 'POST', body: fd, headers: await cabecalhoSessao() });
       const data = await r.json();
       if (!r.ok) throw new Error(data.error);
       toast(`${data.total} registros importados com sucesso!`);
@@ -269,8 +269,8 @@ function ScaleImport() {
     setExpanded(id);
     if (!entries[id]) {
       const [re, rs] = await Promise.all([
-        fetch(`/api/scale/imports/${id}/entries`).then(r => r.json()),
-        fetch(`/api/scale/imports/${id}/summary`).then(r => r.json()),
+        fetch(`/api/scale/imports/${id}/entries`, { headers: await cabecalhoSessao() }).then(r => r.json()),
+        fetch(`/api/scale/imports/${id}/summary`, { headers: await cabecalhoSessao() }).then(r => r.json()),
       ]);
       setEntries(p => ({ ...p, [id]: re }));
       setSummary(p => ({ ...p, [id]: rs }));
@@ -280,7 +280,7 @@ function ScaleImport() {
 
   const deleteImport = async (id, filename) => {
     if (!confirm(`Excluir "${filename}" e todos os dados importados?`)) return;
-    await fetch(`/api/scale/imports/${id}`, { method: 'DELETE' });
+    await fetch(`/api/scale/imports/${id}`, { method: 'DELETE', headers: await cabecalhoSessao() });
     toast('Importação excluída');
     if (expanded === id) setExpanded(null);
     loadImports();

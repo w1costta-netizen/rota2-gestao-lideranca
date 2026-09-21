@@ -1,8 +1,25 @@
 import axios from 'axios';
+import { supabase } from './lib/supabase';
 
 const BASE = import.meta.env.VITE_API_URL || '/api';
 
 const api = axios.create({ baseURL: BASE, timeout: 90000 });
+
+// Toda chamada à API leva o token da sessão do Supabase. É ele — e não o
+// requester_id da URL — que diz ao servidor quem está pedindo. Sem isso o
+// servidor responde 401.
+export async function cabecalhoSessao() {
+  try {
+    const { data } = await supabase.auth.getSession();
+    const token = data?.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch { return {}; }
+}
+api.interceptors.request.use(async (config) => {
+  const cab = await cabecalhoSessao();
+  if (cab.Authorization) { config.headers = config.headers || {}; config.headers.Authorization = cab.Authorization; }
+  return config;
+});
 
 export const leadersAPI = {
   list: () => api.get('/leaders'),
