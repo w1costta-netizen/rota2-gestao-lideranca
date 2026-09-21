@@ -21,6 +21,25 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// 401 com sessão válida no navegador = aba com versão antiga do app. Quem
+// estava com o app aberto durante um deploy segue com o código de antes na
+// memória; se esse código não manda o que o servidor passou a exigir, tudo
+// vira 401 até recarregar — e a pessoa vê "módulo adicional" e "não foi
+// possível ativar" sem entender. Recarrega uma única vez por aba: se o 401
+// for real (sessão inválida no servidor), o app segue para o login normal.
+const CHAVE_401 = 'rota_recarregou_por_401';
+api.interceptors.response.use(undefined, async (erro) => {
+  if (erro?.response?.status === 401) {
+    try {
+      if (!sessionStorage.getItem(CHAVE_401)) {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) { sessionStorage.setItem(CHAVE_401, '1'); window.location.reload(); }
+      }
+    } catch { /* sem sessionStorage não dá pra garantir o guarda: não recarrega */ }
+  }
+  return Promise.reject(erro);
+});
+
 export const leadersAPI = {
   list: () => api.get('/leaders'),
   get: (id) => api.get(`/leaders/${id}`),
@@ -43,9 +62,15 @@ export const agendaAPI = {
 };
 
 export const pdfAPI = {
-  download: (leaderId, week_start) => {
-    const base = import.meta.env.VITE_API_URL || '/api';
-    window.open(`${base}/pdf/leader/${leaderId}?week_start=${week_start}`, '_blank');
+  // Baixa pela API (com token), não por window.open na URL: uma aba nova
+  // não leva o Authorization e o servidor responderia 401.
+  download: async (leaderId, week_start) => {
+    const r = await api.get(`/pdf/leader/${leaderId}`, { params: { week_start }, responseType: 'blob' });
+    const nome = (r.headers?.['content-disposition'] || '').match(/filename="?([^"]+)"?/)?.[1] || 'agenda.pdf';
+    const url = URL.createObjectURL(r.data);
+    const a = document.createElement('a');
+    a.href = url; a.download = nome; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   },
 };
 

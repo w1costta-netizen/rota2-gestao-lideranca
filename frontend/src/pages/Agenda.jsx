@@ -383,7 +383,7 @@ export default function Agenda({ userId, profile }) {
               <button className="btn btn-ghost btn-sm" onClick={() => openSend(l)} title="Enviar WhatsApp">
                 <Send size={13} /> {l.name}
               </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => pdfAPI.download(l.id, week)} title="Baixar PDF">
+              <button className="btn btn-ghost btn-sm" onClick={() => pdfAPI.download(l.id, week).catch(() => toast('Não foi possível gerar o PDF.', 'error'))} title="Baixar PDF">
                 <FileDown size={13} />
               </button>
             </div>
