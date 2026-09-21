@@ -25,21 +25,6 @@ function whatsappReinviteLink({ full_name, email }) {
   return `https://wa.me/?text=${encodeURIComponent(msg)}`;
 }
 
-// Horário de trabalho: quem entra na regra (admin, master e suporte ficam
-// fora por natureza; os demais, salvo isenção decidida pelo admin).
-const entraNaRegraDeHorario = (u) => !['admin', 'master', 'suporte'].includes(u.access_level) && !u.jornada_isento;
-const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().trim();
-// Sugere a linha da escala pelo nome: igual, ou que contenha todas as
-// palavras do nome do usuário. Só sugestão — o gestor confirma.
-function sugerirMembro(nome, membros) {
-  const alvo = semAcento(nome); if (!alvo) return null;
-  const exato = membros.find(m => semAcento(m.name) === alvo); if (exato) return exato;
-  const partes = alvo.split(/\s+/).filter(p => p.length > 2);
-  if (partes.length < 2) return null;
-  const cands = membros.filter(m => { const n = semAcento(m.name); return partes.every(p => n.includes(p)); });
-  return cands.length === 1 ? cands[0] : null;
-}
-
 const ACCESS_LEVELS = [
   { value: 'admin',       label: 'Admin',       desc: 'Gerencia usuários e toda a empresa' },
   { value: 'supervisor',  label: 'Supervisor',   desc: 'Vê escalas de todos os setores' },
@@ -146,7 +131,7 @@ function InlineSelect({ value, onChange, items, placeholder, onAdd, onRemove, ad
 }
 
 /* Modal de configurações: abas Cargos / Setores */
-function ConfigModal({ userId, company, roles, sectors, jornada, onSalvarJornada, onClose, onReload }) {
+function ConfigModal({ userId, company, roles, sectors, onClose, onReload }) {
   const [tab,      setTab]      = useState('roles');
   const [newRole,  setNewRole]  = useState('');
   const [newSect,  setNewSect]  = useState('');
@@ -191,7 +176,7 @@ function ConfigModal({ userId, company, roles, sectors, jornada, onSalvarJornada
 
       {/* Abas */}
       <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'1px solid var(--border)' }}>
-        {[['roles','Cargos'],['sectors','Setores'],['horario','Horário']].map(([id, label]) => (
+        {[['roles','Cargos'],['sectors','Setores']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             style={{ padding:'8px 18px', background:'none', border:'none', cursor:'pointer',
               fontWeight: tab===id ? 700 : 400, fontSize:13,
@@ -203,17 +188,15 @@ function ConfigModal({ userId, company, roles, sectors, jornada, onSalvarJornada
         ))}
       </div>
 
-      {tab === 'horario' && <JornadaConfig jornada={jornada} onSalvar={onSalvarJornada} />}
-
       {/* Adicionar */}
-      {tab !== 'horario' && <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+      <div style={{ display:'flex', gap:8, marginBottom:14 }}>
         <input className="input" value={newVal} onChange={e => setVal(e.target.value)}
           placeholder={ph} onKeyDown={e => e.key === 'Enter' && addFn()}
           style={{ fontSize:13 }}/>
         <button onClick={addFn} className="btn btn-primary btn-sm" style={{ flexShrink:0 }}>
           <Plus size={13}/> Adicionar
         </button>
-      </div>}
+      </div>
 
       {tab === 'sectors' && (
         <p style={{ fontSize:11.5, color:'var(--text-muted)', marginBottom:10, lineHeight:1.6 }}>
@@ -223,7 +206,7 @@ function ConfigModal({ userId, company, roles, sectors, jornada, onSalvarJornada
       )}
 
       {/* Lista */}
-      {tab !== 'horario' && <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:280, overflowY:'auto' }}>
+      <div style={{ display:'flex', flexDirection:'column', gap:6, maxHeight:280, overflowY:'auto' }}>
         {list.length === 0 && (
           <p style={{ fontSize:13, color:'var(--text-muted)', textAlign:'center', padding:'20px 0' }}>
             Nenhum item cadastrado ainda.
@@ -262,125 +245,8 @@ function ConfigModal({ userId, company, roles, sectors, jornada, onSalvarJornada
             </button>
           </div>
         ))}
-      </div>}
+      </div>
     </Modal>
-  );
-}
-
-/* Aba Horário: liga a regra na loja e mostra quem ainda está sem vínculo.
-   Ligar com gente sem vínculo trava essas pessoas (sem escala = sem app),
-   por isso a confirmação lista os nomes antes. */
-function JornadaConfig({ jornada, onSalvar }) {
-  const [tol, setTol] = useState(jornada?.tolerancia_min ?? 15);
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState('');
-  useEffect(() => { setTol(jornada?.tolerancia_min ?? 15); }, [jornada?.tolerancia_min]);
-  if (!jornada) return <p style={{ fontSize:13, color:'var(--text-muted)' }}>Carregando…</p>;
-
-  const salvar = async (dados) => {
-    setErro(''); setSalvando(true);
-    try { await onSalvar(dados); }
-    catch (e) {
-      const r = e.response?.data;
-      if (e.response?.status === 409 && r?.sem_vinculo) {
-        const ok = confirm(`${r.sem_vinculo.length} usuário(s) ainda sem vínculo com a escala:\n\n• ${r.sem_vinculo.join('\n• ')}\n\nEles ficarão sem acesso ao app até terem escala vinculada. Ligar mesmo assim?`);
-        if (ok) { try { await onSalvar({ ...dados, confirmar_sem_vinculo: true }); } catch (e2) { setErro(e2.response?.data?.error || 'Erro ao salvar.'); } }
-      } else setErro(r?.error || 'Erro ao salvar.');
-    }
-    setSalvando(false);
-  };
-
-  return (
-    <div>
-      <p style={{ fontSize:12.5, color:'var(--text-muted)', lineHeight:1.6, marginBottom:14 }}>
-        Com a regra ligada, quem está <b>fora do turno, no intervalo ou de folga</b> não usa as áreas de trabalho do app
-        (conversas, tarefas, comunicados…) e não recebe avisos — o que chegar fica guardado e é entregue no retorno.
-        Cada usuário precisa estar <b>vinculado à sua linha da escala</b> (no editar do usuário). Admin fica fora da regra;
-        outras isenções são decisão sua, registradas no log.
-      </p>
-      {erro && <div className="auth-error" style={{ marginBottom:12 }}>{erro}</div>}
-
-      <label style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:8, cursor:'pointer',
-        border:`1px solid ${jornada.jornada_ativa ? 'var(--primary)' : 'var(--border)'}`,
-        background: jornada.jornada_ativa ? 'rgba(232,98,42,.06)' : 'var(--surface-2)', marginBottom:12 }}>
-        <input type="checkbox" checked={!!jornada.jornada_ativa} disabled={salvando}
-          onChange={e => salvar({ jornada_ativa: e.target.checked })}
-          style={{ accentColor:'var(--primary)', width:16, height:16 }}/>
-        <div>
-          <div style={{ fontSize:13, fontWeight:700 }}>Respeitar horário de trabalho</div>
-          <div style={{ fontSize:11, color:'var(--text-muted)' }}>{jornada.jornada_ativa ? 'Ligado — a trava passa a valer nas próximas etapas da implantação' : 'Desligado'}</div>
-        </div>
-      </label>
-
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
-        <span style={{ fontSize:13 }}>Tolerância na entrada e saída:</span>
-        <input type="number" min="0" max="60" value={tol} onChange={e => setTol(e.target.value)}
-          onBlur={() => { const t = Number(tol); if (Number.isInteger(t) && t !== jornada.tolerancia_min) salvar({ tolerancia_min: t }); }}
-          style={{ width:64, padding:'5px 8px', borderRadius:6, fontSize:13, textAlign:'center', border:'1px solid var(--border)', background:'var(--surface)', color:'var(--text)' }}/>
-        <span style={{ fontSize:12, color:'var(--text-muted)' }}>min (o intervalo não tem tolerância)</span>
-      </div>
-
-      <div style={{ fontSize:12, fontWeight:700, marginBottom:6 }}>
-        {jornada.sem_vinculo.length === 0
-          ? <span style={{ color:'#34d399' }}>✓ Todos os usuários da regra estão vinculados à escala</span>
-          : <span style={{ color:'#fbbf24' }}><AlertTriangle size={12} style={{ verticalAlign:-2 }}/> {jornada.sem_vinculo.length} usuário(s) sem vínculo com a escala</span>}
-      </div>
-      {jornada.sem_vinculo.length > 0 && (
-        <ul style={{ fontSize:12.5, color:'var(--text-muted)', paddingLeft:18, margin:0, lineHeight:1.7 }}>
-          {jornada.sem_vinculo.map(u => <li key={u.id}>{u.full_name}</li>)}
-        </ul>
-      )}
-      <p style={{ fontSize:11, color:'var(--text-muted)', marginTop:10 }}>
-        Para vincular: Editar usuário → Horário de trabalho → Linha na escala.
-      </p>
-    </div>
-  );
-}
-
-/* Horário de trabalho de um usuário: a linha dele na escala e a isenção. */
-function JornadaUsuario({ editing, setEditing, membros, usuarios }) {
-  const j = editing._jornada;
-  const set = (k, v) => setEditing(ed => ({ ...ed, _jornada: { ...ed._jornada, [k]: v } }));
-  // Linhas já tomadas por outros usuários não aparecem — uma linha, um usuário.
-  const tomadas = new Set(usuarios.filter(u => u.id !== editing.id && u.jornada_membro_id).map(u => u.jornada_membro_id));
-  const livres = membros.filter(m => !tomadas.has(m.id));
-  const sugestao = !j.jornada_membro_id ? sugerirMembro(editing.full_name, livres) : null;
-  const atual = membros.find(m => m.id === j.jornada_membro_id);
-  return (
-    <div className="form-group">
-      <label className="form-label">Horário de trabalho</label>
-      <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:10 }}>
-        <div>
-          <div style={{ fontSize:11, color:'var(--text-muted)', marginBottom:4 }}>Linha na escala</div>
-          <select value={j.jornada_membro_id || ''} onChange={e => set('jornada_membro_id', e.target.value || null)}
-            style={{ width:'100%', padding:'9px 12px', borderRadius:8, border:'1px solid var(--border)',
-              background:'var(--surface-2)', color: j.jornada_membro_id ? 'var(--text)' : 'var(--text-muted)', fontSize:13 }}>
-            <option value="">— Sem vínculo —</option>
-            {livres.map(m => (
-              <option key={m.id} value={m.id}>{m.name}{m.sector ? ` · ${m.sector}` : ''}{m.matricula ? ` · ${m.matricula}` : ''}</option>
-            ))}
-            {atual && !livres.some(m => m.id === atual.id) && <option value={atual.id}>{atual.name}</option>}
-          </select>
-          {sugestao && (
-            <button type="button" onClick={() => set('jornada_membro_id', sugestao.id)}
-              style={{ marginTop:6, fontSize:12, color:'var(--primary)', background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline' }}>
-              Sugestão: {sugestao.name}{sugestao.sector ? ` (${sugestao.sector})` : ''} — usar
-            </button>
-          )}
-          {!livres.length && <p style={{ fontSize:11, color:'var(--text-muted)', marginTop:6 }}>Nenhuma linha livre na escala desta loja. Cadastre a pessoa na Escala primeiro.</p>}
-        </div>
-        <label style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:8, cursor:'pointer',
-          border:`1px solid ${j.jornada_isento ? 'var(--primary)' : 'var(--border)'}`,
-          background: j.jornada_isento ? 'rgba(232,98,42,.06)' : 'var(--surface-2)' }}>
-          <input type="checkbox" checked={!!j.jornada_isento} onChange={e => set('jornada_isento', e.target.checked)}
-            style={{ accentColor:'var(--primary)', width:15, height:15 }}/>
-          <div>
-            <div style={{ fontSize:12, fontWeight:600 }}>Isento de horário (cargo de confiança)</div>
-            <div style={{ fontSize:10, color:'var(--text-muted)', lineHeight:1.3 }}>Usa o app a qualquer hora. Decisão da empresa — fica registrada no log com quem fez e quando.</div>
-          </div>
-        </label>
-      </div>
-    </div>
   );
 }
 
@@ -462,8 +328,6 @@ export default function UsersAdmin({ userId, profile }) {
   const [saving,      setSaving]      = useState(false);
   const [error,       setError]       = useState('');
   const [createdUser, setCreatedUser] = useState(null); // dados pós-criação p/ WhatsApp
-  // Horário de trabalho: chave da loja, linhas da escala e quem está sem vínculo.
-  const [jornada, setJornada] = useState(null);
 
   const isMaster = profile?.access_level === 'master';
   // O perfil REAL, não o da loja em que o master está olhando: o master
@@ -508,17 +372,7 @@ export default function UsersAdmin({ userId, profile }) {
       setSectors(sRes.data);
     } catch {}
     setLoading(false);
-    // Separado: se falhar, a gestão de usuários continua inteira.
-    api.get(`/jornada/config?requester_id=${userId}${company ? `&company=${encodeURIComponent(company)}` : ''}`)
-      .then(r => setJornada(r.data)).catch(() => setJornada(null));
   }, [userId, company, isMaster, selectedCompany]);
-
-  const salvarJornada = async (dados) => {
-    await api.put('/jornada/config', { requester_id: userId, ...(company ? { company } : {}), ...dados });
-    const r = await api.get(`/jornada/config?requester_id=${userId}${company ? `&company=${encodeURIComponent(company)}` : ''}`);
-    setJornada(r.data);
-  };
-  const jornadaDoUsuario = (id) => (jornada?.usuarios || []).find(u => u.id === id);
 
   useEffect(() => { load(); }, [load]);
 
@@ -584,13 +438,6 @@ export default function UsersAdmin({ userId, profile }) {
         permissions_versao: editing.permissions ? CATALOGO_VERSAO : null,
         phone:        editing.phone || null,
       });
-      // Horário de trabalho vai por rota própria (só muda se o gestor mexeu).
-      if (editing._jornada) {
-        const antes = jornadaDoUsuario(editing.id) || {};
-        const j = editing._jornada;
-        const mudou = (j.jornada_membro_id || null) !== (antes.jornada_membro_id || null) || !!j.jornada_isento !== !!antes.jornada_isento;
-        if (mudou) await api.put(`/jornada/usuario/${editing.id}`, { requester_id: userId, ...(company ? { company } : {}), jornada_membro_id: j.jornada_membro_id || null, jornada_isento: !!j.jornada_isento });
-      }
       setEditing(null);
       load();
     } catch (e) {
@@ -727,16 +574,7 @@ export default function UsersAdmin({ userId, profile }) {
                     <td style={{ color:'var(--text-muted)', fontSize:12 }}>{u.email}</td>
                     <td style={{ fontSize:12 }}>{u.role || '—'}</td>
                     <td style={{ fontSize:12 }}>{u.sector || '—'}</td>
-                    <td>
-                      <Badge level={u.access_level}/>
-                      {jornada && (() => {
-                        const j = jornadaDoUsuario(u.id);
-                        if (!j) return null;
-                        if (j.jornada_isento) return <div style={{ fontSize:10, color:'var(--text-muted)', marginTop:3 }}>Isento de horário</div>;
-                        if (entraNaRegraDeHorario(j) && !j.jornada_membro_id) return <div style={{ fontSize:10, color:'#fbbf24', marginTop:3 }}>Sem vínculo com a escala</div>;
-                        return null;
-                      })()}
-                    </td>
+                    <td><Badge level={u.access_level}/></td>
                     <td>
                       <span style={{ fontSize:11, fontWeight:600,
                         color: u.active ? '#34d399' : 'var(--text-muted)' }}>
@@ -746,7 +584,7 @@ export default function UsersAdmin({ userId, profile }) {
                     <td>
                       <div style={{ display:'flex', gap:4 }}>
                         <button className="btn-icon" title="Editar"
-                          onClick={() => { const j = jornadaDoUsuario(u.id); setEditing({ ...u, _jornada: j ? { jornada_membro_id: j.jornada_membro_id, jornada_isento: j.jornada_isento } : null }); setError(''); }}>
+                          onClick={() => { setEditing({...u}); setError(''); }}>
                           <Edit2 size={14}/>
                         </button>
                         <a href={whatsappReinviteLink(u)} target="_blank" rel="noreferrer"
@@ -906,12 +744,6 @@ export default function UsersAdmin({ userId, profile }) {
             values={editing}
             onChange={(k, v) => setEditing(ed => ({ ...ed, [k]: v }))}
           />
-          {jornada && editing._jornada && !['admin', 'master', 'suporte'].includes(editing.access_level) && (
-            <>
-              <div style={{ borderTop:'1px solid var(--border)', margin:'16px 0' }}/>
-              <JornadaUsuario editing={editing} setEditing={setEditing} membros={jornada.membros} usuarios={jornada.usuarios} />
-            </>
-          )}
           <div style={{ borderTop:'1px solid var(--border)', margin:'16px 0' }}/>
           <PermissionsSection
             values={editing}
@@ -933,8 +765,6 @@ export default function UsersAdmin({ userId, profile }) {
           company={company}
           roles={roles}
           sectors={sectors}
-          jornada={jornada}
-          onSalvarJornada={salvarJornada}
           onClose={() => setShowCfg(false)}
           onReload={load}
         />
