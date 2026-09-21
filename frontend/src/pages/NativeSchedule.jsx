@@ -263,7 +263,7 @@ function TeamModal({ userId, userSector, onClose }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:500, background:'rgba(0,0,0,.75)', display:'flex', alignItems:'center', justifyContent:'center' }}
       onClick={onClose}>
-      <div style={{ background:'#1a1a1a', borderRadius:12, padding:24, width:560, maxHeight:'80vh', overflowY:'auto', border:'1px solid #333' }}
+      <div style={{ background:'var(--surface)', color:'var(--text)', borderRadius:12, padding:24, width:560, maxWidth:'calc(100vw - 24px)', maxHeight:'80vh', overflowY:'auto', border:'1px solid var(--border)' }}
         onClick={e => e.stopPropagation()}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
           <div>
@@ -276,7 +276,7 @@ function TeamModal({ userId, userSector, onClose }) {
           <button className="btn-icon" onClick={onClose}><X size={16}/></button>
         </div>
         {adding ? (
-          <div style={{ background:'#111', borderRadius:8, padding:14, marginBottom:14, border:'1px solid #2a2a2a' }}>
+          <div style={{ background:'var(--surface-2)', borderRadius:8, padding:14, marginBottom:14, border:'1px solid var(--border)' }}>
             <div style={{ display:'grid', gridTemplateColumns:'100px 1fr', gap:8, marginBottom:8 }}>
               <input className="input" placeholder="Matrícula" value={form.matricula}
                 onChange={e => setForm(f => ({...f, matricula:e.target.value}))} style={{ fontSize:12 }}/>
@@ -293,7 +293,7 @@ function TeamModal({ userId, userSector, onClose }) {
                       onKeyDown={e => { if (e.key === 'Enter') confirmNewRole(); if (e.key === 'Escape') setAddingRole(false); }}
                       style={{ fontSize:12, flex:1 }}/>
                     <button onClick={confirmNewRole} style={{ background:'var(--primary)', border:'none', borderRadius:6, color:'#fff', fontWeight:700, fontSize:12, padding:'0 10px', cursor:'pointer' }}>✓</button>
-                    <button onClick={() => setAddingRole(false)} style={{ background:'#333', border:'none', borderRadius:6, color:'#aaa', fontSize:12, padding:'0 8px', cursor:'pointer' }}>✕</button>
+                    <button onClick={() => setAddingRole(false)} style={{ background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:6, color:'var(--text-muted)', fontSize:12, padding:'0 8px', cursor:'pointer' }}>✕</button>
                   </div>
                 ) : (
                   <>
@@ -302,7 +302,7 @@ function TeamModal({ userId, userSector, onClose }) {
                       {roles.map(r => <option key={r} value={r}>{r}</option>)}
                     </select>
                     <button onClick={() => setAddingRole(true)} title="Adicionar novo cargo"
-                      style={{ background:'#2a2a2a', border:'1px solid #444', borderRadius:6, color:'var(--primary)', fontWeight:800, fontSize:16, padding:'0 10px', cursor:'pointer', lineHeight:1, flexShrink:0 }}>
+                      style={{ background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:6, color:'var(--primary)', fontWeight:800, fontSize:16, padding:'0 10px', cursor:'pointer', lineHeight:1, flexShrink:0 }}>
                       +
                     </button>
                   </>
@@ -327,7 +327,7 @@ function TeamModal({ userId, userSector, onClose }) {
           ? <p style={{ color:'var(--text-muted)', fontSize:13, textAlign:'center', padding:'20px 0' }}>Nenhum colaborador cadastrado.</p>
           : <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <thead>
-                <tr style={{ background:'#111', borderBottom:'1px solid #2a2a2a' }}>
+                <tr style={{ background:'var(--surface-2)', borderBottom:'1px solid var(--border)' }}>
                   {['Matrícula','Nome','Função','Setor',''].map(h => (
                     <th key={h} style={{ padding:'7px 10px', textAlign:'left', color:'var(--text-muted)', fontWeight:600 }}>{h}</th>
                   ))}
@@ -335,7 +335,7 @@ function TeamModal({ userId, userSector, onClose }) {
               </thead>
               <tbody>
                 {members.map(m => editandoId === m.id ? (
-                  <tr key={m.id} style={{ borderBottom:'1px solid #222', background:'#111' }}>
+                  <tr key={m.id} style={{ borderBottom:'1px solid var(--border)', background:'var(--surface-2)' }}>
                     <td style={{ padding:'6px' }}>
                       <input className="input" value={editForm.matricula} placeholder="Matrícula"
                         onChange={e => setEditForm(f => ({ ...f, matricula: e.target.value }))} style={{ fontSize:11, padding:'4px 7px', width:'100%', boxSizing:'border-box' }}/>
@@ -364,7 +364,7 @@ function TeamModal({ userId, userSector, onClose }) {
                     </td>
                   </tr>
                 ) : (
-                  <tr key={m.id} style={{ borderBottom:'1px solid #222' }}>
+                  <tr key={m.id} style={{ borderBottom:'1px solid var(--border)' }}>
                     <td style={{ padding:'7px 10px', color:'var(--text-muted)' }}>{m.matricula||'—'}</td>
                     <td style={{ padding:'7px 10px', fontWeight:600 }}>{m.name}</td>
                     <td style={{ padding:'7px 10px', color:'var(--text-muted)' }}>{m.role||'—'}</td>
