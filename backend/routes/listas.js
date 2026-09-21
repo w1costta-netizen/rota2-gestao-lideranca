@@ -3,15 +3,24 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { registrarLog } = require('../lib/auditLog');
 
+// Lixeira: apagar uma lista só marca `excluida_em`. Fica 30 dias
+// restaurável; passado o prazo, some de vez na próxima abertura da tela
+// (limpeza preguiçosa — não precisa de cron para algo pessoal e pequeno).
+const DIAS_NA_LIXEIRA = 30;
+const limiteLixeira = () => new Date(Date.now() - DIAS_NA_LIXEIRA * 86400000).toISOString();
+
 // GET /api/listas?requester_id= — lista as listas do usuário com itens
 router.get('/', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(400).json({ error: 'requester_id obrigatório' });
 
+  await supabase.from('listas').delete().eq('user_id', requester_id).lt('excluida_em', limiteLixeira());
+
   const { data: listas, error } = await supabase
     .from('listas')
     .select('id, nome, emoji, ordem, created_at, lista_itens(id, texto, concluido, ordem, created_at)')
     .eq('user_id', requester_id)
+    .is('excluida_em', null)
     .order('ordem', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
 
@@ -70,7 +79,46 @@ router.put('/:id', async (req, res) => {
   res.json(data);
 });
 
-// DELETE /api/listas/:id?requester_id= — apaga a lista e os itens
+// GET /api/listas/lixeira?requester_id= — listas apagadas nos últimos 30 dias
+router.get('/lixeira', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(400).json({ error: 'requester_id obrigatório' });
+
+  const { data, error } = await supabase
+    .from('listas')
+    .select('id, nome, emoji, excluida_em, lista_itens(id)')
+    .eq('user_id', requester_id)
+    .not('excluida_em', 'is', null)
+    .gte('excluida_em', limiteLixeira())
+    .order('excluida_em', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json((data || []).map(l => ({
+    id: l.id, nome: l.nome, emoji: l.emoji, excluida_em: l.excluida_em,
+    itens: (l.lista_itens || []).length,
+    dias_restantes: Math.max(0, DIAS_NA_LIXEIRA - Math.floor((Date.now() - new Date(l.excluida_em).getTime()) / 86400000)),
+  })));
+});
+
+// POST /api/listas/:id/restaurar — tira da lixeira
+router.post('/:id/restaurar', async (req, res) => {
+  const { requester_id } = req.body;
+  if (!requester_id) return res.status(400).json({ error: 'requester_id obrigatório' });
+
+  const { data: lista } = await supabase.from('listas').select('user_id, nome, excluida_em').eq('id', req.params.id).single();
+  if (!lista || lista.user_id !== requester_id) return res.status(403).json({ error: 'Acesso negado' });
+  if (!lista.excluida_em) return res.status(400).json({ error: 'Esta lista não está na lixeira.' });
+
+  const { error } = await supabase.from('listas').update({ excluida_em: null }).eq('id', req.params.id);
+  if (error) {
+    registrarLog('restaurar_lista', 'listas', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+  registrarLog('restaurar_lista', 'listas', 'sucesso', { user_id: requester_id, depois: { id: req.params.id, nome: lista.nome } });
+  res.json({ ok: true });
+});
+
+// DELETE /api/listas/:id?requester_id= — manda a lista para a lixeira
 router.delete('/:id', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(400).json({ error: 'requester_id obrigatório' });
@@ -78,7 +126,7 @@ router.delete('/:id', async (req, res) => {
   const { data: lista } = await supabase.from('listas').select('user_id, nome').eq('id', req.params.id).single();
   if (!lista || lista.user_id !== requester_id) return res.status(403).json({ error: 'Acesso negado' });
 
-  const { error } = await supabase.from('listas').delete().eq('id', req.params.id);
+  const { error } = await supabase.from('listas').update({ excluida_em: new Date().toISOString() }).eq('id', req.params.id);
   if (error) {
     registrarLog('excluir_lista', 'listas', 'erro', { user_id: requester_id, rota: req.originalUrl, erro: error.message });
     return res.status(500).json({ error: error.message });

@@ -57,6 +57,7 @@ const ACAO_LABEL = {
   criar_lista: 'Criou lista',
   editar_lista: 'Editou lista',
   excluir_lista: 'Excluiu lista',
+  restaurar_lista: 'Restaurou lista da lixeira',
   adicionar_item_lista: 'Adicionou item à lista',
   editar_item_lista: 'Editou item da lista',
   excluir_item_lista: 'Excluiu item da lista',

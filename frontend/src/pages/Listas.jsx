@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Mic, Trash2, X, ListChecks } from 'lucide-react';
+import { Plus, Mic, Trash2, X, ListChecks, RotateCcw } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
 
@@ -21,6 +21,14 @@ export default function Listas({ userId }) {
   const [salvando, setSalvando] = useState(false);
   const [ouvindo, setOuvindo] = useState(false);
   const recRef = useRef(null);
+  // Lixeira: listas apagadas nos últimos 30 dias, restauráveis.
+  const [lixeira, setLixeira] = useState([]);
+  const [lixeiraAberta, setLixeiraAberta] = useState(false);
+
+  const carregarLixeira = async () => {
+    try { const r = await api.get(`/listas/lixeira?requester_id=${userId}`); setLixeira(r.data); }
+    catch { /* a lixeira é acessório: sem ela a tela segue normal */ }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -34,7 +42,7 @@ export default function Listas({ userId }) {
     setLoading(false);
   };
 
-  useEffect(() => { if (userId) load(); }, [userId]);
+  useEffect(() => { if (userId) { load(); carregarLixeira(); } }, [userId]);
 
   const listaAtiva = listas.find(l => l.id === ativa);
 
@@ -55,13 +63,28 @@ export default function Listas({ userId }) {
   };
 
   const apagarLista = async (lista) => {
-    if (!confirm(`Apagar a lista "${lista.nome}"? Isso remove todos os itens dela.`)) return;
+    if (!confirm(`Apagar a lista "${lista.nome}"? Ela vai para a lixeira e pode ser restaurada em até 30 dias.`)) return;
     try {
       await api.delete(`/listas/${lista.id}?requester_id=${userId}`);
       setListas(ls => ls.filter(l => l.id !== lista.id));
       if (ativa === lista.id) setAtiva(null);
+      toast('Lista movida para a lixeira', 'success');
+      carregarLixeira();
     } catch {
       toast('Erro ao apagar lista', 'error');
+    }
+  };
+
+  const restaurarLista = async (lista) => {
+    try {
+      await api.post(`/listas/${lista.id}/restaurar`, { requester_id: userId });
+      setLixeira(lx => lx.filter(l => l.id !== lista.id));
+      toast(`Lista "${lista.nome}" restaurada`, 'success');
+      await load();
+      setAtiva(lista.id);
+      setLixeiraAberta(false);
+    } catch {
+      toast('Erro ao restaurar lista', 'error');
     }
   };
 
@@ -123,6 +146,13 @@ export default function Listas({ userId }) {
     rec.start();
   };
 
+  const botaoLixeira = (
+    <button className="btn btn-ghost btn-sm" onClick={() => setLixeiraAberta(true)}
+      style={{ width: '100%', justifyContent: 'flex-start', color: 'var(--text-muted)', fontSize: 13 }}>
+      <Trash2 size={14}/> Lixeira ({lixeira.length})
+    </button>
+  );
+
   if (loading) {
     return <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>Carregando...</div>;
   }
@@ -146,6 +176,7 @@ export default function Listas({ userId }) {
           <p style={{ color: 'var(--text-muted)', marginTop: 6, fontSize: 13 }}>
             Crie sua primeira lista — mercado, lembretes, o que precisar.
           </p>
+          {lixeira.length > 0 && <div style={{ marginTop: 14 }}>{botaoLixeira}</div>}
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -170,6 +201,7 @@ export default function Listas({ userId }) {
                 </span>
               </div>
             ))}
+            {lixeira.length > 0 && <div style={{ marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)' }}>{botaoLixeira}</div>}
           </div>
 
           {/* Conteúdo da lista ativa */}
@@ -265,6 +297,37 @@ export default function Listas({ userId }) {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {lixeiraAberta && (
+        <div className="modal-overlay" onClick={e => e.target === e.currentTarget && setLixeiraAberta(false)}>
+          <div className="modal" style={{ maxWidth: 420 }}>
+            <div className="modal-header">
+              <span className="modal-title">Lixeira</span>
+              <button className="btn-icon" onClick={() => setLixeiraAberta(false)}><X size={16}/></button>
+            </div>
+            <div className="modal-body">
+              <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+                Listas apagadas ficam aqui por 30 dias. Depois disso são removidas de vez.
+              </p>
+              {lixeira.length === 0 ? (
+                <p style={{ textAlign: 'center', padding: '16px 0', color: 'var(--text-muted)', fontSize: 13 }}>A lixeira está vazia.</p>
+              ) : lixeira.map(l => (
+                <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 2px', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.emoji} {l.nome}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                      {l.itens} {l.itens === 1 ? 'item' : 'itens'} · {l.dias_restantes === 0 ? 'some hoje' : `some em ${l.dias_restantes} ${l.dias_restantes === 1 ? 'dia' : 'dias'}`}
+                    </div>
+                  </div>
+                  <button className="btn btn-primary btn-sm" onClick={() => restaurarLista(l)} title="Restaurar lista">
+                    <RotateCcw size={13}/> Restaurar
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
