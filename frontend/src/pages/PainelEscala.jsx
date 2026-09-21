@@ -1,6 +1,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Users, Coffee, LogIn, LogOut, AlertTriangle, RefreshCw, Crown } from 'lucide-react';
 import api from '../api';
+import ExportMenu from '../components/ExportMenu';
+import { gerarPDF, compartilharWhatsApp, compartilharArquivo } from '../lib/exportUtils';
+import { useToast } from '../components/Toast';
+
+// Data local (Brasília) em AAAA-MM-DD, sem passar pelo UTC do toISOString.
+const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const somarDias = (iso, n) => { const [a, m, d] = iso.split('-').map(Number); return isoLocal(new Date(a, m - 1, d + n)); };
+const dataDe = (iso) => { const [a, m, d] = iso.split('-').map(Number); return new Date(a, m - 1, d, 12); };
+const hhmm = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
 
 // ─────────────────────────────────────────────────────────────
 // Painel da loja — quem DEVERIA estar em cada setor agora.
@@ -49,7 +58,14 @@ function KPI({ icone: Ic, valor, rotulo, cor }) {
 }
 
 export default function PainelEscala({ profile }) {
+  const toast = useToast();
   const [relogio, setRelogio] = useState(new Date());
+  // Previsibilidade: dá para olhar um dia à frente. Em outro dia não existe
+  // "agora", então a pessoa escolhe a hora para simular ("como vai estar a
+  // loja quinta às 14h"). Hoje segue o relógio e atualiza sozinho.
+  const [dia, setDia] = useState(() => isoLocal(new Date()));
+  const [horaSim, setHoraSim] = useState(() => { const n = new Date(); return hhmm(n.getHours() * 60 + n.getMinutes()); });
+  const ehHoje = dia === isoLocal(new Date());
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(false);
@@ -67,8 +83,9 @@ export default function PainelEscala({ profile }) {
     if (!profile?.company) { setCarregando(false); return; }
     const agora = new Date();
     // O minuto vai daqui, não do servidor: ele roda em UTC e a loja não.
-    const minuto = agora.getHours() * 60 + agora.getMinutes();
-    const dia = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
+    // Em outro dia, o minuto é o da hora simulada.
+    const [hs, ms] = horaSim.split(':').map(Number);
+    const minuto = ehHoje ? agora.getHours() * 60 + agora.getMinutes() : (hs * 60 + (ms || 0));
     try {
       const r = await api.get(`/schedule/painel?company=${encodeURIComponent(profile.company)}&data=${dia}&minuto=${minuto}`);
       setDados(r.data);
@@ -78,13 +95,58 @@ export default function PainelEscala({ profile }) {
     } finally {
       setCarregando(false);
     }
-  }, [profile?.company]);
+  }, [profile?.company, dia, horaSim, ehHoje]);
 
   useEffect(() => {
     carregar();
+    if (!ehHoje) return undefined;   // dia futuro não muda sozinho
     const t = setInterval(carregar, 60000);
     return () => clearInterval(t);
-  }, [carregar]);
+  }, [carregar, ehHoje]);
+
+  // "agora" vira "às 14:00 de quinta" quando não é hoje.
+  const quando = ehHoje ? 'agora' : `às ${horaSim}`;
+  const rotuloDia = ehHoje ? 'hoje' : dataDe(dia).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' });
+
+  // ── Relatório do dia: PDF e WhatsApp ───────────────────────────
+  // O relatório é o PLANO do dia inteiro (quem está escalado, horários,
+  // intervalos, por setor), não só a foto do momento — é o que se manda
+  // para o grupo de manhã.
+  const tituloRel = `Escala do dia — ${dataDe(dia).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}`;
+  const montarPDF = (saida = 'download') => {
+    const sets = dados?.setores || [];
+    const colunas = [{ header: 'Nome', dataKey: 'n' }, { header: 'Cargo', dataKey: 'c' }, { header: 'Entrada', dataKey: 'e' }, { header: 'Saída', dataKey: 's' }, { header: 'Intervalo', dataKey: 'i' }];
+    const secoes = [];
+    if (dados?.lideranca?.configurada) {
+      const lid = [...(dados.lideranca.naLoja || []), ...(dados.lideranca.emIntervalo || [])];
+      if (lid.length) secoes.push({ titulo: `Liderança (${quando})`, colunas: [{ header: 'Nome', dataKey: 'n' }, { header: 'Cargo', dataKey: 'c' }, { header: 'Até', dataKey: 's' }],
+        rows: lid.map(l => ({ n: l.nome, c: l.cargo || '', s: l.saida || l.retorno || '' })) });
+    }
+    sets.filter(st => st.pessoas?.length).forEach(st => secoes.push({
+      titulo: `${st.setor} — ${st.totalDia} no dia${st.minimo != null ? ` · mínimo ${st.minimo}` : ''}`,
+      colunas,
+      rows: [...st.pessoas].sort((a, b) => a.entrouMin - b.entrouMin).map(p => ({ n: p.nome, c: p.cargo || '', e: p.entrada || '', s: p.saida || '', i: p.intervalo ? `${p.intervalo}–${p.retorno}` : '' })),
+    }));
+    if (!secoes.length) { toast('Ninguém escalado neste dia.', 'error'); return null; }
+    return gerarPDF({ titulo: tituloRel, subtitulo: `${profile?.company || ''} · ${todasPessoas.length} escalado(s)${dados?.alertas?.length ? ` · ${dados.alertas.length} alerta(s)` : ''}`, secoes, orientacao: 'portrait', saida });
+  };
+  const textoWhats = () => {
+    const sets = (dados?.setores || []).filter(st => st.pessoas?.length);
+    if (!sets.length) return '';
+    let t = `*${tituloRel}*\n${profile?.company || ''} · ${todasPessoas.length} escalado(s)\n`;
+    (dados?.alertas || []).forEach(a => { t += `⚠️ ${a.setor}: ${a.tipo === 'sem_lider' ? 'sem líder' : a.tipo === 'sem_escala' ? 'escala não lançada' : `${a.naLoja} na loja, mínimo ${a.minimo}`}\n`; });
+    sets.forEach(st => {
+      t += `\n*${st.setor}* (${st.totalDia})\n`;
+      [...st.pessoas].sort((a, b) => a.entrouMin - b.entrouMin).forEach(p => { t += `• ${p.nome} ${p.entrada}–${p.saida}${p.intervalo ? ` (int. ${p.intervalo})` : ''}\n`; });
+    });
+    return t + '\n_Enviado via Rota Líder_';
+  };
+  const whatsTexto = () => { const t = textoWhats(); if (!t) return toast('Ninguém escalado neste dia.', 'error'); compartilharWhatsApp(t); };
+  const pdfWhats = async () => {
+    const r = montarPDF('blob'); if (!r) return;
+    const res = await compartilharArquivo({ ...r, texto: tituloRel });
+    if (res === 'baixado') toast('PDF baixado. No WhatsApp, anexe o arquivo que acabou de baixar.');
+  };
 
   const hhmmss = relogio.toLocaleTimeString('pt-BR');
   const totais = dados?.totais || {};
@@ -122,19 +184,44 @@ export default function PainelEscala({ profile }) {
         <div>
           <h1 className="page-title">{profile?.company || 'Painel da loja'}</h1>
           <p className="page-subtitle">
-            Turno da {turnoDe(relogio.getHours()).toLowerCase()} ·{' '}
-            {relogio.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
+            {ehHoje
+              ? <>Turno da {turnoDe(relogio.getHours()).toLowerCase()} · {relogio.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}</>
+              : <>Previsão para {dataDe(dia).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })} às {horaSim}</>}
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-              {hhmmss}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          {ehHoje ? (
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{hhmmss}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>atualiza a cada minuto</div>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>atualiza a cada minuto</div>
-          </div>
+          ) : (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--text-muted)' }}>
+              Ver como às
+              <input type="time" value={horaSim} onChange={e => e.target.value && setHoraSim(e.target.value)}
+                style={{ padding: '6px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13 }}/>
+            </label>
+          )}
+          <ExportMenu label="Relatório do dia" disabled={!dados} onPDF={() => montarPDF()} onWhatsApp={whatsTexto} onPDFWhatsApp={pdfWhats}/>
           <button className="btn-icon" onClick={carregar} title="Atualizar agora"><RefreshCw size={16}/></button>
         </div>
+      </div>
+
+      {/* Dias à frente: hoje + 6 dias, ou qualquer data. */}
+      <div className="card" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center', padding: '8px 12px', marginBottom: 16 }}>
+        {Array.from({ length: 7 }, (_, i) => somarDias(isoLocal(new Date()), i)).map((d, i) => {
+          const ativo = d === dia;
+          const rot = i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : dataDe(d).toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+          return (
+            <button key={d} onClick={() => setDia(d)}
+              style={{ padding: '5px 11px', borderRadius: 99, fontSize: 12, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize',
+                       border: `1px solid ${ativo ? 'var(--primary)' : 'var(--border)'}`, background: ativo ? 'var(--primary)' : 'transparent', color: ativo ? '#fff' : 'var(--text-muted)' }}>
+              {rot} <span style={{ fontWeight: 400, opacity: .8 }}>{d.slice(8, 10)}/{d.slice(5, 7)}</span>
+            </button>
+          );
+        })}
+        <input type="date" value={dia} onChange={e => e.target.value && setDia(e.target.value)}
+          style={{ marginLeft: 'auto', padding: '5px 8px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 12.5 }}/>
       </div>
 
       {erro && (
@@ -154,7 +241,7 @@ export default function PainelEscala({ profile }) {
             <div key={`${a.tipo}-${a.setor}`} style={{ fontSize: 13, padding: '3px 0' }}>
               <b>{a.setor}</b>{' — '}
               {a.tipo === 'sem_lider'
-                ? `nenhum líder na loja agora — ${a.detalhe}`
+                ? `nenhum líder na loja ${quando} — ${a.detalhe}`
                 : a.tipo === 'sem_escala'
                   ? 'escala deste mês ainda não foi lançada'
                   : `${a.naLoja} na loja, mínimo ${a.minimo}`}
@@ -165,9 +252,9 @@ export default function PainelEscala({ profile }) {
 
       {/* KPIs — os rótulos dizem "escalado", não "presente": é o que o dado é */}
       <div className="stats-grid" style={{ marginBottom: 20 }}>
-        <KPI icone={Users}  valor={totais.naLoja ?? 0}        rotulo="Escalados na loja agora" cor="#16a34a"/>
+        <KPI icone={Users}  valor={totais.naLoja ?? 0}        rotulo={`Escalados na loja ${quando}`} cor="#16a34a"/>
         <KPI icone={Coffee} valor={totais.intervalo ?? 0}     rotulo="Em intervalo"            cor="#f59e0b"/>
-        <KPI icone={LogIn}  valor={totais.aEntrar ?? 0}       rotulo="Ainda entram hoje"       cor="#3b82f6"/>
+        <KPI icone={LogIn}  valor={totais.aEntrar ?? 0}       rotulo={ehHoje ? 'Ainda entram hoje' : 'Entram depois'} cor="#3b82f6"/>
         <KPI icone={LogOut} valor={totais.jaSaiu ?? 0}        rotulo="Já saíram"               cor="#94a3b8"/>
       </div>
 
@@ -196,7 +283,7 @@ export default function PainelEscala({ profile }) {
                   mesmo tempo sem que nenhum responda formalmente pela loja. */}
               <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)',
                             textTransform: 'uppercase', letterSpacing: .4, marginBottom: 7 }}>
-                Na loja agora
+                Na loja {quando}
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
                 {dados.lideranca.naLoja.map((l, i) => (
@@ -211,7 +298,7 @@ export default function PainelEscala({ profile }) {
               </div>
             </>) : (
               <div style={{ fontSize: 13, color: '#dc2626', fontWeight: 700, marginBottom: 10 }}>
-                Nenhum líder na loja agora
+                Nenhum líder na loja {quando}
                 {dados.lideranca.emIntervalo.length > 0 &&
                   ` — em intervalo, volta ${dados.lideranca.emIntervalo[0].retorno}`}
                 {dados.lideranca.proximo && dados.lideranca.emIntervalo.length === 0 &&
@@ -220,7 +307,7 @@ export default function PainelEscala({ profile }) {
             )}
 
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              {dados.lideranca.escaladosHoje} líder(es) escalado(s) hoje
+              {dados.lideranca.escaladosHoje} líder(es) escalado(s) {rotuloDia}
               {dados.lideranca.proximo && ` · próximo entra ${dados.lideranca.proximo.entrada}`}
             </div>
 
@@ -265,13 +352,13 @@ export default function PainelEscala({ profile }) {
           <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>
             {dados?.temMinimoConfigurado
               ? 'comparado ao efetivo mínimo cadastrado'
-              : 'comparado ao pico do próprio setor hoje — cadastre o mínimo para ter alerta'}
+              : `comparado ao pico do próprio setor ${rotuloDia} — cadastre o mínimo para ter alerta`}
           </span>
         </div>
 
         {setores.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>
-            Ninguém escalado hoje nesta loja.
+            Ninguém escalado {rotuloDia} nesta loja.
           </p>
         ) : setores.map(s => {
           const { cor, pct } = semaforo(s);
@@ -298,7 +385,7 @@ export default function PainelEscala({ profile }) {
                                  color: s.semEscalaNoMes ? '#dc2626' : 'var(--text-muted)',
                                  background: s.semEscalaNoMes ? '#dc262618' : 'var(--surface-2)',
                                  border: `1px solid ${s.semEscalaNoMes ? '#dc262640' : 'var(--border)'}` }}>
-                    {s.semEscalaNoMes ? 'escala não lançada' : 'ninguém escalado hoje'}
+                    {s.semEscalaNoMes ? 'escala não lançada' : `ninguém escalado ${rotuloDia}`}
                   </span>
                 ) : (<>
                   <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
@@ -349,7 +436,7 @@ export default function PainelEscala({ profile }) {
 
         {visiveis.length === 0 ? (
           <p style={{ color: 'var(--text-muted)', fontSize: 13, padding: '10px 0' }}>
-            Ninguém neste filtro agora.
+            Ninguém neste filtro {quando}.
           </p>
         ) : visiveis.map((p, i) => (
           <div key={`${p.nome}-${i}`} style={{
@@ -402,7 +489,7 @@ export default function PainelEscala({ profile }) {
       )}
 
       <p style={{ fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.6, textAlign: 'center' }}>
-        Este painel mostra a escala <b>planejada</b> — quem deveria estar em cada setor agora.
+        Este painel mostra a escala <b>planejada</b> — quem deveria estar em cada setor {quando}.
         O app não registra ponto, então ele não diz quem de fato chegou.
       </p>
     </div>
