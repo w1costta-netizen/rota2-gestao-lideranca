@@ -1,10 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, ChevronDown, AlertTriangle, Users, ShoppingCart, DollarSign, BarChart2, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { lerTudo } from '../lib/lerTudo';
 import ExportMenu from '../components/ExportMenu';
 import { gerarPDF, gerarExcel, compartilharWhatsApp, compartilharEmail } from '../lib/exportUtils';
 
 const TABS = ['Geral', 'Departamentos', 'Categorias', 'Itens', 'Atenção'];
+
+// Itens de venda que a extração do Estoque não traz (FLV por peso, açougue,
+// padaria…). Ganham um grupo próprio no filtro para não sumirem.
+const SEM_CLASSIFICACAO = '__sem__';
+const ROTULO_SEM = 'Sem classificação (FLV, açougue, padaria…)';
+const rotuloOpcao = (op) => op === SEM_CLASSIFICACAO ? ROTULO_SEM : op;
+const ordenarComSemClassificacao = (lista) =>
+  [...lista.filter(x => x !== SEM_CLASSIFICACAO).sort(), ...lista.filter(x => x === SEM_CLASSIFICACAO)];
 
 // ─── Formatação ───────────────────────────────────────────
 function fmtR(n) {
@@ -234,7 +243,7 @@ function detectarTotal(linhas) {
 }
 
 // ─── Filtro de departamento (multi-seleção com "Selecionar todos") ────────
-function DeptoFilter({ opcoes, selecionados, onChange, carregando }) {
+function DeptoFilter({ opcoes, selecionados, onChange, carregando, rotulo }) {
   const [open, setOpen] = useState(false);
   const ref = React.useRef();
 
@@ -255,9 +264,9 @@ function DeptoFilter({ opcoes, selecionados, onChange, carregando }) {
   }
 
   const todosSelecionados = selecionados.length === 0;
-  const resumo = todosSelecionados ? 'Todos os departamentos'
-    : selecionados.length === 1 ? selecionados[0]
-    : `${selecionados.length} departamentos`;
+  const resumo = todosSelecionados ? rotulo.todos
+    : selecionados.length === 1 ? rotuloOpcao(selecionados[0])
+    : `${selecionados.length} ${rotulo.varios}`;
 
   const toggle = (op) => onChange(sel => sel.includes(op) ? sel.filter(x => x !== op) : [...sel, op]);
 
@@ -277,7 +286,7 @@ function DeptoFilter({ opcoes, selecionados, onChange, carregando }) {
             cursor: 'pointer', fontSize: 13, fontWeight: 700, borderBottom: '1px solid var(--border)', marginBottom: 4 }}>
             <input type="checkbox" checked={todosSelecionados} onChange={() => onChange([])}
               style={{ accentColor: 'var(--primary)', width: 15, height: 15 }} />
-            Todos os departamentos
+            {rotulo.todos}
           </label>
           {opcoes.map(op => {
             const sel = selecionados.includes(op);
@@ -287,7 +296,7 @@ function DeptoFilter({ opcoes, selecionados, onChange, carregando }) {
                 background: sel ? 'rgba(255,112,0,.08)' : 'transparent' }}>
                 <input type="checkbox" checked={sel} onChange={() => toggle(op)}
                   style={{ accentColor: 'var(--primary)', width: 15, height: 15 }} />
-                {op}
+                {rotuloOpcao(op)}
               </label>
             );
           })}
@@ -312,6 +321,7 @@ export default function PainelVendas({ profile }) {
   // vendas não traz departamento junto do item, só o Estoque tem essa ligação)
   const [mapaDepto, setMapaDepto] = useState(null); // Map | null (null = ainda não carregou)
   const [deptosSelecionados, setDeptosSelecionados] = useState([]); // vazio = todos
+  const [catsSelecionadas, setCatsSelecionadas] = useState([]);     // vazio = todas
 
   const carregarPeriodos = useCallback(async () => {
     if (!company) return;
@@ -323,10 +333,16 @@ export default function PainelVendas({ profile }) {
     if (!periodo || !company) { setDados([]); return; }
     setLoading(true);
     const tabela = periodo === 'atual' ? 'vendas_atual' : 'vendas_historico';
-    let q = supabase.from(tabela).select('*').eq('company', company);
-    if (periodo !== 'atual') q = q.eq('periodo', periodo);
-    const { data } = await q;
-    setDados(data || []);
+    const montar = (ordenar) => {
+      let q = supabase.from(tabela).select('*').eq('company', company);
+      if (ordenar) q = q.order('id');
+      if (periodo !== 'atual') q = q.eq('periodo', periodo);
+      return q;
+    };
+    let data = [];
+    try { data = await lerTudo(() => montar(true)); }
+    catch { data = (await montar(false)).data || []; } // pior caso: como era antes
+    setDados(data);
     setLoading(false);
   }, [company, periodo]);
 
@@ -334,7 +350,10 @@ export default function PainelVendas({ profile }) {
     if (!company) return;
     const { data } = await supabase.from('estoque_payloads').select('payload').eq('company', company).single();
     const lista = data?.payload?.mapa_departamentos || [];
-    setMapaDepto(new Map(lista));
+    // código → { depto, secao }. Estoque importado antes de existir a seção
+    // traz só [código, depto]: o filtro de categoria fica indisponível até
+    // reimportar, mas o de departamento segue funcionando.
+    setMapaDepto(new Map(lista.map(([cod, depto, secao]) => [cod, { depto: depto || null, secao: secao || null }])));
   }, [company]);
 
   useEffect(() => { carregarPeriodos(); }, [carregarPeriodos, refreshKey]);
@@ -347,15 +366,43 @@ export default function PainelVendas({ profile }) {
   const cats    = dados.filter(d => d.categoria).map(d => ({ ...d, nome: d.categoria }));
   // Descobre o departamento de cada item cruzando o código no início do nome
   // (ex: "259183 - SACOLA SAMS...") com o mapa vindo do Estoque
+  // Item que não está na extração do Estoque (FLV por peso, açougue,
+  // padaria…) entra em SEM_CLASSIFICACAO — senão sumia de qualquer filtro.
   const itens   = dados.filter(d => d.item).map(d => {
     const cod = parseInt(String(d.item).match(/^\d+/)?.[0], 10);
-    const depto = mapaDepto?.get(cod) || null;
-    return { ...d, nome: d.item, departamentoItem: depto };
+    const cls = mapaDepto?.get(cod);
+    return { ...d, nome: d.item,
+      departamentoItem: cls?.depto || SEM_CLASSIFICACAO,
+      categoriaItem: cls?.secao || (cls?.depto ? null : SEM_CLASSIFICACAO) };
   });
-  const deptosDisponiveis = [...new Set(itens.map(i => i.departamentoItem).filter(Boolean))].sort();
-  const filtrarPorDepto = (lista) => deptosSelecionados.length
-    ? lista.filter(i => deptosSelecionados.includes(i.departamentoItem))
-    : lista;
+  const deptosDisponiveis = ordenarComSemClassificacao([...new Set(itens.map(i => i.departamentoItem))]);
+  const itensDosDeptos = deptosSelecionados.length
+    ? itens.filter(i => deptosSelecionados.includes(i.departamentoItem))
+    : itens;
+  // Categorias só dos departamentos escolhidos; escolher um departamento
+  // descarta categorias que ficaram fora dele.
+  const catsDisponiveis = ordenarComSemClassificacao([...new Set(itensDosDeptos.map(i => i.categoriaItem).filter(Boolean))]);
+  const catsAtivas = catsSelecionadas.filter(c => catsDisponiveis.includes(c));
+  const filtrarPorDepto = (lista) => {
+    let r = deptosSelecionados.length ? lista.filter(i => deptosSelecionados.includes(i.departamentoItem)) : lista;
+    if (catsAtivas.length) r = r.filter(i => catsAtivas.includes(i.categoriaItem));
+    return r;
+  };
+  const temSecao = itens.some(i => i.categoriaItem && i.categoriaItem !== SEM_CLASSIFICACAO);
+  // Elemento, não componente: como componente seria recriado a cada render e
+  // o menu fecharia a cada clique numa opção.
+  const filtros = (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+      <DeptoFilter opcoes={deptosDisponiveis} selecionados={deptosSelecionados} onChange={setDeptosSelecionados}
+        carregando={mapaDepto === null} rotulo={{ todos: 'Todos os departamentos', varios: 'departamentos' }} />
+      {mapaDepto !== null && deptosDisponiveis.length > 0 && (temSecao
+        ? <DeptoFilter opcoes={catsDisponiveis} selecionados={catsAtivas} onChange={setCatsSelecionadas}
+            rotulo={{ todos: 'Todas as categorias', varios: 'categorias' }} />
+        : <span style={{ fontSize: 12, color: 'var(--text-muted)' }} title="A categoria de cada item vem da extração do Estoque">
+            Reimporte o Estoque para filtrar por categoria
+          </span>)}
+    </div>
+  );
 
   // KPIs globais — usa linha de total do bloco CANAL se detectada, senão soma tudo
   const baseCanais = canais.length ? canais : dados;
@@ -591,7 +638,7 @@ export default function PainelVendas({ profile }) {
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Por Item / Produto</h3>
-                <DeptoFilter opcoes={deptosDisponiveis} selecionados={deptosSelecionados} onChange={setDeptosSelecionados} carregando={mapaDepto === null} />
+                {filtros}
               </div>
               <TabelaVendas linhas={filtrarPorDepto(itens)} />
             </>
@@ -603,7 +650,7 @@ export default function PainelVendas({ profile }) {
                   display: 'flex', alignItems: 'center', gap: 6 }}>
                   <AlertTriangle size={16} /> Itens em Queda
                 </h3>
-                <DeptoFilter opcoes={deptosDisponiveis} selecionados={deptosSelecionados} onChange={setDeptosSelecionados} carregando={mapaDepto === null} />
+                {filtros}
               </div>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
                 Todos os itens com receita abaixo do período anterior (YoY negativo), do pior para o melhor.

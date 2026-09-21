@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Upload, Trash2, Archive, RefreshCw, AlertTriangle, CheckCircle, TrendingUp } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { parseVendasXlsx } from '../lib/parseVendasXlsx';
+import { lerTudo } from '../lib/lerTudo';
 import { useToast } from '../components/Toast';
 
 export default function GestaoVendas({ userId, profile }) {
@@ -101,9 +102,9 @@ export default function GestaoVendas({ userId, profile }) {
     if (!window.confirm(`Fechar o período ${labelPeriodo}? Os dados serão salvos no histórico.`)) return;
     setFechando(true);
     try {
-      const { data: linhas, error: errLer } = await supabase
-        .from('vendas_atual').select('*').eq('company', company);
-      if (errLer) throw errLer;
+      // Em páginas: acima de 1.000 linhas o Supabase cortava o resto e o
+      // histórico ficava incompleto sem aviso.
+      const linhas = await lerTudo(() => supabase.from('vendas_atual').select('*').eq('company', company).order('id'));
       if (!linhas?.length) { showToast('Não há dados atuais para fechar.', 'error'); return; }
 
       const rows = linhas.map(({ id, uploaded_by, uploaded_at, ...l }) => ({ ...l, periodo }));

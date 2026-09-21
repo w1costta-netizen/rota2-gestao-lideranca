@@ -344,7 +344,10 @@ export async function parseEstoqueXlsx(file) {
     // Lista enxuta código→departamento de TODOS os itens (não só os "top"),
     // usada pelo Painel de Vendas pra descobrir o departamento de cada item
     // vendido — a planilha de vendas não traz essa informação junto do item.
-    mapa_departamentos: items.map(r => [r.CD_PRODUTO, r.DESCRICAO_DEPARTAMENTO]),
+    // [código, departamento, seção]. A seção tem os mesmos nomes das
+    // categorias da planilha de vendas (FLV, CONGELADOS, REFRIGERADO…) e é
+    // o que permite ao Painel de Vendas filtrar itens por categoria.
+    mapa_departamentos: items.map(r => [r.CD_PRODUTO, r.DESCRICAO_DEPARTAMENTO, r.DESCRICAO_SECAO]),
     secao_ruptura:    bySecaoQtd(ruptura),
     secao_urgente:    bySecao(urgente, 'sum_ESTOQUE_ON_HAND_LOJA_QTD'),
     secao_aging:      bySecao(aging),
