@@ -844,7 +844,7 @@ export default function Estoque({ profile }) {
       sem4s:      completa('sem4s')?.map(l => [...B(l), fmtData(l[1]), l[2], l[3]]),
       giro_lento: completa('giro_lento')?.map(l => [...B(l), l[1], l[2], l[3]]),
       estq_neg:   completa('estq_neg')?.map(l => [...B(l), l[1], l[2]]),
-      suspensos:  completa('suspensos')?.map(l => [...B(l), LC.dic.m[l[1]], l[2]]),
+      suspensos:  completa('suspensos')?.map(l => [...B(l), LC.dic.m[l[1]], l[3] ?? '', l[2]]),
     };
     gerarExcel({
       nomeArquivo: 'Estoque',
@@ -917,10 +917,10 @@ export default function Estoque({ profile }) {
         },
         {
           nome: 'Suspensos',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Motivo', 'Custo R$'],
+          colunas: ['Cód.', 'Produto', 'Seção', 'Motivo', 'Qtd estoque', 'Custo R$'],
           rows: linhas.suspensos || (d.suspensos_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
-            r.DESC_MOTIVO_SUSPENCAO, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
+            r.DESC_MOTIVO_SUSPENCAO, r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
         },
       ],

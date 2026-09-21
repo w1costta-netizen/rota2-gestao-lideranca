@@ -303,7 +303,9 @@ export async function parseEstoqueXlsx(file) {
     sem4s:      compacto(topN(sem4s, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', false, Infinity), [r => base(r), r => r.DATA_ULTIMA_ENTRADA || null, r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r => n2(r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO)]),
     giro_lento: compacto(giro_lento, [r => base(r), r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r => r.dias_cobertura, r => n2(r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO)]),
     estq_neg:   compacto([...estq_neg].sort((a, b) => a.sum_ESTOQUE_ON_HAND_LOJA_QTD - b.sum_ESTOQUE_ON_HAND_LOJA_QTD), [r => base(r), r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r => r.IDADE_ULTIMA_NF ?? null]),
-    suspensos:  compacto(topN(suspensos_est, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', false, Infinity), [r => base(r), r => idx(dic.m, r.DESC_MOTIVO_SUSPENCAO), r => n2(r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO)]),
+    // Suspensos: TODOS (com e sem estoque) — pedido do usuário para a análise.
+    // Com estoque primeiro, por custo; os sem estoque depois.
+    suspensos:  compacto(topN(items.filter(r => r.STATUS_REAL === 'Suspenso'), 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', false, Infinity), [r => base(r), r => idx(dic.m, r.DESC_MOTIVO_SUSPENCAO), r => n2(r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO), r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD || 0]),
   };
 
   return {
