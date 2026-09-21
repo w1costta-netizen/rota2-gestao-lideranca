@@ -25,7 +25,7 @@ jobs:
     steps:
       - name: Chamar /api/hotmart/verificar-vencimentos
         run: |
-          resposta=$(curl -s --max-time 120 -X POST \
+          resposta=$(curl -s --max-time 120 -X POST -H "x-cron-segredo: ${{ secrets.CRON_SEGREDO }}" \
             https://rota2-gestao-lideranca.onrender.com/api/hotmart/verificar-vencimentos)
           echo "Resposta: $resposta"
           echo "$resposta" | grep -q '"ok":true' || echo "::warning::A verificação não respondeu ok"

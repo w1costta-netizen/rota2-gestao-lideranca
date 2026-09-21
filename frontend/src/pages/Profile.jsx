@@ -156,11 +156,10 @@ export default function Profile() {
 
   // ── Save profile ──────────────────────────────────────────────
   const saveProfile = async () => {
-    if (!form.full_name || !form.company) return toast('Nome e empresa são obrigatórios', 'error');
+    if (!form.full_name) return toast('Nome é obrigatório', 'error');
     setSaving(true);
     const { error } = await supabase.from('profiles').update({
       full_name:   form.full_name,
-      company:     form.company,
       employee_id: form.employee_id,
       sector:      form.sector,
       role:        form.role,
@@ -460,7 +459,10 @@ export default function Profile() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
               <div className="form-group" style={{ margin:0 }}>
                 <label className="form-label">Empresa *</label>
-                <input className="input" value={form.company} onChange={e => set('company', e.target.value)} placeholder="Nome da empresa"/>
+                {/* A loja não é escolhida pela pessoa: vem da compra ou do gestor.
+                    Editável aqui, qualquer um trocaria para outra loja e veria os
+                    dados dela. O banco também bloqueia (trigger em profiles). */}
+                <input className="input" value={form.company} readOnly disabled title="A loja é definida pelo gestor" style={{ opacity: .7, cursor: 'not-allowed' }}/>
               </div>
               <div className="form-group" style={{ margin:0 }}>
                 <label className="form-label"><Hash size={13} style={{ marginRight:4 }}/>ID / Matrícula</label>

@@ -25,9 +25,6 @@ const SEM_SESSAO = [
   '/api/hotmart/webhook',
   '/api/hotmart/verificar-token',
   '/api/hotmart/ativar-conta',
-  '/api/hotmart/verificar-vencimentos',
-  '/api/resumo/diario',
-  '/api/resumo/diario-bordo',
   '/api/resumo/descadastrar',
   '/api/resumo/descadastrar-diario',
   '/api/notificacoes/recebido',
@@ -59,12 +56,28 @@ async function usuarioDoToken(token) {
   return data.user.id;
 }
 
+// Crons do GitHub Actions: sem sessão, mas com um segredo compartilhado no
+// header. Fail-closed: sem CRON_SEGREDO configurado no Render, o cron não
+// roda — e registra no log para não falhar em silêncio.
+const CRONS = ['/api/resumo/diario', '/api/resumo/diario-bordo', '/api/hotmart/verificar-vencimentos'];
+function cronAutorizado(req, res) {
+  const esperado = process.env.CRON_SEGREDO;
+  if (!esperado) {
+    try { require('./auditLog').registrarLog('cron_sem_segredo', 'sistema', 'erro', { rota: req.originalUrl, erro: 'CRON_SEGREDO não configurado no servidor — cron recusado' }); } catch { /* nada */ }
+    res.status(503).json({ error: 'CRON_SEGREDO não configurado no servidor.' });
+    return false;
+  }
+  if ((req.headers['x-cron-segredo'] || '') !== esperado) { res.status(401).json({ error: 'Segredo do cron inválido.' }); return false; }
+  return true;
+}
+
 const caminho = (req) => (req.originalUrl || req.url || '').split('?')[0];
 const comeca = (p, lista) => lista.some(x => p === x || p.startsWith(x + '/'));
 
 async function exigirSessao(req, res, next) {
   const p = caminho(req);
   if (!p.startsWith('/api/')) return next();
+  if (CRONS.includes(p)) return cronAutorizado(req, res) ? next() : undefined;
   if (comeca(p, SEM_SESSAO)) return next();
 
   const cab = req.headers.authorization || '';

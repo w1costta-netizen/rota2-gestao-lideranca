@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Chamar /api/resumo/diario
         run: |
-          resposta=$(curl -s --max-time 280 -X POST \
+          resposta=$(curl -s --max-time 280 -X POST -H "x-cron-segredo: ${{ secrets.CRON_SEGREDO }}" \
             https://rota2-gestao-lideranca.onrender.com/api/resumo/diario)
           echo "Resposta: $resposta"
           echo "$resposta" | grep -q '"ok":true' || echo "::warning::O resumo não respondeu ok"
