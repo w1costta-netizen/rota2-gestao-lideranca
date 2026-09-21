@@ -4,7 +4,9 @@ const cors    = require('cors');
 const app     = express();
 
 app.use(cors({ origin: '*' }));
-app.use(express.json());
+// 50 MB: o relatório de estoque importado passa de 7 MB e é gravado pelo
+// servidor (o Supabase corta gravações vindas do navegador em 8 s).
+app.use(express.json({ limit: '50mb' }));
 
 app.use('/api/leaders',  require('./routes/leaders'));
 app.use('/api/agenda',   require('./routes/agenda'));

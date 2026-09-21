@@ -18,7 +18,7 @@ router.post('/payload', async (req, res) => {
   }
   logAction({
     company, user_id: requester_id, acao: 'importar_estoque', tabela: 'estoque_payloads',
-    depois: { itens: payload?.totais?.itens_total ?? null, gerado_em: payload?.gerado_em ?? null },
+    depois: { itens: payload?.linhas ?? null, gerado_em: payload?.gerado_em ?? null, arquivo: payload?.arquivo ?? null },
   });
   res.json({ ok: true });
 });

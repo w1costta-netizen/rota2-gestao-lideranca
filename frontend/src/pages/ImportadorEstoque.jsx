@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
 import { Upload, CheckCircle, AlertTriangle, Loader } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import api from '../api';
 import { parseEstoqueXlsx } from '../lib/parseEstoqueXlsx';
 import { useToast } from '../components/Toast';
-import { reportAction, reportError } from '../lib/reportError';
+import { reportError } from '../lib/reportError';
 
 const brl = v => v == null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 const n0  = v => v == null ? '—' : Math.round(v).toLocaleString('pt-BR');
@@ -34,24 +34,22 @@ export default function ImportadorEstoque({ profile }) {
       const payload = await parseEstoqueXlsx(file);
       setMensagem('Salvando no banco de dados…');
 
-      const { error } = await supabase
-        .from('estoque_payloads')
-        .upsert({ company, payload, updated_at: new Date().toISOString() }, { onConflict: 'company' });
-
-      if (error) throw new Error(error.message);
+      // Grava pelo SERVIDOR, não direto no Supabase: o banco corta em 8 s
+      // o que vem do navegador, e o relatório (7 MB+) passou a estourar
+      // isso — "canceling statement due to statement timeout". Pela chave de
+      // serviço do servidor não há esse corte. O servidor também registra o
+      // log da importação.
+      await api.post('/estoque/payload', { company, payload, requester_id: profile?.id });
 
       setResumo(payload);
       setEstado('ok');
       setMensagem(`Importação concluída — ${n0(payload.linhas)} itens · ${payload.gerado_em}`);
       toast('Estoque importado e sincronizado!');
-      reportAction({
-        userId: profile?.id, acao: 'importar_estoque', tabela: 'estoque_payloads',
-        depois: { itens: payload.linhas, gerado_em: payload.gerado_em, arquivo: file.name },
-      });
     } catch (e) {
       setEstado('erro');
-      setMensagem(e.message || 'Erro ao processar o arquivo.');
-      toast(e.message || 'Erro ao importar.', 'error');
+      const msg = e?.response?.data?.error || e.message || 'Erro ao processar o arquivo.';
+      setMensagem(msg);
+      toast(msg, 'error');
       reportError({ userId: profile?.id, acao: 'importar_estoque', tabela: 'estoque_payloads', erro: e });
     }
   }
