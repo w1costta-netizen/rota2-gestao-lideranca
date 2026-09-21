@@ -285,10 +285,32 @@ export async function parseEstoqueXlsx(file) {
     statusMap[s].custo_total += r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO || 0;
   }
 
+  // LISTAS COMPLETAS PARA O EXCEL. As listas "top" param em 500 e a tela e
+  // o PDF continuam assim (relatório salvo leve, tela rápida no celular).
+  // O Excel é análise: leva TODOS os itens de cada aba, num bloco compacto
+  // (só as colunas que a planilha usa, seção/depto como índice de dicionário).
+  // ~8.800 linhas na extração de referência ≈ 0,8 MB.
+  const dic = { s: [], d: [], m: [] };
+  const idx = (lista, v) => { const k = v || ''; let i = lista.indexOf(k); if (i < 0) { lista.push(k); i = lista.length - 1; } return i; };
+  const compacto = (arr, campos) => arr.map(r => campos.map(c => c(r)));
+  const base = r => [r.CD_PRODUTO, r.DESCRICAO_PRODUTO, idx(dic.s, r.DESCRICAO_SECAO)];
+  const n2 = v => Math.round((v || 0) * 100) / 100;
+  const listas_completas = {
+    versao: 1, dic,
+    ruptura:    compacto(topN(ruptura, 'sum_QTD_VENDAS_MES_ATUAL', false, Infinity), [r => base(r), r => idx(dic.d, r.DESCRICAO_DEPARTAMENTO), r => r.sum_QTD_VENDAS_MES_ATUAL || 0, r => n2(r.venda_mes_vlr), r => r.estoque_cd_cxs || 0, r => r.estoque_separado_cd || 0, r => r.estoque_transito_loja || 0]),
+    urgente:    compacto(topN(urgente, 'dias_cobertura', true, Infinity), [r => base(r), r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r => r.dias_cobertura, r => r.criticidade, r => r.estoque_cd_cxs || 0, r => r.estoque_separado_cd || 0, r => r.estoque_transito_loja || 0]),
+    aging:      compacto(topN(aging, 'IDADE_ULTIMO_RECEBIMENTO', false, Infinity), [r => base(r), r => r.DATA_ULTIMA_ENTRADA || null, r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r => n2(r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO)]),
+    sem4s:      compacto(topN(sem4s, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', false, Infinity), [r => base(r), r => r.DATA_ULTIMA_ENTRADA || null, r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r => n2(r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO)]),
+    giro_lento: compacto(giro_lento, [r => base(r), r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r => r.dias_cobertura, r => n2(r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO)]),
+    estq_neg:   compacto([...estq_neg].sort((a, b) => a.sum_ESTOQUE_ON_HAND_LOJA_QTD - b.sum_ESTOQUE_ON_HAND_LOJA_QTD), [r => base(r), r => r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r => r.IDADE_ULTIMA_NF ?? null]),
+    suspensos:  compacto(topN(suspensos_est, 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', false, Infinity), [r => base(r), r => idx(dic.m, r.DESC_MOTIVO_SUSPENCAO), r => n2(r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO)]),
+  };
+
   return {
     gerado_em,
     arquivo: file.name,
     ruptura_v2,
+    listas_completas,
     linhas: items.length,
     totais: {
       ruptura_count:         ruptura.length,

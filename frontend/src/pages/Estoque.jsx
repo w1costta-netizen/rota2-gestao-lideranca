@@ -823,8 +823,29 @@ export default function Estoque({ profile }) {
     });
   }
 
+  // Excel com TODOS os itens de cada aba (bloco compacto salvo na
+  // importação). Relatório importado antes disso não tem o bloco e cai nas
+  // listas "top" de 500 — reimportar a extração resolve. Respeita o filtro
+  // de seções escolhido na tela.
   function handleExcel() {
     if (!d) return;
+    const LC = dados?.listas_completas;
+    const secaoOk = nome => !secoesSel.length || secoesSel.includes(nome);
+    const completa = (chave) => {
+      if (!LC?.[chave]) return null;
+      return LC[chave].filter(l => secaoOk(LC.dic.s[l[0][2]]));
+    };
+    const B = l => [l[0][0], l[0][1], LC.dic.s[l[0][2]]];   // cód, produto, seção
+    const crit = c => c === 'critico' ? 'Crítico' : c === 'urgente' ? 'Urgente' : 'Atenção';
+    const linhas = {
+      ruptura:    completa('ruptura')?.map(l => [...B(l), LC.dic.d[l[1]], l[2], l[3], l[4], l[5], l[6]]),
+      urgente:    completa('urgente')?.map(l => [...B(l), l[1], l[2], crit(l[3]), l[4], l[5], l[6]]),
+      aging:      completa('aging')?.map(l => [...B(l), fmtData(l[1]), l[2], l[3]]),
+      sem4s:      completa('sem4s')?.map(l => [...B(l), fmtData(l[1]), l[2], l[3]]),
+      giro_lento: completa('giro_lento')?.map(l => [...B(l), l[1], l[2], l[3]]),
+      estq_neg:   completa('estq_neg')?.map(l => [...B(l), l[1], l[2]]),
+      suspensos:  completa('suspensos')?.map(l => [...B(l), LC.dic.m[l[1]], l[2]]),
+    };
     gerarExcel({
       nomeArquivo: 'Estoque',
       abas: [
@@ -844,7 +865,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Ruptura',
           colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Venda mês (un)', 'Venda mês R$', 'CD (cx)', 'Separ. CD', 'Trânsito Loja'],
-          rows: (d.ruptura_top || []).map(r => [
+          rows: linhas.ruptura || (d.ruptura_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.DESCRICAO_DEPARTAMENTO, r.sum_QTD_VENDAS_MES_ATUAL,
             r.venda_mes_vlr, r.estoque_cd_cxs || 0,
@@ -854,7 +875,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Urgente',
           colunas: ['Cód.', 'Produto', 'Seção', 'Estoque', 'Cobertura (dias)', 'Status', 'CD (cx)', 'Separ. CD', 'Trânsito Loja'],
-          rows: (d.urgente_top || []).map(r => [
+          rows: linhas.urgente || (d.urgente_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.dias_cobertura,
             r.criticidade === 'critico' ? 'Crítico' : r.criticidade === 'urgente' ? 'Urgente' : 'Atenção',
@@ -865,7 +886,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Aging',
           colunas: ['Cód.', 'Produto', 'Seção', 'Última entrada', 'Qtd estoque', 'Custo R$'],
-          rows: (d.aging_top || []).map(r => [
+          rows: linhas.aging || (d.aging_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             fmtData(r.DATA_ULTIMA_ENTRADA), r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
@@ -873,7 +894,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Sem venda 5s',
           colunas: ['Cód.', 'Produto', 'Seção', 'Última entrada', 'Qtd estoque', 'Custo R$'],
-          rows: (d.sem4s_top || []).map(r => [
+          rows: linhas.sem4s || (d.sem4s_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             fmtData(r.DATA_ULTIMA_ENTRADA), r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
@@ -881,7 +902,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Giro Lento',
           colunas: ['Cód.', 'Produto', 'Seção', 'Qtd estoque', 'Cobertura (dias)', 'Custo R$'],
-          rows: (d.giro_lento_top || []).map(r => [
+          rows: linhas.giro_lento || (d.giro_lento_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.dias_cobertura, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
@@ -889,7 +910,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Est. Negativo',
           colunas: ['Cód.', 'Produto', 'Seção', 'Qtd', 'Dias sem NF'],
-          rows: (d.estq_neg_top || []).map(r => [
+          rows: linhas.estq_neg || (d.estq_neg_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.IDADE_ULTIMA_NF,
           ]),
@@ -897,7 +918,7 @@ export default function Estoque({ profile }) {
         {
           nome: 'Suspensos',
           colunas: ['Cód.', 'Produto', 'Seção', 'Motivo', 'Custo R$'],
-          rows: (d.suspensos_top || []).map(r => [
+          rows: linhas.suspensos || (d.suspensos_top || []).map(r => [
             r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
             r.DESC_MOTIVO_SUSPENCAO, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
