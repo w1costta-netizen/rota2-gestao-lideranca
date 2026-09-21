@@ -235,12 +235,18 @@ function TeamModal({ userId, userSector, onClose }) {
   const [editandoId, setEditandoId] = useState(null);
   const [editForm, setEditForm] = useState({ matricula:'', name:'', role:'', sector:'' });
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
-  const abrirEdicao = (m) => { setEditandoId(m.id); setEditForm({ matricula: m.matricula || '', name: m.name || '', role: m.role || '', sector: m.sector || '' }); };
+  // Função digitada à mão na edição: a lista de cargos pode não ter a função
+  // certa (ou ter uma escrita errada), e o seletor sozinho prendia a pessoa.
+  const [digitandoFuncao, setDigitandoFuncao] = useState(false);
+  const abrirEdicao = (m) => { setEditandoId(m.id); setDigitandoFuncao(false); setEditForm({ matricula: m.matricula || '', name: m.name || '', role: m.role || '', sector: m.sector || '' }); };
   const salvarEdicao = async (m) => {
     if (!editForm.name.trim()) return;
     setSalvandoEdicao(true);
     try {
-      await api.put(`/team/${m.id}`, { ...m, ...editForm, name: editForm.name.trim(), sector: editForm.sector.trim() });
+      const role = editForm.role.trim();
+      // Função nova entra na lista para as próximas pessoas.
+      if (role && !roles.includes(role)) { saveCustomRole(role); setRoles(getAllRoles()); }
+      await api.put(`/team/${m.id}`, { ...m, ...editForm, role, name: editForm.name.trim(), sector: editForm.sector.trim() });
       setEditandoId(null);
       await load();
     } catch {}
@@ -345,10 +351,20 @@ function TeamModal({ userId, userSector, onClose }) {
                         onChange={e => setEditForm(f => ({ ...f, name: e.target.value.toUpperCase() }))} style={{ fontSize:11, padding:'4px 7px', width:'100%', boxSizing:'border-box' }}/>
                     </td>
                     <td style={{ padding:'6px' }}>
-                      <select className="select" value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} style={{ fontSize:11, padding:'4px 7px', width:'100%' }}>
-                        <option value="">Função...</option>
-                        {[...new Set([...roles, ...(editForm.role ? [editForm.role] : [])])].map(r => <option key={r} value={r}>{r}</option>)}
-                      </select>
+                      {digitandoFuncao ? (
+                        <input className="input" value={editForm.role} placeholder="Digite a função" autoFocus
+                          onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') salvarEdicao(m); if (e.key === 'Escape') setDigitandoFuncao(false); }}
+                          style={{ fontSize:11, padding:'4px 7px', width:'100%', boxSizing:'border-box' }}/>
+                      ) : (
+                        <select className="select" value={editForm.role}
+                          onChange={e => { if (e.target.value === '__digitar') { setDigitandoFuncao(true); setEditForm(f => ({ ...f, role: '' })); } else setEditForm(f => ({ ...f, role: e.target.value })); }}
+                          style={{ fontSize:11, padding:'4px 7px', width:'100%' }}>
+                          <option value="">Função...</option>
+                          {[...new Set([...roles, ...(editForm.role ? [editForm.role] : [])])].map(r => <option key={r} value={r}>{r}</option>)}
+                          <option value="__digitar">✎ Digitar outra função…</option>
+                        </select>
+                      )}
                     </td>
                     <td style={{ padding:'6px' }}>
                       <input className="input" value={editForm.sector} placeholder="Setor"
