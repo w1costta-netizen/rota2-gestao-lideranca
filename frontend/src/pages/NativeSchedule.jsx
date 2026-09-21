@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { ChevronLeft, ChevronRight, Download, Users, X, Save, Trash2, Plus, CheckCircle,
-         ShieldCheck, AlertTriangle, Crown } from 'lucide-react';
+         ShieldCheck, AlertTriangle, Crown, Pencil } from 'lucide-react';
 import { gerarPDF } from '../lib/exportUtils';
 import api from '../api';
 import { useToast } from '../components/Toast';
@@ -229,6 +229,24 @@ function TeamModal({ userId, userSector, onClose }) {
     await api.delete(`/team/${id}`); load();
   };
 
+  // Editar quem já está cadastrado: matrícula, nome, função e setor. Antes
+  // só o setor era editável na linha; trocar a função exigia excluir e
+  // recadastrar — e excluir leva a escala da pessoa junto.
+  const [editandoId, setEditandoId] = useState(null);
+  const [editForm, setEditForm] = useState({ matricula:'', name:'', role:'', sector:'' });
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const abrirEdicao = (m) => { setEditandoId(m.id); setEditForm({ matricula: m.matricula || '', name: m.name || '', role: m.role || '', sector: m.sector || '' }); };
+  const salvarEdicao = async (m) => {
+    if (!editForm.name.trim()) return;
+    setSalvandoEdicao(true);
+    try {
+      await api.put(`/team/${m.id}`, { ...m, ...editForm, name: editForm.name.trim(), sector: editForm.sector.trim() });
+      setEditandoId(null);
+      await load();
+    } catch {}
+    setSalvandoEdicao(false);
+  };
+
   // Corrigir o setor de quem já está cadastrado. Sem isto, separar uma escala
   // que já existe exigiria apagar e recadastrar cada pessoa — e apagar leva
   // junto a escala dela.
@@ -316,7 +334,36 @@ function TeamModal({ userId, userSector, onClose }) {
                 </tr>
               </thead>
               <tbody>
-                {members.map(m => (
+                {members.map(m => editandoId === m.id ? (
+                  <tr key={m.id} style={{ borderBottom:'1px solid #222', background:'#111' }}>
+                    <td style={{ padding:'6px' }}>
+                      <input className="input" value={editForm.matricula} placeholder="Matrícula"
+                        onChange={e => setEditForm(f => ({ ...f, matricula: e.target.value }))} style={{ fontSize:11, padding:'4px 7px', width:'100%', boxSizing:'border-box' }}/>
+                    </td>
+                    <td style={{ padding:'6px' }}>
+                      <input className="input" value={editForm.name} placeholder="NOME COMPLETO" autoFocus
+                        onChange={e => setEditForm(f => ({ ...f, name: e.target.value.toUpperCase() }))} style={{ fontSize:11, padding:'4px 7px', width:'100%', boxSizing:'border-box' }}/>
+                    </td>
+                    <td style={{ padding:'6px' }}>
+                      <select className="select" value={editForm.role} onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))} style={{ fontSize:11, padding:'4px 7px', width:'100%' }}>
+                        <option value="">Função...</option>
+                        {[...new Set([...roles, ...(editForm.role ? [editForm.role] : [])])].map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </td>
+                    <td style={{ padding:'6px' }}>
+                      <input className="input" value={editForm.sector} placeholder="Setor"
+                        onChange={e => setEditForm(f => ({ ...f, sector: e.target.value }))}
+                        onKeyDown={e => { if (e.key === 'Enter') salvarEdicao(m); if (e.key === 'Escape') setEditandoId(null); }}
+                        style={{ fontSize:11, padding:'4px 7px', width:'100%', boxSizing:'border-box' }}/>
+                    </td>
+                    <td style={{ padding:'6px', textAlign:'right', whiteSpace:'nowrap' }}>
+                      <button className="btn btn-primary btn-sm" onClick={() => salvarEdicao(m)} disabled={salvandoEdicao} title="Salvar" style={{ padding:'4px 8px' }}>
+                        <Save size={12}/>
+                      </button>
+                      <button className="btn-icon" onClick={() => setEditandoId(null)} title="Cancelar"><X size={13}/></button>
+                    </td>
+                  </tr>
+                ) : (
                   <tr key={m.id} style={{ borderBottom:'1px solid #222' }}>
                     <td style={{ padding:'7px 10px', color:'var(--text-muted)' }}>{m.matricula||'—'}</td>
                     <td style={{ padding:'7px 10px', fontWeight:600 }}>{m.name}</td>
@@ -328,7 +375,8 @@ function TeamModal({ userId, userSector, onClose }) {
                         onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
                         style={{ fontSize:11, padding:'4px 7px', width:'100%', boxSizing:'border-box' }}/>
                     </td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' }}>
+                    <td style={{ padding:'7px 10px', textAlign:'right', whiteSpace:'nowrap' }}>
+                      <button className="btn-icon" onClick={() => abrirEdicao(m)} title="Editar matrícula, nome, função e setor"><Pencil size={13}/></button>
                       <button className="btn-icon danger" onClick={() => remove(m.id, m.name)}><Trash2 size={13}/></button>
                     </td>
                   </tr>
