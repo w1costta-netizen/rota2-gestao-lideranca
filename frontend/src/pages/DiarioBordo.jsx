@@ -8,6 +8,7 @@ import ReacaoBar from '../components/ReacaoBar';
 import Comentarios from '../components/Comentarios';
 import { gerarPDF, gerarExcel } from '../lib/exportUtils';
 import { useDitado, vozDisponivel } from '../lib/ditado';
+import { useVistoNaTela } from '../lib/vistoNaTela';
 
 // ─────────────────────────────────────────────────────────────
 // Diário de Bordo — o que aconteceu na loja, dia a dia.
@@ -87,6 +88,13 @@ export default function DiarioBordo({ userId, profile }) {
     setRelatos(rs => rs.map(x => x.id === r.id ? { ...x, lido: true } : x));
     if (!jaFoi) api.post(`/diario/${r.id}/visto`, { requester_id: userId }).catch(() => {});
   };
+
+  // Ficou na tela = leu. O relato inteiro aparece no cartão, então não há
+  // nada para abrir — exigir clique faria o contador nunca baixar.
+  const observar = useVistoNaTela((id) => {
+    const r = relatos.find(x => x.id === id);
+    if (r) marcarVisto(r);
+  });
 
   // Ditado: o trecho reconhecido ENTRA NO FIM do que já está escrito —
   // ninguém perde o que digitou por tocar no microfone.
@@ -398,7 +406,7 @@ export default function DiarioBordo({ userId, profile }) {
               {porDia[d].map(r => {
                 const c = CATEGORIAS[r.categoria] || CATEGORIAS.outro;
                 return (
-                  <div key={r.id} className="card" onClick={() => marcarVisto(r)}
+                  <div key={r.id} className="card" ref={observar(r.id)} onClick={() => marcarVisto(r)}
                     style={{ borderRadius:'0 12px 12px 0',
                              // A borda colorida da categoria vem por último
                              // de propósito: o contorno de "não lido" não

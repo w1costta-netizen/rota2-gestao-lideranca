@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Plus, Pencil, Trash2, LayoutList } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import ReacaoBar from '../components/ReacaoBar';
 import Comentarios from '../components/Comentarios';
+import { useVistoNaTela } from '../lib/vistoNaTela';
 
 const CATEGORIES = [
   { key: 'meta',     label: '🎯 Metas',      color: '#6366f1' },
@@ -89,6 +90,16 @@ export default function Mural({ userId, profile }) {
     await api.post(`/mural/${id}/lido`, { user_id: userId }).catch(() => {});
     setList(l => l.map(m => m.id === id ? { ...m, lido: true } : m));
   };
+
+  // O recado inteiro está no cartão: se ficou na tela, foi lido. Sem isto o
+  // contador do painel só baixava para quem clicasse em cada um.
+  const jaMarcados = useRef(new Set());
+  const observar = useVistoNaTela((id) => {
+    if (jaMarcados.current.has(id)) return;
+    jaMarcados.current.add(id);
+    const item = list.find(m => m.id === id);
+    if (item && !item.lido) marcarLido(id);
+  });
 
   const toggleLeituras = async (id) => {
     const isOpen = leiturasOpen[id];
@@ -178,7 +189,7 @@ export default function Mural({ userId, profile }) {
         {filtered.map(m => {
           const cat = getCat(m.category);
           return (
-            <div key={m.id} onClick={() => !m.lido && marcarLido(m.id)} style={{
+            <div key={m.id} ref={observar(m.id)} onClick={() => !m.lido && marcarLido(m.id)} style={{
               background:'var(--surface)', borderRadius:14, padding:'20px',
               border:`1px solid var(--border)`,
               borderTop:`4px solid ${cat.color}`,

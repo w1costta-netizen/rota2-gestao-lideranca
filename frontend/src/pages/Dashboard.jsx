@@ -78,6 +78,14 @@ function ConviteAvaliacao({ userId, setPage }) {
   );
 }
 
+// As mesmas cores do Diário de Bordo: quem vê o card aqui reconhece na hora
+// o tipo do relato quando abrir a tela cheia. Categoria criada pela loja não
+// está nesta lista e cai no cinza.
+const COR_CATEGORIA = {
+  resultado: '#10b981', operacao: '#3b82f6', clima: '#06b6d4', seguranca: '#ef4444',
+  equipe: '#8b5cf6', cliente: '#f59e0b', outro: '#6b7280',
+};
+
 export default function Dashboard({ setPage, profile: propProfile }) {
   const { session, profile: authProfile } = useAuth();
   const profile  = propProfile || authProfile;
@@ -95,6 +103,7 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   const [comunicados, setComunicados] = useState([]);
   const [mural, setMural]         = useState([]);
   const [diario, setDiario]       = useState({ relatos: 0, comentarios: 0 });
+  const [relatosHoje, setRelatosHoje] = useState([]);
   const [lideres, setLideres]     = useState(0);
   const [listas, setListas]       = useState([]);
   const [anotacoes, setAnotacoes] = useState([]);
@@ -121,7 +130,10 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       // chegou para mim e eu ainda não vi.
       company ? api.get(`/mural?requester_id=${userId}${cq}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
       company ? api.get(`/diario/pendencias?requester_id=${userId}`).catch(() => ({ data: { relatos: 0, comentarios: 0 } })) : Promise.resolve({ data: { relatos: 0, comentarios: 0 } }),
-    ]).then(([t, c, li, an, ag, users, chat, convs, mu, di]) => {
+      // Os relatos de hoje, para o card mostrar o que a loja registrou —
+      // igual ao que a agenda e os comunicados já fazem.
+      company ? api.get(`/diario?requester_id=${userId}&data=${new Date().toISOString().split('T')[0]}&company=${encodeURIComponent(company)}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+    ]).then(([t, c, li, an, ag, users, chat, convs, mu, di, dh]) => {
       setTarefas(t.data || []);
       setComunicados(c.data || []);
       setListas(li.data || []);
@@ -138,6 +150,7 @@ export default function Dashboard({ setPage, profile: propProfile }) {
         + (['lider', 'supervisor'].includes(meuNivel) ? 1 : 0));
       setMural(mu.data || []);
       setDiario(di.data || { relatos: 0, comentarios: 0 });
+      setRelatosHoje(Array.isArray(dh.data) ? dh.data : []);
       setNaoLidasChat(chat.data?.total || 0);
       setConversas(Array.isArray(convs.data) ? convs.data : []);
     }).finally(() => setLoading(false));
@@ -442,6 +455,59 @@ export default function Dashboard({ setPage, profile: propProfile }) {
               </div>
           }
         </div>
+
+        {/* Diário de bordo — o que a loja registrou hoje.
+            Vem depois das tarefas de propósito: primeiro o que eu tenho que
+            fazer, depois o que está acontecendo na loja. */}
+        {company && (
+          <div className="card">
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <div style={{ fontWeight:700, fontSize:14, display:'flex', alignItems:'center', gap:8 }}>
+                <BookOpen size={15} color="#f97316"/> Diário de bordo · hoje
+                {diarioNovos > 0 && (
+                  <span style={{ background:'#f97316', color:'#fff', borderRadius:99,
+                    padding:'1px 7px', fontSize:10, fontWeight:700 }}>{diarioNovos}</span>
+                )}
+              </div>
+              <button className="btn-icon" style={{ fontSize:12, color:'var(--primary)' }} onClick={() => setPage('diario')}>
+                Ver tudo
+              </button>
+            </div>
+            {relatosHoje.length === 0
+              ? <p style={{ color:'var(--text-muted)', fontSize:13 }}>Nada registrado hoje.</p>
+              : <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  {relatosHoje.slice(0,4).map(r => (
+                    <div key={r.id} onClick={() => setPage('diario')}
+                      style={{ display:'flex', gap:10, alignItems:'flex-start', cursor:'pointer' }}>
+                      <div style={{ width:3, alignSelf:'stretch', borderRadius:99, flexShrink:0,
+                        background: COR_CATEGORIA[r.categoria] || '#6b7280' }}/>
+                      <div style={{ minWidth:0, flex:1 }}>
+                        {/* Duas linhas no máximo: o relato inteiro é para a
+                            tela do Diário; aqui é só a chamada. */}
+                        <div style={{ fontSize:13, lineHeight:1.5, display:'-webkit-box',
+                          WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
+                          {r.texto}
+                        </div>
+                        <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:2, display:'flex', gap:8, flexWrap:'wrap' }}>
+                          <span>{r.autor?.full_name || 'Alguém'}</span>
+                          {r.hora && <span>{r.hora.slice(0,5)}</span>}
+                          {r.comentarios > 0 && <span>💬 {r.comentarios}</span>}
+                          {!r.lido && <span style={{ color:'#f97316', fontWeight:700 }}>novo</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {relatosHoje.length > 4 && (
+                    <button onClick={() => setPage('diario')}
+                      style={{ background:'none', border:'none', cursor:'pointer', color:'var(--primary)',
+                        fontSize:12, fontWeight:600, padding:0, textAlign:'left' }}>
+                      + {relatosHoje.length - 4} relato{relatosHoje.length - 4 > 1 ? 's' : ''} de hoje
+                    </button>
+                  )}
+                </div>
+            }
+          </div>
+        )}
 
         {/* Últimos comunicados */}
         <div className="card">
