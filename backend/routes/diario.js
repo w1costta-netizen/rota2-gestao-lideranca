@@ -3,6 +3,7 @@ const router   = express.Router();
 const supabase = require('../supabase');
 const { registrarLog } = require('../lib/auditLog');
 const { enviarPush } = require('../lib/notificacoes');
+const { vistosDe, marcarVisto, comentariosPorItem } = require('../lib/leituras');
 
 // ─────────────────────────────────────────────────────────────
 // Diário de Bordo — o que aconteceu na loja, dia a dia.
@@ -161,7 +162,49 @@ router.get('/', async (req, res) => {
     registrarLog('listar_diario', 'diario_bordo', 'erro', { company: alvo, user_id: requester_id, rota: req.originalUrl, erro: error.message });
     return res.status(500).json({ error: 'Erro ao carregar o diário.' });
   }
-  res.json(linhas || []);
+  // Quem já viu o quê, e quantos comentários novos tem em cada relato.
+  // Sem isso o Diário era a única tela onde a pessoa não sabia o que chegou
+  // depois da última visita dela.
+  const ids = (linhas || []).map(l => l.id);
+  const vistos = await vistosDe(requester_id, 'diario', ids);
+  const coment = await comentariosPorItem('diario_comentarios', 'diario_id', ids, vistos, requester_id);
+  res.json((linhas || []).map(l => ({
+    ...l,
+    lido: !!vistos[l.id] || l.user_id === requester_id,   // o meu relato eu já li
+    comentarios: coment[l.id]?.total || 0,
+    comentarios_novos: coment[l.id]?.novos || 0,
+  })));
+});
+
+// POST /api/diario/:id/visto — a pessoa abriu este relato (ou os comentários)
+router.post('/:id/visto', async (req, res) => {
+  const me = await getPerfil(req.body.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  await marcarVisto(me.id, 'diario', req.params.id);
+  res.json({ ok: true });
+});
+
+// GET /api/diario/pendencias?requester_id= — quanto há de novo para mim
+//
+// Só os números, para o painel inicial não precisar baixar o diário inteiro.
+// Olha os últimos 30 dias: relato de dois meses atrás não é "novidade".
+router.get('/pendencias', async (req, res) => {
+  const me = await getPerfil(req.query.requester_id);
+  if (!me) return res.json({ relatos: 0, comentarios: 0 });
+  const alvo = me.company;
+  if (!alvo) return res.json({ relatos: 0, comentarios: 0 });
+
+  const desde = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const { data: linhas } = await supabase
+    .from('diario_bordo').select('id, user_id').eq('company', alvo).gte('data', desde);
+
+  const ids = (linhas || []).map(l => l.id);
+  const vistos = await vistosDe(me.id, 'diario', ids);
+  const coment = await comentariosPorItem('diario_comentarios', 'diario_id', ids, vistos, me.id);
+  res.json({
+    relatos: (linhas || []).filter(l => !vistos[l.id] && l.user_id !== me.id).length,
+    comentarios: Object.values(coment).reduce((s, c) => s + c.novos, 0),
+  });
 });
 
 // POST /api/diario  { requester_id, data, hora, categoria, texto }

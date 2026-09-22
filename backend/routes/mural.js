@@ -3,6 +3,7 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { enviarPush, usuariosDaLoja } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
+const { vistosDe, marcarVisto, comentariosPorItem } = require('../lib/leituras');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -39,7 +40,15 @@ router.get('/', async (req, res) => {
     lidos = (l || []).map(x => x.mural_id);
   }
 
-  res.json((data || []).map(m => ({ ...m, lido: lidos.includes(m.id) })));
+  const ids = (data || []).map(m => m.id);
+  const vistos = await vistosDe(requester_id, 'mural', ids);
+  const coment = await comentariosPorItem('mural_comentarios', 'mural_id', ids, vistos, requester_id);
+  res.json((data || []).map(m => ({
+    ...m,
+    lido: lidos.includes(m.id),
+    comentarios: coment[m.id]?.total || 0,
+    comentarios_novos: coment[m.id]?.novos || 0,
+  })));
 });
 
 // POST /api/mural
@@ -124,6 +133,14 @@ router.delete('/:id', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: me.company, user_id: requester_id, acao: 'excluir_mural', tabela: 'mural', antes: { title: item?.title } });
+  res.json({ ok: true });
+});
+
+// POST /api/mural/:id/visto — abriu os comentários deste recado
+router.post('/:id/visto', async (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(401).json({ error: 'user_id obrigatório' });
+  await marcarVisto(user_id, 'mural', req.params.id);
   res.json({ ok: true });
 });
 

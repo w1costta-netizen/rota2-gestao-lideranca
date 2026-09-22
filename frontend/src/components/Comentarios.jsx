@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { MessageSquare, ChevronDown, ChevronUp, Send, Pencil, Trash2 } from 'lucide-react';
 import api from '../api';
 import { useToast } from './Toast';
@@ -10,7 +10,7 @@ import { useToast } from './Toast';
 //
 // Os comentários só são buscados quando a pessoa abre a seção: numa lista com
 // muitos cards, carregar tudo de uma vez deixaria a tela lenta à toa.
-export default function Comentarios({ recurso, itemId, userId, podeModerar = false }) {
+export default function Comentarios({ recurso, itemId, userId, podeModerar = false, total = 0, novos = 0, aoVer }) {
   const toast = useToast();
   const [comentarios, setComentarios] = useState([]);
   const [carregando, setCarregando]   = useState(false);
@@ -20,6 +20,10 @@ export default function Comentarios({ recurso, itemId, userId, podeModerar = fal
   const [enviando, setEnviando]       = useState(false);
   const [editandoId, setEditandoId]   = useState(null);
   const [textoEdicao, setTextoEdicao] = useState('');
+  // Quantos comentários novos havia quando a lista chegou. Some ao abrir —
+  // a pessoa acabou de ler.
+  const [novosAqui, setNovosAqui] = useState(novos);
+  useEffect(() => { setNovosAqui(novos); }, [novos, itemId]);
 
   const carregar = useCallback(async () => {
     if (carregou) return;
@@ -32,7 +36,21 @@ export default function Comentarios({ recurso, itemId, userId, podeModerar = fal
     finally { setCarregando(false); }
   }, [recurso, itemId, userId, carregou, toast]);
 
-  const alternar = () => { if (!aberto) carregar(); setAberto(a => !a); };
+  const alternar = () => {
+    if (!aberto) {
+      carregar();
+      setNovosAqui(0);
+      // Avisa o servidor que esta pessoa viu os comentários deste item —
+      // é o que faz o "novo" de amanhã ser de verdade novo.
+      api.post(`/${recurso}/${itemId}/visto`, { requester_id: userId, user_id: userId }).catch(() => {});
+      aoVer?.(itemId);
+    }
+    setAberto(a => !a);
+  };
+
+  // Depois de abrir, vale o que está na tela; antes, o número que veio do
+  // servidor junto da lista.
+  const quantos = carregou ? comentarios.length : total;
 
   const enviar = async () => {
     if (!texto.trim()) return;
@@ -64,10 +82,24 @@ export default function Comentarios({ recurso, itemId, userId, podeModerar = fal
 
   return (
     <div style={{ marginTop:10, borderTop:'1px solid var(--border)', paddingTop:8 }}>
+      {/* A contagem aparece SEM abrir: fechado, o botão dizia só
+          "Comentários" e ninguém sabia se havia algo ali dentro. O selo
+          vermelho é para o que chegou depois da última visita — é o que
+          faz a pessoa abrir em vez de passar direto. */}
       <button onClick={alternar} style={{ background:'none', border:'none', cursor:'pointer',
-        display:'flex', alignItems:'center', gap:5, fontSize:12, color:'var(--text-muted)', padding:0 }}>
+        display:'flex', alignItems:'center', gap:5, fontSize:12, padding:0,
+        color: novosAqui > 0 && !aberto ? 'var(--primary)' : 'var(--text-muted)',
+        fontWeight: novosAqui > 0 && !aberto ? 700 : 400 }}>
         <MessageSquare size={13}/>
-        {aberto ? 'Ocultar comentários' : `Comentários${carregou && comentarios.length ? ` (${comentarios.length})` : ''}`}
+        {aberto
+          ? 'Ocultar comentários'
+          : `Comentários${quantos ? ` (${quantos})` : ''}`}
+        {!aberto && novosAqui > 0 && (
+          <span style={{ background:'#ef4444', color:'#fff', borderRadius:99, padding:'1px 7px',
+            fontSize:10, fontWeight:700, lineHeight:1.6 }}>
+            {novosAqui} novo{novosAqui > 1 ? 's' : ''}
+          </span>
+        )}
         {aberto ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
       </button>
 

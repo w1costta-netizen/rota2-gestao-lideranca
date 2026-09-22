@@ -215,7 +215,9 @@ export default function Mural({ userId, profile }) {
 
               {/* Comentários — o clique não pode abrir/fechar o card */}
               <div onClick={e => e.stopPropagation()}>
-                <Comentarios recurso="mural" itemId={m.id} userId={userId} podeModerar={canManage} />
+                <Comentarios recurso="mural" itemId={m.id} userId={userId} podeModerar={canManage}
+                  total={m.comentarios} novos={m.comentarios_novos}
+                  aoVer={() => setList(l => l.map(x => x.id === m.id ? { ...x, comentarios_novos: 0 } : x))} />
               </div>
 
               {/* Painel de visualizações — só quem gerencia */}

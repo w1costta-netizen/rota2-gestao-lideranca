@@ -3,6 +3,7 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { enviarPush, usuariosDaLoja } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
+const { vistosDe, marcarVisto, comentariosPorItem } = require('../lib/leituras');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -39,7 +40,14 @@ router.get('/', async (req, res) => {
     lidos = (l || []).map(x => x.comunicado_id);
   }
 
-  const result = (data || []).map(c => ({ ...c, lido: lidos.includes(c.id) }));
+  const vistos = await vistosDe(requester_id, 'comunicado', ids);
+  const coment = await comentariosPorItem('comunicado_comentarios', 'comunicado_id', ids, vistos, requester_id);
+  const result = (data || []).map(c => ({
+    ...c,
+    lido: lidos.includes(c.id),
+    comentarios: coment[c.id]?.total || 0,
+    comentarios_novos: coment[c.id]?.novos || 0,
+  }));
   res.json(result);
 });
 
@@ -125,6 +133,14 @@ router.delete('/:id', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: me.company, user_id: requester_id, acao: 'excluir_comunicado', tabela: 'comunicados', antes: { title: com?.title } });
+  res.json({ ok: true });
+});
+
+// POST /api/comunicados/:id/visto — abriu os comentários deste comunicado
+router.post('/:id/visto', async (req, res) => {
+  const { user_id } = req.body;
+  if (!user_id) return res.status(401).json({ error: 'user_id obrigatório' });
+  await marcarVisto(user_id, 'comunicado', req.params.id);
   res.json({ ok: true });
 });
 

@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Pencil, X, ChevronLeft, ChevronRight, Search, BookOpen, CalendarDays } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import { Plus, Trash2, Pencil, X, ChevronLeft, ChevronRight, Search, BookOpen, CalendarDays, Mic } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
 import Avatar from '../components/Avatar';
@@ -7,6 +7,7 @@ import ExportMenu from '../components/ExportMenu';
 import ReacaoBar from '../components/ReacaoBar';
 import Comentarios from '../components/Comentarios';
 import { gerarPDF, gerarExcel } from '../lib/exportUtils';
+import { useDitado, vozDisponivel } from '../lib/ditado';
 
 // ─────────────────────────────────────────────────────────────
 // Diário de Bordo — o que aconteceu na loja, dia a dia.
@@ -69,6 +70,30 @@ export default function DiarioBordo({ userId, profile }) {
   // Categorias próprias da loja, somadas às 7 de base.
   const [extras, setExtras] = useState([]);
   const [criandoCat, setCriandoCat] = useState(null); // null = fechado
+
+  // Abriu o relato = leu. O mesmo que o Mural e os Comunicados já faziam;
+  // o Diário era a única tela sem essa marca, e por isso ninguém sabia o
+  // que tinha chegado desde a última visita.
+  //
+  // O aviso vai uma vez só por relato: o clique no bloco de comentários
+  // sobe até o cartão, e sem esta marca o mesmo relato seria avisado duas
+  // vezes no mesmo toque.
+  const jaAvisados = useRef(new Set());
+  // `jaFoi` = o bloco de comentários já avisou o servidor; aqui só falta
+  // tirar o selo da tela.
+  const marcarVisto = (r, jaFoi = false) => {
+    if (jaAvisados.current.has(r.id)) return;
+    jaAvisados.current.add(r.id);
+    setRelatos(rs => rs.map(x => x.id === r.id ? { ...x, lido: true } : x));
+    if (!jaFoi) api.post(`/diario/${r.id}/visto`, { requester_id: userId }).catch(() => {});
+  };
+
+  // Ditado: o trecho reconhecido ENTRA NO FIM do que já está escrito —
+  // ninguém perde o que digitou por tocar no microfone.
+  const { ouvindo, ditar, parar: pararDitado } = useDitado(
+    (trecho) => setEditando(ed => ed && ({ ...ed, texto: ed.texto ? `${ed.texto} ${trecho}` : trecho })),
+    { aoIndisponivel: () => toast('Ditado não é suportado neste navegador (comum no iPhone). Escreva normalmente.', 'error') },
+  );
 
   const CATEGORIAS = {
     ...CATEGORIAS_BASE,
@@ -165,6 +190,7 @@ export default function DiarioBordo({ userId, profile }) {
   });
 
   const salvar = async () => {
+    pararDitado();
     if (!editando.texto.trim()) { toast('Escreva o relato.', 'error'); return; }
     try {
       const corpo = {
@@ -184,6 +210,7 @@ export default function DiarioBordo({ userId, profile }) {
   };
 
   const excluir = async (r) => {
+    pararDitado();
     if (!window.confirm('Excluir este relato?')) return;
     try {
       await api.delete(`/diario/${r.id}?requester_id=${userId}`);
@@ -371,7 +398,13 @@ export default function DiarioBordo({ userId, profile }) {
               {porDia[d].map(r => {
                 const c = CATEGORIAS[r.categoria] || CATEGORIAS.outro;
                 return (
-                  <div key={r.id} className="card" style={{ borderLeft:`4px solid ${c.cor}`, borderRadius:'0 12px 12px 0' }}>
+                  <div key={r.id} className="card" onClick={() => marcarVisto(r)}
+                    style={{ borderRadius:'0 12px 12px 0',
+                             // A borda colorida da categoria vem por último
+                             // de propósito: o contorno de "não lido" não
+                             // pode comer a faixa que identifica o tipo.
+                             border: r.lido ? undefined : '1px solid var(--primary)',
+                             borderLeft:`4px solid ${c.cor}` }}>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:8 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:9, minWidth:0 }}>
                         <Avatar avatarUrl={r.autor?.avatar_url} name={r.autor?.full_name} size={28}/>
@@ -382,6 +415,12 @@ export default function DiarioBordo({ userId, profile }) {
                           <div style={{ fontSize:11.5, color:'var(--text-muted)' }}>
                             {r.hora ? `${r.hora.slice(0,5)} · ` : ''}
                             <span style={{ color:c.cor, fontWeight:600 }}>{c.nome}</span>
+                            {!r.lido && (
+                              <span style={{ marginLeft:6, background:'var(--primary)', color:'#fff',
+                                borderRadius:99, padding:'1px 7px', fontSize:10, fontWeight:700 }}>
+                                Novo
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -406,7 +445,9 @@ export default function DiarioBordo({ userId, profile }) {
                         alheio é só gestor (moderação), como no Mural. */}
                     <ReacaoBar itemId={r.id} userId={userId} tipo="diario"
                       reacoes={reacoes[r.id]} onToggle={toggleReacao}/>
-                    <Comentarios recurso="diario" itemId={r.id} userId={userId} podeModerar={ehGestor}/>
+                    <Comentarios recurso="diario" itemId={r.id} userId={userId} podeModerar={ehGestor}
+                      total={r.comentarios} novos={r.comentarios_novos}
+                      aoVer={() => { marcarVisto(r, true); setRelatos(rs => rs.map(x => x.id === r.id ? { ...x, comentarios_novos: 0 } : x)); }}/>
                   </div>
                 );
               })}
@@ -460,14 +501,14 @@ export default function DiarioBordo({ userId, profile }) {
       )}
 
       {editando && (
-        <div onClick={() => setEditando(null)}
+        <div onClick={() => { pararDitado(); setEditando(null); }}
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:1000,
                    display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div onClick={e => e.stopPropagation()} className="card"
             style={{ width:'100%', maxWidth:520, maxHeight:'90vh', overflowY:'auto' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
               <h2 style={{ fontSize:16, fontWeight:700 }}>{editando.id ? 'Editar relato' : 'Novo relato'}</h2>
-              <button onClick={() => setEditando(null)} aria-label="Fechar"
+              <button onClick={() => { pararDitado(); setEditando(null); }} aria-label="Fechar"
                 style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)', padding:6, margin:-6 }}>
                 <X size={18}/>
               </button>
@@ -519,9 +560,20 @@ export default function DiarioBordo({ userId, profile }) {
               {CATEGORIAS[editando.categoria]?.desc}
             </div>
 
-            <label style={{ fontSize:11.5, color:'var(--text-muted)', fontWeight:600, display:'block', marginBottom:6 }}>
-              O QUE ACONTECEU
-            </label>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:6 }}>
+              <label style={{ fontSize:11.5, color:'var(--text-muted)', fontWeight:600 }}>
+                O QUE ACONTECEU
+              </label>
+              <button type="button" onClick={ouvindo ? pararDitado : ditar}
+                title={vozDisponivel() ? 'Ditar o relato' : 'Ditado não disponível neste navegador'}
+                style={{ display:'inline-flex', alignItems:'center', gap:5, cursor:'pointer', fontSize:12,
+                         fontWeight:600, padding:'5px 10px', borderRadius:99,
+                         border:`1px solid ${ouvindo ? '#FF5252' : 'var(--border)'}`,
+                         background: ouvindo ? '#FF525218' : 'var(--surface-2)',
+                         color: ouvindo ? '#FF5252' : 'var(--text-muted)' }}>
+                <Mic size={13}/> {ouvindo ? 'Parar' : 'Ditar'}
+              </button>
+            </div>
             <textarea
               value={editando.texto} rows={6} autoFocus
               onChange={e => setEditando({ ...editando, texto:e.target.value })}
@@ -537,7 +589,7 @@ export default function DiarioBordo({ userId, profile }) {
                   </button>
                 : <span/>}
               <div style={{ display:'flex', gap:8 }}>
-                <button className="btn btn-ghost" onClick={() => setEditando(null)}>Cancelar</button>
+                <button className="btn btn-ghost" onClick={() => { pararDitado(); setEditando(null); }}>Cancelar</button>
                 <button className="btn btn-primary" onClick={salvar}>Salvar</button>
               </div>
             </div>

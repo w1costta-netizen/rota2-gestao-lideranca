@@ -224,7 +224,9 @@ export default function Comunicados({ userId, profile }) {
 
                 {/* Comentários — o clique não pode abrir/fechar o comunicado */}
                 <div onClick={e => e.stopPropagation()}>
-                  <Comentarios recurso="comunicados" itemId={c.id} userId={userId} podeModerar={canManage} />
+                  <Comentarios recurso="comunicados" itemId={c.id} userId={userId} podeModerar={canManage}
+                    total={c.comentarios} novos={c.comentarios_novos}
+                    aoVer={() => setList(l => l.map(x => x.id === c.id ? { ...x, comentarios_novos: 0 } : x))} />
                 </div>
 
                 {/* Painel de leituras — só quem gerencia (admin/supervisor/master), como o backend já exige */}

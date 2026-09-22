@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Megaphone, CheckSquare, CalendarDays, ListChecks, StickyNote, Pin,
-  AlertTriangle, Clock, Users, MessageCircle
+  AlertTriangle, Clock, Users, MessageCircle, BookOpen, UserCog
 } from 'lucide-react';
 
 // As mesmas cores da tela de Anotações. Repetidas aqui de propósito: o
@@ -93,6 +93,9 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   const [subiuPara, setSubiuPara] = useState(null);
   const [tarefas, setTarefas]     = useState([]);
   const [comunicados, setComunicados] = useState([]);
+  const [mural, setMural]         = useState([]);
+  const [diario, setDiario]       = useState({ relatos: 0, comentarios: 0 });
+  const [lideres, setLideres]     = useState(0);
   const [listas, setListas]       = useState([]);
   const [anotacoes, setAnotacoes] = useState([]);
   const [agenda, setAgenda]       = useState([]);
@@ -114,7 +117,11 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       // mesmo para quem está fora de uma (o dono do sistema, por exemplo).
       api.get(`/chat/nao-lidas?requester_id=${userId}`).catch(() => ({ data: { total: 0 } })),
       api.get(`/chat/conversas?requester_id=${userId}`).catch(() => ({ data: [] })),
-    ]).then(([t, c, li, an, ag, users, chat, convs]) => {
+      // Mural e Diário respondem à mesma pergunta dos comunicados — o que
+      // chegou para mim e eu ainda não vi.
+      company ? api.get(`/mural?requester_id=${userId}${cq}`).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+      company ? api.get(`/diario/pendencias?requester_id=${userId}`).catch(() => ({ data: { relatos: 0, comentarios: 0 } })) : Promise.resolve({ data: { relatos: 0, comentarios: 0 } }),
+    ]).then(([t, c, li, an, ag, users, chat, convs, mu, di]) => {
       setTarefas(t.data || []);
       setComunicados(c.data || []);
       setListas(li.data || []);
@@ -124,6 +131,13 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       // senão uma loja de uma pessoa diz "0 usuários cadastrados".
       const euConto = authProfile?.company && authProfile.company === company ? 1 : 0;
       setStats({ totalUsers: (users.data || []).length + euConto });
+      // Líderes: quem conduz equipe (líder e supervisor). Eu entro na conta
+      // se sou desta loja e tenho um desses níveis — a lista não me traz.
+      const meuNivel = authProfile?.company === company ? authProfile?.access_level : null;
+      setLideres((users.data || []).filter(u => ['lider', 'supervisor'].includes(u.access_level)).length
+        + (['lider', 'supervisor'].includes(meuNivel) ? 1 : 0));
+      setMural(mu.data || []);
+      setDiario(di.data || { relatos: 0, comentarios: 0 });
       setNaoLidasChat(chat.data?.total || 0);
       setConversas(Array.isArray(convs.data) ? convs.data : []);
     }).finally(() => setLoading(false));
@@ -169,6 +183,10 @@ export default function Dashboard({ setPage, profile: propProfile }) {
 
   // Comunicados não lidos
   const naoLidos = comunicados.filter(c => !c.lido);
+  const muralNaoLidos = mural.filter(m => !m.lido).length;
+  // Um número só para o Diário: relato novo e comentário novo são a mesma
+  // pergunta — "tem coisa lá que eu não vi".
+  const diarioNovos = (diario.relatos || 0) + (diario.comentarios || 0);
   const urgentes  = comunicados.filter(c => c.prioridade === 'urgente' && !c.lido);
 
   // Itens ainda por fazer nas listas pessoais — é o número que diz se
@@ -306,6 +324,18 @@ export default function Dashboard({ setPage, profile: propProfile }) {
         <StatCard icon={MessageCircle} color="#0ea5e9" bg="#0ea5e915"
           value={naoLidasChat} label="Conversas não lidas"
           onClick={() => setPage('chat')}/>
+        {company && (
+          <StatCard icon={Pin} color="#a855f7" bg="#a855f715"
+            value={muralNaoLidos} label="Mural não lidos"
+            onClick={() => setPage('mural')}/>
+        )}
+        {/* Relatos e comentários juntos: o que importa é saber que tem
+            novidade no diário, não de que tipo ela é. */}
+        {company && (
+          <StatCard icon={BookOpen} color="#f97316" bg="#f9731615"
+            value={diarioNovos} label="Diário de bordo não lidos"
+            onClick={() => setPage('diario')}/>
+        )}
         {isAdmin
           ? <StatCard icon={Users} color="#10b981" bg="#10b98115"
               value={stats.totalUsers || 0} label="Usuários cadastrados"
@@ -314,6 +344,11 @@ export default function Dashboard({ setPage, profile: propProfile }) {
               value={itensPendentes} label="Itens nas listas"
               onClick={() => setPage('listas')}/>
         }
+        {isAdmin && (
+          <StatCard icon={UserCog} color="#14b8a6" bg="#14b8a615"
+            value={lideres} label="Líderes"
+            onClick={() => setPage('usersadmin')}/>
+        )}
       </div>
 
       {/* Grade de conteúdo */}
