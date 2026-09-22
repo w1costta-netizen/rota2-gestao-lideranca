@@ -14,6 +14,24 @@ const supabase = require('../supabase');
 
 const TIPOS = ['diario', 'mural', 'comunicado'];
 
+// Dia em que o aviso de "não lido" entrou no ar.
+//
+// Sem este corte, a estreia acusaria meses de histórico como novidade e a
+// loja inteira pararia para ler o passado — trabalho que não muda nada.
+// Tudo que é anterior a esta data nasce lido, para todo mundo.
+const ESTREIA = '2026-09-22T00:00:00.000Z';
+
+// A partir de quando vale avisar esta pessoa: a estreia, ou o dia em que
+// ela entrou no app, o que for mais recente. Quem é contratado em novembro
+// não precisa ver outubro inteiro como novidade.
+function avisarDesde(perfilCriadoEm) {
+  if (!perfilCriadoEm) return ESTREIA;
+  return new Date(perfilCriadoEm) > new Date(ESTREIA) ? new Date(perfilCriadoEm).toISOString() : ESTREIA;
+}
+
+// Item criado antes do corte conta como já lido.
+const antesDoCorte = (criadoEm, desde) => !!criadoEm && new Date(criadoEm) < new Date(desde);
+
 // Mapa item_id → data da última visita (ISO), só dos itens pedidos.
 async function vistosDe(userId, tipo, ids) {
   if (!userId || !TIPOS.includes(tipo) || !ids?.length) return {};
@@ -38,7 +56,7 @@ async function marcarVisto(userId, tipo, itemId) {
 
 // Quantos comentários cada item tem, e quantos são novos para a pessoa.
 // Uma consulta só para a lista inteira — uma por card deixaria a tela lenta.
-async function comentariosPorItem(tabela, coluna, ids, vistos, userId) {
+async function comentariosPorItem(tabela, coluna, ids, vistos, userId, desde = ESTREIA) {
   const mapa = {};
   if (!ids?.length) return mapa;
   try {
@@ -49,6 +67,8 @@ async function comentariosPorItem(tabela, coluna, ids, vistos, userId) {
       acc.total++;
       // O próprio comentário nunca é novidade para quem escreveu.
       if (c.user_id === userId) continue;
+      // Nem o que é anterior ao corte (ver ESTREIA).
+      if (antesDoCorte(c.created_at, desde)) continue;
       // Sem visita registrada, todo comentário é novo — é a primeira vez
       // que a pessoa vê o item.
       const visto = vistos?.[id];
@@ -58,4 +78,4 @@ async function comentariosPorItem(tabela, coluna, ids, vistos, userId) {
   } catch { return mapa; }
 }
 
-module.exports = { vistosDe, marcarVisto, comentariosPorItem };
+module.exports = { vistosDe, marcarVisto, comentariosPorItem, avisarDesde, antesDoCorte, ESTREIA };

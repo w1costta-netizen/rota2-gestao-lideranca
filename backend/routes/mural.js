@@ -3,10 +3,10 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { enviarPush, usuariosDaLoja } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
-const { vistosDe, marcarVisto, comentariosPorItem } = require('../lib/leituras');
+const { vistosDe, marcarVisto, comentariosPorItem, avisarDesde, antesDoCorte } = require('../lib/leituras');
 
 async function getProfile(id) {
-  const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
+  const { data } = await supabase.from('profiles').select('access_level, company, full_name, created_at').eq('id', id).single();
   return data;
 }
 const isManager = p => p && ['admin','supervisor','master'].includes(p.access_level);
@@ -41,11 +41,13 @@ router.get('/', async (req, res) => {
   }
 
   const ids = (data || []).map(m => m.id);
+  const desde = avisarDesde(me.created_at);
   const vistos = await vistosDe(requester_id, 'mural', ids);
-  const coment = await comentariosPorItem('mural_comentarios', 'mural_id', ids, vistos, requester_id);
+  const coment = await comentariosPorItem('mural_comentarios', 'mural_id', ids, vistos, requester_id, desde);
   res.json((data || []).map(m => ({
     ...m,
-    lido: lidos.includes(m.id),
+    // Recado anterior ao corte não volta a pedir leitura (ver ESTREIA).
+    lido: lidos.includes(m.id) || antesDoCorte(m.created_at, desde),
     comentarios: coment[m.id]?.total || 0,
     comentarios_novos: coment[m.id]?.novos || 0,
   })));

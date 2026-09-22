@@ -3,10 +3,10 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { enviarPush, usuariosDaLoja } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
-const { vistosDe, marcarVisto, comentariosPorItem } = require('../lib/leituras');
+const { vistosDe, marcarVisto, comentariosPorItem, avisarDesde, antesDoCorte } = require('../lib/leituras');
 
 async function getProfile(id) {
-  const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
+  const { data } = await supabase.from('profiles').select('access_level, company, full_name, created_at').eq('id', id).single();
   return data;
 }
 
@@ -40,11 +40,13 @@ router.get('/', async (req, res) => {
     lidos = (l || []).map(x => x.comunicado_id);
   }
 
+  const desde = avisarDesde(me.created_at);
   const vistos = await vistosDe(requester_id, 'comunicado', ids);
-  const coment = await comentariosPorItem('comunicado_comentarios', 'comunicado_id', ids, vistos, requester_id);
+  const coment = await comentariosPorItem('comunicado_comentarios', 'comunicado_id', ids, vistos, requester_id, desde);
   const result = (data || []).map(c => ({
     ...c,
-    lido: lidos.includes(c.id),
+    // Comunicado anterior ao corte não volta a pedir leitura (ver ESTREIA).
+    lido: lidos.includes(c.id) || antesDoCorte(c.created_at, desde),
     comentarios: coment[c.id]?.total || 0,
     comentarios_novos: coment[c.id]?.novos || 0,
   }));

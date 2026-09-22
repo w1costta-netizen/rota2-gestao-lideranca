@@ -3,7 +3,7 @@ const router   = express.Router();
 const supabase = require('../supabase');
 const { registrarLog } = require('../lib/auditLog');
 const { enviarPush } = require('../lib/notificacoes');
-const { vistosDe, marcarVisto, comentariosPorItem } = require('../lib/leituras');
+const { vistosDe, marcarVisto, comentariosPorItem, avisarDesde, antesDoCorte } = require('../lib/leituras');
 
 // ─────────────────────────────────────────────────────────────
 // Diário de Bordo — o que aconteceu na loja, dia a dia.
@@ -51,7 +51,7 @@ const ehGestor = p => p && ['admin', 'supervisor', 'master'].includes(p.access_l
 // tornava a falha perigosa.
 async function getPerfil(id) {
   const { data } = await supabase
-    .from('profiles').select('id, company, full_name, access_level, active').eq('id', id).maybeSingle();
+    .from('profiles').select('id, company, full_name, access_level, active, created_at').eq('id', id).maybeSingle();
   if (!data || data.active === false) return null;
   return data;
 }
@@ -166,11 +166,13 @@ router.get('/', async (req, res) => {
   // Sem isso o Diário era a única tela onde a pessoa não sabia o que chegou
   // depois da última visita dela.
   const ids = (linhas || []).map(l => l.id);
+  const desde = avisarDesde(me.created_at);
   const vistos = await vistosDe(requester_id, 'diario', ids);
-  const coment = await comentariosPorItem('diario_comentarios', 'diario_id', ids, vistos, requester_id);
+  const coment = await comentariosPorItem('diario_comentarios', 'diario_id', ids, vistos, requester_id, desde);
   res.json((linhas || []).map(l => ({
     ...l,
-    lido: !!vistos[l.id] || l.user_id === requester_id,   // o meu relato eu já li
+    // Relato meu, já visto, ou anterior ao corte: nasce lido.
+    lido: !!vistos[l.id] || l.user_id === requester_id || antesDoCorte(l.created_at, desde),
     comentarios: coment[l.id]?.total || 0,
     comentarios_novos: coment[l.id]?.novos || 0,
   })));
@@ -196,13 +198,14 @@ router.get('/pendencias', async (req, res) => {
 
   const desde = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
   const { data: linhas } = await supabase
-    .from('diario_bordo').select('id, user_id').eq('company', alvo).gte('data', desde);
+    .from('diario_bordo').select('id, user_id, created_at').eq('company', alvo).gte('data', desde);
 
+  const corte = avisarDesde(me.created_at);
   const ids = (linhas || []).map(l => l.id);
   const vistos = await vistosDe(me.id, 'diario', ids);
-  const coment = await comentariosPorItem('diario_comentarios', 'diario_id', ids, vistos, me.id);
+  const coment = await comentariosPorItem('diario_comentarios', 'diario_id', ids, vistos, me.id, corte);
   res.json({
-    relatos: (linhas || []).filter(l => !vistos[l.id] && l.user_id !== me.id).length,
+    relatos: (linhas || []).filter(l => !vistos[l.id] && l.user_id !== me.id && !antesDoCorte(l.created_at, corte)).length,
     comentarios: Object.values(coment).reduce((s, c) => s + c.novos, 0),
   });
 });
