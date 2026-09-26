@@ -24,6 +24,37 @@ function Modal({ title, onClose, children }) {
 // não aprova loja, não desativa e não mexe em módulo contratado — isso é
 // comercial, e é do master. O servidor recusa essas rotas para ele de
 // qualquer forma; esconder aqui evita oferecer um botão que sempre falha.
+// Até quando a loja tem acesso.
+//
+// O controle de quem pagou passou a ser manual quando a Hotmart não avisa
+// a tempo, e para isso é preciso ENXERGAR a data: sem ela o master desativa
+// no escuro e só descobre o vencimento pelo cliente reclamando.
+function Vencimento({ ate }) {
+  if (!ate) {
+    return (
+      <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}
+        title="Loja sem data de vencimento: a checagem diária não bloqueia esta loja.">
+        · sem data de acesso
+      </span>
+    );
+  }
+  const hoje = new Date().toISOString().slice(0, 10);
+  const dias = Math.round((new Date(ate + 'T12:00:00') - new Date(hoje + 'T12:00:00')) / 86400000);
+  // Três faixas: vencido, vencendo (até 7 dias) e em dia. A faixa amarela
+  // existe para o master agir ANTES do cliente perder o acesso.
+  const cor = dias < 0 ? '#ef4444' : dias <= 7 ? '#f59e0b' : 'var(--text-muted)';
+  const texto = dias < 0 ? `venceu em ${ate.split('-').reverse().join('/')}`
+    : dias === 0 ? 'vence hoje'
+    : dias <= 7 ? `vence em ${dias} dia${dias > 1 ? 's' : ''}`
+    : `acesso até ${ate.split('-').reverse().join('/')}`;
+  return (
+    <span style={{ fontSize: 11.5, color: cor, fontWeight: dias <= 7 ? 700 : 400 }}
+      title={`Acesso até ${ate.split('-').reverse().join('/')}`}>
+      · {texto}
+    </span>
+  );
+}
+
 export default function MasterDashboard({ userId, viewingStore, onSelectStore, ehMaster = true }) {
   const [stores,       setStores]       = useState([]);
   const [loading,      setLoading]      = useState(true);
@@ -239,6 +270,14 @@ Isso não tem volta.`)) return;
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
                     {s.city || 'Cidade não informada'} · {s.user_count} usuário{s.user_count !== 1 ? 's' : ''}
                   </div>
+                  {/* Por que esta loja caiu: reembolso, vencimento ou mão do
+                      master. Sem isso, a lista de desativadas é uma fila de
+                      nomes sem história. */}
+                  {s.motivo_bloqueio && (
+                    <div style={{ fontSize: 11.5, color: '#f59e0b', marginTop: 3, fontWeight: 600 }}>
+                      {s.motivo_bloqueio}
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button className="btn btn-sm" onClick={() => approve(s)}>
@@ -294,6 +333,7 @@ Isso não tem volta.`)) return;
                     <div style={{ fontWeight: 700, fontSize: 14 }}>{s.name}</div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                       {s.city || '—'} · {s.active_count} usuário{s.active_count !== 1 ? 's' : ''} ativo{s.active_count !== 1 ? 's' : ''}
+                      {' '}<Vencimento ate={s.acesso_ate}/>
                     </div>
                   </div>
                 </div>
