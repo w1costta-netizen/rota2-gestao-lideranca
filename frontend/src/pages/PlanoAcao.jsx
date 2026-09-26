@@ -415,16 +415,28 @@ export default function PlanoAcao({ userId, profile }) {
             criar_tarefa: formAcao.criar_tarefa,
           } : {}),
         };
-        const { data } = await api.put(`/pdca/acoes/${editingAcao.id}`, { requester_id: userId, ...payload });
-        setAcoes(as => as.map(a => a.id === data.id ? data : a));
+        // O texto e as datas sao os mesmos para todo mundo do grupo: editar
+        // em uma vale para todas (a conclusao de cada um nao se propaga).
+        const { data } = await api.put(`/pdca/acoes/${editingAcao.id}`,
+          { requester_id: userId, aplicar_grupo: true, ...payload });
+        setAcoes(as => as.map(a => {
+          if (a.id === data.id) return data;
+          if (editingAcao.grupo_id && a.grupo_id === editingAcao.grupo_id) {
+            return { ...a, descricao: data.descricao, prazo: data.prazo, inicio: data.inicio, recorrencia: data.recorrencia };
+          }
+          return a;
+        }));
         setEditingAcao(null);
       } else {
         // Criação: 1 líder selecionado = 1 ação; vários líderes = 1 ação (com tarefa) pra cada
         const ids = usaResponsaveis && (formAcao.responsaveis_ids || []).length > 0
           ? formAcao.responsaveis_ids
           : [null];
+        // Uma ação para cada pessoa (cada uma vira tarefa e conclui no seu
+        // tempo), mas todas com o mesmo grupo: na tela vira um cartão só.
+        const grupoId = ids.length > 1 ? (crypto.randomUUID?.() || String(Date.now())) : null;
         const criadas = await Promise.all(ids.map(rid => api.post(`/pdca/${selectedPlan.id}/acoes`, {
-          requester_id: userId, quadrante: addingTo, descricao: descricaoFinal,
+          requester_id: userId, quadrante: addingTo, descricao: descricaoFinal, grupo_id: grupoId,
           ...(usaResponsaveis ? {
             responsavel_id: rid, prazo: formAcao.prazo,
             inicio: formAcao.inicio || null,
@@ -451,9 +463,12 @@ export default function PlanoAcao({ userId, profile }) {
   };
 
   const deleteAcao = async (acao) => {
+    // Cartão de várias pessoas: apaga o grupo inteiro, que é o que a pessoa
+    // vê. Apagar só uma linha deixaria o cartão pela metade.
+    const doGrupo = !!acao.grupo_id;
     try {
-      await api.delete(`/pdca/acoes/${acao.id}?requester_id=${userId}`);
-      setAcoes(as => as.filter(a => a.id !== acao.id));
+      await api.delete(`/pdca/acoes/${acao.id}?requester_id=${userId}${doGrupo ? '&grupo=1' : ''}`);
+      setAcoes(as => as.filter(a => doGrupo ? a.grupo_id !== acao.grupo_id : a.id !== acao.id));
     } catch { toast('Erro ao excluir ação'); }
   };
 
@@ -466,6 +481,20 @@ export default function PlanoAcao({ userId, profile }) {
 
   const acoesByQ = { P: [], D: [], C: [], A: [] };
   acoes.forEach(a => { if (acoesByQ[a.quadrante]) acoesByQ[a.quadrante].push(a); });
+
+  // Mesma ação delegada a várias pessoas vira UM cartão com todos dentro.
+  // Sem isto, escolher 5 líderes repetia o texto inteiro 5 vezes e o plano
+  // virava um paredão ilegível.
+  const agrupar = (lista) => {
+    const grupos = [];
+    const porGrupo = new Map();
+    for (const a of lista) {
+      if (!a.grupo_id) { grupos.push([a]); continue; }
+      if (!porGrupo.has(a.grupo_id)) { const g = []; porGrupo.set(a.grupo_id, g); grupos.push(g); }
+      porGrupo.get(a.grupo_id).push(a);
+    }
+    return grupos;
+  };
   const totalAcoes  = acoes.length;
   const acoesFeitas = acoes.filter(a => a.concluida).length;
   const progress    = totalAcoes > 0 ? Math.round((acoesFeitas / totalAcoes) * 100) : 0;
@@ -589,10 +618,14 @@ export default function PlanoAcao({ userId, profile }) {
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: 8, textAlign: 'center' }}>
                     Nenhuma ação ainda
                   </div>
-                ) : acoesByQ[q.key].map(acao => (
+                ) : agrupar(acoesByQ[q.key]).map(grupo => {
+                  const acao = grupo[0];
+                  return (
                   <AcaoCard
-                    key={acao.id}
+                    key={acao.grupo_id || acao.id}
                     acao={acao}
+                    grupo={grupo}
+                    onToggleDe={toggleAcao}
                     color={q.color}
                     canManage={canManage}
                     membros={membros}
@@ -652,7 +685,8 @@ export default function PlanoAcao({ userId, profile }) {
                     }}
                     onDelete={() => deleteAcao(acao)}
                   />
-                ))}
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -1185,35 +1219,76 @@ function AcaoFormAgir({ form, setForm, membros, saving, hasTask, onSave, isNovo 
   );
 }
 
-function AcaoCard({ acao, color, canManage, formatDate, onToggle, onEdit, onDelete }) {
+// Um cartão por AÇÃO, não por pessoa.
+//
+// Delegar a mesma ação a 5 líderes criava 5 cartões com o mesmo texto
+// longo repetido — o plano virava um paredão. Aqui o texto aparece uma
+// vez e cada responsável tem a sua linha, com o próprio "concluí".
+function AcaoCard({ acao, grupo, color, canManage, formatDate, onToggle, onToggleDe, onEdit, onDelete }) {
+  const linhas = (grupo && grupo.length ? grupo : [acao]).filter(a => a.responsavel);
+  const varias = linhas.length > 1;
+  // Com várias pessoas, o cartão só fica "feito" quando todas concluíram.
+  const feitas = (grupo || [acao]).filter(a => a.concluida).length;
+  const todasFeitas = feitas === (grupo || [acao]).length;
+
   return (
     <div style={{ background: 'var(--bg, #0F1116)', borderRadius: 10, padding: '12px 14px',
-      border: `1px solid ${acao.concluida ? color + '44' : 'var(--border)'}`,
-      opacity: acao.concluida ? 0.75 : 1, transition: 'opacity .2s' }}>
+      border: `1px solid ${todasFeitas ? color + '44' : 'var(--border)'}`,
+      opacity: todasFeitas ? 0.75 : 1, transition: 'opacity .2s' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-        <button onClick={onToggle}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 1, flexShrink: 0 }}>
-          {acao.concluida
-            ? <CheckCircle2 size={18} style={{ color }}/>
-            : <Circle size={18} style={{ color: 'var(--text-muted)' }}/>}
-        </button>
+        {/* Com um responsável só, o círculo continua ao lado do texto. Com
+            vários, ele some daqui e vai para a linha de cada pessoa. */}
+        {!varias && (
+          <button onClick={onToggle}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 1, flexShrink: 0 }}>
+            {acao.concluida
+              ? <CheckCircle2 size={18} style={{ color }}/>
+              : <Circle size={18} style={{ color: 'var(--text-muted)' }}/>}
+          </button>
+        )}
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)',
-            textDecoration: acao.concluida ? 'line-through' : 'none',
+            textDecoration: todasFeitas ? 'line-through' : 'none',
             lineHeight: 1.4, marginBottom: 6 }}>
             {acao.descricao}
           </div>
 
+          {varias && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>
+                Responsáveis · {feitas}/{linhas.length} concluíram
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {linhas.map(a => (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <button onClick={() => onToggleDe?.(a)}
+                      title={a.concluida ? 'Marcar como não feita' : 'Marcar como feita'}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, lineHeight: 0 }}>
+                      {a.concluida
+                        ? <CheckCircle2 size={16} style={{ color }}/>
+                        : <Circle size={16} style={{ color: 'var(--text-muted)' }}/>}
+                    </button>
+                    <Avatar name={a.responsavel.full_name} avatarUrl={a.responsavel.avatar_url} size={20}/>
+                    <span style={{ fontSize: 11.5, color: 'var(--text-muted)',
+                      textDecoration: a.concluida ? 'line-through' : 'none' }}>
+                      {a.responsavel.full_name}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            {acao.responsavel && (
+            {!varias && acao.responsavel && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <Avatar name={acao.responsavel.full_name} avatarUrl={acao.responsavel.avatar_url} size={20}/>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{acao.responsavel.full_name.split(' ')[0]}</span>
               </div>
             )}
             {acao.prazo && (() => {
-              const info = !acao.concluida ? prazoInfo(acao.prazo) : null;
+              const info = !todasFeitas ? prazoInfo(acao.prazo) : null;
               return (
                 <span style={{ fontSize: 11, color: info?.icone ? info.cor : 'var(--text-muted)', fontWeight: info?.icone ? 700 : 400 }}>
                   {info?.icone ? `${info.icone} ${info.texto}` : `📅 ${formatDate(acao.prazo)}`}
@@ -1235,7 +1310,9 @@ function AcaoCard({ acao, color, canManage, formatDate, onToggle, onEdit, onDele
             )}
             {acao.tarefa_id && (
               <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5,
-                background: '#E8681A22', color: '#E8681A' }}>🔗 Tarefa</span>
+                background: '#E8681A22', color: '#E8681A' }}>
+                🔗 {varias ? `${linhas.filter(a => a.tarefa_id).length} tarefas` : 'Tarefa'}
+              </span>
             )}
           </div>
         </div>

@@ -162,7 +162,7 @@ router.get('/:id/acoes', async (req, res) => {
 
 // POST /api/pdca/:id/acoes
 router.post('/:id/acoes', async (req, res) => {
-  const { requester_id, quadrante, descricao, responsavel_id, prazo, criar_tarefa, inicio, recorrencia } = req.body;
+  const { requester_id, quadrante, descricao, responsavel_id, prazo, criar_tarefa, inicio, recorrencia, grupo_id } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
@@ -178,6 +178,10 @@ router.post('/:id/acoes', async (req, res) => {
     responsavel_id: responsavel_id || null,
     prazo: prazo || null,
     inicio: inicio || null,
+    // Mesma ação delegada a várias pessoas: uma linha por pessoa (cada uma
+    // vira tarefa e conclui no seu tempo), todas com o mesmo grupo para a
+    // tela mostrar um cartão só.
+    grupo_id: grupo_id || null,
     recorrencia: RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma',
     concluida: false,
     criar_tarefa: criar_tarefa !== false,
@@ -230,7 +234,7 @@ router.post('/:id/acoes', async (req, res) => {
 
 // PUT /api/pdca/acoes/:id  — ANTES de PUT /:id para não conflitar
 router.put('/acoes/:id', async (req, res) => {
-  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia } = req.body;
+  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia, aplicar_grupo } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -326,6 +330,40 @@ router.put('/acoes/:id', async (req, res) => {
     }
   }
 
+  // Ação de várias pessoas: o texto, o prazo e a repetição são os mesmos
+  // para todo mundo — editar em uma tem que valer para todas, senão o
+  // cartão único da tela mostraria uma versão e as tarefas, outra.
+  // `concluida` NUNCA se propaga: cada pessoa conclui a sua.
+  if (aplicar_grupo && acaoAtual.grupo_id) {
+    const doGrupo = {};
+    for (const campo of ['descricao', 'prazo', 'inicio', 'recorrencia', 'criar_tarefa']) {
+      if (updates[campo] !== undefined) doGrupo[campo] = updates[campo];
+    }
+    if (Object.keys(doGrupo).length) {
+      const { data: irmas } = await supabase.from('acoes_pdca')
+        .select('id, tarefa_id')
+        .eq('grupo_id', acaoAtual.grupo_id).neq('id', req.params.id);
+
+      await supabase.from('acoes_pdca').update(doGrupo).eq('grupo_id', acaoAtual.grupo_id).neq('id', req.params.id);
+
+      // As tarefas das outras pessoas acompanham a mesma mudança.
+      for (const irma of (irmas || [])) {
+        if (!irma.tarefa_id) continue;
+        const { data: t } = await supabase.from('tarefas')
+          .select('due_date, pdca_context').eq('id', irma.tarefa_id).maybeSingle();
+        const patch = {};
+        if (doGrupo.descricao !== undefined) patch.title = doGrupo.descricao;
+        if (doGrupo.recorrencia !== undefined) patch.recorrencia = doGrupo.recorrencia;
+        if (doGrupo.prazo !== undefined || doGrupo.inicio !== undefined) {
+          patch.pdca_context = { ...(t?.pdca_context || {}), repetir_ate: finalPrazo || null };
+          const novaData = finalInicio || finalPrazo;
+          if (novaData && t?.due_date !== novaData) patch.due_date = novaData;
+        }
+        if (Object.keys(patch).length) await supabase.from('tarefas').update(patch).eq('id', irma.tarefa_id);
+      }
+    }
+  }
+
   res.json(data);
 });
 
@@ -337,17 +375,29 @@ router.delete('/acoes/:id', async (req, res) => {
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
 
   const { data: acao } = await supabase.from('acoes_pdca')
-    .select('tarefa_id, descricao, plano:plano_id(company)').eq('id', req.params.id).single();
+    .select('tarefa_id, descricao, grupo_id, plano:plano_id(company)').eq('id', req.params.id).single();
 
-  const { error } = await supabase.from('acoes_pdca').delete().eq('id', req.params.id);
+  // Apagar a ação de várias pessoas de uma vez: é um cartão só na tela, e
+  // apagar linha por linha deixaria metade do grupo órfã.
+  const apagarGrupo = req.query.grupo === '1' && acao?.grupo_id;
+  let tarefasParaApagar = acao?.tarefa_id ? [acao.tarefa_id] : [];
+  if (apagarGrupo) {
+    const { data: irmas } = await supabase.from('acoes_pdca')
+      .select('tarefa_id').eq('grupo_id', acao.grupo_id);
+    tarefasParaApagar = (irmas || []).map(i => i.tarefa_id).filter(Boolean);
+  }
+
+  const { error } = apagarGrupo
+    ? await supabase.from('acoes_pdca').delete().eq('grupo_id', acao.grupo_id)
+    : await supabase.from('acoes_pdca').delete().eq('id', req.params.id);
   if (error) {
     logError({ company: acao?.plano?.company, user_id: requester_id, acao: 'excluir_acao_pdca', tabela: 'acoes_pdca', rota: req.originalUrl, erro_mensagem: error.message });
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: acao?.plano?.company, user_id: requester_id, acao: 'excluir_acao_pdca', tabela: 'acoes_pdca', antes: { descricao: acao?.descricao } });
 
-  if (acao?.tarefa_id) {
-    await supabase.from('tarefas').delete().eq('id', acao.tarefa_id);
+  if (tarefasParaApagar.length) {
+    await supabase.from('tarefas').delete().in('id', tarefasParaApagar);
   }
 
   res.json({ ok: true });
