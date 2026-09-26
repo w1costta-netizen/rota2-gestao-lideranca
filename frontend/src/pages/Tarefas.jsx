@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Pencil, Trash2, CheckCircle, Circle, Clock, ClipboardList, MessageSquare, Send, ChevronDown, ChevronUp, RefreshCw, Tag, CalendarDays, List, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, CheckCircle, Circle, Clock, ClipboardList, MessageSquare, Send, ChevronDown, ChevronUp, RefreshCw, Tag, CalendarDays, List, ChevronLeft, ChevronRight, CalendarClock } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -73,7 +73,118 @@ function TagChip({ tag, onRemove, small }) {
   );
 }
 
-function CommentSection({ taskId, userId }) {
+/* Pedido de novo prazo.
+   Tarefa que depende de terceiro não cabe num dia só: a pessoa cumpre a
+   parte dela, pede a data nova com o motivo, e quem criou a tarefa aceita
+   ou recusa. Enquanto não houver resposta, o prazo antigo continua valendo
+   — senão pedir prazo viraria um jeito de nunca atrasar. */
+function BlocoPrazo({ t, userId, onMudou }) {
+  const toast = useToast();
+  const [pedindo, setPedindo] = useState(false);
+  const [data, setData]       = useState('');
+  const [motivo, setMotivo]   = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [resposta, setResposta] = useState('');
+
+  const pedido = t.prazo_pendente;
+  const souDono   = t.created_by === userId;      // quem criou decide
+  const souQuemFaz = t.assigned_to === userId;
+  const concluida = t.status === 'concluida';
+
+  const dia = (d) => (d ? String(d).split('-').reverse().join('/') : 'sem data');
+
+  const enviar = async () => {
+    if (!data) { toast('Escolha a nova data.', 'error'); return; }
+    if (!motivo.trim()) { toast('Escreva o motivo — é ele que fica registrado.', 'error'); return; }
+    setSalvando(true);
+    try {
+      await api.post(`/tarefas/${t.id}/prazo`, { requester_id: userId, data_nova: data, motivo: motivo.trim() });
+      toast('Pedido enviado. Agora é esperar a resposta.');
+      setPedindo(false); setData(''); setMotivo('');
+      onMudou?.();
+    } catch (e) { toast(e?.response?.data?.error || 'Não foi possível pedir o prazo.', 'error'); }
+    setSalvando(false);
+  };
+
+  const responder = async (aceitar) => {
+    setSalvando(true);
+    try {
+      await api.put(`/tarefas/prazos/${pedido.id}`, { requester_id: userId, aceitar, resposta: resposta.trim() });
+      toast(aceitar ? 'Prazo atualizado.' : 'Pedido recusado — o prazo continua o mesmo.');
+      setResposta('');
+      onMudou?.();
+    } catch (e) { toast(e?.response?.data?.error || 'Não foi possível responder.', 'error'); }
+    setSalvando(false);
+  };
+
+  // Pedido em aberto: quem decide vê os botões; os outros, só o aviso.
+  if (pedido) {
+    return (
+      <div style={{ marginTop:10, background:'#f59e0b12', border:'1px solid #f59e0b40',
+        borderRadius:10, padding:'10px 12px' }}>
+        <div style={{ fontSize:12.5, fontWeight:700, color:'#f59e0b', display:'flex', alignItems:'center', gap:6 }}>
+          <CalendarClock size={14}/> Novo prazo pedido: {dia(pedido.data_nova)}
+        </div>
+        <div style={{ fontSize:12.5, color:'var(--text)', marginTop:4, lineHeight:1.5 }}>{pedido.motivo}</div>
+        <div style={{ fontSize:11, color:'var(--text-muted)', marginTop:3 }}>
+          Pedido por {pedido.solicitante?.full_name || 'quem faz a tarefa'} · até lá continua valendo {dia(pedido.data_antiga)}
+        </div>
+        {souDono ? (
+          <div style={{ marginTop:8 }}>
+            <input className="input" value={resposta} onChange={e => setResposta(e.target.value)}
+              placeholder="Resposta (opcional)" style={{ fontSize:12.5, marginBottom:6 }}/>
+            <div style={{ display:'flex', gap:8 }}>
+              <button className="btn btn-primary btn-sm" disabled={salvando} onClick={() => responder(true)}>
+                Aceitar novo prazo
+              </button>
+              <button className="btn btn-ghost btn-sm" disabled={salvando} onClick={() => responder(false)}>
+                Recusar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ fontSize:11.5, color:'var(--text-muted)', marginTop:6 }}>
+            Aguardando resposta de {t.creator?.full_name || 'quem criou a tarefa'}.
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (!souQuemFaz || concluida) return null;
+
+  return (
+    <div style={{ marginTop:8 }}>
+      {!pedindo ? (
+        <button onClick={() => setPedindo(true)}
+          style={{ background:'none', border:'none', cursor:'pointer', padding:0,
+            display:'flex', alignItems:'center', gap:5, fontSize:12, color:'var(--text-muted)' }}>
+          <CalendarClock size={13}/> Não vou conseguir no prazo
+        </button>
+      ) : (
+        <div style={{ background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:10, padding:'10px 12px' }}>
+          <div style={{ fontSize:12, fontWeight:700, marginBottom:8 }}>Pedir novo prazo</div>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:8 }}>
+            <input type="date" className="input" value={data} min={t.due_date || undefined}
+              onChange={e => setData(e.target.value)} style={{ fontSize:12.5, maxWidth:170 }}/>
+          </div>
+          <textarea className="input" rows={2} value={motivo} onChange={e => setMotivo(e.target.value)}
+            placeholder="O que aconteceu? Ex: acionei o fornecedor hoje, ele troca na quinta."
+            style={{ fontSize:12.5, width:'100%', resize:'vertical', fontFamily:'inherit' }}/>
+          <div style={{ fontSize:11, color:'var(--text-muted)', margin:'6px 0 8px' }}>
+            {t.creator?.full_name || 'Quem criou a tarefa'} recebe o pedido e decide. Até lá, o prazo é {dia(t.due_date)}.
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button className="btn btn-primary btn-sm" disabled={salvando} onClick={enviar}>Enviar pedido</button>
+            <button className="btn btn-ghost btn-sm" onClick={() => setPedindo(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CommentSection({ taskId, userId, total = 0, novos = 0, aoVer }) {
   const toast = useToast();
   const [comments, setComments]   = useState([]);
   const [loading, setLoading]     = useState(false);
@@ -83,6 +194,9 @@ function CommentSection({ taskId, userId }) {
   const [sending, setSending]     = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText]   = useState('');
+  // Quantas atualizações novas havia quando a lista chegou. Some ao abrir.
+  const [novosAqui, setNovosAqui] = useState(novos);
+  useEffect(() => { setNovosAqui(novos); }, [novos, taskId]);
 
   const load = useCallback(async () => {
     if (loaded) return;
@@ -95,7 +209,20 @@ function CommentSection({ taskId, userId }) {
     finally { setLoading(false); }
   }, [taskId, userId, loaded]);
 
-  const toggle = () => { if (!open) load(); setOpen(o => !o); };
+  const toggle = () => {
+    if (!open) {
+      load();
+      setNovosAqui(0);
+      // Avisa o servidor que esta pessoa leu as atualizações — é o que faz
+      // o "novo" da próxima vez ser novo de verdade.
+      api.post(`/tarefas/${taskId}/visto`, { requester_id: userId }).catch(() => {});
+      aoVer?.(taskId);
+    }
+    setOpen(o => !o);
+  };
+
+  // Depois de abrir vale o que está na tela; antes, o número do servidor.
+  const quantas = loaded ? comments.length : total;
 
   const send = async () => {
     if (!text.trim()) return;
@@ -131,10 +258,21 @@ function CommentSection({ taskId, userId }) {
 
   return (
     <div style={{ marginTop:10, borderTop:'1px solid var(--border)', paddingTop:8 }}>
+      {/* A contagem aparece SEM abrir, e o que chegou depois da última
+          visita ganha selo vermelho: fechado, o botão dizia só
+          "Atualizações" e ninguém sabia que havia recado ali dentro. */}
       <button onClick={toggle} style={{ background:'none', border:'none', cursor:'pointer',
-        display:'flex', alignItems:'center', gap:5, fontSize:12, color:'var(--text-muted)', padding:0 }}>
+        display:'flex', alignItems:'center', gap:5, fontSize:12, padding:0,
+        color: novosAqui > 0 && !open ? 'var(--primary)' : 'var(--text-muted)',
+        fontWeight: novosAqui > 0 && !open ? 700 : 400 }}>
         <MessageSquare size={13}/>
-        {open ? 'Ocultar atualizações' : `Atualizações${loaded && comments.length ? ` (${comments.length})` : ''}`}
+        {open ? 'Ocultar atualizações' : `Atualizações${quantas ? ` (${quantas})` : ''}`}
+        {!open && novosAqui > 0 && (
+          <span style={{ background:'#ef4444', color:'#fff', borderRadius:99, padding:'1px 7px',
+            fontSize:10, fontWeight:700, lineHeight:1.6 }}>
+            {novosAqui} nova{novosAqui > 1 ? 's' : ''}
+          </span>
+        )}
         {open ? <ChevronUp size={12}/> : <ChevronDown size={12}/>}
       </button>
       {open && (
@@ -460,6 +598,21 @@ export default function Tarefas({ userId, profile, setPage }) {
                   🎯 Plano de ação
                 </span>
               )}
+              {!asRecurring && t.prazo_pendente && (
+                <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
+                  background:'#f59e0b22', color:'#f59e0b' }}>
+                  ⏳ Novo prazo pedido
+                </span>
+              )}
+              {/* Quantas vezes o prazo já mudou. Não bloqueia nada — só
+                  deixa o padrão visível para quem aprova. */}
+              {!asRecurring && t.adiamentos > 0 && (
+                <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
+                  background:'#64748b22', color:'var(--text-muted)' }}
+                  title="Vezes que o prazo desta tarefa foi adiado com aceite">
+                  {t.adiamentos}º adiamento
+                </span>
+              )}
             </div>
             {t.description && (
               <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:6, lineHeight:1.4 }}>
@@ -505,7 +658,10 @@ export default function Tarefas({ userId, profile, setPage }) {
                 <Avatar name={t.assigned?.full_name} avatarUrl={t.assigned?.avatar_url} size={28}/>
               </div>
             </div>
-            <CommentSection taskId={t.id} userId={userId}/>
+            {!asRecurring && <BlocoPrazo t={t} userId={userId} onMudou={load}/>}
+            <CommentSection taskId={t.id} userId={userId}
+              total={t.comentarios} novos={t.comentarios_novos}
+              aoVer={() => setList(l => l.map(x => x.id === t.id ? { ...x, comentarios_novos: 0 } : x))}/>
           </div>
           {canEdit(t) && (
             <div style={{ display:'flex', gap:6, flexShrink:0 }}>

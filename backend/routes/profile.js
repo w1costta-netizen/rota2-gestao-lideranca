@@ -24,15 +24,26 @@ router.get('/all', async (req, res) => {
 // Salva ou atualiza perfil — usa a chave secreta para bypassar RLS
 // chamado logo após o signUp, antes do e-mail ser confirmado
 router.post('/upsert', async (req, res) => {
-  const { id, full_name, email, company, employee_id, sector, role, phone, whatsapp, access_level } = req.body;
+  const { id, full_name, email, company, employee_id, sector, role, phone, whatsapp } = req.body;
   if (!id || !email) return res.status(400).json({ error: 'id e email são obrigatórios' });
+  // Só para si mesmo: sem isto, bastava trocar o `id` no corpo da chamada
+  // para reescrever o perfil de outra pessoa.
+  if (req.usuario?.id && req.usuario.id !== id) {
+    return res.status(403).json({ error: 'Esta sessão não corresponde ao usuário informado.' });
+  }
+
+  // O nível NÃO vem do corpo: quem escolhe é o gestor, em Gestão de
+  // Usuários. Aqui a pessoa está salvando o próprio cadastro, e aceitar
+  // `access_level` daqui deixava qualquer um se promover a master.
+  const { data: existente } = await supabase
+    .from('profiles').select('access_level').eq('id', id).maybeSingle();
 
   const { data, error } = await supabase.from('profiles').upsert({
     id, full_name, email, company: company || '',
     employee_id: employee_id || '', sector: sector || '',
     role: role || '', phone: phone || '',
     whatsapp: whatsapp || phone || '',
-    access_level: access_level || 'lider',
+    access_level: existente?.access_level || 'lider',
   }, { onConflict: 'id' }).select().single();
 
   if (error) {

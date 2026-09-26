@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { TrendingUp, TrendingDown, ChevronDown, AlertTriangle, Users, ShoppingCart, DollarSign, BarChart2, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { lerTudo } from '../lib/lerTudo';
@@ -119,10 +119,19 @@ const COLUNAS_TABELA = [
   { label: 'Volume',  key: 'volume',     left: false, fn: l => l.extras?.volume || 0 },
 ];
 
-function TabelaVendas({ linhas, marcarTotal }) {
+// Quantas linhas o navegador desenha de cada vez.
+//
+// Com a lista completa de itens (8.000 numa loja grande), desenhar tudo de
+// uma vez trava a página inteira: cada clique — um filtro, uma ordenação —
+// refaz 60 mil pedaços de tela. Em pedaços de 300 a tela responde na hora,
+// e quem precisa ver mais clica em "Mostrar mais".
+const PEDACO = 300;
+
+const TabelaVendas = React.memo(function TabelaVendas({ linhas, marcarTotal }) {
   const [isMobile, setIsMobile] = React.useState(() => window.innerWidth < 640);
   const [sortKey, setSortKey]   = React.useState(null);
   const [sortAsc, setSortAsc]   = React.useState(false);
+  const [mostrar, setMostrar]   = React.useState(PEDACO);
 
   React.useEffect(() => {
     const fn = () => setIsMobile(window.innerWidth < 640);
@@ -130,23 +139,46 @@ function TabelaVendas({ linhas, marcarTotal }) {
     return () => window.removeEventListener('resize', fn);
   }, []);
 
-  if (!linhas.length) return <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Sem dados.</p>;
-  const { totalRow, subRows } = marcarTotal ? detectarTotal(linhas) : { totalRow: null, subRows: linhas };
+  // Trocou o filtro (ou a ordenação): volta ao primeiro pedaço. Senão a
+  // pessoa filtra 40 itens e continua vendo a rolagem de antes.
+  React.useEffect(() => { setMostrar(PEDACO); }, [linhas, sortKey, sortAsc]);
 
   const handleSort = (key) => {
     if (sortKey === key) setSortAsc(a => !a);
     else { setSortKey(key); setSortAsc(false); }
   };
 
-  const col = COLUNAS_TABELA.find(c => c.key === sortKey);
-  const sorted = col
-    ? [...subRows].sort((a, b) => {
-        const va = col.fn(a), vb = col.fn(b);
-        if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-        return sortAsc ? va - vb : vb - va;
-      })
-    : subRows;
-  const linhasFinais = totalRow ? [...sorted, totalRow] : sorted;
+  // Ordenar 8.000 linhas a cada desenho é o que fazia o clique no filtro
+  // demorar: agora só refaz quando a lista ou a ordem mudam de verdade.
+  const { linhasFinais, totalRow } = React.useMemo(() => {
+    const { totalRow: tr, subRows } = marcarTotal ? detectarTotal(linhas) : { totalRow: null, subRows: linhas };
+    const col = COLUNAS_TABELA.find(c => c.key === sortKey);
+    const sorted = col
+      ? [...subRows].sort((a, b) => {
+          const va = col.fn(a), vb = col.fn(b);
+          if (typeof va === 'string') return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+          return sortAsc ? va - vb : vb - va;
+        })
+      : subRows;
+    return { linhasFinais: tr ? [...sorted, tr] : sorted, totalRow: tr };
+  }, [linhas, marcarTotal, sortKey, sortAsc]);
+
+  if (!linhas.length) return <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>Sem dados.</p>;
+
+  const visiveis = linhasFinais.slice(0, mostrar);
+  const faltam = linhasFinais.length - visiveis.length;
+  const MaisLinhas = faltam > 0 ? (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', flexWrap: 'wrap' }}>
+      <button onClick={() => setMostrar(m => m + PEDACO)}
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8,
+          padding: '8px 14px', fontSize: 12.5, fontWeight: 600, color: 'var(--text)', cursor: 'pointer' }}>
+        Mostrar mais {Math.min(PEDACO, faltam)}
+      </button>
+      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+        Mostrando {visiveis.length} de {linhasFinais.length} — o Excel traz a lista completa.
+      </span>
+    </div>
+  ) : null;
 
   if (isMobile) {
     return (
@@ -174,11 +206,12 @@ function TabelaVendas({ linhas, marcarTotal }) {
           )}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {linhasFinais.map((l, i) => {
+          {visiveis.map((l, i) => {
             const isTotal = totalRow && l.nome === totalRow.nome;
             return <CardItem key={i} l={l} isTotal={isTotal} />;
           })}
         </div>
+        {MaisLinhas}
       </div>
     );
   }
@@ -201,7 +234,7 @@ function TabelaVendas({ linhas, marcarTotal }) {
           </tr>
         </thead>
         <tbody>
-          {linhasFinais.map((l, i) => {
+          {visiveis.map((l, i) => {
             const e = l.extras || {};
             const saldo = e.saldo_receita ?? (l.realizado - l.meta);
             const corSaldo = saldo >= 0 ? '#22c55e' : '#ef4444';
@@ -224,9 +257,10 @@ function TabelaVendas({ linhas, marcarTotal }) {
           })}
         </tbody>
       </table>
+      {MaisLinhas}
     </div>
   );
-}
+});
 
 /**
  * Detecta linha de total: o valor da última linha ≈ soma das anteriores.
@@ -360,35 +394,46 @@ export default function PainelVendas({ profile }) {
   useEffect(() => { carregarDados(); }, [carregarDados]);
   useEffect(() => { carregarMapaDepto(); }, [carregarMapaDepto]);
 
-  // Agrupa por tipo de bloco
-  const canais  = dados.filter(d => d.canal);
-  const deptos  = dados.filter(d => d.departamento).map(d => ({ ...d, nome: d.departamento }));
-  const cats    = dados.filter(d => d.categoria).map(d => ({ ...d, nome: d.categoria }));
-  // Descobre o departamento de cada item cruzando o código no início do nome
-  // (ex: "259183 - SACOLA SAMS...") com o mapa vindo do Estoque
-  // Item que não está na extração do Estoque (FLV por peso, açougue,
-  // padaria…) entra em SEM_CLASSIFICACAO — senão sumia de qualquer filtro.
-  const itens   = dados.filter(d => d.item).map(d => {
+  // Agrupa por tipo de bloco.
+  //
+  // Tudo aqui é `useMemo` de propósito: são 8.000 itens numa loja grande, e
+  // sem isso a lista era remontada do zero a cada clique — abrir o filtro,
+  // marcar uma opção, ordenar — e a página inteira travava. Agora só refaz
+  // quando os dados ou o filtro realmente mudam.
+  const canais  = useMemo(() => dados.filter(d => d.canal), [dados]);
+  const deptos  = useMemo(() => dados.filter(d => d.departamento).map(d => ({ ...d, nome: d.departamento })), [dados]);
+  const cats    = useMemo(() => dados.filter(d => d.categoria).map(d => ({ ...d, nome: d.categoria })), [dados]);
+  // Descobre o departamento e a categoria de cada item cruzando o código no
+  // início do nome (ex: "259183 - SACOLA SAMS...") com o mapa do Estoque.
+  // Item fora da extração (FLV por peso, açougue, padaria…) entra em
+  // SEM_CLASSIFICACAO — senão sumia de qualquer filtro.
+  const itens = useMemo(() => dados.filter(d => d.item).map(d => {
     const cod = parseInt(String(d.item).match(/^\d+/)?.[0], 10);
     const cls = mapaDepto?.get(cod);
     return { ...d, nome: d.item,
       departamentoItem: cls?.depto || SEM_CLASSIFICACAO,
       categoriaItem: cls?.secao || (cls?.depto ? null : SEM_CLASSIFICACAO) };
-  });
-  const deptosDisponiveis = ordenarComSemClassificacao([...new Set(itens.map(i => i.departamentoItem))]);
-  const itensDosDeptos = deptosSelecionados.length
-    ? itens.filter(i => deptosSelecionados.includes(i.departamentoItem))
-    : itens;
+  }), [dados, mapaDepto]);
+
+  const deptosDisponiveis = useMemo(
+    () => ordenarComSemClassificacao([...new Set(itens.map(i => i.departamentoItem))]), [itens]);
   // Categorias só dos departamentos escolhidos; escolher um departamento
   // descarta categorias que ficaram fora dele.
-  const catsDisponiveis = ordenarComSemClassificacao([...new Set(itensDosDeptos.map(i => i.categoriaItem).filter(Boolean))]);
-  const catsAtivas = catsSelecionadas.filter(c => catsDisponiveis.includes(c));
-  const filtrarPorDepto = (lista) => {
+  const catsDisponiveis = useMemo(() => {
+    const base = deptosSelecionados.length
+      ? itens.filter(i => deptosSelecionados.includes(i.departamentoItem))
+      : itens;
+    return ordenarComSemClassificacao([...new Set(base.map(i => i.categoriaItem).filter(Boolean))]);
+  }, [itens, deptosSelecionados]);
+  const catsAtivas = useMemo(
+    () => catsSelecionadas.filter(c => catsDisponiveis.includes(c)), [catsSelecionadas, catsDisponiveis]);
+  const filtrarPorDepto = useCallback((lista) => {
     let r = deptosSelecionados.length ? lista.filter(i => deptosSelecionados.includes(i.departamentoItem)) : lista;
     if (catsAtivas.length) r = r.filter(i => catsAtivas.includes(i.categoriaItem));
     return r;
-  };
-  const temSecao = itens.some(i => i.categoriaItem && i.categoriaItem !== SEM_CLASSIFICACAO);
+  }, [deptosSelecionados, catsAtivas]);
+  const temSecao = useMemo(
+    () => itens.some(i => i.categoriaItem && i.categoriaItem !== SEM_CLASSIFICACAO), [itens]);
   // Elemento, não componente: como componente seria recriado a cada render e
   // o menu fecharia a cada clique numa opção.
   const filtros = (
@@ -417,12 +462,21 @@ export default function PainelVendas({ profile }) {
     : 0;
 
   // Atenção: YoY receita negativo — apenas itens individuais (produtos)
-  const atencao = itens
+  const atencao = useMemo(() => itens
     .filter(d => {
       const yoy = d.extras?.yoy_receita ?? d.percentual ?? 0;
       return yoy < 0;
     })
-    .sort((a, b) => (a.extras?.yoy_receita ?? a.percentual) - (b.extras?.yoy_receita ?? b.percentual));
+    .sort((a, b) => (a.extras?.yoy_receita ?? a.percentual) - (b.extras?.yoy_receita ?? b.percentual)), [itens]);
+
+  // Prontas para a tabela. Sem isto, cada desenho criaria uma lista nova e
+  // o React.memo da tabela nunca pegaria — ela seria redesenhada inteira a
+  // cada clique em qualquer lugar da página.
+  const itensFiltrados = useMemo(() => filtrarPorDepto(itens), [filtrarPorDepto, itens]);
+  const atencaoFiltrada = useMemo(() => filtrarPorDepto(atencao).map(d => ({
+    ...d,
+    nome: d.canal || d.departamento || d.categoria || d.item || d.nome,
+  })), [filtrarPorDepto, atencao]);
 
   const periodoLabel = (p) => {
     if (p === 'atual') return 'Período Atual';
@@ -640,7 +694,7 @@ export default function PainelVendas({ profile }) {
                 <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', margin: 0 }}>Por Item / Produto</h3>
                 {filtros}
               </div>
-              <TabelaVendas linhas={filtrarPorDepto(itens)} />
+              <TabelaVendas linhas={itensFiltrados} />
             </>
           )}
           {tab === 4 && (
@@ -655,10 +709,7 @@ export default function PainelVendas({ profile }) {
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
                 Todos os itens com receita abaixo do período anterior (YoY negativo), do pior para o melhor.
               </p>
-              <TabelaVendas linhas={filtrarPorDepto(atencao).map(d => ({
-                ...d,
-                nome: d.canal || d.departamento || d.categoria || d.item || d.nome,
-              }))} />
+              <TabelaVendas linhas={atencaoFiltrada} />
             </>
           )}
         </>

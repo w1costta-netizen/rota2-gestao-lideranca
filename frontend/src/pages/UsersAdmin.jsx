@@ -29,6 +29,8 @@ const ACCESS_LEVELS = [
   { value: 'admin',       label: 'Admin',       desc: 'Gerencia usuários e toda a empresa' },
   { value: 'supervisor',  label: 'Supervisor',   desc: 'Vê escalas de todos os setores' },
   { value: 'lider',       label: 'Líder',        desc: 'Gerencia apenas seu setor' },
+  { value: 'analista',    label: 'Analista',     desc: 'Vê o que o líder vê — sem gerir pessoas' },
+  { value: 'auxiliar_adm', label: 'Auxiliar ADM', desc: 'Apoio da administração — sem vendas e estoque' },
   { value: 'colaborador', label: 'Colaborador',  desc: 'Acesso mínimo — customize as permissões' },
   { value: 'suporte',     label: 'Suporte',      desc: 'Só os Logs de Auditoria, de todas as lojas — não vê dados de operação' },
 ];
@@ -37,6 +39,8 @@ const BADGE = {
   admin:       { bg:'#6366f115', color:'#818cf8', border:'#6366f130', label:'Admin' },
   supervisor:  { bg:'#f59e0b15', color:'#fbbf24', border:'#f59e0b30', label:'Supervisor' },
   lider:       { bg:'#10b98115', color:'#34d399', border:'#10b98130', label:'Líder' },
+  analista:    { bg:'#0ea5e915', color:'#38bdf8', border:'#0ea5e930', label:'Analista' },
+  auxiliar_adm:{ bg:'#a855f715', color:'#c084fc', border:'#a855f730', label:'Auxiliar ADM' },
   colaborador: { bg:'#64748b15', color:'#94a3b8', border:'#64748b30', label:'Colaborador' },
   suporte:     { bg:'#06b6d415', color:'#22d3ee', border:'#06b6d430', label:'Suporte' },
 };
@@ -310,7 +314,7 @@ function PermissionsSection({ values, onChange }) {
       </div>
       {!isCustom && (
         <p style={{ fontSize:11, color:'var(--text-muted)', marginTop:8 }}>
-          Usando permissões padrão do nível <b>{values.access_level}</b>. Altere qualquer item para customizar.
+          Usando permissões padrão do nível <b>{BADGE[values.access_level]?.label || values.access_level}</b>. Altere qualquer item para customizar.
         </p>
       )}
     </div>

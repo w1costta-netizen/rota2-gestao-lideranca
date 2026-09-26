@@ -3,6 +3,18 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 
+// Níveis que existem. Qualquer outro valor é recusado: o nível manda em
+// tudo que a pessoa vê e pode, e um valor solto (erro de digitação, ou uma
+// chamada montada à mão pedindo 'master') não pode entrar no banco.
+// 'master' e 'suporte' ficam de fora de propósito — são do dono do sistema,
+// e quem os concede é o próprio master, na trava logo abaixo.
+const NIVEIS_DA_LOJA = ['admin', 'supervisor', 'lider', 'analista', 'auxiliar_adm', 'colaborador'];
+function nivelPermitido(nivel, euSouMaster) {
+  if (nivel === undefined) return true;
+  if (NIVEIS_DA_LOJA.includes(nivel)) return true;
+  return euSouMaster && ['master', 'suporte'].includes(nivel);
+}
+
 // Verifica se o solicitante é admin da empresa
 async function requireAdmin(req, res, next) {
   const { requester_id } = req.body || req.query;
@@ -90,6 +102,9 @@ router.post('/users', async (req, res) => {
   if (access_level === 'suporte' && me.access_level !== 'master') {
     return res.status(403).json({ error: 'Apenas o master pode criar contas de Suporte.' });
   }
+  if (!nivelPermitido(access_level, me.access_level === 'master')) {
+    return res.status(400).json({ error: 'Nível de acesso inválido.' });
+  }
 
   const targetCompany = reqCompany !== undefined ? (reqCompany || null) : me.company;
   // A conta de Suporte não pertence a uma loja — ela atende todas.
@@ -152,6 +167,9 @@ router.put('/users/:id', async (req, res) => {
   const mexendoComSuporte = access_level === 'suporte' || antes?.access_level === 'suporte';
   if (mexendoComSuporte && me.access_level !== 'master') {
     return res.status(403).json({ error: 'Apenas o master pode gerenciar contas de Suporte.' });
+  }
+  if (!nivelPermitido(access_level, me.access_level === 'master')) {
+    return res.status(400).json({ error: 'Nível de acesso inválido.' });
   }
 
   // Atualiza e-mail e/ou senha no Supabase Auth se fornecido

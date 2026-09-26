@@ -36,6 +36,19 @@ export const DEFAULT_PERMISSIONS = {
   admin:        ['painel', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_gestao', 'vendas_painel', 'usuarios', 'estoque', 'importador_estoque', 'organograma', 'conferencia_secao', 'pdca', 'metas', 'produtividade', 'desempenho', 'torneio', 'logs', 'opiniao'],
   supervisor:   ['painel', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'metas', 'produtividade', 'desempenho', 'torneio', 'opiniao'],
   lider:        ['painel', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'metas', 'produtividade', 'desempenho', 'torneio', 'opiniao'],
+  // Analista: enxerga o que o líder enxerga, porque o trabalho dele é
+  // justamente olhar número e processo — vendas, estoque, conferência,
+  // PDCA. O que NÃO tem é autoridade sobre gente: criar usuário, lançar
+  // escala de equipe e gerir a loja seguem sendo de quem lidera. Essa
+  // separação é automática: as rotas de gestão conferem o nível, e
+  // 'analista' não está em nenhuma delas.
+  analista:     ['painel', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'vendas_painel', 'estoque', 'organograma', 'conferencia_secao', 'pdca', 'metas', 'produtividade', 'desempenho', 'torneio', 'opiniao'],
+  // Auxiliar ADM: apoio da administração da loja. Precisa do que organiza o
+  // dia (painel, escala de todos os setores, caixas, atas, flyers,
+  // conferência, organograma) e não do que é análise de resultado —
+  // vendas e estoque ficam fora por padrão, e entram pessoa a pessoa se a
+  // loja quiser.
+  auxiliar_adm: ['painel', 'dashboard', 'comunicados', 'tarefas', 'mural', 'diario', 'chat', 'campanhas', 'agenda', 'listas', 'anotacoes', 'atas', 'escala', 'escala_setores', 'caixas', 'relatorios', 'organograma', 'conferencia_secao', 'metas', 'produtividade', 'desempenho', 'torneio', 'opiniao'],
   // Agenda e escala entram aqui porque são a agenda e a escala DA PRÓPRIA
   // pessoa — quem trabalha no dia precisa saber quando trabalha. Ver a
   // escala de outros setores ('escala_setores') continua fora.

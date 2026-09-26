@@ -3,9 +3,10 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
+const { vistosDe, marcarVisto, comentariosPorItem, avisarDesde } = require('../lib/leituras');
 
 async function getProfile(id) {
-  const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
+  const { data } = await supabase.from('profiles').select('access_level, company, full_name, created_at').eq('id', id).single();
   return data;
 }
 const isManager = p => p && ['admin','supervisor','master'].includes(p.access_level);
@@ -52,7 +53,38 @@ router.get('/', async (req, res) => {
       .or(`assigned_to.eq.${requester_id},created_by.eq.${requester_id}`)
       .order('created_at', { ascending: false });
     if (error) throw error;
-    res.json(data);
+
+    // Duas informações que a lista precisa dar sem a pessoa abrir nada:
+    // quantas atualizações novas tem, e se existe pedido de novo prazo
+    // esperando resposta.
+    const ids = (data || []).map(t => t.id);
+    const desde = avisarDesde(me.created_at);
+    const [vistos, prazos] = await Promise.all([
+      vistosDe(requester_id, 'tarefa', ids),
+      ids.length
+        ? supabase.from('tarefa_prazos')
+            .select('*, solicitante:pedido_por(full_name)')
+            .in('tarefa_id', ids).eq('situacao', 'pendente')
+            .then(r => r.data || []).catch(() => [])
+        : [],
+    ]);
+    const coment = await comentariosPorItem('tarefa_comentarios', 'tarefa_id', ids, vistos, requester_id, desde);
+    const pendentePorTarefa = Object.fromEntries(prazos.map(p => [p.tarefa_id, p]));
+    // Quantas vezes o prazo já foi adiado: quem aprova precisa enxergar o
+    // padrão, mesmo sem nada bloquear.
+    const { data: aceitos } = ids.length
+      ? await supabase.from('tarefa_prazos').select('tarefa_id').in('tarefa_id', ids).eq('situacao', 'aceito')
+      : { data: [] };
+    const adiamentos = {};
+    for (const a of aceitos || []) adiamentos[a.tarefa_id] = (adiamentos[a.tarefa_id] || 0) + 1;
+
+    res.json((data || []).map(t => ({
+      ...t,
+      comentarios: coment[t.id]?.total || 0,
+      comentarios_novos: coment[t.id]?.novos || 0,
+      prazo_pendente: pendentePorTarefa[t.id] || null,
+      adiamentos: adiamentos[t.id] || 0,
+    })));
   } catch (e) {
     logError({ company: queryCompany || null, user_id: requester_id, acao: 'listar_tarefas', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: e.message });
     res.status(500).json({ error: 'Erro ao carregar tarefas.' });
@@ -180,6 +212,135 @@ router.put('/:id', async (req, res) => {
   }
 
   res.json(data);
+});
+
+// POST /api/tarefas/:id/visto — abri esta tarefa (e as atualizações dela)
+router.post('/:id/visto', async (req, res) => {
+  const { requester_id } = req.body;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  await marcarVisto(requester_id, 'tarefa', req.params.id);
+  res.json({ ok: true });
+});
+
+// ── Pedido de novo prazo ──────────────────────────────────────
+//
+// Tarefa que depende de terceiro não cabe num dia só. Sem este caminho, a
+// pessoa cumpria a parte dela, avisava por fora e a tarefa seguia marcada
+// como atrasada — ou, pior, era fechada como concluída sem ter sido feita.
+//
+// Regras: pede quem recebeu a tarefa; decide quem criou. Enquanto não
+// houver resposta, a DATA ANTIGA CONTINUA VALENDO — senão pedir prazo
+// viraria um jeito de nunca atrasar.
+
+// POST /api/tarefas/:id/prazo  { requester_id, data_nova, motivo }
+router.post('/:id/prazo', async (req, res) => {
+  const { requester_id, data_nova, motivo } = req.body;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  if (!data_nova) return res.status(400).json({ error: 'Escolha a nova data.' });
+  if (!motivo?.trim()) return res.status(400).json({ error: 'Explique por que precisa de mais prazo.' });
+
+  const me = await getProfile(requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+
+  const { data: task } = await supabase.from('tarefas')
+    .select('id, title, due_date, assigned_to, created_by, company, status').eq('id', req.params.id).maybeSingle();
+  if (!task) return res.status(404).json({ error: 'Tarefa não encontrada' });
+  if (task.assigned_to !== requester_id) return res.status(403).json({ error: 'Só quem recebeu a tarefa pode pedir novo prazo.' });
+  if (task.status === 'concluida') return res.status(400).json({ error: 'Esta tarefa já está concluída.' });
+  if (task.due_date && data_nova <= task.due_date) {
+    return res.status(400).json({ error: 'A nova data precisa ser depois do prazo atual.' });
+  }
+
+  const { data, error } = await supabase.from('tarefa_prazos').insert({
+    tarefa_id: task.id, pedido_por: requester_id,
+    data_antiga: task.due_date || null, data_nova, motivo: motivo.trim(),
+  }).select('*, solicitante:pedido_por(full_name)').single();
+  if (error) {
+    // O índice único barra um segundo pedido em aberto.
+    const jaTem = String(error.message || '').includes('idx_tarefa_prazo_pendente');
+    logError({ company: task.company, user_id: requester_id, acao: 'pedir_prazo_tarefa', tabela: 'tarefa_prazos', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(jaTem ? 409 : 500).json({ error: jaTem ? 'Já existe um pedido de prazo aguardando resposta.' : error.message });
+  }
+
+  // O pedido também vira atualização da tarefa: é ali que a equipe procura
+  // o histórico, e é o que prova que foi comunicado.
+  await supabase.from('tarefa_comentarios').insert({
+    tarefa_id: task.id, user_id: requester_id,
+    text: `⏳ Pedido de novo prazo para ${data_nova.split('-').reverse().join('/')}: ${motivo.trim()}`,
+  });
+
+  logAction({ company: task.company, user_id: requester_id, acao: 'pedir_prazo_tarefa', tabela: 'tarefa_prazos',
+    antes: { prazo: task.due_date }, depois: { tarefa: task.title, prazo: data_nova, motivo: motivo.trim() } });
+
+  enviarPush([task.created_by].filter(id => id && id !== requester_id),
+    '⏳ Pedido de novo prazo',
+    `${me.full_name || 'Alguém'} pediu ${data_nova.split('-').reverse().join('/')} para "${task.title}"`,
+    'tarefa', { company: task.company, rota: req.originalUrl });
+
+  res.json(data);
+});
+
+// PUT /api/tarefas/prazos/:pid  { requester_id, aceitar, resposta }
+router.put('/prazos/:pid', async (req, res) => {
+  const { requester_id, aceitar, resposta } = req.body;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+
+  const { data: pedido } = await supabase.from('tarefa_prazos')
+    .select('*, tarefa:tarefa_id(id, title, created_by, assigned_to, company, due_date)')
+    .eq('id', req.params.pid).maybeSingle();
+  if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (pedido.situacao !== 'pendente') return res.status(400).json({ error: 'Este pedido já foi respondido.' });
+  // Quem criou a tarefa é quem decide. Foi a escolha da loja: o prazo é um
+  // acordo entre duas pessoas, e quem combinou é quem desfaz.
+  if (pedido.tarefa?.created_by !== requester_id) {
+    return res.status(403).json({ error: 'Só quem criou a tarefa pode responder ao pedido de prazo.' });
+  }
+
+  const me = await getProfile(requester_id);
+  const situacao = aceitar ? 'aceito' : 'recusado';
+
+  const { error } = await supabase.from('tarefa_prazos').update({
+    situacao, decidido_por: requester_id, decidido_em: new Date().toISOString(),
+    resposta: resposta?.trim() || null,
+  }).eq('id', pedido.id);
+  if (error) {
+    logError({ company: pedido.tarefa?.company, user_id: requester_id, acao: 'responder_prazo_tarefa', tabela: 'tarefa_prazos', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: error.message });
+  }
+
+  // Só agora a data muda — e só se foi aceita.
+  if (aceitar) {
+    await supabase.from('tarefas').update({ due_date: pedido.data_nova }).eq('id', pedido.tarefa_id);
+  }
+
+  const dia = (d) => (d ? String(d).split('-').reverse().join('/') : 'sem data');
+  await supabase.from('tarefa_comentarios').insert({
+    tarefa_id: pedido.tarefa_id, user_id: requester_id,
+    text: aceitar
+      ? `✅ Novo prazo aceito: de ${dia(pedido.data_antiga)} para ${dia(pedido.data_nova)}.${resposta?.trim() ? ` ${resposta.trim()}` : ''}`
+      : `❌ Novo prazo recusado — continua valendo ${dia(pedido.data_antiga)}.${resposta?.trim() ? ` ${resposta.trim()}` : ''}`,
+  });
+
+  logAction({ company: pedido.tarefa?.company, user_id: requester_id, acao: 'responder_prazo_tarefa', tabela: 'tarefa_prazos',
+    antes: { prazo: pedido.data_antiga }, depois: { tarefa: pedido.tarefa?.title, situacao, prazo: aceitar ? pedido.data_nova : pedido.data_antiga } });
+
+  enviarPush([pedido.pedido_por].filter(id => id && id !== requester_id),
+    aceitar ? '✅ Novo prazo aceito' : '❌ Novo prazo recusado',
+    `${me?.full_name || 'Quem pediu a tarefa'} respondeu: "${pedido.tarefa?.title || ''}"`,
+    'tarefa', { company: pedido.tarefa?.company, rota: req.originalUrl });
+
+  res.json({ ok: true, situacao });
+});
+
+// GET /api/tarefas/:id/prazos — histórico de repactuações da tarefa
+router.get('/:id/prazos', async (req, res) => {
+  const { requester_id } = req.query;
+  if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
+  const { data, error } = await supabase.from('tarefa_prazos')
+    .select('*, solicitante:pedido_por(full_name), decisor:decidido_por(full_name)')
+    .eq('tarefa_id', req.params.id).order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
 });
 
 // GET /api/tarefas/:id/comentarios

@@ -12,7 +12,7 @@ const supabase = require('../supabase');
 // não abrir.
 // ─────────────────────────────────────────────────────────────
 
-const TIPOS = ['diario', 'mural', 'comunicado'];
+const TIPOS = ['diario', 'mural', 'comunicado', 'tarefa'];
 
 // Dia em que o aviso de "não lido" entrou no ar.
 //
