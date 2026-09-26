@@ -949,7 +949,7 @@ function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadr
 }
 
 // Bloco reutilizável: Responsável + Prazo + toggle "criar tarefa automaticamente"
-function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNovo }) {
+function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNovo, textos = {} }) {
   const ids = form.responsaveis_ids || [];
   const toggleResp = (id) => setForm(p => {
     const atuais = p.responsaveis_ids || [];
@@ -960,7 +960,7 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
     <>
       <div className="form-group">
         <label className="form-label">
-          Responsável(is)
+          {textos.responsavel || 'Responsável(is)'}
           {isNovo && ids.length > 1 && (
             <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
               {ids.length} selecionados — cria 1 ação pra cada
@@ -996,7 +996,7 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
         )}
       </div>
       <div className="form-group">
-        <label className="form-label">Prazo</label>
+        <label className="form-label">{textos.prazo || 'Prazo'}</label>
         <input className="input" type="date" value={form.prazo} onChange={e => setForm(p => ({ ...p, prazo: e.target.value }))}/>
       </div>
 
@@ -1004,7 +1004,7 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
           Antes ela nascia com a data do prazo final e sem repetição: só
           surgia no último dia, quando já não dava tempo de fazer. */}
       <div className="form-group">
-        <label className="form-label">Quando fazer</label>
+        <label className="form-label">{textos.quando || 'Quando fazer'}</label>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 150px' }}>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Começa em</div>
@@ -1020,11 +1020,15 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
           </div>
         </div>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
-          {form.recorrencia && form.recorrencia !== 'nenhuma'
-            ? `A tarefa aparece ${form.inicio ? `a partir de ${form.inicio.split('-').reverse().join('/')}` : 'já'} e se repete ${(RECORRENCIAS.find(r => r.key === form.recorrencia)?.label || '').toLowerCase()}${form.prazo ? `, até ${form.prazo.split('-').reverse().join('/')}` : ''}.`
-            : form.inicio
-              ? `A tarefa aparece em ${form.inicio.split('-').reverse().join('/')}.`
-              : 'Sem data de início, a tarefa aparece direto no prazo.'}
+          {(() => {
+            const oQue = textos.oQue || 'A tarefa';
+            if (form.recorrencia && form.recorrencia !== 'nenhuma') {
+              return `${oQue} aparece ${form.inicio ? `a partir de ${form.inicio.split('-').reverse().join('/')}` : 'já'} e se repete ${(RECORRENCIAS.find(r => r.key === form.recorrencia)?.label || '').toLowerCase()}${form.prazo ? `, até ${form.prazo.split('-').reverse().join('/')}` : ''}.`;
+            }
+            return form.inicio
+              ? `${oQue} aparece em ${form.inicio.split('-').reverse().join('/')}.`
+              : `Sem data de início, ${oQue.toLowerCase()} aparece direto no prazo.`;
+          })()}
         </div>
       </div>
 
@@ -1032,7 +1036,7 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: 'var(--surface-2, #262B38)', borderRadius: 10, padding: '10px 14px' }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Criar tarefa automaticamente</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{textos.tarefa || 'Criar tarefa automaticamente'}</div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>
               {ids.length > 0 && form.prazo ? 'Tarefa será criada ao salvar' : 'Selecione responsável(is) e prazo para ativar'}
             </div>
@@ -1053,8 +1057,27 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
 
 // C — Checar: o que foi verificado, resultado observado (com dados) e
 // classificação (Com resultado / Sem resultado / Sem conclusão)
+/* Cabeçalho de etapa: deixa visível que o C tem dois momentos. */
+function Etapa({ numero, titulo, ajuda, cor }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+      <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0,
+        background: cor + '22', color: cor, fontSize: 12, fontWeight: 800,
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{numero}</span>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>{titulo}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, lineHeight: 1.4 }}>{ajuda}</div>
+      </div>
+    </div>
+  );
+}
+
 function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave, isNovo }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
+  // Na criação o resultado nasce escondido: ninguém tem número no dia em
+  // que combina a medição, e o campo em branco fazia parecer que faltava
+  // preencher algo.
+  const [mostrarResultado, setMostrarResultado] = useState(!isNovo && !!(form.resultado || form.classificacao));
   const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === 'C');
   const dica = DICAS.C;
@@ -1067,51 +1090,80 @@ function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave, isNov
         <span style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.4 }}>{dica.dicaRapida}</span>
       </div>
 
+      {/* O C tem DOIS momentos, e misturá-los era o que confundia: agora se
+          combina a medição (o quê, quem, de quanto em quanto tempo), e só
+          depois, com número na mão, se escreve o resultado. */}
+      <Etapa numero={1} titulo="Combinar a verificação" cor={q.color}
+        ajuda="O que vai ser medido, por quem e com que frequência." />
+
       <div className="form-group">
-        <label className="form-label">O que foi verificado *</label>
+        <label className="form-label">O que vamos verificar *</label>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-          Qual ação (do D) você está avaliando? Quais ações funcionaram e quais não funcionaram?
+          Qual ação (do D) será avaliada e qual indicador vai dizer se funcionou.
         </div>
-        <textarea className="input" rows={4} value={form.descricao} onChange={f('descricao')}
+        <textarea className="input" rows={3} value={form.descricao} onChange={f('descricao')}
           placeholder={dica.exemplo} style={{ resize: 'vertical' }}/>
       </div>
 
-      <div className="form-group">
-        <label className="form-label">Resultado observado (com dados)</label>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
-          O indicador melhorou em relação à meta definida no P? Compare o antes x depois com números.
-        </div>
-        <textarea className="input" rows={4} value={form.resultado} onChange={f('resultado')}
-          placeholder="Ex: Ruptura caiu de 12% para 6% na seção de bebidas (meta era 5%)" style={{ resize: 'vertical' }}/>
-      </div>
-
-      <div className="form-group">
-        <label className="form-label">Classificação</label>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-          O problema foi resolvido, apenas amenizado, ou nem chegou a ser concluído?
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {CLASSIFICACOES_C.map(c => (
-            <button key={c.key} type="button"
-              onClick={() => setForm(p => ({ ...p, classificacao: p.classificacao === c.key ? '' : c.key }))}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10,
-                fontSize: 13, fontWeight: 700, cursor: 'pointer', textAlign: 'left',
-                border: `2px solid ${form.classificacao === c.key ? c.cor : 'var(--border)'}`,
-                background: form.classificacao === c.key ? c.cor + '18' : 'transparent',
-                color: form.classificacao === c.key ? c.cor : 'var(--text)',
-              }}>
-              <span style={{ fontSize: 16 }}>{c.emoji}</span>
-              <span style={{ flex: 1 }}>{c.label}</span>
-              <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>{c.desc}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros}
+        podeToggleTarefa={podeToggleTarefa} isNovo={isNovo}
+        textos={{
+          responsavel: 'Quem vai medir',
+          prazo: 'Última medição (prazo)',
+          quando: 'De quanto em quanto tempo medir',
+          oQue: 'A medição',
+          tarefa: 'Criar a tarefa de medição',
+        }}/>
 
       <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
 
-      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo}/>
+      <Etapa numero={2} titulo="Registrar o resultado" cor={q.color}
+        ajuda={isNovo
+          ? 'Isto é para depois: volte aqui quando tiver as medições em mãos.'
+          : 'Com as medições em mãos, escreva o que aconteceu.'} />
+
+      {isNovo && !mostrarResultado ? (
+        <button type="button" onClick={() => setMostrarResultado(true)}
+          style={{ background: 'none', border: '1px dashed var(--border)', borderRadius: 10,
+            padding: '10px 14px', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12.5 }}>
+          Já tenho o resultado — preencher agora
+        </button>
+      ) : (
+        <>
+          <div className="form-group">
+            <label className="form-label">Resultado observado (com dados)</label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>
+              O indicador melhorou em relação à meta definida no P? Compare o antes x depois com números.
+            </div>
+            <textarea className="input" rows={4} value={form.resultado} onChange={f('resultado')}
+              placeholder="Ex: Ruptura caiu de 12% para 6% na seção de bebidas (meta era 5%)" style={{ resize: 'vertical' }}/>
+          </div>
+
+          <div className="form-group">
+            <label className="form-label">Classificação</label>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+              O problema foi resolvido, apenas amenizado, ou nem chegou a ser concluído?
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {CLASSIFICACOES_C.map(c => (
+                <button key={c.key} type="button"
+                  onClick={() => setForm(p => ({ ...p, classificacao: p.classificacao === c.key ? '' : c.key }))}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10,
+                    fontSize: 13, fontWeight: 700, cursor: 'pointer', textAlign: 'left',
+                    border: `2px solid ${form.classificacao === c.key ? c.cor : 'var(--border)'}`,
+                    background: form.classificacao === c.key ? c.cor + '18' : 'transparent',
+                    color: form.classificacao === c.key ? c.cor : 'var(--text)',
+                  }}>
+                  <span style={{ fontSize: 16 }}>{c.emoji}</span>
+                  <span style={{ flex: 1 }}>{c.label}</span>
+                  <span style={{ fontSize: 11, fontWeight: 400, color: 'var(--text-muted)' }}>{c.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar verificação'}
