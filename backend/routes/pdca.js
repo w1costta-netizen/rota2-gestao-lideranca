@@ -9,6 +9,10 @@ async function getProfile(id) {
 }
 const canManage = p => p && ['admin', 'supervisor', 'master'].includes(p.access_level);
 
+// As mesmas repetições que as Tarefas entendem — a tarefa da ação é uma
+// tarefa comum, e quem repete é o motor de lá.
+const RECORRENCIAS = ['nenhuma', 'diaria', 'semanal', 'quinzenal', 'mensal'];
+
 const QUADRANTE_LABEL = { P: 'P — Planejar', D: 'D — Fazer', C: 'C — Checar', A: 'A — Agir' };
 
 // ── PLANOS ──────────────────────────────────────────────────
@@ -158,7 +162,7 @@ router.get('/:id/acoes', async (req, res) => {
 
 // POST /api/pdca/:id/acoes
 router.post('/:id/acoes', async (req, res) => {
-  const { requester_id, quadrante, descricao, responsavel_id, prazo, criar_tarefa } = req.body;
+  const { requester_id, quadrante, descricao, responsavel_id, prazo, criar_tarefa, inicio, recorrencia } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
@@ -173,6 +177,8 @@ router.post('/:id/acoes', async (req, res) => {
     descricao: descricao.trim(),
     responsavel_id: responsavel_id || null,
     prazo: prazo || null,
+    inicio: inicio || null,
+    recorrencia: RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma',
     concluida: false,
     criar_tarefa: criar_tarefa !== false,
   }).select('*, responsavel:responsavel_id(id, full_name, avatar_url)').single();
@@ -202,12 +208,14 @@ router.post('/:id/acoes', async (req, res) => {
       title: descricao.trim(),
       description: `Ação do Plano: ${plano.titulo}`,
       assigned_to: responsavel_id,
-      due_date: prazo,
+      // A tarefa aparece a partir do INÍCIO, não do prazo final: a pessoa
+      // precisa ver o que fazer enquanto dá tempo de fazer.
+      due_date: inicio || prazo,
       priority: 'normal',
-      recorrencia: 'nenhuma',
+      recorrencia: RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma',
       tags: ['plano_acao'],
       created_by: requester_id,
-      pdca_context: pdcaContext,
+      pdca_context: { ...pdcaContext, repetir_ate: prazo },
       status: 'pendente',
     }).select('id').single();
 
@@ -222,7 +230,7 @@ router.post('/:id/acoes', async (req, res) => {
 
 // PUT /api/pdca/acoes/:id  — ANTES de PUT /:id para não conflitar
 router.put('/acoes/:id', async (req, res) => {
-  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa } = req.body;
+  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -237,6 +245,8 @@ router.put('/acoes/:id', async (req, res) => {
   if (descricao !== undefined)    updates.descricao    = descricao.trim();
   if (responsavel_id !== undefined) updates.responsavel_id = responsavel_id || null;
   if (prazo !== undefined)        updates.prazo        = prazo || null;
+  if (inicio !== undefined)       updates.inicio       = inicio || null;
+  if (recorrencia !== undefined)  updates.recorrencia  = RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma';
   if (criar_tarefa !== undefined) updates.criar_tarefa = criar_tarefa;
   if (concluida !== undefined) {
     updates.concluida    = concluida;
@@ -266,7 +276,25 @@ router.put('/acoes/:id', async (req, res) => {
   const finalCriar      = criar_tarefa !== undefined ? criar_tarefa : acaoAtual.criar_tarefa;
   const finalResponsavel = responsavel_id !== undefined ? responsavel_id : acaoAtual.responsavel_id;
   const finalPrazo      = prazo !== undefined ? prazo : acaoAtual.prazo;
+  const finalInicio     = inicio !== undefined ? inicio : acaoAtual.inicio;
+  const finalRepete     = recorrencia !== undefined ? recorrencia : acaoAtual.recorrencia;
   const plano           = acaoAtual.plano;
+
+  // Mudou a data ou a repetição de uma ação que JÁ tem tarefa: a tarefa
+  // acompanha. Sem isso, corrigir o plano não corrigia o que a pessoa vê.
+  if (acaoAtual.tarefa_id && (inicio !== undefined || prazo !== undefined || recorrencia !== undefined)) {
+    const { data: tAtual } = await supabase.from('tarefas')
+      .select('due_date, pdca_context').eq('id', acaoAtual.tarefa_id).maybeSingle();
+    const patchTarefa = {
+      recorrencia: RECORRENCIAS.includes(finalRepete) ? finalRepete : 'nenhuma',
+      pdca_context: { ...(tAtual?.pdca_context || {}), repetir_ate: finalPrazo || null },
+    };
+    // A data só volta para trás se a tarefa ainda não foi feita nem
+    // repactuada — mexer numa data já combinada seria atropelar a pessoa.
+    const novaData = finalInicio || finalPrazo;
+    if (novaData && tAtual?.due_date !== novaData) patchTarefa.due_date = novaData;
+    await supabase.from('tarefas').update(patchTarefa).eq('id', acaoAtual.tarefa_id);
+  }
 
   if (finalCriar && finalResponsavel && finalPrazo && !acaoAtual.tarefa_id) {
     const pdcaContext = {
@@ -283,12 +311,12 @@ router.put('/acoes/:id', async (req, res) => {
       title: data.descricao,
       description: `Ação do Plano: ${plano?.titulo}`,
       assigned_to: finalResponsavel,
-      due_date: finalPrazo,
+      due_date: finalInicio || finalPrazo,
       priority: 'normal',
-      recorrencia: 'nenhuma',
+      recorrencia: RECORRENCIAS.includes(finalRepete) ? finalRepete : 'nenhuma',
       tags: ['plano_acao'],
       created_by: requester_id,
-      pdca_context: pdcaContext,
+      pdca_context: { ...pdcaContext, repetir_ate: finalPrazo },
       status: 'pendente',
     }).select('id').single();
 

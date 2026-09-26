@@ -183,11 +183,21 @@ function prazoInfo(prazo) {
 }
 
 const EMPTY_PLANO  = { titulo: '', problema: '', meta: '', prazo_final: '' };
-const EMPTY_ACAO    = { descricao: '', responsaveis_ids: [], prazo: '', criar_tarefa: true };
+// Repetições que as Tarefas entendem. "Começa em" + "repete" é o que faz a
+// ação aparecer ao longo do caminho, e não só no último dia.
+const RECORRENCIAS = [
+  { key: 'nenhuma',   label: 'Uma vez só' },
+  { key: 'diaria',    label: 'Todo dia' },
+  { key: 'semanal',   label: 'Toda semana' },
+  { key: 'quinzenal', label: 'A cada 15 dias' },
+  { key: 'mensal',    label: 'Todo mês' },
+];
+
+const EMPTY_ACAO    = { descricao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true };
 const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
-const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsaveis_ids: [], prazo: '', criar_tarefa: true };
-const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsaveis_ids: [], prazo: '', criar_tarefa: true };
-const EMPTY_ACAO_A  = { padronizacao: '', comunicacao: '', treinamento: '', monitoramento: '', responsaveis_ids: [], prazo: '', criar_tarefa: true };
+const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true };
+const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true };
+const EMPTY_ACAO_A  = { padronizacao: '', comunicacao: '', treinamento: '', monitoramento: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true };
 
 const CLASSIFICACOES_C = [
   { key: 'com_resultado', label: 'Com resultado', cor: '#10b981', emoji: '✅', desc: 'melhorou — candidata a padronizar no A' },
@@ -400,6 +410,8 @@ export default function PlanoAcao({ userId, profile }) {
           ...(usaResponsaveis ? {
             responsavel_id: (formAcao.responsaveis_ids || [])[0] || null,
             prazo: formAcao.prazo,
+            inicio: formAcao.inicio || null,
+            recorrencia: formAcao.recorrencia || 'nenhuma',
             criar_tarefa: formAcao.criar_tarefa,
           } : {}),
         };
@@ -413,7 +425,12 @@ export default function PlanoAcao({ userId, profile }) {
           : [null];
         const criadas = await Promise.all(ids.map(rid => api.post(`/pdca/${selectedPlan.id}/acoes`, {
           requester_id: userId, quadrante: addingTo, descricao: descricaoFinal,
-          ...(usaResponsaveis ? { responsavel_id: rid, prazo: formAcao.prazo, criar_tarefa: formAcao.criar_tarefa } : {}),
+          ...(usaResponsaveis ? {
+            responsavel_id: rid, prazo: formAcao.prazo,
+            inicio: formAcao.inicio || null,
+            recorrencia: formAcao.recorrencia || 'nenhuma',
+            criar_tarefa: formAcao.criar_tarefa,
+          } : {}),
         })));
         setAcoes(as => [...as, ...criadas.map(r => r.data)]);
         if (criadas.length > 1) toast(`${criadas.length} ações criadas — uma para cada líder selecionado!`);
@@ -597,6 +614,8 @@ export default function PlanoAcao({ userId, profile }) {
                           descricao: acao.descricao,
                           responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
+                          inicio: acao.inicio || '',
+                          recorrencia: acao.recorrencia || 'nenhuma',
                           criar_tarefa: acao.criar_tarefa !== false,
                         });
                       } else if (acao.quadrante === 'D') {
@@ -606,6 +625,8 @@ export default function PlanoAcao({ userId, profile }) {
                           oque: acao.descricao,
                           responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
+                          inicio: acao.inicio || '',
+                          recorrencia: acao.recorrencia || 'nenhuma',
                           criar_tarefa: acao.criar_tarefa !== false,
                         });
                       } else if (acao.quadrante === 'A') {
@@ -614,6 +635,8 @@ export default function PlanoAcao({ userId, profile }) {
                           padronizacao: acao.descricao,
                           responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
+                          inicio: acao.inicio || '',
+                          recorrencia: acao.recorrencia || 'nenhuma',
                           criar_tarefa: acao.criar_tarefa !== false,
                         });
                       } else {
@@ -621,6 +644,8 @@ export default function PlanoAcao({ userId, profile }) {
                           descricao: acao.descricao,
                           responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
+                          inicio: acao.inicio || '',
+                          recorrencia: acao.recorrencia || 'nenhuma',
                           criar_tarefa: acao.criar_tarefa !== false,
                         });
                       }
@@ -941,6 +966,34 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
         <input className="input" type="date" value={form.prazo} onChange={e => setForm(p => ({ ...p, prazo: e.target.value }))}/>
       </div>
 
+      {/* Quando a tarefa aparece para a pessoa.
+          Antes ela nascia com a data do prazo final e sem repetição: só
+          surgia no último dia, quando já não dava tempo de fazer. */}
+      <div className="form-group">
+        <label className="form-label">Quando fazer</label>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 150px' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Começa em</div>
+            <input className="input" type="date" value={form.inicio || ''} max={form.prazo || undefined}
+              onChange={e => setForm(p => ({ ...p, inicio: e.target.value }))}/>
+          </div>
+          <div style={{ flex: '1 1 150px' }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>Repete</div>
+            <select className="input" value={form.recorrencia || 'nenhuma'}
+              onChange={e => setForm(p => ({ ...p, recorrencia: e.target.value }))}>
+              {RECORRENCIAS.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+          {form.recorrencia && form.recorrencia !== 'nenhuma'
+            ? `A tarefa aparece ${form.inicio ? `a partir de ${form.inicio.split('-').reverse().join('/')}` : 'já'} e se repete ${(RECORRENCIAS.find(r => r.key === form.recorrencia)?.label || '').toLowerCase()}${form.prazo ? `, até ${form.prazo.split('-').reverse().join('/')}` : ''}.`
+            : form.inicio
+              ? `A tarefa aparece em ${form.inicio.split('-').reverse().join('/')}.`
+              : 'Sem data de início, a tarefa aparece direto no prazo.'}
+        </div>
+      </div>
+
       {podeToggleTarefa ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: 'var(--surface-2, #262B38)', borderRadius: 10, padding: '10px 14px' }}>
@@ -1167,6 +1220,19 @@ function AcaoCard({ acao, color, canManage, formatDate, onToggle, onEdit, onDele
                 </span>
               );
             })()}
+            {/* Repetição: quem olha o plano precisa saber que aquela ação
+                volta toda semana, e não só no dia do prazo. */}
+            {acao.recorrencia && acao.recorrencia !== 'nenhuma' && (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5,
+                background: '#6366f122', color: '#6366f1' }}>
+                🔁 {(RECORRENCIAS.find(r => r.key === acao.recorrencia)?.label || acao.recorrencia)}
+              </span>
+            )}
+            {acao.inicio && acao.inicio !== acao.prazo && (
+              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                a partir de {formatDate(acao.inicio)}
+              </span>
+            )}
             {acao.tarefa_id && (
               <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5,
                 background: '#E8681A22', color: '#E8681A' }}>🔗 Tarefa</span>

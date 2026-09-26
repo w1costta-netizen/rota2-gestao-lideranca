@@ -174,7 +174,12 @@ router.put('/:id', async (req, res) => {
   // Recorrência: ao concluir, cria próxima instância automaticamente
   if (status === 'concluida' && task?.recorrencia && task.recorrencia !== 'nenhuma') {
     const proxData = nextDueDate(task.due_date, task.recorrencia);
-    if (proxData) {
+    // Tarefa de plano de ação repete só até o prazo da ação. Sem esta
+    // trava, uma ação "toda segunda" continuaria nascendo para sempre,
+    // muito depois de o plano ter acabado.
+    const limite = task?.pdca_context?.repetir_ate;
+    const passouDoPrazo = limite && proxData && proxData > limite;
+    if (proxData && !passouDoPrazo) {
       supabase.from('tarefas').insert({
         company:          task.company,
         title:            task.title,
