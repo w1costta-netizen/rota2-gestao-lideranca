@@ -68,8 +68,13 @@ export default function MasterDashboard({ userId, viewingStore, onSelectStore, e
 
   const approve = async (store) => {
     try {
-      await api.put(`/stores/${store.id}/approve`, { requester_id: userId });
-      showToast(`Loja "${store.name}" aprovada!`);
+      const r = await api.put(`/stores/${store.id}/approve`, { requester_id: userId });
+      // Quantas pessoas voltaram: numa reativação é o número que diz se a
+      // equipe foi religada junto com a loja.
+      const religadas = r.data?.pessoas_religadas || 0;
+      showToast(religadas
+        ? `Loja "${store.name}" reativada — ${religadas} pessoa(s) voltaram a ter acesso.`
+        : `Loja "${store.name}" aprovada!`);
       load();
     } catch (e) {
       showToast(e.response?.data?.error || 'Erro ao aprovar', 'error');

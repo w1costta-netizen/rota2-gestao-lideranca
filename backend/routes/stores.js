@@ -148,16 +148,29 @@ router.put('/:id/approve', async (req, res) => {
   const me = await requireMaster(req, res);
   if (!me) return;
 
+  // Este botão faz dois papéis: aprovar loja nova e REATIVAR loja que foi
+  // bloqueada (reembolso, vencimento, desativada pelo master). No segundo
+  // caso a loja voltava sozinha e a equipe continuava trancada do lado de
+  // fora: o bloqueio desliga todo mundo com `bloqueado_pela_loja`, e só
+  // `reativarLoja` religa essas pessoas.
+  const { data: antes } = await supabase
+    .from('stores').select('id, name, active, motivo_bloqueio, approved_by').eq('id', req.params.id).maybeSingle();
+  if (!antes) return res.status(404).json({ error: 'Loja não encontrada' });
+
+  const r = await reativarLoja(antes, { quem: req.body.requester_id, rota: req.originalUrl });
+  if (!r.ok) return res.status(500).json({ error: r.erro });
+
   const { data, error } = await supabase
     .from('stores')
-    .update({ active: true, approved_by: req.body.requester_id, motivo_bloqueio: null })
+    .update({ approved_by: req.body.requester_id })
     .eq('id', req.params.id)
     .select().single();
   if (error) {
     logError({ user_id: req.body.requester_id, acao: 'aprovar_loja', tabela: 'stores', rota: req.originalUrl, erro_mensagem: error.message });
     return res.status(500).json({ error: error.message });
   }
-  logAction({ company: data.name, user_id: req.body.requester_id, acao: 'aprovar_loja', tabela: 'stores', depois: { id: data.id, name: data.name } });
+  logAction({ company: data.name, user_id: req.body.requester_id, acao: 'aprovar_loja', tabela: 'stores',
+              depois: { id: data.id, name: data.name, pessoas_religadas: r.pessoas } });
 
   // Ativa o gerente que criou a loja como admin dela
   if (data.created_by) {
@@ -174,7 +187,7 @@ router.put('/:id/approve', async (req, res) => {
     );
   }
 
-  res.json(data);
+  res.json({ ...data, pessoas_religadas: r.pessoas });
 });
 
 // PUT /api/stores/:id/disable — master desativa loja
