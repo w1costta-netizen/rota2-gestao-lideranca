@@ -484,6 +484,18 @@ export default function Metas({ userId, profile }) {
   const planoDe = id => dados.planos.find(p => p.id === id);
   // A verificação do C ligada a esta meta — fonte viva das datas de medição.
   const verificacaoDe = id => (dados.verificacoes || []).find(v => v.id === id);
+  // A verificação desta meta. Metas criadas antes do vínculo existir têm
+  // só o plano: quando esse plano tem UMA verificação no C, ela é a certa
+  // sem margem de dúvida. Com várias, não chutamos — ficaria mostrando o
+  // nome de quem não mede aquilo.
+  const verificacaoDaMeta = (m) => {
+    if (!m) return null;
+    const direta = verificacaoDe(m.acao_id);
+    if (direta) return direta;
+    const vs = verificacoesDoPlano(m.plano_id);
+    return vs.length === 1 ? vs[0] : null;
+  };
+  const quemMede = (m) => m?.responsavel?.full_name || verificacaoDaMeta(m)?.responsavel?.full_name || null;
   const verificacoesDoPlano = id => (dados.verificacoes || []).filter(v => v.plano_id === id);
   const aberta = dados.metas.find(m => m.id === abertaId) || null;
   const lista = useMemo(() => dados.metas.filter(m => filtro === 'todas' ? true : filtro === 'livres' ? !m.plano_id : m.plano_id === filtro), [dados.metas, filtro]);
@@ -639,7 +651,7 @@ export default function Metas({ userId, profile }) {
             <div>
               <div style={{ fontWeight: 800, fontSize: 16 }}>{aberta.nome}</div>
               <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                {aberta.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · prazo {br(aberta.prazo)} · lança {FREQ[aberta.frequencia] || aberta.frequencia}{pl ? ` · 🎯 ${pl.titulo}` : ' · meta da empresa (sem plano)'}
+                {aberta.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · prazo {br(aberta.prazo)} · lança {FREQ[aberta.frequencia] || aberta.frequencia}{quemMede(aberta) ? ` · mede ${quemMede(aberta)}` : ''}{pl ? ` · 🎯 ${pl.titulo}` : ' · meta da empresa (sem plano)'}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -662,7 +674,7 @@ export default function Metas({ userId, profile }) {
               {foraDaMeta.length === 0 && sets.length > 0 && !rTotal.atingiu && <> Todas as áreas bateram — o que falta é no total.</>}
             </div>
           )}
-          <Medicoes meta={aberta} verificacao={verificacaoDe(aberta.acao_id)}/>
+          <Medicoes meta={aberta} verificacao={verificacaoDaMeta(aberta)}/>
         </div>
 
         {/* Por setor: a visão que vai para a reunião. Uma linha por setor
@@ -802,7 +814,7 @@ export default function Metas({ userId, profile }) {
           {/* Datas combinadas no C: um toque em vez de procurar no calendário.
               Quem já tem número entra riscada, para não lançar duas vezes. */}
           {(() => {
-            const datas = (verificacaoDe(aberta.acao_id)?.datas_medicao || []).map(d => String(d).slice(0, 10));
+            const datas = (verificacaoDaMeta(aberta)?.datas_medicao || []).map(d => String(d).slice(0, 10));
             if (!datas.length) return null;
             const feitas = new Set((aberta.lancamentos || []).map(l => String(l.data).slice(0, 10)));
             return (
@@ -920,11 +932,11 @@ export default function Metas({ userId, profile }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
               <b style={{ fontSize: 14 }}>{m.nome}</b><Selo cor={r.cor}>{r.atingiu ? '✓ Na meta' : 'Fora da meta'}</Selo>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · até {br(m.prazo)} · lança {FREQ[m.frequencia] || m.frequencia}{p ? ` · 🎯 ${p.titulo}` : ''}{m.responsavel?.full_name ? ` · mede ${m.responsavel.full_name}` : ''}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · até {br(m.prazo)} · lança {FREQ[m.frequencia] || m.frequencia}{p ? ` · 🎯 ${p.titulo}` : ''}{quemMede(m) ? ` · mede ${quemMede(m)}` : ''}</div>
             {(() => {
               // Medição que já passou da data e ninguém lançou: é o aviso que
               // faz a pessoa abrir a meta.
-              const v = verificacaoDe(m.acao_id);
+              const v = verificacaoDaMeta(m);
               const datas = (v?.datas_medicao || []).map(d => String(d).slice(0, 10));
               if (!datas.length) return null;
               const feitas = new Set((m.lancamentos || []).map(l => String(l.data).slice(0, 10)));
