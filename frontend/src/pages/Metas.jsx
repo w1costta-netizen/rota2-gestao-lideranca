@@ -21,7 +21,6 @@ const MEDIDAS = {
 };
 const ORDEM = ['quantidade', 'reais', 'percentual'];
 const FREQ = { diario: 'todo dia', semanal: 'toda semana', mensal: 'todo mês' };
-const COR = { verde: '#16a34a', amarelo: '#d97706', vermelho: '#dc2626', azul: '#2563eb' };
 
 const hoje = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
 const br = iso => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '');
@@ -78,7 +77,9 @@ function analisar(m, k, setor = TOTAL) {
     projecao = my + b * (dias(ms[0][0], m.prazo) - mx);
     chega = m.direcao === 'reduzir' ? projecao <= cfg.meta : projecao >= cfg.meta;
   }
-  const cor = atingiu ? COR.verde : pct >= 60 ? COR.azul : pct >= 30 ? COR.amarelo : COR.vermelho;
+  // Mesma escala de estado dos gráficos, nos tokens do app (validados
+  // para daltonismo e contraste nos dois temas).
+  const cor = atingiu ? 'var(--success)' : pct >= 60 ? 'var(--warning)' : 'var(--danger)';
   const frase = atingiu ? `Meta atingida: ${T.fmt(atual)} contra ${T.fmt(cfg.meta)}.`
     : ms.length < 2 ? 'Ainda sem tendência — lance pelo menos 2 vezes.'
     : restam < 0 ? `Prazo vencido há ${-restam} dias; ficou em ${T.fmt(atual)} (${Math.round(pct)}% do caminho).`
@@ -91,78 +92,315 @@ function analisar(m, k, setor = TOTAL) {
 function resumo(m, setor = TOTAL) {
   const as = medidasDe(m).map(k => analisar(m, k, setor)).filter(Boolean);
   const pior = as.reduce((p, a) => (a.pct < p.pct ? a : p), as[0]);
-  return { as, pct: as.length ? Math.round(as.reduce((s, a) => s + a.pct, 0) / as.length) : 0, atingiu: as.length > 0 && as.every(a => a.atingiu), cor: pior?.cor || COR.vermelho, pior };
+  return { as, pct: as.length ? Math.round(as.reduce((s, a) => s + a.pct, 0) / as.length) : 0, atingiu: as.length > 0 && as.every(a => a.atingiu), cor: pior?.cor || 'var(--danger)', pior };
 }
+// "500 / 800" numa meta de REDUZIR parecia que faltava chegar a 800,
+// quando 500 já é melhor que a meta. O sinal resolve a leitura.
+const metaLida = (m, a) => `${m.direcao === 'reduzir' ? 'até' : 'mín.'} ${a.T.fmt(a.cfg.meta)}`;
+
 const graficoAutomatico = (m, a) => (m.frequencia === 'mensal' || a.ms.length <= 3 ? 'barras' : 'linha');
 
 // ── Gráficos em SVG (sem biblioteca, como o resto do app) ────
+//
+// Regras seguidas aqui, nesta ordem: primeiro a forma (barra para poucos
+// períodos, linha para muitos), depois a cor — e a cor é UMA por gráfico,
+// nunca uma por barra. Colorir cada barra pelo seu próprio estado parece
+// informativo, mas repete em cor o que o tamanho da barra já diz, e as
+// três cores de status não se distinguem por quem tem daltonismo (medido:
+// verde↔âmbar fica em ΔE 9,3 — no limite). Quem bateu a meta ganha um ✓,
+// que é leitura garantida sem depender de cor.
+//
+// As cores vêm dos tokens do app (--success/--warning/--danger), que já
+// passam nas checagens de banda de luminosidade, croma, daltonismo e
+// contraste nos dois temas.
+const ESTADOS = {
+  bom:     { cor: 'var(--success)', rotulo: 'na meta' },
+  caminho: { cor: 'var(--warning)', rotulo: 'a caminho' },
+  atencao: { cor: 'var(--danger)',  rotulo: 'precisa acelerar' },
+};
+const estadoDe = (a) => (a.atingiu ? ESTADOS.bom : a.pct >= 60 ? ESTADOS.caminho : ESTADOS.atencao);
+
+// Régua do eixo em números redondos. "467" e "1.773" são o intervalo bruto
+// dividido em três; ninguém lê isso como referência — 0, 500, 1.000 sim.
+function passoBonito(bruto) {
+  const exp = Math.pow(10, Math.floor(Math.log10(Math.abs(bruto) || 1)));
+  const n = bruto / exp;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * exp;
+}
+function marcasY(min, max, quantas = 3) {
+  if (!Number.isFinite(min) || !Number.isFinite(max) || max === min) return [min];
+  // Tenta o passo ideal e, se não couberem pelo menos duas marcas dentro do
+  // intervalo, vai diminuindo. Sem isso o gráfico pequeno caía no intervalo
+  // cru (467 · 1.773), que é justamente o que se queria evitar.
+  for (const divisor of [1, 2, 5, 10]) {
+    const passo = passoBonito((max - min) / quantas) / divisor;
+    if (!Number.isFinite(passo) || passo <= 0) break;
+    const out = [];
+    for (let v = Math.ceil(min / passo) * passo; v <= max + 1e-9 && out.length < 8; v += passo) {
+      out.push(Number(v.toFixed(6)));
+    }
+    if (out.length >= 2) return out;
+  }
+  return [min, max];
+}
+
+// Observação daquele lançamento, para o ponto do gráfico contar o porquê.
+const obsDe = (m, setor) => Object.fromEntries(
+  (m.lancamentos || [])
+    .filter(l => (l.setor || '') === (setor || '') && l.observacao)
+    .map(l => [String(l.data).slice(0, 10), l.observacao]));
+
+// Caixa de texto que segue o mouse. O <title> do SVG demora ~1s e some
+// sozinho; num gráfico de acompanhamento a pessoa quer conferir ponto a
+// ponto, e a espera atrapalha.
+function useDica() {
+  const [dica, setDica] = useState(null);
+  const caixa = dica && (
+    <div style={{ position: 'fixed', left: dica.x + 12, top: dica.y - 8, zIndex: 60, pointerEvents: 'none',
+      background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 10,
+      boxShadow: 'var(--shadow-md)', padding: '8px 10px', maxWidth: 260 }}>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{dica.titulo}</div>
+      <div style={{ fontSize: 14, fontWeight: 800, marginTop: 1 }}>{dica.valor}</div>
+      {dica.extra && <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2 }}>{dica.extra}</div>}
+      {dica.obs && <div style={{ fontSize: 11.5, marginTop: 4, lineHeight: 1.35 }}>💬 {dica.obs}</div>}
+    </div>
+  );
+  const em = (e, d) => setDica({ ...d, x: e.clientX, y: e.clientY });
+  return { caixa, em, fora: () => setDica(null) };
+}
+
+// Variação em relação ao lançamento anterior — é o que a reunião comenta.
+const variacao = (a, i) => {
+  if (i === 0) return null;
+  const d = a.ms[i][1] - a.ms[i - 1][1];
+  if (d === 0) return 'igual ao anterior';
+  const bom = a.T === MEDIDAS.percentual || true; // só descreve; o juízo é da direção
+  return `${d > 0 ? '▲' : '▼'} ${a.T.fmt(Math.abs(d))} ${d > 0 ? 'a mais' : 'a menos'} que antes${bom ? '' : ''}`;
+};
+
 function Linha({ m, a, mini }) {
-  const W = 640, H = mini ? 120 : 220, P = mini ? { l: 44, r: 8, t: 8, b: 18 } : { l: 56, r: 16, t: 14, b: 30 };
-  const pts = a.ms; if (!pts.length) return <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Sem lançamentos.</div>;
+  const { caixa, em, fora } = useDica();
+  const obs = obsDe(m, a.setor);
+  const W = 640, H = mini ? 120 : 240, P = mini ? { l: 44, r: 14, t: 10, b: 18 } : { l: 58, r: 54, t: 26, b: 30 };
+  const pts = a.ms;
+  if (!pts.length) return <SemDados mini={mini}/>;
+  const est = estadoDe(a);
+
   const ys = [...pts.map(p => p[1]), a.cfg.meta, a.cfg.inicial];
-  let y0 = Math.min(...ys), y1 = Math.max(...ys); const pad = (y1 - y0 || 1) * .15; y0 -= pad; y1 += pad;
+  let y0 = Math.min(...ys), y1 = Math.max(...ys); const pad = (y1 - y0 || 1) * .18; y0 -= pad; y1 += pad;
   const x0 = pts[0][0], x1 = pts[pts.length - 1][0] > m.prazo ? pts[pts.length - 1][0] : m.prazo;
   const sx = d => P.l + dias(x0, d) / (dias(x0, x1) || 1) * (W - P.l - P.r);
   const sy = v => P.t + (1 - (v - y0) / (y1 - y0)) * (H - P.t - P.b);
   const cam = pts.map((p, i) => (i ? 'L' : 'M') + sx(p[0]).toFixed(1) + ' ' + sy(p[1]).toFixed(1)).join(' ');
-  const grade = mini ? [0, 1] : [0, .25, .5, .75, 1];
+  const base = sy(Math.max(y0, 0));
+  const area = `${cam} L ${sx(pts[pts.length - 1][0]).toFixed(1)} ${base.toFixed(1)} L ${sx(x0).toFixed(1)} ${base.toFixed(1)} Z`;
+  const ultimo = pts[pts.length - 1];
+  const grade = marcasY(y0, y1, mini ? 2 : 3);
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxHeight: mini ? 140 : 260, display: 'block' }}>
-      {grade.map(f => { const v = y0 + f * (y1 - y0); return <g key={f}><line x1={P.l} x2={W - P.r} y1={sy(v)} y2={sy(v)} stroke="var(--border)"/><text x={P.l - 5} y={sy(v) + 4} fontSize={mini ? 9 : 10} fill="var(--text-muted)" textAnchor="end">{a.T.fmt(v)}</text></g>; })}
-      <line x1={P.l} x2={W - P.r} y1={sy(a.cfg.meta)} y2={sy(a.cfg.meta)} stroke={COR.verde} strokeWidth="1.5" strokeDasharray="6 3"/>
-      <text x={W - P.r} y={sy(a.cfg.meta) - 4} fontSize="10" fill={COR.verde} textAnchor="end">meta {a.T.fmt(a.cfg.meta)}</text>
-      {a.projecao != null && a.restam > 0 && (
-        <line x1={sx(pts[pts.length - 1][0])} y1={sy(pts[pts.length - 1][1])} x2={sx(m.prazo)} y2={sy(Math.max(y0, Math.min(y1, a.projecao)))} stroke={a.chega ? COR.verde : COR.vermelho} strokeDasharray="4 4" strokeWidth="1.5"/>
-      )}
-      <path d={cam} fill="none" stroke="var(--primary)" strokeWidth="2.5"/>
-      {pts.map(p => <circle key={p[0]} cx={sx(p[0])} cy={sy(p[1])} r={mini ? 3 : 4} fill="var(--primary)"><title>{br(p[0])}: {a.T.fmt(p[1])}</title></circle>)}
-      <text x={sx(x0)} y={H - 6} fontSize="10" fill="var(--text-muted)">{br(x0)}</text>
-      <text x={sx(m.prazo)} y={H - 6} fontSize="10" fill="var(--text-muted)" textAnchor="end">prazo {br(m.prazo)}</text>
-    </svg>
+    <div style={{ position: 'relative' }}>
+      {caixa}
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxHeight: mini ? 140 : 280, display: 'block' }}
+        onMouseLeave={fora}>
+        {/* Grade discreta: linha fina e sólida, só para dar régua ao olho */}
+        {grade.map(v => (
+          <g key={v}>
+            <line x1={P.l} x2={W - P.r} y1={sy(v)} y2={sy(v)} stroke="var(--border)" strokeWidth="1"/>
+            <text x={P.l - 6} y={sy(v) + 4} fontSize={mini ? 9 : 10.5} fill="var(--text-muted)" textAnchor="end">{a.T.fmt(v)}</text>
+          </g>))}
+
+        {/* A meta é referência, não dado: fica em cinza tracejado e com o
+            nome escrito, para não competir com a linha do resultado. */}
+        <line x1={P.l} x2={W - P.r} y1={sy(a.cfg.meta)} y2={sy(a.cfg.meta)} stroke="var(--text-muted)" strokeWidth="1" strokeDasharray="5 4" opacity=".85"/>
+        {!mini && <text x={P.l + 2} y={sy(a.cfg.meta) - 5} fontSize="10.5" fill="var(--text-muted)">meta {a.T.fmt(a.cfg.meta)}</text>}
+
+        <path d={area} fill={est.cor} opacity=".10"/>
+        <path d={cam} fill="none" stroke={est.cor} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round"/>
+
+        {/* Ritmo até o prazo: onde termina se seguir assim. */}
+        {/* Só faz sentido projetar o que ainda está em andamento: com a meta
+            batida, a reta continuava descendo e anunciava "-390", que para
+            quantidade não existe. */}
+        {a.projecao != null && a.restam > 0 && !a.atingiu && !mini && (() => {
+          const piso = a.k === 'percentual' ? -Infinity : 0;
+          const proj = Math.max(piso, a.projecao);
+          const yp = sy(Math.max(y0, Math.min(y1, proj)));
+          return (
+            <g>
+              <line x1={sx(ultimo[0])} y1={sy(ultimo[1])} x2={sx(m.prazo)} y2={yp}
+                stroke="var(--text-muted)" strokeWidth="1.5" strokeDasharray="3 4"/>
+              <circle cx={sx(m.prazo)} cy={yp} r="3.5" fill="var(--surface)" stroke="var(--text-muted)" strokeWidth="1.5"/>
+              <text x={W - P.r + 6} y={yp + 4} fontSize="10.5" fill="var(--text-muted)">{a.T.fmt(proj)}</text>
+            </g>
+          );
+        })()}
+
+        {pts.map((p, i) => {
+          const ehUltimo = i === pts.length - 1;
+          const temObs = !!obs[p[0]];
+          return (
+            <g key={p[0]}>
+              {/* Alvo de toque maior que o ponto, senão acertar com o dedo vira sorte */}
+              <circle cx={sx(p[0])} cy={sy(p[1])} r="14" fill="transparent"
+                onMouseMove={e => em(e, { titulo: br(p[0]), valor: a.T.fmt(p[1]), extra: variacao(a, i), obs: obs[p[0]] })}/>
+              <circle cx={sx(p[0])} cy={sy(p[1])} r={ehUltimo ? 5 : 4} fill={est.cor} stroke="var(--surface)" strokeWidth="2"/>
+              {temObs && !mini && <text x={sx(p[0])} y={sy(p[1]) - 12} fontSize="11" textAnchor="middle">💬</text>}
+            </g>
+          );
+        })}
+
+        {/* Número em cada ponto — mas só onde cabe. A régua abaixo mede o
+            espaço já ocupado e pula o rótulo que fosse encostar no vizinho;
+            o último ponto sempre aparece, maior, porque é a resposta. */}
+        {(() => {
+          const alt = 7.2; // largura média por caractere no tamanho usado
+          const usados = [];
+          const cabe = (x, txt) => {
+            const meia = (txt.length * alt) / 2 + 6;
+            if (usados.some(u => Math.abs(u.x - x) < u.meia + meia)) return false;
+            usados.push({ x, meia }); return true;
+          };
+          // O último entra primeiro: ele tem prioridade sobre os do meio.
+          const ordem = [pts.length - 1, ...pts.map((_, i) => i).filter(i => i !== pts.length - 1)];
+          return ordem.map(i => {
+            const p = pts[i], ehUltimo = i === pts.length - 1;
+            const txt = a.T.fmt(p[1]);
+            if (!cabe(sx(p[0]), txt)) return null;
+            return (
+              <text key={`v${p[0]}`} x={sx(p[0])} y={sy(p[1]) - (obs[p[0]] && !mini ? 26 : 14)}
+                fontSize={ehUltimo ? (mini ? 11 : 13.5) : (mini ? 10 : 11.5)}
+                fontWeight={ehUltimo ? 800 : 600}
+                textAnchor="middle" fill="var(--text)">{txt}</text>
+            );
+          });
+        })()}
+
+        <text x={sx(x0)} y={H - 6} fontSize="10.5" fill="var(--text-muted)">{br(x0)}</text>
+        <text x={W - P.r} y={H - 6} fontSize="10.5" fill="var(--text-muted)" textAnchor="end">prazo {br(m.prazo)}</text>
+      </svg>
+    </div>
   );
 }
+
 function Barras({ m, a, mini }) {
-  const W = 640, H = mini ? 120 : 220, P = mini ? { l: 44, r: 8, t: 14, b: 18 } : { l: 56, r: 16, t: 18, b: 30 };
-  const pts = a.ms.slice(-12); if (!pts.length) return <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Sem lançamentos.</div>;
-  const y1 = Math.max(...pts.map(p => p[1]), a.cfg.meta, 0) * 1.12 || 1, y0 = 0;
+  const { caixa, em, fora } = useDica();
+  const obs = obsDe(m, a.setor);
+  const W = 640, H = mini ? 120 : 240, P = mini ? { l: 44, r: 10, t: 16, b: 20 } : { l: 58, r: 18, t: 30, b: 34 };
+  const pts = a.ms.slice(-12);
+  if (!pts.length) return <SemDados mini={mini}/>;
+  const est = estadoDe(a);
+
+  const y1 = Math.max(...pts.map(p => p[1]), a.cfg.meta, 0) * 1.15 || 1, y0 = 0;
   const sy = v => P.t + (1 - (v - y0) / (y1 - y0)) * (H - P.t - P.b);
-  const bw = (W - P.l - P.r) / pts.length;
+  const faixa = (W - P.l - P.r) / pts.length;
+  // Barra fina com ar em volta: no máximo 24px, e 2px de respiro entre elas.
+  const bw = Math.min(24, faixa - 2);
   const rot = d => (m.frequencia === 'mensal' ? new Date(d + 'T12:00:00Z').toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' }) : br(d).slice(0, 5));
+  const bateu = v => (m.direcao === 'reduzir' ? v <= a.cfg.meta : v >= a.cfg.meta);
+  // Topo arredondado, base reta: a barra nasce na linha do zero.
+  const barra = (x, y, w, h, r = 4) => {
+    const rr = Math.min(r, h, w / 2);
+    return `M ${x} ${y + h} L ${x} ${y + rr} Q ${x} ${y} ${x + rr} ${y} L ${x + w - rr} ${y} Q ${x + w} ${y} ${x + w} ${y + rr} L ${x + w} ${y + h} Z`;
+  };
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxHeight: mini ? 140 : 260, display: 'block' }}>
-      {[0, 1].map(f => { const v = y0 + f * (y1 - y0); return <g key={f}><line x1={P.l} x2={W - P.r} y1={sy(v)} y2={sy(v)} stroke="var(--border)"/><text x={P.l - 5} y={sy(v) + 4} fontSize={mini ? 9 : 10} fill="var(--text-muted)" textAnchor="end">{a.T.fmt(v)}</text></g>; })}
-      {pts.map((p, i) => { const ok = m.direcao === 'reduzir' ? p[1] <= a.cfg.meta : p[1] >= a.cfg.meta; const x = P.l + i * bw + bw * .18; return (
-        <g key={p[0]}>
-          <rect x={x} y={sy(Math.max(0, p[1]))} width={bw * .64} height={Math.max(0, sy(0) - sy(Math.max(0, p[1])))} rx="4" fill={ok ? COR.verde : 'var(--primary)'}><title>{br(p[0])}: {a.T.fmt(p[1])}</title></rect>
-          {!mini && <text x={x + bw * .32} y={sy(Math.max(0, p[1])) - 4} fontSize="10" textAnchor="middle" fill="var(--text)">{a.T.fmt(p[1])}</text>}
-          <text x={x + bw * .32} y={H - 6} fontSize="10" textAnchor="middle" fill="var(--text-muted)">{rot(p[0])}</text>
-        </g>); })}
-      <line x1={P.l} x2={W - P.r} y1={sy(a.cfg.meta)} y2={sy(a.cfg.meta)} stroke={COR.verde} strokeWidth="1.5" strokeDasharray="6 3"/>
-      <text x={W - P.r} y={sy(a.cfg.meta) - 4} fontSize="10" fill={COR.verde} textAnchor="end">meta {a.T.fmt(a.cfg.meta)}</text>
-    </svg>
+    <div style={{ position: 'relative' }}>
+      {caixa}
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxHeight: mini ? 140 : 280, display: 'block' }}
+        onMouseLeave={fora}>
+        {marcasY(y0, y1, mini ? 1 : 2).map(v => (
+          <g key={v}>
+            <line x1={P.l} x2={W - P.r} y1={sy(v)} y2={sy(v)} stroke="var(--border)" strokeWidth="1"/>
+            <text x={P.l - 6} y={sy(v) + 4} fontSize={mini ? 9 : 10.5} fill="var(--text-muted)" textAnchor="end">{a.T.fmt(v)}</text>
+          </g>))}
+
+        <line x1={P.l} x2={W - P.r} y1={sy(a.cfg.meta)} y2={sy(a.cfg.meta)} stroke="var(--text-muted)" strokeWidth="1" strokeDasharray="5 4" opacity=".85"/>
+        {!mini && <text x={P.l + 2} y={sy(a.cfg.meta) - 5} fontSize="10.5" fill="var(--text-muted)">meta {a.T.fmt(a.cfg.meta)}</text>}
+
+        {pts.map((p, i) => {
+          const v = Math.max(0, p[1]);
+          const x = P.l + i * faixa + (faixa - bw) / 2;
+          const y = sy(v), h = Math.max(1, sy(0) - y);
+          return (
+            <g key={p[0]}
+              onMouseMove={e => em(e, { titulo: br(p[0]), valor: a.T.fmt(p[1]), extra: variacao(a, a.ms.length - pts.length + i), obs: obs[p[0]] })}>
+              <rect x={x - 3} y={P.t} width={bw + 6} height={sy(0) - P.t} fill="transparent"/>
+              <path d={barra(x, y, bw, h)} fill={est.cor}/>
+              <text x={x + bw / 2} y={y - (mini ? 5 : 8)} fontSize={mini ? 9.5 : 12.5} fontWeight="700" textAnchor="middle" fill="var(--text)">
+                {a.T.fmt(p[1])}
+              </text>
+              {/* Quem bateu a meta ganha ✓: leitura que não depende de cor */}
+              {!mini && bateu(p[1]) && <text x={x + bw / 2} y={y - 21} fontSize="11" textAnchor="middle" fill="var(--success)">✓</text>}
+              {obs[p[0]] && !mini && <text x={x + bw / 2} y={sy(0) + 14} fontSize="10" textAnchor="middle">💬</text>}
+              <text x={x + bw / 2} y={H - 6} fontSize="10.5" textAnchor="middle" fill="var(--text-muted)">{rot(p[0])}</text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
-function Progresso({ a, compacto }) {
+
+function SemDados({ mini }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      height: mini ? 90 : 150, gap: 4, color: 'var(--text-muted)', fontSize: 12.5,
+      border: '1px dashed var(--border)', borderRadius: 10 }}>
+      <span style={{ fontSize: 20, opacity: .5 }}>📈</span>
+      <span>Sem lançamentos ainda</span>
+      {!mini && <span style={{ fontSize: 11.5 }}>Clique em "Lançar" e o gráfico começa a se desenhar.</span>}
+    </div>
+  );
+}
+
+function Progresso({ a, compacto, m }) {
+  const est = estadoDe(a);
+  const largura = Math.min(100, Math.max(0, a.pct));
+  // Onde deveria estar hoje, se o avanço fosse parelho do início até o prazo.
+  const ritmo = (() => {
+    if (!m?.prazo || !a.ms.length) return null;
+    const total = dias(a.ms[0][0], m.prazo);
+    if (total <= 0) return null;
+    return Math.min(100, Math.max(0, dias(a.ms[0][0], hoje()) / total * 100));
+  })();
   return (
     <div>
       {!compacto && (
         <div style={{ margin: '6px 0 2px', display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'var(--text-muted)' }}>
-          <span>Começou em <b style={{ color: 'var(--text)' }}>{a.T.fmt(a.cfg.inicial)}</b></span><span>Quer chegar em <b style={{ color: 'var(--text)' }}>{a.T.fmt(a.cfg.meta)}</b></span>
+          <span>Começou em <b style={{ color: 'var(--text)' }}>{a.T.fmt(a.cfg.inicial)}</b></span>
+          <span>Quer chegar em <b style={{ color: 'var(--text)' }}>{a.T.fmt(a.cfg.meta)}</b></span>
         </div>
       )}
-      <div style={{ height: compacto ? 7 : 10, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden', marginTop: compacto ? 4 : 0 }}>
-        <div style={{ width: `${Math.min(100, a.pct)}%`, height: '100%', background: a.cor, borderRadius: 99, transition: 'width .4s' }}/>
+      <div style={{ position: 'relative', height: compacto ? 8 : 12, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden', marginTop: compacto ? 4 : 0 }}>
+        <div style={{ width: `${largura}%`, height: '100%', background: est.cor, borderRadius: 99, transition: 'width .4s' }}/>
       </div>
-      {!compacto && <div style={{ fontSize: 12, marginTop: 5 }}>Hoje está em <b>{a.T.fmt(a.atual)}</b> — já andou <b style={{ color: a.cor }}>{Math.round(a.pct)}%</b> do caminho até a meta</div>}
+      {/* A marca do ritmo mostra se o avanço está adiantado ou atrasado em
+          relação ao tempo que já passou — sem ela, 40% pode ser ótimo ou
+          péssimo dependendo do prazo. */}
+      {!compacto && ritmo != null && (
+        <div style={{ position: 'relative', height: 14 }}>
+          <div style={{ position: 'absolute', left: `${ritmo}%`, transform: 'translateX(-50%)', fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+            ▲ tempo decorrido
+          </div>
+        </div>
+      )}
+      {!compacto && (
+        <div style={{ fontSize: 12, marginTop: 5 }}>
+          Hoje está em <b>{a.T.fmt(a.atual)}</b> — já andou <b>{Math.round(a.pct)}%</b> do caminho até a meta
+          {ritmo != null && <span style={{ color: 'var(--text-muted)' }}> · {Math.round(ritmo)}% do prazo usado</span>}
+        </div>
+      )}
     </div>
   );
 }
+
 function Grafico({ m, a, mini }) {
   const t = m.grafico === 'auto' ? graficoAutomatico(m, a) : m.grafico;
   if (t === 'linha') return <Linha m={m} a={a} mini={mini}/>;
   if (t === 'barras') return <Barras m={m} a={a} mini={mini}/>;
-  return <Progresso a={a}/>;
+  return <Progresso a={a} m={m}/>;
 }
+
 const Selo = ({ cor, children }) => <span style={{ fontSize: 11, fontWeight: 700, color: cor, background: `${cor}1f`, borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap' }}>{children}</span>;
 const Rotulo = ({ children }) => <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: .3, margin: '10px 0 4px' }}>{children}</label>;
 const inputStyle = { width: '100%', padding: '8px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13.5 };
@@ -386,9 +624,9 @@ export default function Metas({ userId, profile }) {
                         <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontWeight: nome ? 600 : 800 }}>{nome || 'Total'}</td>
                         {ks.map(k => { const a = rs.as.find(x => x.k === k); return (
                           <td key={k} style={{ padding: '8px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                            {a ? <><b style={{ color: a.cor }}>{a.T.fmt(a.atual)}</b> <span style={{ color: 'var(--text-muted)' }}>/ {a.T.fmt(a.cfg.meta)}</span></> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                            {a ? <><b>{a.T.fmt(a.atual)}</b> <span style={{ color: 'var(--text-muted)' }}>· {metaLida(aberta, a)}</span></> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                           </td>); })}
-                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', textAlign: 'right' }}><Selo cor={rs.cor}>{rs.atingiu ? 'atingiu' : `${rs.pct}%`}</Selo></td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', textAlign: 'right' }}><Selo cor={rs.cor}>{rs.atingiu ? '✓ atingiu' : `${rs.pct}%`}</Selo></td>
                       </tr>
                     );
                   })}
@@ -415,20 +653,27 @@ export default function Metas({ userId, profile }) {
           {foco ? (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 8 }}>
+                {/* O número fica em tinta de texto; quem carrega o estado é
+                    a marca colorida ao lado, com palavra junto. Número verde
+                    ou vermelho some para quem não distingue as cores — e,
+                    em tamanho grande, cansa a leitura. */}
                 {[['Atual', foco.T.fmt(foco.atual), foco.dataAtual ? br(foco.dataAtual) : 'partida', foco.cor],
                   ['Meta', foco.T.fmt(foco.cfg.meta), `até ${br(aberta.prazo)}`, null],
                   ['Do caminho', `${Math.round(foco.pct)}%`, `saiu de ${foco.T.fmt(foco.cfg.inicial)}`, foco.cor],
                   ['Prazo', foco.restam >= 0 ? `${foco.restam}d` : 'vencido', foco.restam >= 0 ? 'restantes' : `${-foco.restam} dias atrás`, null]].map(([r1, v, s, c]) => (
                   <div key={r1} style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '10px 12px' }}>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>{r1}</div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: c || 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{v}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'center', gap: 7 }}>
+                      {c && <span style={{ width: 9, height: 9, borderRadius: '50%', background: c, flexShrink: 0 }}/>}
+                      {v}
+                    </div>
                     <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>{s}</div>
                   </div>
                 ))}
               </div>
               <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.55 }}>{foco.frase}</div>
               <Grafico m={aberta} a={foco}/>
-              {tipoAtual !== 'progresso' && <Progresso a={foco}/>}
+              {tipoAtual !== 'progresso' && <Progresso a={foco} m={aberta}/>}
             </>
           ) : (
             <>
@@ -438,9 +683,12 @@ export default function Metas({ userId, profile }) {
                   <div key={a.k} onClick={() => setMedida(a.k)} style={{ background: 'var(--surface-2)', borderRadius: 12, padding: 12, cursor: 'pointer', border: '1.5px solid transparent' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>{a.T.nome}</span>
-                      <Selo cor={a.cor}>{Math.round(a.pct)}%</Selo>
+                      {/* A cor mora no selo, e o selo diz em palavras o que
+                          a cor está dizendo — quem não distingue as cores lê
+                          a mesma informação. */}
+                      <Selo cor={a.cor}>{a.atingiu ? '✓ na meta' : `${Math.round(a.pct)}% do caminho`}</Selo>
                     </div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: a.cor, margin: '2px 0 4px', fontVariantNumeric: 'tabular-nums' }}>{a.T.fmt(a.atual)} <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>/ {a.T.fmt(a.cfg.meta)}</span></div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: '2px 0 4px', fontVariantNumeric: 'tabular-nums' }}>{a.T.fmt(a.atual)} <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>· meta {metaLida(aberta, a)}</span></div>
                     <Grafico m={aberta} a={a} mini/>
                   </div>
                 ))}
@@ -590,7 +838,7 @@ export default function Metas({ userId, profile }) {
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${r.as.length || 1}, 1fr)`, gap: 10, marginTop: 8 }}>
               {r.as.map(a => (
                 <div key={a.k}>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>{a.T.curto} · <b style={{ color: a.cor }}>{a.T.fmt(a.atual)}</b> <span style={{ fontWeight: 400 }}>/ {a.T.fmt(a.cfg.meta)}</span></div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>{a.T.curto} · <b style={{ color: 'var(--text)' }}>{a.T.fmt(a.atual)}</b> <span style={{ fontWeight: 400 }}>· meta {metaLida(m, a)}</span></div>
                   <Progresso a={a} compacto/>
                 </div>
               ))}
