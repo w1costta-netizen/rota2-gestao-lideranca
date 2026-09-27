@@ -195,7 +195,7 @@ const RECORRENCIAS = [
 
 const EMPTY_ACAO    = { descricao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
 const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
-const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
+const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {}, datas_medicao: [] };
 const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
 const EMPTY_ACAO_A  = { padronizacao: '', comunicacao: '', treinamento: '', monitoramento: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
 
@@ -413,6 +413,7 @@ export default function PlanoAcao({ userId, profile }) {
             inicio: formAcao.inicio || null,
             recorrencia: formAcao.recorrencia || 'nenhuma',
             criar_tarefa: formAcao.criar_tarefa,
+            ...(addingTo === 'C' ? { datas_medicao: formAcao.datas_medicao || [] } : {}),
           } : {}),
         };
         // O texto e as datas sao os mesmos para todo mundo do grupo: editar
@@ -454,6 +455,7 @@ export default function PlanoAcao({ userId, profile }) {
             criar_tarefa: formAcao.criar_tarefa,
             // Na criação a chave é o id da PESSOA (a ação ainda não existe).
             detalhe: (formAcao.detalhes || {})[rid] || null,
+            datas_medicao: formAcao.datas_medicao || [],
           } : {}),
         })));
         setAcoes(as => [...as, ...criadas.map(r => r.data)]);
@@ -656,6 +658,7 @@ export default function PlanoAcao({ userId, profile }) {
                         // então recarrega tudo em "descrição"; responsável/prazo voltam normal.
                         setFormAcao({
                           ...EMPTY_ACAO_C,
+                          datas_medicao: acao.datas_medicao || [],
                           descricao: acao.descricao,
                           responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
@@ -978,7 +981,7 @@ function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadr
 }
 
 // Bloco reutilizável: Responsável + Prazo + toggle "criar tarefa automaticamente"
-function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNovo, textos = {}, grupo = [] }) {
+function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNovo, textos = {}, grupo = [], semRepeticao = false }) {
   const ids = form.responsaveis_ids || [];
   // Na criação a chave é a PESSOA (a ação ainda não existe); na edição é a
   // AÇÃO de cada um, que é o que o servidor sabe atualizar.
@@ -1037,7 +1040,15 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
 
       {/* Quando a tarefa aparece para a pessoa.
           Antes ela nascia com a data do prazo final e sem repetição: só
-          surgia no último dia, quando já não dava tempo de fazer. */}
+          surgia no último dia, quando já não dava tempo de fazer.
+          No C isto dá lugar à lista de datas da medição. */}
+      {semRepeticao ? (
+        <div className="form-group">
+          <label className="form-label">{textos.inicio || 'Começa em'}</label>
+          <input className="input" type="date" value={form.inicio || ''} max={form.prazo || undefined}
+            onChange={e => setForm(p => ({ ...p, inicio: e.target.value }))}/>
+        </div>
+      ) : (
       <div className="form-group">
         <label className="form-label">{textos.quando || 'Quando fazer'}</label>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -1066,6 +1077,7 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
           })()}
         </div>
       </div>
+      )}
 
       {/* A ação é a mesma para o grupo, mas o papel de uma pessoa pode ser
           diferente. Sem isto, o único jeito era editar a tarefa dela por
@@ -1117,6 +1129,114 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
 
 // C — Checar: o que foi verificado, resultado observado (com dados) e
 // classificação (Com resultado / Sem resultado / Sem conclusão)
+/* Datas da medição (só no C).
+   Com "repete toda semana" o app criava UMA tarefa: a próxima só nascia
+   quando a pessoa concluía a anterior — quem não concluía nunca via as
+   seguintes, e o gestor não tinha onde conferir o calendário da coleta.
+   Aqui as datas ficam à vista, o app sugere a partir da frequência e cada
+   data vira uma tarefa para o responsável. */
+const FREQUENCIAS_MEDICAO = [
+  { key: 'semanal',   label: 'Toda semana',    dias: 7 },
+  { key: 'quinzenal', label: 'A cada 15 dias', dias: 15 },
+  { key: 'mensal',    label: 'Todo mês',       dias: 0 },
+];
+
+function gerarDatas(inicio, fim, freq) {
+  if (!inicio || !fim) return [];
+  const regra = FREQUENCIAS_MEDICAO.find(f => f.key === freq);
+  if (!regra) return [];
+  const datas = [];
+  const limite = new Date(fim + 'T12:00:00');
+  const d = new Date(inicio + 'T12:00:00');
+  // Teto igual ao do servidor: lista gigante viraria dezenas de tarefas.
+  while (d <= limite && datas.length < 60) {
+    datas.push(d.toISOString().slice(0, 10));
+    if (regra.dias) d.setDate(d.getDate() + regra.dias);
+    else d.setMonth(d.getMonth() + 1);
+  }
+  return datas;
+}
+
+const diaCurto = (iso) => {
+  const d = new Date(iso + 'T12:00:00');
+  const semana = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d.getDay()];
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')} ${semana}`;
+};
+
+function DatasMedicao({ form, setForm }) {
+  const [novaData, setNovaData] = useState('');
+  const datas = form.datas_medicao || [];
+
+  const definir = (lista) => setForm(p => ({ ...p, datas_medicao: [...new Set(lista)].sort() }));
+  const sugerir = (freq) => {
+    const geradas = gerarDatas(form.inicio, form.prazo, freq);
+    if (!geradas.length) return;
+    definir(geradas);
+  };
+
+  return (
+    <div className="form-group">
+      <label className="form-label">Datas da medição</label>
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.5 }}>
+        Cada data vira uma tarefa para quem mede — todas já aparecem na lista dela, sem depender de concluir a anterior.
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+        {FREQUENCIAS_MEDICAO.map(f => (
+          <button key={f.key} type="button" onClick={() => sugerir(f.key)}
+            disabled={!form.inicio || !form.prazo}
+            title={!form.inicio || !form.prazo ? 'Preencha "começa em" e o prazo primeiro' : `Sugerir datas ${f.label.toLowerCase()}`}
+            style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 99,
+              padding: '5px 12px', fontSize: 12, cursor: (!form.inicio || !form.prazo) ? 'not-allowed' : 'pointer',
+              opacity: (!form.inicio || !form.prazo) ? .5 : 1, color: 'var(--text)' }}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {datas.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+          {datas.map(d => (
+            <span key={d} style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: 'rgba(232,98,42,.10)', border: '1px solid rgba(232,98,42,.35)', borderRadius: 8,
+              padding: '4px 8px', fontSize: 12, color: 'var(--text)' }}>
+              {diaCurto(d)}
+              <button type="button" onClick={() => definir(datas.filter(x => x !== d))}
+                title="Tirar esta data"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)',
+                  padding: 0, lineHeight: 1, fontSize: 13 }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input className="input" type="date" value={novaData} onChange={e => setNovaData(e.target.value)}
+          style={{ maxWidth: 170, fontSize: 12.5 }}/>
+        <button type="button" disabled={!novaData}
+          onClick={() => { definir([...datas, novaData]); setNovaData(''); }}
+          style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 8,
+            padding: '7px 12px', fontSize: 12.5, cursor: novaData ? 'pointer' : 'not-allowed',
+            opacity: novaData ? 1 : .5, color: 'var(--text)' }}>
+          Adicionar data
+        </button>
+        {datas.length > 0 && (
+          <button type="button" onClick={() => definir([])}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 12 }}>
+            limpar
+          </button>
+        )}
+      </div>
+
+      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 8 }}>
+        {datas.length
+          ? `${datas.length} ${datas.length > 1 ? 'medições combinadas' : 'medição combinada'} — ${datas.length > 1 ? 'viram' : 'vira'} ${datas.length > 1 ? `${datas.length} tarefas` : '1 tarefa'} para quem mede.`
+          : 'Sem datas, a medição vira uma tarefa única no prazo.'}
+      </div>
+    </div>
+  );
+}
+
 /* Cabeçalho de etapa: deixa visível que o C tem dois momentos. */
 function Etapa({ numero, titulo, ajuda, cor }) {
   return (
@@ -1167,13 +1287,15 @@ function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave, isNov
 
       <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros}
         podeToggleTarefa={podeToggleTarefa} isNovo={isNovo} grupo={grupo}
+        semRepeticao
         textos={{
           responsavel: 'Quem vai medir',
           prazo: 'Última medição (prazo)',
-          quando: 'De quanto em quanto tempo medir',
-          oQue: 'A medição',
-          tarefa: 'Criar a tarefa de medição',
+          inicio: 'Primeira medição (começa em)',
+          tarefa: 'Criar as tarefas de medição',
         }}/>
+
+      <DatasMedicao form={form} setForm={setForm}/>
 
       <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
 
@@ -1415,6 +1537,19 @@ function AcaoCard({ acao, grupo, color, canManage, formatDate, onToggle, onToggl
               return (
                 <span style={{ fontSize: 11, color: info?.icone ? info.cor : 'var(--text-muted)', fontWeight: info?.icone ? 700 : 400 }}>
                   {info?.icone ? `${info.icone} ${info.texto}` : `📅 ${formatDate(acao.prazo)}`}
+                </span>
+              );
+            })()}
+            {/* Medição com datas combinadas: o cartão diz quantas são e
+                quando é a próxima, que é o que o gestor quer saber. */}
+            {(acao.datas_medicao || []).length > 0 && (() => {
+              const hoje = new Date().toISOString().slice(0, 10);
+              const prox = acao.datas_medicao.find(d => d >= hoje);
+              return (
+                <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5,
+                  background: '#0ea5e922', color: '#38bdf8' }}
+                  title={acao.datas_medicao.map(d => d.split('-').reverse().join('/')).join(' · ')}>
+                  📏 {acao.datas_medicao.length} medições{prox ? ` · próxima ${prox.split('-').reverse().join('/')}` : ' · encerradas'}
                 </span>
               );
             })()}

@@ -15,6 +15,48 @@ const RECORRENCIAS = ['nenhuma', 'diaria', 'semanal', 'quinzenal', 'mensal'];
 
 // O que a pessoa lê na tarefa dela. O título é a ação (igual para o grupo);
 // a parte individual entra aqui, que é onde ela trabalha.
+// Datas de medição do C: uma tarefa por data, todas criadas de uma vez.
+//
+// Com repetição, só existia a PRIMEIRA tarefa — a seguinte nascia quando a
+// pessoa concluía a anterior. Quem não concluía nunca via as próximas, e o
+// gestor não tinha onde conferir o calendário da coleta.
+function limparDatas(datas) {
+  if (!Array.isArray(datas)) return [];
+  const so = datas
+    .filter(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d))
+    .sort();
+  // Teto de segurança: uma lista enorme viraria centenas de tarefas na mão
+  // de uma pessoa só.
+  return [...new Set(so)].slice(0, 60);
+}
+
+async function criarTarefasDeMedicao({ datas, acao, plano, responsavel_id, requester_id, detalhe, pdcaContext }) {
+  const linhas = datas.map(data => ({
+    company: plano?.company,
+    title: acao.descricao,
+    description: descricaoDaTarefa(plano?.titulo, detalhe),
+    assigned_to: responsavel_id,
+    due_date: data,
+    priority: 'normal',
+    recorrencia: 'nenhuma',
+    tags: ['plano_acao'],
+    created_by: requester_id,
+    pdca_context: pdcaContext,
+    status: 'pendente',
+  }));
+  if (!linhas.length) return null;
+  const { data: criadas } = await supabase.from('tarefas').insert(linhas).select('id');
+  return (criadas || [])[0]?.id || null;
+}
+
+// Apaga as tarefas de medição desta ação que ainda estão pendentes. O que a
+// pessoa já concluiu fica: é registro do que aconteceu.
+async function limparTarefasDeMedicao(acaoId) {
+  if (!acaoId) return;
+  await supabase.from('tarefas').delete()
+    .eq('pdca_context->>acao_id', acaoId).eq('status', 'pendente');
+}
+
 function descricaoDaTarefa(tituloPlano, detalhe) {
   const base = `Ação do Plano: ${tituloPlano}`;
   return detalhe?.trim() ? `${base}
@@ -170,7 +212,7 @@ router.get('/:id/acoes', async (req, res) => {
 
 // POST /api/pdca/:id/acoes
 router.post('/:id/acoes', async (req, res) => {
-  const { requester_id, quadrante, descricao, responsavel_id, prazo, criar_tarefa, inicio, recorrencia, grupo_id, detalhe } = req.body;
+  const { requester_id, quadrante, descricao, responsavel_id, prazo, criar_tarefa, inicio, recorrencia, grupo_id, detalhe, datas_medicao } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
@@ -192,6 +234,8 @@ router.post('/:id/acoes', async (req, res) => {
     grupo_id: grupo_id || null,
     // A parte desta pessoa dentro da ação comum. Fica só nela.
     detalhe: detalhe?.trim() || null,
+    // Só o C trabalha com lista de datas (ver criarTarefasDeMedicao).
+    datas_medicao: quadrante === 'C' && limparDatas(datas_medicao).length ? limparDatas(datas_medicao) : null,
     recorrencia: RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma',
     concluida: false,
     criar_tarefa: criar_tarefa !== false,
@@ -217,25 +261,38 @@ router.post('/:id/acoes', async (req, res) => {
       acao_id: acao.id,
     };
 
-    const { data: tarefa } = await supabase.from('tarefas').insert({
-      company: plano.company,
-      title: descricao.trim(),
-      description: descricaoDaTarefa(plano.titulo, detalhe),
-      assigned_to: responsavel_id,
-      // A tarefa aparece a partir do INÍCIO, não do prazo final: a pessoa
-      // precisa ver o que fazer enquanto dá tempo de fazer.
-      due_date: inicio || prazo,
-      priority: 'normal',
-      recorrencia: RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma',
-      tags: ['plano_acao'],
-      created_by: requester_id,
-      pdca_context: { ...pdcaContext, repetir_ate: prazo },
-      status: 'pendente',
-    }).select('id').single();
+    const datas = quadrante === 'C' ? limparDatas(datas_medicao) : [];
+    let tarefaId = null;
 
-    if (tarefa) {
-      await supabase.from('acoes_pdca').update({ tarefa_id: tarefa.id }).eq('id', acao.id);
-      acao.tarefa_id = tarefa.id;
+    if (datas.length) {
+      // Medição com datas combinadas: uma tarefa por data, todas já
+      // visíveis para o responsável.
+      tarefaId = await criarTarefasDeMedicao({
+        datas, acao: { descricao: descricao.trim() }, plano, responsavel_id, requester_id, detalhe,
+        pdcaContext: { ...pdcaContext, medicao: true },
+      });
+    } else {
+      const { data: tarefa } = await supabase.from('tarefas').insert({
+        company: plano.company,
+        title: descricao.trim(),
+        description: descricaoDaTarefa(plano.titulo, detalhe),
+        assigned_to: responsavel_id,
+        // A tarefa aparece a partir do INÍCIO, não do prazo final: a pessoa
+        // precisa ver o que fazer enquanto dá tempo de fazer.
+        due_date: inicio || prazo,
+        priority: 'normal',
+        recorrencia: RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma',
+        tags: ['plano_acao'],
+        created_by: requester_id,
+        pdca_context: { ...pdcaContext, repetir_ate: prazo },
+        status: 'pendente',
+      }).select('id').single();
+      tarefaId = tarefa?.id || null;
+    }
+
+    if (tarefaId) {
+      await supabase.from('acoes_pdca').update({ tarefa_id: tarefaId }).eq('id', acao.id);
+      acao.tarefa_id = tarefaId;
     }
   }
 
@@ -244,7 +301,7 @@ router.post('/:id/acoes', async (req, res) => {
 
 // PUT /api/pdca/acoes/:id  — ANTES de PUT /:id para não conflitar
 router.put('/acoes/:id', async (req, res) => {
-  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia, aplicar_grupo, detalhe } = req.body;
+  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia, aplicar_grupo, detalhe, datas_medicao } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -262,6 +319,7 @@ router.put('/acoes/:id', async (req, res) => {
   if (inicio !== undefined)       updates.inicio       = inicio || null;
   // Individual de propósito: `detalhe` NUNCA entra no que se aplica ao grupo.
   if (detalhe !== undefined)      updates.detalhe      = detalhe?.trim() || null;
+  if (datas_medicao !== undefined) updates.datas_medicao = limparDatas(datas_medicao).length ? limparDatas(datas_medicao) : null;
   if (recorrencia !== undefined)  updates.recorrencia  = RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma';
   if (criar_tarefa !== undefined) updates.criar_tarefa = criar_tarefa;
   if (concluida !== undefined) {
@@ -345,6 +403,33 @@ router.put('/acoes/:id', async (req, res) => {
     }
   }
 
+  // Datas de medição mudaram: refaz as tarefas que ainda estão pendentes.
+  // As já concluídas ficam — são o registro do que foi medido.
+  if (datas_medicao !== undefined && acaoAtual.quadrante === 'C') {
+    const datas = limparDatas(datas_medicao);
+    await limparTarefasDeMedicao(req.params.id);
+    const respFinal = finalResponsavel;
+    if (datas.length && respFinal) {
+      const pdcaContext = {
+        plano_id: acaoAtual.plano_id,
+        plano_titulo: plano?.titulo,
+        quadrante: acaoAtual.quadrante,
+        quadrante_label: QUADRANTE_LABEL[acaoAtual.quadrante] || acaoAtual.quadrante,
+        meta: plano?.meta,
+        acao_id: req.params.id,
+        medicao: true,
+      };
+      const primeira = await criarTarefasDeMedicao({
+        datas, acao: { descricao: data.descricao }, plano, responsavel_id: respFinal,
+        requester_id, detalhe: detalhe !== undefined ? detalhe : acaoAtual.detalhe, pdcaContext,
+      });
+      if (primeira) {
+        await supabase.from('acoes_pdca').update({ tarefa_id: primeira }).eq('id', req.params.id);
+        data.tarefa_id = primeira;
+      }
+    }
+  }
+
   // Ação de várias pessoas: o texto, o prazo e a repetição são os mesmos
   // para todo mundo — editar em uma tem que valer para todas, senão o
   // cartão único da tela mostraria uma versão e as tarefas, outra.
@@ -401,10 +486,14 @@ router.delete('/acoes/:id', async (req, res) => {
   // apagar linha por linha deixaria metade do grupo órfã.
   const apagarGrupo = req.query.grupo === '1' && acao?.grupo_id;
   let tarefasParaApagar = acao?.tarefa_id ? [acao.tarefa_id] : [];
+  // Os ids têm que ser lidos ANTES do delete: depois as linhas não existem
+  // mais e as tarefas de medição ficariam órfãs na lista das pessoas.
+  let idsDasAcoes = [req.params.id];
   if (apagarGrupo) {
     const { data: irmas } = await supabase.from('acoes_pdca')
-      .select('tarefa_id').eq('grupo_id', acao.grupo_id);
+      .select('id, tarefa_id').eq('grupo_id', acao.grupo_id);
     tarefasParaApagar = (irmas || []).map(i => i.tarefa_id).filter(Boolean);
+    idsDasAcoes = (irmas || []).map(i => i.id);
   }
 
   const { error } = apagarGrupo
@@ -418,6 +507,11 @@ router.delete('/acoes/:id', async (req, res) => {
 
   if (tarefasParaApagar.length) {
     await supabase.from('tarefas').delete().in('id', tarefasParaApagar);
+  }
+  // A medição do C tem várias tarefas (uma por data) e só uma delas está em
+  // `tarefa_id` — as outras se encontram pelo vínculo com a ação.
+  for (const idAcao of idsDasAcoes) {
+    await supabase.from('tarefas').delete().eq('pdca_context->>acao_id', idAcao);
   }
 
   res.json({ ok: true });
