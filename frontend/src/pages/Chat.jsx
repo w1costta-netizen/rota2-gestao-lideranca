@@ -414,7 +414,7 @@ export default function Chat({ userId }) {
           <MessageCircle size={20} style={{ color:'var(--primary)' }}/> Conversas
         </h1>
         <p style={{ color:'var(--text-muted)', fontSize:13, marginTop:2 }}>
-          Converse com quem é da sua loja, sem sair do app.
+          Converse com quem é da sua empresa, sem sair do app.
         </p>
       </div>
 

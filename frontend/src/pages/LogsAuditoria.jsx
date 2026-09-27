@@ -134,13 +134,13 @@ const ACAO_LABEL = {
   remover_reacao: 'Removeu reação',
 
   // Lojas, perfil e acesso
-  criar_loja: 'Criou loja',
-  solicitar_loja: 'Solicitou cadastro de loja',
-  aprovar_loja: 'Aprovou loja',
-  desativar_loja: 'Desativou loja',
-  editar_modulos_premium: 'Alterou módulos da loja',
-  adicionar_loja_extra: 'Liberou loja extra',
-  remover_loja_extra: 'Removeu loja extra',
+  criar_loja: 'Criou empresa',
+  solicitar_loja: 'Solicitou cadastro de empresa',
+  aprovar_loja: 'Aprovou empresa',
+  desativar_loja: 'Desativou empresa',
+  editar_modulos_premium: 'Alterou módulos da empresa',
+  adicionar_loja_extra: 'Liberou empresa extra',
+  remover_loja_extra: 'Removeu empresa extra',
   criar_cargo: 'Criou cargo',
   excluir_cargo: 'Excluiu cargo',
   criar_setor: 'Criou setor',
@@ -239,7 +239,7 @@ export default function LogsAuditoria({ userId, profile }) {
       load();
       toast('Loja adicionada!');
     } catch (e) {
-      toast(e?.response?.data?.error || 'Erro ao adicionar loja', 'error');
+      toast(e?.response?.data?.error || 'Erro ao adicionar empresa', 'error');
     } finally {
       setSalvandoEmpresa(false);
     }
@@ -343,7 +343,7 @@ export default function LogsAuditoria({ userId, profile }) {
           padding:'12px 14px', marginBottom:16 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
             <Store size={15} style={{ color:'var(--primary)' }}/>
-            <span style={{ fontWeight:700, fontSize:13 }}>Minhas lojas</span>
+            <span style={{ fontWeight:700, fontSize:13 }}>Minhas empresas</span>
             <span style={{ fontSize:11, color:'var(--text-muted)' }}>
               — além da sua loja principal ({profile?.company || '—'}), você pode liberar outras lojas para aparecerem aqui
             </span>
@@ -365,7 +365,7 @@ export default function LogsAuditoria({ userId, profile }) {
           )}
 
           <div style={{ display:'flex', gap:8 }}>
-            <input className="input" style={{ flex:1 }} placeholder="Nome exato da loja (campo 'company')"
+            <input className="input" style={{ flex:1 }} placeholder="Nome exato da empresa (campo 'company')"
               value={novaEmpresa} onChange={e => setNovaEmpresa(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') adicionarEmpresa(); }}/>
             <button className="btn btn-primary" onClick={adicionarEmpresa} disabled={salvandoEmpresa || !novaEmpresa.trim()}>

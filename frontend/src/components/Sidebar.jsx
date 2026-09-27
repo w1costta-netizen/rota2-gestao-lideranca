@@ -7,7 +7,7 @@ import Avatar from './Avatar';
 
 // Itens avulsos (sem grupo)
 const NAV_SOLO = [
-  { id: 'lojas',            label: 'Lojas',           icon: Store,       perm: 'lojas' },
+  { id: 'lojas',            label: 'Empresas',        icon: Store,       perm: 'lojas' },
   { id: 'dashboard',        label: 'Dashboard',       icon: LayoutGrid,  perm: 'dashboard' },
   { id: 'campanhas',        label: 'Flyers',           icon: Tag,         perm: 'campanhas' },
   { id: 'relatorios',       label: 'Tour 4x4',         icon: Camera,      perm: 'relatorios' },

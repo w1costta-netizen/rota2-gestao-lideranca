@@ -9,14 +9,14 @@ export default function StoreSetup({ userId, onFinish }) {
   const [error,   setError]   = useState('');
 
   const submit = async () => {
-    if (!name.trim()) return setError('Nome da loja é obrigatório.');
+    if (!name.trim()) return setError('Nome da empresa é obrigatório.');
     setSaving(true);
     setError('');
     try {
       await api.post('/stores', { requester_id: userId, name: name.trim(), city: city.trim() });
       setDone(true);
     } catch (e) {
-      setError(e.response?.data?.error || 'Erro ao cadastrar loja.');
+      setError(e.response?.data?.error || 'Erro ao cadastrar empresa.');
     }
     setSaving(false);
   };
@@ -62,9 +62,9 @@ export default function StoreSetup({ userId, onFinish }) {
             )}
 
             <div className="form-group">
-              <label className="form-label">Nome da loja *</label>
+              <label className="form-label">Nome da empresa *</label>
               <input className="input" value={name} onChange={e => setName(e.target.value)}
-                placeholder="Ex: Sam's Club Brasília Sul" autoFocus />
+                placeholder="Ex: Padaria Central · Clínica Vida · Loja Centro" autoFocus />
             </div>
 
             <div className="form-group">
@@ -75,7 +75,7 @@ export default function StoreSetup({ userId, onFinish }) {
 
             <button className="btn btn-primary" onClick={submit} disabled={saving}
               style={{ width: '100%', justifyContent: 'center', marginTop: 8, padding: '12px' }}>
-              {saving ? 'Cadastrando...' : 'Cadastrar loja'}
+              {saving ? 'Cadastrando...' : 'Cadastrar empresa'}
             </button>
           </>
         )}

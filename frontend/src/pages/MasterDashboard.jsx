@@ -33,7 +33,7 @@ function Vencimento({ ate }) {
   if (!ate) {
     return (
       <span style={{ fontSize: 11.5, color: 'var(--text-muted)' }}
-        title="Loja sem data de vencimento: a checagem diária não bloqueia esta loja.">
+        title="Empresa sem data de vencimento: a checagem diária não bloqueia esta empresa.">
         · sem data de acesso
       </span>
     );
@@ -92,7 +92,7 @@ export default function MasterDashboard({ userId, viewingStore, onSelectStore, e
       setNewForm({ name: '', city: '' });
       load();
     } catch (e) {
-      alert(e.response?.data?.error || 'Erro ao criar loja.');
+      alert(e.response?.data?.error || 'Erro ao criar empresa.');
     }
     setSavingNew(false);
   };
@@ -104,8 +104,8 @@ export default function MasterDashboard({ userId, viewingStore, onSelectStore, e
       // equipe foi religada junto com a loja.
       const religadas = r.data?.pessoas_religadas || 0;
       showToast(religadas
-        ? `Loja "${store.name}" reativada — ${religadas} pessoa(s) voltaram a ter acesso.`
-        : `Loja "${store.name}" aprovada!`);
+        ? `Empresa "${store.name}" reativada — ${religadas} pessoa(s) voltaram a ter acesso.`
+        : `Empresa "${store.name}" aprovada!`);
       load();
     } catch (e) {
       showToast(e.response?.data?.error || 'Erro ao aprovar', 'error');
@@ -127,7 +127,7 @@ export default function MasterDashboard({ userId, viewingStore, onSelectStore, e
     const gente = store.user_count
       ? `
 
-${store.user_count} usuário(s) estão ligados a esta loja e ficarão sem loja.`
+${store.user_count} usuário(s) estão ligados a esta empresa e ficarão sem empresa.`
       : '';
     if (!confirm(`${motivo} "${store.name}"?${gente}
 
@@ -135,18 +135,18 @@ Isso não tem volta.`)) return;
     try {
       const r = await api.delete(`/stores/${store.id}?requester_id=${userId}`);
       const n = r.data?.usuarios_vinculados || 0;
-      showToast(`"${store.name}" apagada.${n ? ` ${n} usuário(s) ficaram sem loja.` : ''}`);
+      showToast(`"${store.name}" apagada.${n ? ` ${n} usuário(s) ficaram sem empresa.` : ''}`);
       load();
     } catch (e) {
-      showToast(e.response?.data?.error || 'Erro ao apagar a loja', 'error');
+      showToast(e.response?.data?.error || 'Erro ao apagar a empresa', 'error');
     }
   };
 
   const disable = async (store) => {
-    if (!confirm(`Desativar a loja "${store.name}"? Os usuários perderão acesso.`)) return;
+    if (!confirm(`Desativar a empresa "${store.name}"? Os usuários perderão acesso.`)) return;
     try {
       await api.put(`/stores/${store.id}/disable`, { requester_id: userId });
-      showToast(`Loja "${store.name}" desativada.`);
+      showToast(`Empresa "${store.name}" desativada.`);
       load();
     } catch (e) {
       showToast(e.response?.data?.error || 'Erro ao desativar', 'error');
@@ -176,11 +176,11 @@ Isso não tem volta.`)) return;
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Gestão de Lojas</h1>
+          <h1 className="page-title">Gestão de Empresas</h1>
           <p className="page-subtitle">{active.length} ativas · {pending.length} aguardando aprovação</p>
         </div>
         <button className="btn btn-primary btn-sm" onClick={() => setShowNew(true)}>
-          <Plus size={14}/> Nova Loja
+          <Plus size={14}/> Nova Empresa
         </button>
       </div>
 
@@ -190,7 +190,7 @@ Isso não tem volta.`)) return;
           <div className="stat-icon"><Store size={22} color="var(--primary)"/></div>
           <div>
             <div className="stat-value">{stores.length}</div>
-            <div className="stat-label">Total de lojas</div>
+            <div className="stat-label">Total de empresas</div>
           </div>
         </div>
         <div className="stat-card">
@@ -283,7 +283,7 @@ Isso não tem volta.`)) return;
                   <button className="btn btn-sm" onClick={() => approve(s)}>
                     <CheckCircle size={13}/> Reativar
                   </button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => excluir(s, 'Apagar a loja')}
+                  <button className="btn btn-ghost btn-sm" onClick={() => excluir(s, 'Apagar a empresa')}
                     style={{ color: 'var(--danger)' }}>
                     <XCircle size={13}/> Apagar
                   </button>
@@ -300,15 +300,15 @@ Isso não tem volta.`)) return;
       ) : active.length === 0 && pending.length === 0 && desativadas.length === 0 ? (
         <div className="card" style={{ textAlign: 'center', padding: 40 }}>
           <Store size={48} style={{ opacity: .15, marginBottom: 12 }}/>
-          <h3>Nenhuma loja cadastrada</h3>
+          <h3>Nenhuma empresa cadastrada</h3>
           <p style={{ color: 'var(--text-muted)', marginTop: 6, fontSize: 13 }}>
-            Os gerentes gerais precisam acessar o app e cadastrar a loja deles.
+            Os gerentes gerais precisam acessar o app e cadastrar a empresa deles.
           </p>
         </div>
       ) : (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', fontWeight: 700, fontSize: 14 }}>
-            Lojas ativas ({active.length})
+            Empresas ativas ({active.length})
           </div>
           {active.map(s => (
             <div key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
@@ -395,7 +395,7 @@ Isso não tem volta.`)) return;
                   {loadingUsers === s.id ? (
                     <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Carregando usuários...</div>
                   ) : (storeUsers[s.id] || []).length === 0 ? (
-                    <div style={{ padding: '16px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Nenhum usuário cadastrado nesta loja.</div>
+                    <div style={{ padding: '16px 0', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>Nenhum usuário cadastrado nesta empresa.</div>
                   ) : (
                     <div className="table-wrap">
                       <table>
@@ -441,9 +441,9 @@ Isso não tem volta.`)) return;
       )}
 
       {showNew && (
-        <Modal title="Nova Loja" onClose={() => setShowNew(false)}>
+        <Modal title="Nova Empresa" onClose={() => setShowNew(false)}>
           <div className="form-group">
-            <label className="form-label">Nome da loja *</label>
+            <label className="form-label">Nome da empresa *</label>
             <input className="input" autoFocus value={newForm.name}
               onChange={e => setNewForm(f => ({ ...f, name: e.target.value }))}
               placeholder="Ex: Sam's Club Brasília Sul"

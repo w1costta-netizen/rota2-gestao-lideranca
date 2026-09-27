@@ -280,7 +280,7 @@ export default function Dashboard({ setPage, profile: propProfile }) {
           justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
           borderLeft: '4px solid var(--primary)', borderRadius: '0 12px 12px 0' }}>
           <div style={{ fontSize: 13, lineHeight: 1.5 }}>
-            <strong>Você não está dentro de nenhuma loja.</strong> Suas listas e anotações
+            <strong>Você não está dentro de nenhuma empresa.</strong> Suas listas e anotações
             estão aqui; tarefas, comunicados e agenda aparecem ao entrar numa loja.
           </div>
           <button className="btn btn-primary btn-sm" style={{ flexShrink: 0 }}
@@ -680,19 +680,19 @@ export default function Dashboard({ setPage, profile: propProfile }) {
           justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 3 }}>
-              Sua empresa tem mais de uma loja?
+              Sua empresa tem mais de uma unidade?
             </div>
             <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.5 }}>
               Dá para administrar todas por aqui, cada uma com a sua equipe — e você
               acompanhando de um lugar só.
             </div>
           </div>
-          <a href={`mailto:contato@rotalider.com.br?subject=${encodeURIComponent('Quero abrir mais lojas')}&body=${encodeURIComponent(`Loja: ${profile?.company || ''}
-Quantas lojas: 
+          <a href={`mailto:contato@rotalider.com.br?subject=${encodeURIComponent('Quero abrir mais unidades')}&body=${encodeURIComponent(`Empresa: ${profile?.company || ''}
+Quantas unidades: 
 Cidades: 
 `)}`}
             className="btn btn-primary btn-sm" style={{ textDecoration: 'none', flexShrink: 0 }}>
-            Quero abrir mais lojas
+            Quero abrir mais unidades
           </a>
         </div>
       )}

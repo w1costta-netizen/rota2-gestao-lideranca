@@ -129,7 +129,7 @@ export default function Login({ onGoRegister }) {
       )}
 
       <div className="auth-footer" style={{ fontSize:12, color:'var(--text-muted)', textAlign:'center' }}>
-        A equipe entra por convite do administrador da loja.<br />
+        A equipe entra por convite do administrador da empresa.<br />
         <a href="/termos-de-uso-rotalider.html" target="_blank" rel="noopener noreferrer"
           style={{ color:'var(--primary)', textDecoration:'underline', marginTop:6, display:'inline-block' }}>
           Termos de Uso

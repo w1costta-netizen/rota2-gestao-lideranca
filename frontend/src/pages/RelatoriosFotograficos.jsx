@@ -592,7 +592,12 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
       <div className="page-header">
         <div>
           <div className="page-title">Tour 4x4</div>
+          {/* O nome é o que a equipe já conhece; a frase existe para quem
+              chega de fora entender a tela sem perguntar a ninguém. */}
           <div className="page-subtitle">
+            Reporte e resolva: fotografe o que precisa melhorar, defina prazo e acompanhe até fechar.
+          </div>
+          <div className="page-subtitle" style={{ marginTop: 2 }}>
             {setoresSel.length > 0
               ? `${listFiltrada.length} de ${list.length} tour${list.length !== 1 ? 's' : ''}`
               : `${list.length} tour${list.length !== 1 ? 's' : ''}`}

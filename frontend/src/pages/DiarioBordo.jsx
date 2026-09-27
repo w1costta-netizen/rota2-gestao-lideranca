@@ -105,7 +105,7 @@ export default function DiarioBordo({ userId, profile }) {
 
   const CATEGORIAS = {
     ...CATEGORIAS_BASE,
-    ...Object.fromEntries(extras.map(c => [c.chave, { nome: c.nome, cor: c.cor, desc: 'Categoria criada na loja', id: c.id, daLoja: true }])),
+    ...Object.fromEntries(extras.map(c => [c.chave, { nome: c.nome, cor: c.cor, desc: 'Categoria criada na empresa', id: c.id, daLoja: true }])),
   };
 
   const carregarCategorias = async () => {
@@ -126,14 +126,14 @@ export default function DiarioBordo({ userId, profile }) {
       // Já deixa selecionada: quem criou a categoria era porque ia usá-la.
       if (editando) setEditando(ed => ({ ...ed, categoria: r.data.chave }));
       setCriandoCat(null);
-      toast(`Categoria "${r.data.nome}" criada para a loja.`);
+      toast(`Categoria "${r.data.nome}" criada para a empresa.`);
     } catch (e) {
       toast(e?.response?.data?.error || 'Erro ao criar a categoria.', 'error');
     }
   };
 
   const removerCategoria = async (cat) => {
-    if (!window.confirm(`Remover a categoria "${cat.nome}" da loja?`)) return;
+    if (!window.confirm(`Remover a categoria "${cat.nome}" da empresa?`)) return;
     try {
       await api.delete(`/diario/categorias/${cat.id}?requester_id=${userId}`);
       setExtras(lista => lista.filter(c => c.id !== cat.id));
@@ -261,7 +261,7 @@ export default function DiarioBordo({ userId, profile }) {
             <BookOpen size={20} style={{ color:'var(--primary)' }}/> Diário de Bordo
           </h1>
           <p style={{ color:'var(--text-muted)', fontSize:13, marginTop:2 }}>
-            O que aconteceu na loja, dia a dia — para consultar e entender depois.
+            O que aconteceu na empresa, dia a dia — para consultar e entender depois.
           </p>
         </div>
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
@@ -365,7 +365,7 @@ export default function DiarioBordo({ userId, profile }) {
                 {/* Só gestor remove, e só categoria da loja: as 7 de base
                     sustentam a análise e não podem sumir. */}
                 {c.daLoja && ehGestor && (
-                  <button onClick={() => removerCategoria(c)} title={`Remover "${c.nome}" da loja`}
+                  <button onClick={() => removerCategoria(c)} title={`Remover "${c.nome}" da empresa`}
                     aria-label={`Remover categoria ${c.nome}`}
                     style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)',
                              padding:'4px 2px 4px 4px', marginLeft:-2 }}>
@@ -375,7 +375,7 @@ export default function DiarioBordo({ userId, profile }) {
               </span>
             ))}
             <button onClick={() => setCriandoCat({ nome:'', cor:CORES_NOVA[0] })}
-              title="Criar uma categoria para a loja"
+              title="Criar uma categoria para a empresa"
               style={{ padding:'5px 11px', borderRadius:99, fontSize:12, cursor:'pointer', fontWeight:600,
                        border:'1px dashed var(--border)', background:'transparent', color:'var(--text-muted)',
                        display:'inline-flex', alignItems:'center', gap:4 }}>
@@ -557,7 +557,7 @@ export default function DiarioBordo({ userId, profile }) {
                 </button>
               ))}
               <button onClick={() => setCriandoCat({ nome:'', cor:CORES_NOVA[0] })}
-                title="Criar uma categoria para a loja"
+                title="Criar uma categoria para a empresa"
                 style={{ padding:'6px 12px', borderRadius:99, fontSize:12, cursor:'pointer', fontWeight:600,
                          border:'1px dashed var(--border)', background:'transparent', color:'var(--text-muted)',
                          display:'inline-flex', alignItems:'center', gap:4 }}>

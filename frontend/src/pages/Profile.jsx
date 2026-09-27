@@ -462,7 +462,7 @@ export default function Profile() {
                 {/* A loja não é escolhida pela pessoa: vem da compra ou do gestor.
                     Editável aqui, qualquer um trocaria para outra loja e veria os
                     dados dela. O banco também bloqueia (trigger em profiles). */}
-                <input className="input" value={form.company} readOnly disabled title="A loja é definida pelo gestor" style={{ opacity: .7, cursor: 'not-allowed' }}/>
+                <input className="input" value={form.company} readOnly disabled title="A empresa é definida pelo gestor" style={{ opacity: .7, cursor: 'not-allowed' }}/>
               </div>
               <div className="form-group" style={{ margin:0 }}>
                 <label className="form-label"><Hash size={13} style={{ marginRight:4 }}/>ID / Matrícula</label>

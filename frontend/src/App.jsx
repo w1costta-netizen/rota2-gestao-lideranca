@@ -144,8 +144,8 @@ function ModuloNaoContratado({ nome, podeContratar }) {
       <p style={{ fontSize:13, maxWidth:420, lineHeight:1.6 }}>
         Ele não vem no plano padrão.{' '}
         {podeContratar
-          ? 'Para liberar na sua loja, fale com a gente — a ativação é imediata, sem precisar refazer nada do que você já cadastrou.'
-          : 'Quem pode contratar é o responsável pela sua loja — vale comentar com ele se este módulo ajudaria no seu dia a dia.'}
+          ? 'Para liberar na sua empresa, fale com a gente — a ativação é imediata, sem precisar refazer nada do que você já cadastrou.'
+          : 'Quem pode contratar é o responsável pela sua empresa — vale comentar com ele se este módulo ajudaria no seu dia a dia.'}
       </p>
       {/* O convite para contratar só para quem decide. Colaborador não compra
           módulo, e mandá-lo escrever para o suporte só gera mensagem que
@@ -175,14 +175,14 @@ function EscolhaUmaLoja({ irParaLojas, podeEscolher }) {
     <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
       minHeight:'60vh', gap:12, color:'var(--text-muted)', textAlign:'center', padding:20 }}>
       <span style={{ fontSize:40 }}>🏬</span>
-      <h2 style={{ fontSize:18, fontWeight:700, color:'var(--text)' }}>Escolha uma loja para ver esta tela</h2>
+      <h2 style={{ fontSize:18, fontWeight:700, color:'var(--text)' }}>Escolha uma empresa para ver esta tela</h2>
       <p style={{ fontSize:13, maxWidth:430, lineHeight:1.6 }}>
         {podeEscolher
-          ? 'Sua conta é a dona do sistema e não faz parte de nenhuma loja. Entre em uma delas e o app funciona normalmente ali dentro — inclusive esta tela. Suas Listas, Anotações e Conversas continuam disponíveis sem escolher nada.'
-          : 'Seu cadastro ainda não está ligado a uma loja. Fale com o responsável para liberar seu acesso.'}
+          ? 'Sua conta é a dona do sistema e não faz parte de nenhuma empresa. Entre em uma delas e o app funciona normalmente ali dentro — inclusive esta tela. Suas Listas, Anotações e Conversas continuam disponíveis sem escolher nada.'
+          : 'Seu cadastro ainda não está ligado a uma empresa. Fale com o responsável para liberar seu acesso.'}
       </p>
       {podeEscolher && (
-        <button className="btn btn-primary btn-sm" onClick={irParaLojas}>Ir para Lojas</button>
+        <button className="btn btn-primary btn-sm" onClick={irParaLojas}>Ir para Empresas</button>
       )}
     </div>
   );
@@ -369,8 +369,8 @@ function AppContent() {
         {contaDesativada && (
           <div className="auth-error" style={{ marginBottom: 12, textAlign: 'center' }}>
             {motivoBloqueio === 'loja'
-              ? 'A assinatura da sua loja no Rota Líder está encerrada. Fale com o responsável pela loja para reativar.'
-              : 'Seu acesso foi desativado. Fale com o responsável pela sua loja.'}
+              ? 'A assinatura da sua empresa no Rota Líder está encerrada. Fale com o responsável para reativar.'
+              : 'Seu acesso foi desativado. Fale com o responsável pela sua empresa.'}
           </div>
         )}
         {(authPage === 'register' || hasToken)
@@ -390,7 +390,7 @@ function AppContent() {
       <h2 style={{ color:'#fff', fontSize:18, fontWeight:700 }}>Não foi possível carregar seu perfil</h2>
       <p style={{ color:'#999', fontSize:13.5, maxWidth:340, lineHeight:1.6 }}>
         {motivoPerfil === 'cadastro não encontrado'
-          ? 'Sua conta existe, mas não está ligada a nenhum cadastro no Rota Líder. Quem administra a loja precisa criar o seu acesso.'
+          ? 'Sua conta existe, mas não está ligada a nenhum cadastro no Rota Líder. Quem administra a empresa precisa criar o seu acesso.'
           : 'Verifique sua conexão e tente de novo. Se continuar assim, fale com o suporte.'}
       </p>
       {/* O motivo técnico fica visível de propósito: sem ele, todo relato

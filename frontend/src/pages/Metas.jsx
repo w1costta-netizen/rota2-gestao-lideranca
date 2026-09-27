@@ -312,7 +312,7 @@ export default function Metas({ userId, profile }) {
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
       <div>
         <h1 style={{ fontSize: 22, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 9 }}><Target size={20} style={{ color: 'var(--primary)' }}/> Resultados</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>Lance o número de cada período e acompanhe a evolução — da loja e dos planos de ação.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>Lance o número de cada período e acompanhe a evolução — da empresa e dos planos de ação.</p>
       </div>
       {dados.podeGerir && !aberta && <button className="btn btn-primary" onClick={abrirNova}><Plus size={15}/> Nova meta</button>}
     </div>
@@ -342,7 +342,7 @@ export default function Metas({ userId, profile }) {
             <div>
               <div style={{ fontWeight: 800, fontSize: 16 }}>{aberta.nome}</div>
               <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                {aberta.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · prazo {br(aberta.prazo)} · lança {FREQ[aberta.frequencia]}{pl ? ` · 🎯 ${pl.titulo}` : ' · meta da loja (sem plano)'}
+                {aberta.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · prazo {br(aberta.prazo)} · lança {FREQ[aberta.frequencia]}{pl ? ` · 🎯 ${pl.titulo}` : ' · meta da empresa (sem plano)'}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -368,7 +368,7 @@ export default function Metas({ userId, profile }) {
         {sets.length > 0 && (
           <div className="card" style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-              <h3 style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>Por setor</h3>
+              <h3 style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>Por área</h3>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Total = soma dos setores em quantidade e R$; o percentual do total é o lançado (ou média ponderada).</div>
             </div>
             <div style={{ overflowX: 'auto' }}>
@@ -383,7 +383,7 @@ export default function Metas({ userId, profile }) {
                     const ativo = setorValido === nome;
                     return (
                       <tr key={nome || '__total'} onClick={() => { setSetorFoco(nome); setMedida(null); }} style={{ cursor: 'pointer', background: ativo ? 'rgba(232,98,42,.08)' : 'transparent' }}>
-                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontWeight: nome ? 600 : 800 }}>{nome || 'Total da loja'}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontWeight: nome ? 600 : 800 }}>{nome || 'Total'}</td>
                         {ks.map(k => { const a = rs.as.find(x => x.k === k); return (
                           <td key={k} style={{ padding: '8px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
                             {a ? <><b style={{ color: a.cor }}>{a.T.fmt(a.atual)}</b> <span style={{ color: 'var(--text-muted)' }}>/ {a.T.fmt(a.cfg.meta)}</span></> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
@@ -400,7 +400,7 @@ export default function Metas({ userId, profile }) {
 
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-            <h3 style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>{setorValido ? `${setorValido} — ` : sets.length ? 'Total da loja — ' : ''}{foco ? foco.T.nome : 'Painel — as medidas lado a lado'}</h3>
+            <h3 style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>{setorValido ? `${setorValido} — ` : sets.length ? 'Total — ' : ''}{foco ? foco.T.nome : 'Painel — as medidas lado a lado'}</h3>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {foco && <button className="btn btn-sm" onClick={() => setMedida(null)}><LayoutGrid size={13}/> Ver painel</button>}
               {[['auto', 'Automático'], ['linha', 'Linha'], ['barras', 'Barras'], ['progresso', 'Progresso']].map(([g, t]) => (
@@ -454,7 +454,7 @@ export default function Metas({ userId, profile }) {
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead><tr>
-                {['Data', ...(sets.length ? ['Setor'] : []), ...ks.map(k => MEDIDAS[k].curto), 'Quem', ''].map((h, i) => <th key={i} style={{ textAlign: ks.map(k => MEDIDAS[k].curto).includes(h) ? 'right' : 'left', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>{h}</th>)}
+                {['Data', ...(sets.length ? ['Área'] : []), ...ks.map(k => MEDIDAS[k].curto), 'Quem', ''].map((h, i) => <th key={i} style={{ textAlign: ks.map(k => MEDIDAS[k].curto).includes(h) ? 'right' : 'left', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>{h}</th>)}
               </tr></thead>
               <tbody>
                 {lancs.map(l => (
@@ -498,10 +498,10 @@ export default function Metas({ userId, profile }) {
             </div>
           ) : (
             <>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '8px 0 4px' }}>Uma linha por setor. Quantidade e R$ do total somam sozinhos{ks.includes('percentual') ? '; o % do total você lança na linha "Total" (ou deixa em branco para a média ponderada)' : ''}.</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', margin: '8px 0 4px' }}>Uma linha por área. Quantidade e R$ do total somam sozinhos{ks.includes('percentual') ? '; o % do total você lança na linha "Total" (ou deixa em branco para a média ponderada)' : ''}.</div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead><tr><th style={{ textAlign: 'left', padding: '6px 4px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Setor</th>{ks.map(k => <th key={k} style={{ textAlign: 'left', padding: '6px 4px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{MEDIDAS[k].curto}</th>)}</tr></thead>
+                  <thead><tr><th style={{ textAlign: 'left', padding: '6px 4px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Área</th>{ks.map(k => <th key={k} style={{ textAlign: 'left', padding: '6px 4px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{MEDIDAS[k].curto}</th>)}</tr></thead>
                   <tbody>
                     {sets.map(st => (
                       <tr key={st.nome}>
@@ -615,7 +615,7 @@ export default function Metas({ userId, profile }) {
             <>
               <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Em 4 passos: o que medir · como medir · de onde sai e onde quer chegar · até quando.</p>
               <Rotulo>1. O que você quer acompanhar?</Rotulo>
-              <input style={inputStyle} value={nova.nome} maxLength={80} onChange={e => set({ nome: e.target.value })} placeholder="Ex.: Venda de Bazar · Ruptura de Perecíveis · Faltas no mês"/>
+              <input style={inputStyle} value={nova.nome} maxLength={80} onChange={e => set({ nome: e.target.value })} placeholder="Ex.: Vendas do mês · Retrabalho na produção · Faltas da equipe"/>
               <Rotulo>2. O número precisa subir ou descer?</Rotulo>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" style={escolha(nova.direcao === 'aumentar')} onClick={() => set({ direcao: 'aumentar' })}>⬆ Subir — quanto maior, melhor (venda, conversão)</button>
@@ -649,10 +649,14 @@ export default function Metas({ userId, profile }) {
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Mensal vira gráfico de barras; diário/semanal vira linha com tendência</div>
                 </div>
               </div>
-              <Rotulo>5. Quer acompanhar por setor? <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional) — o total da loja e cada setor, como NAL, Mercearia, Perecíveis</span></Rotulo>
+              {/* Setor aqui é qualquer recorte que a pessoa use: setor,
+                  área, equipe, turno, filial, obra. As sugestões vêm do que
+                  a própria empresa cadastrou, e o campo livre aceita
+                  qualquer nome — este app não é só de loja. */}
+              <Rotulo>5. Quer acompanhar separado por área? <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional) — o total e cada parte: setor, equipe, turno, filial, o que fizer sentido para você</span></Rotulo>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" style={escolha(!nova.porSetor)} onClick={() => set({ porSetor: false })}>Não — só o total</button>
-                <button type="button" style={escolha(nova.porSetor)} onClick={() => set({ porSetor: true })}>Sim — total + setores</button>
+                <button type="button" style={escolha(nova.porSetor)} onClick={() => set({ porSetor: true })}>Sim — total + partes</button>
               </div>
               {nova.porSetor && (() => {
                 const vazio = () => Object.fromEntries(ks.map(k => [k, { inicial: '', meta: '' }]));
@@ -668,7 +672,7 @@ export default function Metas({ userId, profile }) {
                       </div>
                     )}
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <input style={inputStyle} value={nova.novoSetor} maxLength={40} placeholder="Outro setor — digite e aperte Enter" onChange={e => set({ novoSetor: e.target.value })}
+                      <input style={inputStyle} value={nova.novoSetor} maxLength={40} placeholder="Digite o nome e aperte Enter — ex.: Comercial, Turno da noite, Filial Centro" onChange={e => set({ novoSetor: e.target.value })}
                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ligar(nova.novoSetor.trim()); } }}/>
                       <button type="button" className="btn btn-sm" onClick={() => ligar(nova.novoSetor.trim())}>Adicionar</button>
                     </div>
@@ -676,7 +680,7 @@ export default function Metas({ userId, profile }) {
                       <div key={st.nome} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginTop: 8 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <b style={{ fontSize: 12.5 }}>{st.nome}</b>
-                          <button type="button" className="btn-icon" onClick={() => tirar(st.nome)} title="Tirar setor"><X size={13}/></button>
+                          <button type="button" className="btn-icon" onClick={() => tirar(st.nome)} title="Tirar da lista"><X size={13}/></button>
                         </div>
                         {ks.map(k => (
                           <div key={k} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -686,14 +690,14 @@ export default function Metas({ userId, profile }) {
                         ))}
                       </div>
                     ))}
-                    {ks.length > 0 && nova.setores.length > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Dica: a soma das metas dos setores costuma bater com a meta do total.</div>}
+                    {ks.length > 0 && nova.setores.length > 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6 }}>Dica: a soma das metas das partes costuma bater com a meta do total.</div>}
                   </div>
                 );
               })()}
 
               <Rotulo>Essa meta faz parte de um plano de ação? <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional)</span></Rotulo>
               <select className="select" value={nova.plano_id} onChange={e => set({ plano_id: e.target.value })}>
-                <option value="">Não — é uma meta da loja</option>
+                <option value="">Não — é uma meta da empresa</option>
                 {dados.planos.map(p => <option key={p.id} value={p.id}>🎯 {p.titulo}</option>)}
               </select>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Todos os planos do PDCA aparecem aqui. Ligando, a meta também fica visível dentro do plano.</div>
