@@ -176,11 +176,14 @@ export default function Metas({ userId, profile }) {
   const [carregando, setCarregando] = useState(true);
   const [filtro, setFiltro] = useState('todas');
   const [abertaId, setAbertaId] = useState(null);
+  // Para onde voltar depois de editar: o assistente mora na lista, então
+  // editar fecha a meta e a reabre ao salvar.
+  const [voltarPara, setVoltarPara] = useState(null);
   const [medida, setMedida] = useState(null);
   const [setorFoco, setSetorFoco] = useState(TOTAL);   // '' = total
   const [modal, setModal] = useState(null);        // 'nova' | 'lancar'
   const [nova, setNova] = useState(null);
-  const [lanc, setLanc] = useState({ data: hoje(), valores: {}, porSetor: {} });
+  const [lanc, setLanc] = useState({ data: hoje(), valores: {}, porSetor: {}, observacao: '' });
   const [salvando, setSalvando] = useState(false);
 
   const carregar = async () => {
@@ -201,6 +204,32 @@ export default function Metas({ userId, profile }) {
               porSetor: false, setores: [], novoSetor: '' });
     setModal('nova');
   };
+  // Editar reaproveita o MESMO assistente da criação: manter duas telas
+  // parecidas era garantir que uma ficasse para trás. `nova.id` é o que
+  // diz se estamos criando ou corrigindo.
+  const abrirEdicao = (m) => {
+    const usa = { quantidade: false, reais: false, percentual: false };
+    const val = { quantidade: { inicial: '', meta: '' }, reais: { inicial: '', meta: '' }, percentual: { inicial: '', meta: '' } };
+    ORDEM.forEach(k => {
+      if (m.medidas?.[k]) {
+        usa[k] = true;
+        val[k] = { inicial: String(m.medidas[k].inicial), meta: String(m.medidas[k].meta) };
+      }
+    });
+    const sets = setoresDe(m).map(st => ({
+      nome: st.nome,
+      val: Object.fromEntries(ORDEM.map(k => [k, st.medidas?.[k]
+        ? { inicial: String(st.medidas[k].inicial), meta: String(st.medidas[k].meta) }
+        : { inicial: '', meta: '' }])),
+    }));
+    setNova({ id: m.id, nome: m.nome, direcao: m.direcao, prazo: String(m.prazo).slice(0, 10),
+              frequencia: m.frequencia, plano_id: m.plano_id || '', usa, val,
+              porSetor: sets.length > 0, setores: sets, novoSetor: '' });
+    setVoltarPara(abertaId);
+    setAbertaId(null);
+    setModal('nova');
+  };
+
   const salvarNova = async () => {
     const ks = ORDEM.filter(k => nova.usa[k]);
     if (!nova.nome.trim()) return toast('Diga o que você quer acompanhar (passo 1).', 'error');
@@ -213,11 +242,32 @@ export default function Metas({ userId, profile }) {
     if (nova.porSetor && !setores.length) return toast('Marque pelo menos um setor (passo 5) ou desligue "acompanhar por setor".', 'error');
     const incompleto = setores.find(st => ks.some(k => !st.medidas[k]));
     if (incompleto) return toast(`No setor "${incompleto.nome}", preencha "hoje está em" e "quer chegar em" em todas as medidas.`, 'error');
+    // Tirar um setor que já tem números lançados é decisão com consequência:
+    // os lançamentos ficam no banco, mas somem da tela. Por isso o aviso
+    // nomeia quais setores sairiam.
+    if (nova.id) {
+      const antes = setoresDe(dados.metas.find(m => m.id === nova.id) || {}).map(st => st.nome);
+      const agora = setores.map(st => st.nome);
+      const comLancamento = new Set((dados.metas.find(m => m.id === nova.id)?.lancamentos || [])
+        .filter(l => l.setor).map(l => l.setor));
+      const sumindo = antes.filter(n => !agora.includes(n) && comLancamento.has(n));
+      if (sumindo.length && !window.confirm(
+        `Você está tirando ${sumindo.length === 1 ? 'o setor' : 'os setores'} ${sumindo.join(', ')}, que já ${sumindo.length === 1 ? 'tem número lançado' : 'têm números lançados'}.\n\nOs lançamentos não somem do banco, mas deixam de aparecer aqui. Continuar?`)) return;
+    }
+
     setSalvando(true);
     try {
-      await api.post('/metas', { requester_id: userId, company: company || undefined, nome: nova.nome, direcao: nova.direcao, prazo: nova.prazo, frequencia: nova.frequencia, medidas, setores, plano_id: nova.plano_id || null });
-      setModal(null); toast('Meta criada.'); carregar();
-    } catch (e) { toast(e?.response?.data?.error || 'Não foi possível criar.', 'error'); }
+      const corpo = { requester_id: userId, company: company || undefined, nome: nova.nome, direcao: nova.direcao, prazo: nova.prazo, frequencia: nova.frequencia, medidas, setores, plano_id: nova.plano_id || null };
+      if (nova.id) {
+        await api.put(`/metas/${nova.id}`, corpo);
+        toast('Meta atualizada.');
+        if (voltarPara) { setAbertaId(voltarPara); setVoltarPara(null); }
+      } else {
+        await api.post('/metas', corpo);
+        toast('Meta criada.');
+      }
+      setModal(null); carregar();
+    } catch (e) { toast(e?.response?.data?.error || 'Não foi possível salvar.', 'error'); }
     setSalvando(false);
   };
   const salvarLanc = async () => {
@@ -227,10 +277,10 @@ export default function Metas({ userId, profile }) {
     // Um pedido por linha preenchida: total (sem setor) e cada setor.
     const pedidos = [];
     const total = limpar(lanc.valores, ks);
-    if (Object.keys(total).length) pedidos.push({ setor: '', valores: total });
+    if (Object.keys(total).length) pedidos.push({ setor: '', valores: total, observacao: lanc.observacao });
     setoresDe(aberta).forEach(st => {
       const v = limpar(lanc.porSetor[st.nome], Object.keys(st.medidas));
-      if (Object.keys(v).length) pedidos.push({ setor: st.nome, valores: v });
+      if (Object.keys(v).length) pedidos.push({ setor: st.nome, valores: v, observacao: lanc.observacao });
     });
     if (!pedidos.length) return toast('Informe pelo menos um número.', 'error');
     setSalvando(true);
@@ -238,7 +288,7 @@ export default function Metas({ userId, profile }) {
       for (const pd of pedidos) {
         await api.post(`/metas/${aberta.id}/lancamentos`, { requester_id: userId, company: company || undefined, data: lanc.data, ...pd });
       }
-      setModal(null); setLanc({ data: hoje(), valores: {}, porSetor: {} }); toast('Lançado.'); carregar();
+      setModal(null); setLanc({ data: hoje(), valores: {}, porSetor: {}, observacao: '' }); toast('Lançado.'); carregar();
     } catch (e) { toast(e?.response?.data?.error || 'Não foi possível lançar.', 'error'); }
     setSalvando(false);
   };
@@ -261,8 +311,8 @@ export default function Metas({ userId, profile }) {
   const cabecalho = (
     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
       <div>
-        <h1 style={{ fontSize: 22, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 9 }}><Target size={20} style={{ color: 'var(--primary)' }}/> Metas</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>Metas com número, da loja e dos planos de ação — lance o resultado e acompanhe no gráfico.</p>
+        <h1 style={{ fontSize: 22, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 9 }}><Target size={20} style={{ color: 'var(--primary)' }}/> Resultados</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 2 }}>Lance o número de cada período e acompanhe a evolução — da loja e dos planos de ação.</p>
       </div>
       {dados.podeGerir && !aberta && <button className="btn btn-primary" onClick={abrirNova}><Plus size={15}/> Nova meta</button>}
     </div>
@@ -285,7 +335,7 @@ export default function Metas({ userId, profile }) {
     return (
       <div>
         {cabecalho}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}><button className="btn btn-sm" onClick={() => { setAbertaId(null); setMedida(null); setSetorFoco(TOTAL); }}><ChevronLeft size={14}/> Metas</button></div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}><button className="btn btn-sm" onClick={() => { setAbertaId(null); setMedida(null); setSetorFoco(TOTAL); }}><ChevronLeft size={14}/> Resultados</button></div>
 
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
@@ -297,7 +347,11 @@ export default function Metas({ userId, profile }) {
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
               <Selo cor={rTotal.cor}>{rTotal.atingiu ? 'Meta atingida' : `${rTotal.pct}% do caminho`}</Selo>
-              <button className="btn btn-primary btn-sm" onClick={() => { setLanc({ data: hoje(), valores: {}, porSetor: {} }); setModal('lancar'); }}><Plus size={14}/> Lançar</button>
+              <button className="btn btn-primary btn-sm" onClick={() => { setLanc({ data: hoje(), valores: {}, porSetor: {}, observacao: '' }); setModal('lancar'); }}><Plus size={14}/> Lançar</button>
+              {/* Editar existe principalmente para ligar o acompanhamento
+                  por setor depois — antes só dava para isso apagando a meta
+                  e perdendo os lançamentos. */}
+              <button className="btn btn-sm" onClick={() => abrirEdicao(aberta)} title="Editar a meta, o prazo e os setores">Editar</button>
               {dados.podeGerir && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => apagarMeta(aberta)}><Trash2 size={14}/></button>}
             </div>
           </div>
@@ -408,7 +462,14 @@ export default function Metas({ userId, profile }) {
                     <td style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)' }}>{br(l.data)}</td>
                     {sets.length > 0 && <td style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)', fontWeight: l.setor ? 500 : 700 }}>{l.setor || 'Total'}</td>}
                     {ks.map(k => <td key={k} style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{l.valores?.[k] != null ? MEDIDAS[k].fmt(l.valores[k]) : '—'}</td>)}
-                    <td style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)' }}>{l.quem?.full_name?.split(' ')[0] || '—'}</td>
+                    <td style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)', fontSize: 12, color: 'var(--text-muted)' }}>
+                      {l.quem?.full_name?.split(' ')[0] || '—'}
+                      {l.observacao && (
+                        <div style={{ fontSize: 11.5, color: 'var(--text)', opacity: .85, marginTop: 2, lineHeight: 1.35, whiteSpace: 'pre-wrap' }}>
+                          💬 {l.observacao}
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: '7px 8px', borderBottom: '1px solid var(--border)', textAlign: 'right' }}>
                       {(dados.podeGerir || l.lancado_por === userId) && <button className="btn-icon" onClick={() => apagarLanc(String(l.data).slice(0, 10), l.setor || '')} title="Apagar"><X size={13}/></button>}
                     </td>
@@ -469,6 +530,17 @@ export default function Metas({ userId, profile }) {
               </div>
             </>
           )}
+
+          {/* O que explica o número. Sem isto, três meses depois ninguém
+              lembra por que a semana caiu, e o gráfico vira uma linha sem
+              história — que é justamente o que se discute na reunião. */}
+          <div style={{ marginTop: 12 }}>
+            <Rotulo>Observação (opcional)</Rotulo>
+            <textarea rows={2} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+              value={lanc.observacao}
+              onChange={e => setLanc(l => ({ ...l, observacao: e.target.value }))}
+              placeholder="O que explica esse número? Ex: faltou o caminhão na quarta"/>
+          </div>
         </Modal>
       </div>
     );
@@ -482,7 +554,7 @@ export default function Metas({ userId, profile }) {
       {cabecalho}
       <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>
-          {dados.metas.length} meta(s) · {atingidas} atingida(s). Aqui ficam as metas com número: as da loja e as de cada plano de ação. Todo plano do PDCA aparece nos filtros.
+          {dados.metas.length} meta(s) · {atingidas} atingida(s). Aqui você lança o número de cada período: das metas da loja e das de cada plano de ação. Todo plano do PDCA aparece nos filtros.
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {[['todas', `Todas (${dados.metas.length})`], ['livres', `Da loja (${dados.metas.filter(m => !m.plano_id).length})`],
@@ -532,8 +604,8 @@ export default function Metas({ userId, profile }) {
         );
       })}
 
-      <Modal open={modal === 'nova'} onClose={() => setModal(null)} title="Nova meta"
-        footer={<><button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button><button className="btn btn-primary" onClick={salvarNova} disabled={salvando}>{salvando ? 'Criando...' : 'Criar meta'}</button></>}>
+      <Modal open={modal === 'nova'} onClose={() => setModal(null)} title={nova?.id ? 'Editar meta' : 'Nova meta'}
+        footer={<><button className="btn btn-ghost" onClick={() => setModal(null)}>Cancelar</button><button className="btn btn-primary" onClick={salvarNova} disabled={salvando}>{salvando ? 'Salvando...' : (nova?.id ? 'Salvar alterações' : 'Criar meta')}</button></>}>
         {nova && (() => {
           const ks = ORDEM.filter(k => nova.usa[k]);
           const set = (patch) => setNova(n => ({ ...n, ...patch }));

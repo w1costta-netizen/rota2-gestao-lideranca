@@ -23,7 +23,7 @@ export const MODULES = [
   { key: 'organograma',         label: 'Organograma',            icon: '🌿', desc: 'Hierarquia de equipes e líderes' },
   { key: 'conferencia_secao',   label: 'Conferência de Seção',   icon: '🔍', desc: 'Conferência e checklist de seções da loja' },
   { key: 'pdca',                label: 'Plano de Ação (PDCA)',   icon: '🎯', desc: 'Criar e acompanhar planos de ação PDCA' },
-  { key: 'metas',               label: 'Metas',                  icon: '🎯', desc: 'Metas com número, da loja e dos planos de ação, com gráfico automático' },
+  { key: 'metas',               label: 'Resultados',             icon: '🎯', desc: 'Lançar o número da semana e acompanhar a evolução — da loja e dos planos de ação' },
   { key: 'produtividade',       label: 'Gestão do Tempo e Produtividade', icon: '⏱️', desc: 'Treinamentos de produtividade e painel de acompanhamento do time' },
   { key: 'desempenho',           label: 'Análise de Desempenho',  icon: '📈', desc: 'Notas e sugestões por pessoa e por equipe, a partir do que o app registra' },
   { key: 'torneio',              label: 'Torneios',               icon: '🏆', desc: 'Campanhas entre setores e pessoas, com placar automático' },

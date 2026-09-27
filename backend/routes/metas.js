@@ -97,7 +97,7 @@ router.get('/', async (req, res) => {
 
   const ids = (metas || []).map(m => m.id);
   const { data: lanc } = ids.length
-    ? await supabase.from('metas_lancamentos').select('meta_id, data, setor, valores, lancado_por, created_at, quem:lancado_por(full_name)')
+    ? await supabase.from('metas_lancamentos').select('meta_id, data, setor, valores, observacao, lancado_por, created_at, quem:lancado_por(full_name)')
         .in('meta_id', ids).order('data')
     : { data: [] };
   const porMeta = {};
@@ -213,6 +213,9 @@ router.post('/:id/lancamentos', async (req, res) => {
   if (!meta.ativa) return res.status(400).json({ error: 'Esta meta foi apagada.' });
 
   const { data, valores } = req.body || {};
+  // O que explica o número. Sem isto, três meses depois ninguém lembra por
+  // que a semana caiu, e o gráfico vira uma linha sem história.
+  const observacao = String(req.body?.observacao || '').trim().slice(0, 400) || null;
   if (!ehData(data)) return res.status(400).json({ error: 'Informe a data do lançamento.' });
   // '' = total da loja; senão tem que ser um setor da meta.
   const setor = String(req.body?.setor || '').trim();
@@ -229,8 +232,8 @@ router.post('/:id/lancamentos', async (req, res) => {
   if (!Object.keys(limpos).length) return res.status(400).json({ error: 'Informe pelo menos um número.' });
 
   const { data: salvo, error } = await supabase.from('metas_lancamentos')
-    .upsert({ meta_id: meta.id, data, setor, valores: limpos, lancado_por: me.id, created_at: new Date().toISOString() }, { onConflict: 'meta_id,data,setor' })
-    .select('meta_id, data, setor, valores, lancado_por, created_at, quem:lancado_por(full_name)').single();
+    .upsert({ meta_id: meta.id, data, setor, valores: limpos, observacao, lancado_por: me.id, created_at: new Date().toISOString() }, { onConflict: 'meta_id,data,setor' })
+    .select('meta_id, data, setor, valores, observacao, lancado_por, created_at, quem:lancado_por(full_name)').single();
   if (error) {
     registrarLog('lancar_meta', 'metas_lancamentos', 'erro', { company: meta.company, user_id: me.id, rota: req.originalUrl, erro: error.message });
     return res.status(500).json({ error: 'Não foi possível lançar.' });

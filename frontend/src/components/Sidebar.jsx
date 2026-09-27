@@ -47,7 +47,7 @@ const NAV_GROUPS = [
       { id: 'anotacoes', label: 'Anotações',   icon: StickyNote,   perm: 'anotacoes' },
       { id: 'atas',    label: 'Ata de Reunião', icon: PenTool,     perm: 'atas' },
       { id: 'pdca',    label: 'Plano de Ação', icon: Target,       perm: 'pdca' },
-      { id: 'metas',   label: 'Metas',         icon: Goal,         perm: 'metas' },
+      { id: 'metas',   label: 'Resultados',    icon: Goal,         perm: 'metas' },
       { id: 'produtividade', label: 'Treinamentos', icon: GraduationCap, perm: 'produtividade' },
       { id: 'desempenho', label: 'Desempenho',  icon: Activity,      perm: 'desempenho' },
       { id: 'torneio', label: 'Torneios',    icon: Trophy,        perm: 'torneio' },
