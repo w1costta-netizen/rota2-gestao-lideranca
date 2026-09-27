@@ -431,7 +431,7 @@ function Medicoes({ meta, verificacao }) {
     <div style={{ marginTop: 10, border: '1px solid var(--border)', borderRadius: 10, padding: '9px 12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 12.5 }}>
         <b>📏 Medições combinadas no plano</b>
-        {quem && <span style={{ color: 'var(--text-muted)' }}>Quem mede: <b style={{ color: 'var(--text)' }}>{quem}</b></span>}
+        {quem && <span style={{ color: 'var(--text-muted)' }}>Responsável pela medição: <b style={{ color: 'var(--text)' }}>{quem}</b></span>}
       </div>
       {datas.length > 0 && (
         <>
@@ -450,6 +450,37 @@ function Medicoes({ meta, verificacao }) {
     </div>
   );
 }
+
+// Plano e responsável são vínculos, não característica da meta: ficam
+// numa linha própria, em etiqueta. Emendados na mesma frase de "reduzir ·
+// prazo · lança toda semana" viravam um amontoado que ninguém lê até o fim.
+// Uma cor por plano de ação, para o olho separar os grupos sem ler.
+//
+// NÃO usa verde/âmbar/vermelho: esses três já querem dizer "na meta" e
+// "fora da meta" no resto da tela, e reaproveitá-los aqui faria um plano
+// parecer um estado. Os quatro passam nas checagens de banda de
+// luminosidade, croma, daltonismo e contraste no tema claro e sobre o
+// fundo escuro do app (o magenta fica em 2,73:1 no escuro — por isso o
+// texto NUNCA usa a cor: quem carrega a identidade é o pontinho, e o
+// nome do plano vem sempre escrito ao lado, em tinta legível).
+//
+// Com mais de quatro planos as cores se repetem. É aceitável porque a
+// cor aqui é apoio: o nome do plano está sempre visível no próprio chip.
+const CORES_PLANO = ['#2F6FD0', '#B5179E', '#0E9488', '#7A5AF8'];
+const corDoPlano = (planos, id) => {
+  const i = planos.findIndex(p => p.id === id);
+  return i < 0 ? 'var(--text-muted)' : CORES_PLANO[i % CORES_PLANO.length];
+};
+
+const Etiqueta = ({ rotulo, children, cor }) => (
+  <span title={typeof children === 'string' ? children : undefined}
+    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12,
+             background: 'var(--surface-2)', borderRadius: 8, padding: '3px 9px', maxWidth: '100%' }}>
+    {cor && <span style={{ width: 8, height: 8, borderRadius: '50%', background: cor, flexShrink: 0 }}/>}
+    {rotulo && <span style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>{rotulo}</span>}
+    <b style={{ color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{children}</b>
+  </span>
+);
 
 const Selo = ({ cor, children }) => <span style={{ fontSize: 11, fontWeight: 700, color: cor, background: `${cor}1f`, borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap' }}>{children}</span>;
 const Rotulo = ({ children }) => <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: .3, margin: '10px 0 4px' }}>{children}</label>;
@@ -651,7 +682,11 @@ export default function Metas({ userId, profile }) {
             <div>
               <div style={{ fontWeight: 800, fontSize: 16 }}>{aberta.nome}</div>
               <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                {aberta.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · prazo {br(aberta.prazo)} · lança {FREQ[aberta.frequencia] || aberta.frequencia}{quemMede(aberta) ? ` · mede ${quemMede(aberta)}` : ''}{pl ? ` · 🎯 ${pl.titulo}` : ' · meta da empresa (sem plano)'}
+                {aberta.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · prazo {br(aberta.prazo)} · lança {FREQ[aberta.frequencia] || aberta.frequencia}
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                <Etiqueta rotulo={pl ? 'Plano de ação' : ''} cor={pl ? corDoPlano(dados.planos, pl.id) : null}>{pl ? pl.titulo : 'Resultado da empresa — não vem de plano de ação'}</Etiqueta>
+                {quemMede(aberta) && <Etiqueta rotulo="Responsável pela medição">{quemMede(aberta)}</Etiqueta>}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -899,17 +934,38 @@ export default function Metas({ userId, profile }) {
     <div>
       {cabecalho}
       <div className="card" style={{ marginBottom: 12 }}>
-        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>
-          {dados.metas.length} meta(s) · {atingidas} atingida(s). Aqui você lança o número de cada período: das metas da empresa e das de cada plano de ação. Todo plano do PDCA aparece nos filtros.
+        <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.6 }}>
+          <b style={{ color: 'var(--text)' }}>{dados.metas.length} {dados.metas.length === 1 ? 'resultado' : 'resultados'}</b> · {atingidas} na meta. Aqui você lança o número de cada período.
+          {/* "Da empresa" não dizia nada a quem lê pela primeira vez. Agora a
+              frase explica a diferença entre os dois grupos antes dos filtros. */}
+          <div style={{ marginTop: 3 }}>
+            Filtre pela origem: <b style={{ color: 'var(--text)' }}>da empresa</b> são os que você acompanha por conta própria, sem plano de ação. Os demais nasceram de um plano do PDCA e aparecem com o nome dele.
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {[['todas', `Todas (${dados.metas.length})`], ['livres', `Da empresa (${dados.metas.filter(m => !m.plano_id).length})`],
-            ...dados.planos.map(p => [p.id, `🎯 ${p.titulo} (${dados.metas.filter(m => m.plano_id === p.id).length})`])].map(([id, t]) => (
-            <button key={id} onClick={() => setFiltro(id)}
-              style={{ padding: '5px 11px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                       border: `1px solid ${filtro === id ? 'var(--primary)' : 'var(--border)'}`,
-                       background: filtro === id ? 'var(--primary)' : 'transparent', color: filtro === id ? '#fff' : 'var(--text-muted)' }}>{t}</button>
-          ))}
+          {/* A contagem fica FORA do texto que encurta: com nome de plano
+              longo ela era a primeira coisa a sumir, que é justamente o que
+              a pessoa quer ver no filtro. */}
+          {[{ id: 'todas', txt: 'Todas', n: dados.metas.length },
+            { id: 'livres', txt: 'Da empresa, sem plano', n: dados.metas.filter(m => !m.plano_id).length,
+              dica: 'Resultados que a empresa acompanha por conta própria, fora de qualquer plano de ação.' },
+            ...dados.planos.map(p => ({ id: p.id, txt: p.titulo, n: dados.metas.filter(m => m.plano_id === p.id).length,
+              cor: corDoPlano(dados.planos, p.id), dica: `Resultados do plano de ação "${p.titulo}".` }))
+          ].map(({ id, txt, n, cor, dica }) => {
+            const on = filtro === id;
+            return (
+              <button key={id} onClick={() => setFiltro(id)} title={dica}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 99,
+                         fontSize: 12, fontWeight: on ? 700 : 600, cursor: 'pointer', maxWidth: '100%',
+                         border: `1px solid ${cor ? (on ? cor : `${cor}66`) : (on ? 'var(--primary)' : 'var(--border)')}`,
+                         background: cor ? (on ? `${cor}26` : 'transparent') : (on ? 'var(--primary)' : 'transparent'),
+                         color: cor ? 'var(--text)' : (on ? '#fff' : 'var(--text-muted)') }}>
+                {cor && <span style={{ width: 8, height: 8, borderRadius: '50%', background: cor, flexShrink: 0 }}/>}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{txt}</span>
+                <span style={{ flexShrink: 0, opacity: .7 }}>({n})</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -932,7 +988,13 @@ export default function Metas({ userId, profile }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
               <b style={{ fontSize: 14 }}>{m.nome}</b><Selo cor={r.cor}>{r.atingiu ? '✓ Na meta' : 'Fora da meta'}</Selo>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · até {br(m.prazo)} · lança {FREQ[m.frequencia] || m.frequencia}{p ? ` · 🎯 ${p.titulo}` : ''}{quemMede(m) ? ` · mede ${quemMede(m)}` : ''}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · até {br(m.prazo)} · lança {FREQ[m.frequencia] || m.frequencia}</div>
+            {(p || quemMede(m)) && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                {p && <Etiqueta rotulo="Plano de ação" cor={corDoPlano(dados.planos, p.id)}>{p.titulo}</Etiqueta>}
+                {quemMede(m) && <Etiqueta rotulo="Responsável pela medição">{quemMede(m)}</Etiqueta>}
+              </div>
+            )}
             {(() => {
               // Medição que já passou da data e ninguém lançou: é o aviso que
               // faz a pessoa abrir a meta.
@@ -1029,7 +1091,7 @@ export default function Metas({ userId, profile }) {
                 <div style={{ marginTop: 8, background: 'rgba(47,125,79,.08)', border: '1px solid rgba(47,125,79,.25)', borderRadius: 10, padding: '9px 12px', fontSize: 12.5, lineHeight: 1.6 }}>
                   <b style={{ color: 'var(--success)' }}>✓ Puxado da verificação do plano.</b> Tudo aqui embaixo pode ser ajustado.
                   <div style={{ color: 'var(--text-muted)', marginTop: 3 }}>
-                    {vEscolhida.responsavel?.full_name && <>Quem mede: <b style={{ color: 'var(--text)' }}>{vEscolhida.responsavel.full_name}</b>. </>}
+                    {vEscolhida.responsavel?.full_name && <>Responsável pela medição: <b style={{ color: 'var(--text)' }}>{vEscolhida.responsavel.full_name}</b>. </>}
                     {(vEscolhida.datas_medicao || []).length > 0 && <>{vEscolhida.datas_medicao.length} {vEscolhida.datas_medicao.length === 1 ? 'medição combinada' : 'medições combinadas'}: {vEscolhida.datas_medicao.map(br).join(' · ')}.</>}
                   </div>
                 </div>
