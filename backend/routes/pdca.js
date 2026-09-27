@@ -45,7 +45,16 @@ async function criarTarefasDeMedicao({ datas, acao, plano, responsavel_id, reque
     status: 'pendente',
   }));
   if (!linhas.length) return null;
-  const { data: criadas } = await supabase.from('tarefas').insert(linhas).select('id');
+  // O erro AQUI era engolido. Como as tarefas antigas já foram apagadas
+  // logo antes, uma falha deixava a pessoa com zero tarefas e nenhuma
+  // mensagem em lugar nenhum — o cartão continuava dizendo "0 de 6
+  // medições" e ninguém tinha como saber que deu errado.
+  const { data: criadas, error } = await supabase.from('tarefas').insert(linhas).select('id');
+  if (error) {
+    const e = new Error(`Não foi possível criar as tarefas de medição: ${error.message}`);
+    e.medicao = true;
+    throw e;
+  }
   return (criadas || [])[0]?.id || null;
 }
 
@@ -53,8 +62,12 @@ async function criarTarefasDeMedicao({ datas, acao, plano, responsavel_id, reque
 // pessoa já concluiu fica: é registro do que aconteceu.
 async function limparTarefasDeMedicao(acaoId) {
   if (!acaoId) return;
+  // Só as de medição: o filtro apagava QUALQUER tarefa pendente da ação,
+  // inclusive uma tarefa comum criada segundos antes na mesma requisição.
   await supabase.from('tarefas').delete()
-    .eq('pdca_context->>acao_id', acaoId).eq('status', 'pendente');
+    .eq('pdca_context->>acao_id', acaoId)
+    .eq('pdca_context->>medicao', 'true')
+    .eq('status', 'pendente');
 }
 
 function descricaoDaTarefa(tituloPlano, detalhe) {
@@ -289,10 +302,15 @@ router.post('/:id/acoes', async (req, res) => {
     if (datas.length) {
       // Medição com datas combinadas: uma tarefa por data, todas já
       // visíveis para o responsável.
-      tarefaId = await criarTarefasDeMedicao({
-        datas, acao: { descricao: descricao.trim() }, plano, responsavel_id, requester_id, detalhe,
-        pdcaContext: { ...pdcaContext, medicao: true },
-      });
+      try {
+        tarefaId = await criarTarefasDeMedicao({
+          datas, acao: { descricao: descricao.trim() }, plano, responsavel_id, requester_id, detalhe,
+          pdcaContext: { ...pdcaContext, medicao: true },
+        });
+      } catch (e) {
+        registrarLog('criar_acao_pdca', 'acoes_pdca', 'erro', { company: plano.company, user_id: requester_id, rota: req.originalUrl, erro: e.message });
+        acao.aviso = 'A ação foi salva, mas as tarefas de medição não foram criadas. Abra a ação e salve de novo.';
+      }
     } else {
       const { data: tarefa } = await supabase.from('tarefas').insert({
         company: plano.company,
@@ -375,10 +393,17 @@ router.put('/acoes/:id', async (req, res) => {
   const finalInicio     = inicio !== undefined ? inicio : acaoAtual.inicio;
   const finalRepete     = recorrencia !== undefined ? recorrencia : acaoAtual.recorrencia;
   const plano           = acaoAtual.plano;
+  // Verificação com datas combinadas é uma tarefa POR DATA. Tratá-la como
+  // tarefa comum (uma só, com recorrência) fazia as duas coisas brigarem:
+  // a tarefa da primeira data era reescrita com a recorrência da ação e
+  // passava a se duplicar ao ser concluída.
+  const datasFinais = acaoAtual.quadrante === 'C'
+    ? limparDatas(datas_medicao !== undefined ? datas_medicao : acaoAtual.datas_medicao)
+    : [];
 
   // Mudou a data ou a repetição de uma ação que JÁ tem tarefa: a tarefa
   // acompanha. Sem isso, corrigir o plano não corrigia o que a pessoa vê.
-  if (acaoAtual.tarefa_id && (inicio !== undefined || prazo !== undefined || recorrencia !== undefined)) {
+  if (!datasFinais.length && acaoAtual.tarefa_id && (inicio !== undefined || prazo !== undefined || recorrencia !== undefined)) {
     const { data: tAtual } = await supabase.from('tarefas')
       .select('due_date, pdca_context').eq('id', acaoAtual.tarefa_id).maybeSingle();
     const patchTarefa = {
@@ -395,7 +420,7 @@ router.put('/acoes/:id', async (req, res) => {
     await supabase.from('tarefas').update(patchTarefa).eq('id', acaoAtual.tarefa_id);
   }
 
-  if (finalCriar && finalResponsavel && finalPrazo && !acaoAtual.tarefa_id) {
+  if (!datasFinais.length && finalCriar && finalResponsavel && finalPrazo && !acaoAtual.tarefa_id) {
     const pdcaContext = {
       plano_id: acaoAtual.plano_id,
       plano_titulo: plano?.titulo,
@@ -425,10 +450,12 @@ router.put('/acoes/:id', async (req, res) => {
     }
   }
 
-  // Datas de medição mudaram: refaz as tarefas que ainda estão pendentes.
-  // As já concluídas ficam — são o registro do que foi medido.
-  if (datas_medicao !== undefined && acaoAtual.quadrante === 'C') {
-    const datas = limparDatas(datas_medicao);
+  // Refaz as tarefas de medição que ainda estão pendentes; as concluídas
+  // ficam, são o registro do que foi medido. Roda também quando as datas
+  // NÃO mudaram: é o que permite consertar uma ação cujas tarefas não
+  // chegaram a nascer — basta abrir e salvar de novo.
+  if (datasFinais.length && acaoAtual.quadrante === 'C' && finalCriar) {
+    const datas = datasFinais;
     await limparTarefasDeMedicao(req.params.id);
     const respFinal = finalResponsavel;
     if (datas.length && respFinal) {
@@ -441,13 +468,18 @@ router.put('/acoes/:id', async (req, res) => {
         acao_id: req.params.id,
         medicao: true,
       };
-      const primeira = await criarTarefasDeMedicao({
-        datas, acao: { descricao: data.descricao }, plano, responsavel_id: respFinal,
-        requester_id, detalhe: detalhe !== undefined ? detalhe : acaoAtual.detalhe, pdcaContext,
-      });
-      if (primeira) {
-        await supabase.from('acoes_pdca').update({ tarefa_id: primeira }).eq('id', req.params.id);
-        data.tarefa_id = primeira;
+      try {
+        const primeira = await criarTarefasDeMedicao({
+          datas, acao: { descricao: data.descricao }, plano, responsavel_id: respFinal,
+          requester_id, detalhe: detalhe !== undefined ? detalhe : acaoAtual.detalhe, pdcaContext,
+        });
+        if (primeira) {
+          await supabase.from('acoes_pdca').update({ tarefa_id: primeira }).eq('id', req.params.id);
+          data.tarefa_id = primeira;
+        }
+      } catch (e) {
+        registrarLog('editar_acao_pdca', 'acoes_pdca', 'erro', { company: plano?.company, user_id: requester_id, rota: req.originalUrl, erro: e.message });
+        data.aviso = 'A ação foi salva, mas as tarefas de medição não foram criadas. Tente salvar de novo.';
       }
     }
   }

@@ -437,6 +437,9 @@ export default function PlanoAcao({ userId, profile }) {
           }
           return a;
         }));
+        // O servidor avisa quando salvou a ação mas não conseguiu criar as
+        // tarefas de medição. Antes isso passava em branco.
+        if (data.aviso) toast(data.aviso);
         setEditingAcao(null);
       } else {
         // Criação: 1 líder selecionado = 1 ação; vários líderes = 1 ação (com tarefa) pra cada
@@ -459,7 +462,9 @@ export default function PlanoAcao({ userId, profile }) {
           } : {}),
         })));
         setAcoes(as => [...as, ...criadas.map(r => r.data)]);
-        if (criadas.length > 1) toast(`${criadas.length} ações criadas — uma para cada líder selecionado!`);
+        const aviso = criadas.map(r => r.data?.aviso).find(Boolean);
+        if (aviso) toast(aviso);
+        else if (criadas.length > 1) toast(`${criadas.length} ações criadas — uma para cada líder selecionado!`);
       }
       setAddingTo(null);
       setFormAcao(isP ? EMPTY_ACAO_P : isC ? EMPTY_ACAO_C : isD ? EMPTY_ACAO_D : isA ? EMPTY_ACAO_A : EMPTY_ACAO);
