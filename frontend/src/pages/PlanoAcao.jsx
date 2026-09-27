@@ -386,6 +386,74 @@ export default function PlanoAcao({ userId, profile }) {
     return partes.join('\n');
   };
 
+  // ── Desmontar o texto de volta nos campos ──────────────────
+  //
+  // Os quadrantes estruturados guardam os campos num texto único (uma só
+  // coluna no banco). Editar recarregava o bolo inteiro no primeiro campo
+  // e deixava os outros vazios — e quem salvasse assim perdia a separação
+  // para sempre, porque o texto era regravado sem os rótulos.
+  //
+  // O formato é nosso e é previsível: linha que começa com "Rótulo: " abre
+  // um campo e vale até o próximo rótulo (valor de várias linhas funciona).
+  // O que vem ANTES do primeiro rótulo é o campo livre do quadrante. Texto
+  // antigo, escrito à mão sem rótulo nenhum, cai inteiro nesse campo livre
+  // — que é exatamente o comportamento de antes, só que agora é a exceção.
+  const separarRotulos = (texto, rotulos) => {
+    const achar = (l) => rotulos.find(r => l.startsWith(`${r.rotulo}: `) || l.trim() === `${r.rotulo}:`);
+    const baldes = { __livre: [] };
+    rotulos.forEach(r => { baldes[r.campo] = []; });
+    let atual = null;
+    for (const l of String(texto || '').split('\n')) {
+      const r = achar(l);
+      if (r) { atual = r.campo; baldes[atual].push(l.slice(r.rotulo.length + 1).trim()); }
+      else if (atual) baldes[atual].push(l);
+      else baldes.__livre.push(l);
+    }
+    const res = { livre: baldes.__livre.join('\n').trim() };
+    rotulos.forEach(r => { res[r.campo] = baldes[r.campo].join('\n').trim(); });
+    return res;
+  };
+
+  const decomporD = (texto) => {
+    const r = separarRotulos(texto, [
+      { rotulo: 'Onde', campo: 'onde' }, { rotulo: 'Como', campo: 'como' },
+      { rotulo: 'Por quê', campo: 'porque' }, { rotulo: 'Quanto custa', campo: 'quanto' },
+    ]);
+    return { oque: r.livre, onde: r.onde, como: r.como, porque: r.porque, quanto: r.quanto };
+  };
+
+  const decomporA = (texto) => {
+    const r = separarRotulos(texto, [
+      { rotulo: 'Comunicação', campo: 'comunicacao' }, { rotulo: 'Treinamento', campo: 'treinamento' },
+      { rotulo: 'Monitoramento', campo: 'monitoramento' },
+    ]);
+    return { padronizacao: r.livre, comunicacao: r.comunicacao, treinamento: r.treinamento, monitoramento: r.monitoramento };
+  };
+
+  const decomporP = (texto) => {
+    const r = separarRotulos(texto, [
+      { rotulo: 'Problema', campo: 'problema' },
+      { rotulo: 'Causa raiz (5 Porquês)', campo: 'causa' },
+      { rotulo: 'Meta', campo: 'meta_smart' },
+    ]);
+    const achados = r.causa.split('\n').map(l => l.replace(/^\s*\d+\)\s*/, '').trim()).filter(Boolean);
+    // Sempre 5 caixas na tela, mesmo que a pessoa tenha preenchido menos.
+    const porques = [...achados, '', '', '', '', ''].slice(0, Math.max(5, achados.length));
+    return { problema: r.problema || r.livre, porques, meta_smart: r.meta_smart };
+  };
+
+  const decomporC = (texto) => {
+    const r = separarRotulos(texto, [{ rotulo: 'Resultado observado', campo: 'resultado' }]);
+    const linhas = r.livre.split('\n');
+    // A classificação foi salva como "emoji RÓTULO" na primeira linha.
+    const cls = CLASSIFICACOES_C.find(c => linhas[0]?.trim() === `${c.emoji} ${c.label.toUpperCase()}`);
+    return {
+      classificacao: cls?.key || '',
+      descricao: (cls ? linhas.slice(1) : linhas).join('\n').trim(),
+      resultado: r.resultado,
+    };
+  };
+
   const saveAcao = async () => {
     const quadranteAtual = editingAcao ? editingAcao.quadrante : addingTo;
     const isP = quadranteAtual === 'P';
@@ -655,16 +723,12 @@ export default function PlanoAcao({ userId, profile }) {
                       setEditingAcao(acao);
                       setAddingTo(acao.quadrante);
                       if (acao.quadrante === 'P') {
-                        // O texto salvo é um bloco único; não dá pra separar de volta
-                        // com certeza, então recarrega tudo no campo "Problema".
-                        setFormAcao({ ...EMPTY_ACAO_P, problema: acao.descricao });
+                        setFormAcao({ ...EMPTY_ACAO_P, ...decomporP(acao.descricao) });
                       } else if (acao.quadrante === 'C') {
-                        // O texto salvo já vem composto (emoji + descrição + resultado),
-                        // então recarrega tudo em "descrição"; responsável/prazo voltam normal.
                         setFormAcao({
                           ...EMPTY_ACAO_C,
+                          ...decomporC(acao.descricao),
                           datas_medicao: acao.datas_medicao || [],
-                          descricao: acao.descricao,
                           responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
@@ -675,10 +739,9 @@ export default function PlanoAcao({ userId, profile }) {
                           detalhes: Object.fromEntries(grupo.map(g => [g.id, g.detalhe || ''])),
                         });
                       } else if (acao.quadrante === 'D') {
-                        // Idem: texto composto (O quê/Onde/Como/...) recarrega em "oque".
                         setFormAcao({
                           ...EMPTY_ACAO_D,
-                          oque: acao.descricao,
+                          ...decomporD(acao.descricao),
                           responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
@@ -691,7 +754,7 @@ export default function PlanoAcao({ userId, profile }) {
                       } else if (acao.quadrante === 'A') {
                         setFormAcao({
                           ...EMPTY_ACAO_A,
-                          padronizacao: acao.descricao,
+                          ...decomporA(acao.descricao),
                           responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
