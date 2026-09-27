@@ -20,7 +20,10 @@ const MEDIDAS = {
   percentual: { nome: 'Percentual (%)', curto: '%', ex: 'Ex.: 5% de ruptura, 100% da meta', fmt: v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%', passo: 0.1, ph: ['ex.: 12', 'ex.: 5'] },
 };
 const ORDEM = ['quantidade', 'reais', 'percentual'];
-const FREQ = { diario: 'todo dia', semanal: 'toda semana', mensal: 'todo mês' };
+const FREQ = { diario: 'todo dia', semanal: 'toda semana', quinzenal: 'a cada 15 dias', mensal: 'todo mês' };
+// A verificação do C fala em recorrência; aqui a mesma coisa se chama
+// frequência. Este mapa evita que uma meta puxada do plano minta o ritmo.
+const FREQ_DA_RECORRENCIA = { diaria: 'diario', semanal: 'semanal', quinzenal: 'quinzenal', mensal: 'mensal' };
 
 const hoje = () => new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
 const br = iso => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '');
@@ -93,6 +96,9 @@ function analisar(m, k, setor = TOTAL) {
     const b = x.reduce((s, xi, j) => s + (xi - mx) * (y[j] - my), 0) / (x.reduce((s, xi) => s + (xi - mx) ** 2, 0) || 1);
     projecao = my + b * (dias(ms[0][0], m.prazo) - mx);
     chega = m.direcao === 'reduzir' ? projecao <= cfg.meta : projecao >= cfg.meta;
+    // A reta não sabe que o mundo tem chão: numa meta de reduzir ela
+    // projetava "-9 slots rasurados". Quem já chega ao piso, chega.
+    if (m.direcao === 'reduzir') projecao = Math.max(Math.min(0, cfg.meta), projecao);
   }
   // Duas cores, porque são dois estados. Os tokens do app já passam nas
   // checagens de daltonismo e contraste nos dois temas.
@@ -400,6 +406,51 @@ function Grafico({ m, a, mini }) {
   return <Barras m={m} a={a} mini={mini}/>;
 }
 
+// O calendário combinado no C do plano vira cobrança aqui: o que já foi
+// lançado, o que é a próxima e o que passou sem número. As datas são lidas
+// da ação ao vivo — mexeu no plano, muda aqui, sem cópia para desencontrar.
+function Medicoes({ meta, verificacao }) {
+  const datas = (verificacao?.datas_medicao || []).map(d => String(d).slice(0, 10));
+  const quem = verificacao?.responsavel?.full_name || meta.responsavel?.full_name;
+  if (!datas.length && !quem) return null;
+
+  const lancadas = new Set((meta.lancamentos || []).map(l => String(l.data).slice(0, 10)));
+  const h = hoje();
+  const feitas = datas.filter(d => lancadas.has(d));
+  const atrasadas = datas.filter(d => !lancadas.has(d) && d < h);
+  const proxima = datas.find(d => !lancadas.has(d) && d >= h);
+
+  const estilo = (d) => {
+    if (lancadas.has(d)) return { cor: 'var(--success)', txt: `✓ ${br(d)}`, titulo: 'Número lançado' };
+    if (d < h) return { cor: 'var(--danger)', txt: br(d), titulo: 'Passou sem lançamento' };
+    if (d === proxima) return { cor: 'var(--primary)', txt: br(d), titulo: 'Próxima medição' };
+    return { cor: 'var(--text-muted)', txt: br(d), titulo: 'Medição combinada' };
+  };
+
+  return (
+    <div style={{ marginTop: 10, border: '1px solid var(--border)', borderRadius: 10, padding: '9px 12px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 12.5 }}>
+        <b>📏 Medições combinadas no plano</b>
+        {quem && <span style={{ color: 'var(--text-muted)' }}>Quem mede: <b style={{ color: 'var(--text)' }}>{quem}</b></span>}
+      </div>
+      {datas.length > 0 && (
+        <>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 7 }}>
+            {datas.map(d => { const e = estilo(d); return (
+              <span key={d} title={e.titulo} style={{ fontSize: 11.5, fontWeight: 700, color: e.cor, border: `1px solid ${e.cor}55`, background: `${e.cor}14`, borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap' }}>{e.txt}</span>
+            ); })}
+          </div>
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 6 }}>
+            {feitas.length} de {datas.length} lançadas
+            {proxima && <> · próxima <b style={{ color: 'var(--text)' }}>{br(proxima)}</b></>}
+            {atrasadas.length > 0 && <> · <b style={{ color: 'var(--danger)' }}>{atrasadas.length} {atrasadas.length === 1 ? 'passou' : 'passaram'} sem número</b></>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const Selo = ({ cor, children }) => <span style={{ fontSize: 11, fontWeight: 700, color: cor, background: `${cor}1f`, borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap' }}>{children}</span>;
 const Rotulo = ({ children }) => <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: .3, margin: '10px 0 4px' }}>{children}</label>;
 const inputStyle = { width: '100%', padding: '8px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13.5 };
@@ -409,7 +460,7 @@ export default function Metas({ userId, profile }) {
   const company = profile?.company || '';
   const q = `requester_id=${userId}${company ? `&company=${encodeURIComponent(company)}` : ''}`;
 
-  const [dados, setDados] = useState({ metas: [], planos: [], setoresLoja: [], podeGerir: false });
+  const [dados, setDados] = useState({ metas: [], planos: [], verificacoes: [], setoresLoja: [], podeGerir: false });
   const [carregando, setCarregando] = useState(true);
   const [filtro, setFiltro] = useState('todas');
   const [abertaId, setAbertaId] = useState(null);
@@ -431,12 +482,16 @@ export default function Metas({ userId, profile }) {
   useEffect(() => { if (userId) carregar(); }, [userId, company]);
 
   const planoDe = id => dados.planos.find(p => p.id === id);
+  // A verificação do C ligada a esta meta — fonte viva das datas de medição.
+  const verificacaoDe = id => (dados.verificacoes || []).find(v => v.id === id);
+  const verificacoesDoPlano = id => (dados.verificacoes || []).filter(v => v.plano_id === id);
   const aberta = dados.metas.find(m => m.id === abertaId) || null;
   const lista = useMemo(() => dados.metas.filter(m => filtro === 'todas' ? true : filtro === 'livres' ? !m.plano_id : m.plano_id === filtro), [dados.metas, filtro]);
 
   // ── Ações ──────────────────────────────────────────────────
   const abrirNova = () => {
-    setNova({ nome: '', direcao: 'aumentar', prazo: '', frequencia: 'mensal', plano_id: dados.planos.some(p => p.id === filtro) ? filtro : '',
+    setNova({ nome: '', direcao: 'aumentar', prazo: '', frequencia: 'mensal', acao_id: '', responsavel_id: '',
+              plano_id: dados.planos.some(p => p.id === filtro) ? filtro : '',
               usa: { quantidade: false, reais: true, percentual: false }, val: { quantidade: { inicial: '', meta: '' }, reais: { inicial: '', meta: '' }, percentual: { inicial: '', meta: '' } },
               porSetor: false, setores: [], novoSetor: '' });
     setModal('nova');
@@ -460,7 +515,8 @@ export default function Metas({ userId, profile }) {
         : { inicial: '', meta: '' }])),
     }));
     setNova({ id: m.id, nome: m.nome, direcao: m.direcao, prazo: String(m.prazo).slice(0, 10),
-              frequencia: m.frequencia, plano_id: m.plano_id || '', usa, val,
+              frequencia: m.frequencia, plano_id: m.plano_id || '',
+              acao_id: m.acao_id || '', responsavel_id: m.responsavel_id || '', usa, val,
               porSetor: sets.length > 0, setores: sets, novoSetor: '' });
     setVoltarPara(abertaId);
     setAbertaId(null);
@@ -494,7 +550,8 @@ export default function Metas({ userId, profile }) {
 
     setSalvando(true);
     try {
-      const corpo = { requester_id: userId, company: company || undefined, nome: nova.nome, direcao: nova.direcao, prazo: nova.prazo, frequencia: nova.frequencia, medidas, setores, plano_id: nova.plano_id || null };
+      const corpo = { requester_id: userId, company: company || undefined, nome: nova.nome, direcao: nova.direcao, prazo: nova.prazo, frequencia: nova.frequencia, medidas, setores,
+                      plano_id: nova.plano_id || null, acao_id: nova.plano_id ? (nova.acao_id || null) : null, responsavel_id: nova.responsavel_id || null };
       if (nova.id) {
         await api.put(`/metas/${nova.id}`, corpo);
         toast('Meta atualizada.');
@@ -582,7 +639,7 @@ export default function Metas({ userId, profile }) {
             <div>
               <div style={{ fontWeight: 800, fontSize: 16 }}>{aberta.nome}</div>
               <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
-                {aberta.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · prazo {br(aberta.prazo)} · lança {FREQ[aberta.frequencia]}{pl ? ` · 🎯 ${pl.titulo}` : ' · meta da empresa (sem plano)'}
+                {aberta.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · prazo {br(aberta.prazo)} · lança {FREQ[aberta.frequencia] || aberta.frequencia}{pl ? ` · 🎯 ${pl.titulo}` : ' · meta da empresa (sem plano)'}
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -605,6 +662,7 @@ export default function Metas({ userId, profile }) {
               {foraDaMeta.length === 0 && sets.length > 0 && !rTotal.atingiu && <> Todas as áreas bateram — o que falta é no total.</>}
             </div>
           )}
+          <Medicoes meta={aberta} verificacao={verificacaoDe(aberta.acao_id)}/>
         </div>
 
         {/* Por setor: a visão que vai para a reunião. Uma linha por setor
@@ -741,6 +799,27 @@ export default function Metas({ userId, profile }) {
           <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.55 }}>Informe a data e como ficou o número nesse dia/semana/mês. Se lançar duas vezes na mesma data, vale o último.</p>
           <Rotulo>Data do lançamento</Rotulo>
           <input type="date" style={inputStyle} value={lanc.data} onChange={e => setLanc(l => ({ ...l, data: e.target.value }))}/>
+          {/* Datas combinadas no C: um toque em vez de procurar no calendário.
+              Quem já tem número entra riscada, para não lançar duas vezes. */}
+          {(() => {
+            const datas = (verificacaoDe(aberta.acao_id)?.datas_medicao || []).map(d => String(d).slice(0, 10));
+            if (!datas.length) return null;
+            const feitas = new Set((aberta.lancamentos || []).map(l => String(l.data).slice(0, 10)));
+            return (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6, alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>Combinadas no plano:</span>
+                {datas.map(d => (
+                  <button key={d} type="button" onClick={() => setLanc(l => ({ ...l, data: d }))}
+                    style={{ fontSize: 11.5, fontWeight: 700, cursor: 'pointer', borderRadius: 99, padding: '3px 9px',
+                             border: `1px solid ${lanc.data === d ? 'var(--primary)' : 'var(--border)'}`,
+                             background: lanc.data === d ? 'rgba(232,98,42,.1)' : 'transparent',
+                             color: feitas.has(d) ? 'var(--success)' : lanc.data === d ? 'var(--primary)' : 'var(--text-muted)' }}>
+                    {feitas.has(d) ? '✓ ' : ''}{br(d)}
+                  </button>
+                ))}
+              </div>
+            );
+          })()}
           {sets.length === 0 ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
               {ks.map(k => (
@@ -841,7 +920,18 @@ export default function Metas({ userId, profile }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
               <b style={{ fontSize: 14 }}>{m.nome}</b><Selo cor={r.cor}>{r.atingiu ? '✓ Na meta' : 'Fora da meta'}</Selo>
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · até {br(m.prazo)} · lança {FREQ[m.frequencia]}{p ? ` · 🎯 ${p.titulo}` : ''}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · até {br(m.prazo)} · lança {FREQ[m.frequencia] || m.frequencia}{p ? ` · 🎯 ${p.titulo}` : ''}{m.responsavel?.full_name ? ` · mede ${m.responsavel.full_name}` : ''}</div>
+            {(() => {
+              // Medição que já passou da data e ninguém lançou: é o aviso que
+              // faz a pessoa abrir a meta.
+              const v = verificacaoDe(m.acao_id);
+              const datas = (v?.datas_medicao || []).map(d => String(d).slice(0, 10));
+              if (!datas.length) return null;
+              const feitas = new Set((m.lancamentos || []).map(l => String(l.data).slice(0, 10)));
+              const atrasadas = datas.filter(d => !feitas.has(d) && d < hoje());
+              if (!atrasadas.length) return null;
+              return <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--danger)', marginTop: 3 }}>⚠ {atrasadas.length} {atrasadas.length === 1 ? 'medição passou' : 'medições passaram'} sem número (desde {br(atrasadas[0])})</div>;
+            })()}
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${r.as.length || 1}, 1fr)`, gap: 10, marginTop: 8 }}>
               {r.as.map(a => (
                 <div key={a.k}>
@@ -869,17 +959,78 @@ export default function Metas({ userId, profile }) {
           const set = (patch) => setNova(n => ({ ...n, ...patch }));
           const setVal = (k, campo, v) => setNova(n => ({ ...n, val: { ...n.val, [k]: { ...n.val[k], [campo]: v } } }));
           const escolha = (on) => ({ padding: '7px 12px', borderRadius: 8, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', textAlign: 'left', border: `1px solid ${on ? 'var(--primary)' : 'var(--border)'}`, background: on ? 'rgba(232,98,42,.08)' : 'transparent', color: on ? 'var(--primary)' : 'var(--text-muted)' });
+
+          // O que a verificação do C já sabe: o que medir, por quem, com que
+          // ritmo e até quando. Redigitar isso aqui era trabalho dobrado — e
+          // fonte de erro (o prazo virava a data da PRIMEIRA medição).
+          const puxar = (v) => {
+            if (!v) return {};
+            const p = {};
+            if (v.descricao) p.nome = String(v.descricao).slice(0, 80);
+            if (v.prazo) p.prazo = String(v.prazo).slice(0, 10);   // última medição
+            if (FREQ_DA_RECORRENCIA[v.recorrencia]) p.frequencia = FREQ_DA_RECORRENCIA[v.recorrencia];
+            if (v.responsavel_id) p.responsavel_id = v.responsavel_id;
+            return p;
+          };
+          // Trocar de plano: com uma verificação só, já puxa; com várias,
+          // espera a pessoa dizer qual delas esta meta mede.
+          const trocarPlano = (id) => {
+            const vs = verificacoesDoPlano(id);
+            if (!id) return set({ plano_id: '', acao_id: '' });
+            if (vs.length === 1) return set({ plano_id: id, acao_id: vs[0].id, ...puxar(vs[0]) });
+            set({ plano_id: id, acao_id: '' });
+          };
+          const vsDoPlano = verificacoesDoPlano(nova.plano_id);
+          const vEscolhida = vsDoPlano.find(v => v.id === nova.acao_id);
+
           return (
             <>
-              <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Em 4 passos: o que medir · como medir · de onde sai e onde quer chegar · até quando.</p>
-              <Rotulo>1. O que você quer acompanhar?</Rotulo>
+              <p style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>Em 5 passos: de onde vem · o que medir · como medir · de onde sai e onde quer chegar · até quando.</p>
+
+              {/* Esta pergunta vem PRIMEIRO de propósito: vindo de um plano,
+                  as respostas seguintes chegam prontas. Perguntar no fim,
+                  como era antes, fazia a pessoa digitar tudo à toa. */}
+              <Rotulo>1. Essa meta vem de um plano de ação? <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional)</span></Rotulo>
+              <select className="select" value={nova.plano_id} onChange={e => trocarPlano(e.target.value)}>
+                <option value="">Não — é uma meta da empresa</option>
+                {dados.planos.map(p => <option key={p.id} value={p.id}>🎯 {p.titulo}</option>)}
+              </select>
+              {!nova.plano_id && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Vindo de um plano, o que você já escreveu na verificação do C chega preenchido aqui.</div>}
+
+              {nova.plano_id && vsDoPlano.length === 0 && (
+                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--text-muted)', background: 'var(--surface-2)', borderRadius: 8, padding: '8px 10px' }}>
+                  Este plano ainda não tem verificação no <b>C</b>. Dá para seguir preenchendo à mão — ou criar a verificação no plano primeiro, e aí tudo vem pronto.
+                </div>
+              )}
+
+              {nova.plano_id && vsDoPlano.length > 1 && (
+                <div style={{ marginTop: 6 }}>
+                  <Rotulo>Qual verificação esta meta mede?</Rotulo>
+                  <select className="select" value={nova.acao_id} onChange={e => { const v = vsDoPlano.find(x => x.id === e.target.value); set({ acao_id: e.target.value, ...puxar(v) }); }}>
+                    <option value="">Escolha a verificação do C…</option>
+                    {vsDoPlano.map(v => <option key={v.id} value={v.id}>{String(v.descricao).slice(0, 70)}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {vEscolhida && (
+                <div style={{ marginTop: 8, background: 'rgba(47,125,79,.08)', border: '1px solid rgba(47,125,79,.25)', borderRadius: 10, padding: '9px 12px', fontSize: 12.5, lineHeight: 1.6 }}>
+                  <b style={{ color: 'var(--success)' }}>✓ Puxado da verificação do plano.</b> Tudo aqui embaixo pode ser ajustado.
+                  <div style={{ color: 'var(--text-muted)', marginTop: 3 }}>
+                    {vEscolhida.responsavel?.full_name && <>Quem mede: <b style={{ color: 'var(--text)' }}>{vEscolhida.responsavel.full_name}</b>. </>}
+                    {(vEscolhida.datas_medicao || []).length > 0 && <>{vEscolhida.datas_medicao.length} {vEscolhida.datas_medicao.length === 1 ? 'medição combinada' : 'medições combinadas'}: {vEscolhida.datas_medicao.map(br).join(' · ')}.</>}
+                  </div>
+                </div>
+              )}
+
+              <Rotulo>2. O que você quer acompanhar?</Rotulo>
               <input style={inputStyle} value={nova.nome} maxLength={80} onChange={e => set({ nome: e.target.value })} placeholder="Ex.: Vendas do mês · Retrabalho na produção · Faltas da equipe"/>
-              <Rotulo>2. O número precisa subir ou descer?</Rotulo>
+              <Rotulo>3. O número precisa subir ou descer?</Rotulo>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" style={escolha(nova.direcao === 'aumentar')} onClick={() => set({ direcao: 'aumentar' })}>⬆ Subir — quanto maior, melhor (venda, conversão)</button>
                 <button type="button" style={escolha(nova.direcao === 'reduzir')} onClick={() => set({ direcao: 'reduzir' })}>⬇ Descer — quanto menor, melhor (ruptura, perda, faltas)</button>
               </div>
-              <Rotulo>3. Como você mede? <span style={{ fontWeight: 400, textTransform: 'none' }}>Pode marcar mais de uma — elas aparecem lado a lado.</span></Rotulo>
+              <Rotulo>4. Como você mede? <span style={{ fontWeight: 400, textTransform: 'none' }}>Pode marcar mais de uma — elas aparecem lado a lado.</span></Rotulo>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {ORDEM.map(k => (
                   <button key={k} type="button" style={{ ...escolha(nova.usa[k]), flex: '1 1 150px' }} onClick={() => set({ usa: { ...nova.usa, [k]: !nova.usa[k] } })}>
@@ -897,9 +1048,9 @@ export default function Metas({ userId, profile }) {
                   </div>
                 </div>
               ))}
-              <Rotulo>4. Até quando, e de quanto em quanto tempo você lança o número?</Rotulo>
+              <Rotulo>5. Até quando, e de quanto em quanto tempo você lança o número?</Rotulo>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div><input type="date" style={inputStyle} value={nova.prazo} onChange={e => set({ prazo: e.target.value })}/><div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Prazo final da meta</div></div>
+                <div><input type="date" style={inputStyle} value={nova.prazo} onChange={e => set({ prazo: e.target.value })}/><div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{vEscolhida?.prazo ? 'Última medição combinada no plano' : 'Prazo final da meta'}</div></div>
                 <div>
                   <select className="select" value={nova.frequencia} onChange={e => set({ frequencia: e.target.value })}>
                     {Object.entries(FREQ).map(([k, t]) => <option key={k} value={k}>Lanço {t}</option>)}
@@ -911,7 +1062,7 @@ export default function Metas({ userId, profile }) {
                   área, equipe, turno, filial, obra. As sugestões vêm do que
                   a própria empresa cadastrou, e o campo livre aceita
                   qualquer nome — este app não é só de loja. */}
-              <Rotulo>5. Quer acompanhar separado por área? <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional) — o total e cada parte: setor, equipe, turno, filial, o que fizer sentido para você</span></Rotulo>
+              <Rotulo>6. Quer acompanhar separado por área? <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional) — o total e cada parte: setor, equipe, turno, filial, o que fizer sentido para você</span></Rotulo>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" style={escolha(!nova.porSetor)} onClick={() => set({ porSetor: false })}>Não — só o total</button>
                 <button type="button" style={escolha(nova.porSetor)} onClick={() => set({ porSetor: true })}>Sim — total + partes</button>
@@ -952,13 +1103,6 @@ export default function Metas({ userId, profile }) {
                   </div>
                 );
               })()}
-
-              <Rotulo>Essa meta faz parte de um plano de ação? <span style={{ fontWeight: 400, textTransform: 'none' }}>(opcional)</span></Rotulo>
-              <select className="select" value={nova.plano_id} onChange={e => set({ plano_id: e.target.value })}>
-                <option value="">Não — é uma meta da empresa</option>
-                {dados.planos.map(p => <option key={p.id} value={p.id}>🎯 {p.titulo}</option>)}
-              </select>
-              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>Todos os planos do PDCA aparecem aqui. Ligando, a meta também fica visível dentro do plano.</div>
             </>
           );
         })()}

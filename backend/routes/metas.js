@@ -19,7 +19,9 @@ const { registrarLog } = require('../lib/auditLog');
 
 const MEDIDAS = ['quantidade', 'reais', 'percentual'];
 const DIRECOES = ['aumentar', 'reduzir'];
-const FREQUENCIAS = ['diario', 'semanal', 'mensal'];
+// 'quinzenal' existe porque a verificação do C já oferece "a cada 15
+// dias" — sem ela, uma meta puxada do plano mentiria a frequência.
+const FREQUENCIAS = ['diario', 'semanal', 'quinzenal', 'mensal'];
 const GRAFICOS = ['auto', 'linha', 'barras', 'progresso'];
 const ehData = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
 
@@ -71,6 +73,29 @@ function validarSetores(setores, medidasDaMeta) {
   return { setores: limpos };
 }
 
+// A meta pode apontar para a ação do C que a verifica. Daí saem as datas
+// de medição (lidas ao vivo, nunca copiadas) e o responsável padrão.
+// Exigimos que a ação seja do quadrante C E do plano informado: apontar
+// para a verificação de outro plano deixaria a tela contando a história
+// errada.
+async function validarVinculo({ acao_id, plano_id, company }) {
+  if (!acao_id) return { acao_id: null };
+  const { data: acao } = await supabase.from('acoes_pdca')
+    .select('id, quadrante, plano_id, plano:plano_id(company)').eq('id', acao_id).maybeSingle();
+  if (!acao || acao.plano?.company !== company) return { erro: 'Verificação não encontrada nesta empresa.' };
+  if (acao.quadrante !== 'C') return { erro: 'Só a verificação do C pode ser ligada a um resultado.' };
+  if (plano_id && acao.plano_id !== plano_id) return { erro: 'Essa verificação é de outro plano.' };
+  return { acao_id: acao.id };
+}
+
+// Quem lança o número tem que ser da mesma empresa.
+async function validarResponsavel(id, company) {
+  if (!id) return { responsavel_id: null };
+  const { data } = await supabase.from('profiles').select('id, company').eq('id', id).maybeSingle();
+  if (!data || data.company !== company) return { erro: 'Quem vai medir não é desta empresa.' };
+  return { responsavel_id: data.id };
+}
+
 async function metaDaLoja(id, company) {
   const { data } = await supabase.from('metas').select('*').eq('id', id).maybeSingle();
   if (!data || data.company !== company) return null;
@@ -87,13 +112,23 @@ router.get('/', async (req, res) => {
   if (!company) return res.json({ metas: [], planos: [], podeGerir: false });
 
   const [{ data: metas, error }, { data: planos }, { data: setoresLoja }] = await Promise.all([
-    supabase.from('metas').select('*, criador:criado_por(full_name)')
+    supabase.from('metas').select('*, criador:criado_por(full_name), responsavel:responsavel_id(id, full_name, avatar_url)')
       .eq('company', company).eq('ativa', true).order('created_at', { ascending: false }),
-    supabase.from('planos_acao').select('id, titulo, meta, status')
+    supabase.from('planos_acao').select('id, titulo, meta, prazo_final, status')
       .eq('company', company).order('criado_em', { ascending: false }),
     supabase.from('company_sectors').select('sector_name').eq('company', company).order('sort_order'),
   ]);
   if (error) return res.status(500).json({ error: 'Erro ao carregar as metas.' });
+
+  // As verificações do C de todos os planos da empresa. É delas que o
+  // assistente puxa o que já foi digitado no plano — e é delas que a tela
+  // lê as datas de medição, sempre atualizadas.
+  const idsPlanos = (planos || []).map(p => p.id);
+  const { data: verificacoes } = idsPlanos.length
+    ? await supabase.from('acoes_pdca')
+        .select('id, plano_id, descricao, responsavel_id, prazo, inicio, recorrencia, datas_medicao, responsavel:responsavel_id(id, full_name)')
+        .in('plano_id', idsPlanos).eq('quadrante', 'C').order('prazo')
+    : { data: [] };
 
   const ids = (metas || []).map(m => m.id);
   const { data: lanc } = ids.length
@@ -106,6 +141,7 @@ router.get('/', async (req, res) => {
   res.json({
     metas: (metas || []).map(m => ({ ...m, lancamentos: porMeta[m.id] || [] })),
     planos: planos || [],
+    verificacoes: verificacoes || [],
     setoresLoja: (setoresLoja || []).map(s => s.sector_name).filter(Boolean),
     podeGerir: ehGestor(me),
   });
@@ -119,7 +155,7 @@ router.post('/', async (req, res) => {
   const company = lojaDe(me, req.body?.company);
   if (!company) return res.status(400).json({ error: 'Sem loja definida' });
 
-  const { nome, direcao, prazo, frequencia, medidas, plano_id, setores } = req.body || {};
+  const { nome, direcao, prazo, frequencia, medidas, plano_id, setores, acao_id, responsavel_id } = req.body || {};
   if (!nome?.trim()) return res.status(400).json({ error: 'Diga o que você quer acompanhar.' });
   if (!ehData(prazo)) return res.status(400).json({ error: 'Informe até quando.' });
   const v = validarMedidas(medidas);
@@ -136,12 +172,18 @@ router.post('/', async (req, res) => {
     planoFinal = plano.id;
   }
 
+  const vin = await validarVinculo({ acao_id, plano_id: planoFinal, company });
+  if (vin.erro) return res.status(400).json({ error: vin.erro });
+  const vr = await validarResponsavel(responsavel_id, company);
+  if (vr.erro) return res.status(400).json({ error: vr.erro });
+
   const { data, error } = await supabase.from('metas').insert({
-    company, plano_id: planoFinal, nome: nome.trim().slice(0, 80),
+    company, plano_id: planoFinal, acao_id: vin.acao_id, responsavel_id: vr.responsavel_id,
+    nome: nome.trim().slice(0, 80),
     direcao: DIRECOES.includes(direcao) ? direcao : 'aumentar',
     prazo, frequencia: FREQUENCIAS.includes(frequencia) ? frequencia : 'mensal',
     medidas: v.medidas, setores: vs.setores, criado_por: me.id,
-  }).select('*, criador:criado_por(full_name)').single();
+  }).select('*, criador:criado_por(full_name), responsavel:responsavel_id(id, full_name, avatar_url)').single();
   if (error) {
     registrarLog('criar_meta', 'metas', 'erro', { company, user_id: me.id, rota: req.originalUrl, erro: error.message });
     return res.status(500).json({ error: 'Não foi possível criar a meta.' });
@@ -157,7 +199,7 @@ router.put('/:id', async (req, res) => {
   const meta = await metaDaLoja(req.params.id, lojaDe(me, req.body?.company));
   if (!meta) return res.status(404).json({ error: 'Meta não encontrada' });
 
-  const { nome, direcao, prazo, frequencia, medidas, plano_id, grafico, ativa, setores } = req.body || {};
+  const { nome, direcao, prazo, frequencia, medidas, plano_id, grafico, ativa, setores, acao_id, responsavel_id } = req.body || {};
   const mudancas = { updated_at: new Date().toISOString() };
   if (grafico !== undefined && GRAFICOS.includes(grafico)) mudancas.grafico = grafico;
 
@@ -177,10 +219,24 @@ router.put('/:id', async (req, res) => {
         if (!plano || plano.company !== meta.company) return res.status(400).json({ error: 'Plano de ação não encontrado nesta loja.' });
       }
       mudancas.plano_id = plano_id || null;
+      // Tirou o plano: o vínculo com a verificação vai junto, senão a meta
+      // ficaria lendo datas de um plano que ela não mostra mais.
+      if (!plano_id) mudancas.acao_id = null;
+    }
+    if (acao_id !== undefined && mudancas.acao_id === undefined) {
+      const alvoPlano = plano_id !== undefined ? plano_id : meta.plano_id;
+      const vin = await validarVinculo({ acao_id, plano_id: alvoPlano, company: meta.company });
+      if (vin.erro) return res.status(400).json({ error: vin.erro });
+      mudancas.acao_id = vin.acao_id;
+    }
+    if (responsavel_id !== undefined) {
+      const vr = await validarResponsavel(responsavel_id, meta.company);
+      if (vr.erro) return res.status(400).json({ error: vr.erro });
+      mudancas.responsavel_id = vr.responsavel_id;
     }
   }
 
-  const { data, error } = await supabase.from('metas').update(mudancas).eq('id', meta.id).select('*, criador:criado_por(full_name)').single();
+  const { data, error } = await supabase.from('metas').update(mudancas).eq('id', meta.id).select('*, criador:criado_por(full_name), responsavel:responsavel_id(id, full_name, avatar_url)').single();
   if (error) {
     registrarLog('editar_meta', 'metas', 'erro', { company: meta.company, user_id: me.id, rota: req.originalUrl, erro: error.message });
     return res.status(500).json({ error: 'Não foi possível salvar.' });
