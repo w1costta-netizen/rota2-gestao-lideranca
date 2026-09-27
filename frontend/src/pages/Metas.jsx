@@ -5,7 +5,7 @@ import { useToast } from '../components/Toast';
 import Modal from '../components/Modal';
 
 // ─────────────────────────────────────────────────────────────
-// Metas com número — da loja ou de um plano de ação.
+// Metas com número — da empresa ou de um plano de ação.
 //
 // Portado do protótipo aprovado (prototipos/monitoramento-metas.html).
 // Uma meta tem até três medidas (quantidade, R$, %) lado a lado; o
@@ -27,7 +27,7 @@ const br = iso => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/')
 const dias = (a, b) => Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5);
 const medidasDe = m => ORDEM.filter(k => m.medidas?.[k]);
 const setoresDe = m => (Array.isArray(m.setores) ? m.setores : []);
-const TOTAL = '';   // setor '' = total da loja
+const TOTAL = '';   // setor '' = total da empresa
 
 // Série de uma medida: do setor pedido, ou do total.
 //
@@ -56,7 +56,18 @@ function serie(m, k, setor) {
   }).sort((a, b) => a[0].localeCompare(b[0]));
 }
 
+// "500 / 800" numa meta de REDUZIR parecia que faltava chegar a 800,
+// quando 500 já é melhor que a meta. O sinal resolve a leitura.
+const alvoTexto = (direcao, T, meta) => `${direcao === 'reduzir' ? 'até' : 'mín.'} ${T.fmt(meta)}`;
+
 // ── Cálculo de uma medida (do total ou de um setor) ──────────
+//
+// O VEREDITO É BINÁRIO: bateu a meta ou não bateu. Existiu aqui um
+// "% do caminho" (quanto se andou da partida até a meta) que pintava
+// de verde/âmbar quem estava fora — numa meta de reduzir a zero, estar
+// em 1 virava "80% do caminho", como se fosse quase bom. Não é: está
+// fora. O quanto melhorou desde a última medição continua importando,
+// mas como ANÁLISE, ao lado do veredito, nunca no lugar dele.
 function analisar(m, k, setor = TOTAL) {
   const T = MEDIDAS[k];
   const cfg = setor ? setoresDe(m).find(s => s.nome === setor)?.medidas?.[k] : m.medidas[k];
@@ -64,9 +75,15 @@ function analisar(m, k, setor = TOTAL) {
   const ms = serie(m, k, setor);
   const atual = ms.length ? ms[ms.length - 1][1] : cfg.inicial;
   const dataAtual = ms.length ? ms[ms.length - 1][0] : null;
-  const percurso = cfg.meta - cfg.inicial, andado = atual - cfg.inicial;
-  const pct = percurso === 0 ? 100 : Math.max(0, Math.min(120, andado / percurso * 100));
   const atingiu = m.direcao === 'reduzir' ? atual <= cfg.meta : atual >= cfg.meta;
+  // O que falta para a meta — é isto que decide, não o trajeto já andado.
+  const falta = atingiu ? 0 : Math.abs(cfg.meta - atual);
+  // Distância proporcional, só para ordenar quem está mais longe.
+  const folga = falta / (Math.abs(cfg.meta - cfg.inicial) || Math.abs(cfg.inicial) || 1);
+  // Comparação com a medição anterior: o "melhorou/piorou" da análise.
+  const anterior = ms.length >= 2 ? ms[ms.length - 2] : null;
+  const variacao = anterior ? atual - anterior[1] : null;
+  const melhorou = !variacao ? null : (m.direcao === 'reduzir' ? variacao < 0 : variacao > 0);
   const restam = dias(hoje(), m.prazo);
   // Tendência: reta pelos pontos, projetada até o prazo.
   let projecao = null, chega = null;
@@ -77,26 +94,47 @@ function analisar(m, k, setor = TOTAL) {
     projecao = my + b * (dias(ms[0][0], m.prazo) - mx);
     chega = m.direcao === 'reduzir' ? projecao <= cfg.meta : projecao >= cfg.meta;
   }
-  // Mesma escala de estado dos gráficos, nos tokens do app (validados
-  // para daltonismo e contraste nos dois temas).
-  const cor = atingiu ? 'var(--success)' : pct >= 60 ? 'var(--warning)' : 'var(--danger)';
-  const frase = atingiu ? `Meta atingida: ${T.fmt(atual)} contra ${T.fmt(cfg.meta)}.`
+  // Duas cores, porque são dois estados. Os tokens do app já passam nas
+  // checagens de daltonismo e contraste nos dois temas.
+  const cor = atingiu ? 'var(--success)' : 'var(--danger)';
+  const alvo = alvoTexto(m.direcao, T, cfg.meta);
+  const veredito = atingiu
+    ? `Na meta: ${T.fmt(atual)} contra ${alvo}.`
+    : `Fora da meta: está em ${T.fmt(atual)} e a meta é ${alvo} — falta ${T.fmt(falta)}.`;
+  const desde = !anterior ? ''
+    : !variacao ? `Sem mudança desde a medição anterior (${br(anterior[0])}).`
+    : `${melhorou ? 'Melhorou' : 'Piorou'} ${T.fmt(Math.abs(variacao))} desde a medição anterior (era ${T.fmt(anterior[1])} em ${br(anterior[0])}).`;
+  const ritmo = atingiu ? ''
     : ms.length < 2 ? 'Ainda sem tendência — lance pelo menos 2 vezes.'
-    : restam < 0 ? `Prazo vencido há ${-restam} dias; ficou em ${T.fmt(atual)} (${Math.round(pct)}% do caminho).`
-    : chega ? `No ritmo atual chega em ${T.fmt(projecao)} no prazo — a meta é ${T.fmt(cfg.meta)}. Continue.`
-    : `No ritmo atual chegaria em ${T.fmt(projecao)}, e a meta é ${T.fmt(cfg.meta)}. Precisa acelerar: faltam ${restam} dias.`;
-  return { k, setor, T, cfg, ms, atual, dataAtual, pct, atingiu, restam, projecao, chega, cor, frase };
+    : restam < 0 ? `Prazo vencido há ${-restam} dias.`
+    : chega ? `No ritmo atual chega em ${T.fmt(projecao)} até o prazo.`
+    : `No ritmo atual chegaria em ${T.fmt(projecao)}. Faltam ${restam} dias.`;
+  const frase = [veredito, desde, ritmo].filter(Boolean).join(' ');
+  return { k, setor, T, cfg, ms, atual, dataAtual, atingiu, falta, folga, anterior, variacao, melhorou, restam, projecao, chega, cor, frase };
 }
-// A medida de menor progresso é a que segura o resultado; a meta só é
-// "atingida" quando todas batem.
+// A meta só é "atingida" quando TODAS as medidas batem. Quem segura o
+// resultado é a que está proporcionalmente mais longe do alvo.
 function resumo(m, setor = TOTAL) {
   const as = medidasDe(m).map(k => analisar(m, k, setor)).filter(Boolean);
-  const pior = as.reduce((p, a) => (a.pct < p.pct ? a : p), as[0]);
-  return { as, pct: as.length ? Math.round(as.reduce((s, a) => s + a.pct, 0) / as.length) : 0, atingiu: as.length > 0 && as.every(a => a.atingiu), cor: pior?.cor || 'var(--danger)', pior };
+  const fora = as.filter(a => !a.atingiu);
+  const pior = fora.length ? fora.reduce((p, a) => (a.folga > p.folga ? a : p), fora[0]) : null;
+  return { as, fora: fora.length, atingiu: as.length > 0 && fora.length === 0,
+           cor: !as.length ? 'var(--text-muted)' : fora.length ? 'var(--danger)' : 'var(--success)', pior };
 }
-// "500 / 800" numa meta de REDUZIR parecia que faltava chegar a 800,
-// quando 500 já é melhor que a meta. O sinal resolve a leitura.
-const metaLida = (m, a) => `${m.direcao === 'reduzir' ? 'até' : 'mín.'} ${a.T.fmt(a.cfg.meta)}`;
+const metaLida = (m, a) => alvoTexto(m.direcao, a.T, a.cfg.meta);
+
+// O "melhorou/piorou" mora aqui: seta para o lado que o número andou,
+// cor pelo que isso significa na direção da meta. Vive sempre ao lado
+// do veredito, nunca substituindo ele.
+function Variacao({ a, size = 11.5 }) {
+  if (!a?.variacao) return null;
+  return (
+    <span style={{ fontSize: size, fontWeight: 700, color: a.melhorou ? 'var(--success)' : 'var(--danger)', whiteSpace: 'nowrap' }}
+      title={`Medição anterior: ${a.T.fmt(a.anterior[1])} em ${br(a.anterior[0])}`}>
+      {a.variacao < 0 ? '↓' : '↑'}{a.T.fmt(Math.abs(a.variacao))}
+    </span>
+  );
+}
 
 const graficoAutomatico = (m, a) => (m.frequencia === 'mensal' || a.ms.length <= 3 ? 'barras' : 'linha');
 
@@ -105,20 +143,20 @@ const graficoAutomatico = (m, a) => (m.frequencia === 'mensal' || a.ms.length <=
 // Regras seguidas aqui, nesta ordem: primeiro a forma (barra para poucos
 // períodos, linha para muitos), depois a cor — e a cor é UMA por gráfico,
 // nunca uma por barra. Colorir cada barra pelo seu próprio estado parece
-// informativo, mas repete em cor o que o tamanho da barra já diz, e as
-// três cores de status não se distinguem por quem tem daltonismo (medido:
-// verde↔âmbar fica em ΔE 9,3 — no limite). Quem bateu a meta ganha um ✓,
-// que é leitura garantida sem depender de cor.
+// informativo, mas repete em cor o que o tamanho da barra já diz. Quem
+// bateu a meta ganha um ✓, que é leitura garantida sem depender de cor.
 //
-// As cores vêm dos tokens do app (--success/--warning/--danger), que já
+// As cores vêm dos tokens do app (--success/--danger), que já
 // passam nas checagens de banda de luminosidade, croma, daltonismo e
 // contraste nos dois temas.
+// Dois estados, porque o resultado é binário: bateu a meta ou não bateu.
+// Havia um terceiro ("a caminho", âmbar) para quem passou de 60% do
+// trajeto — era ele que dava cara de quase-bom para quem estava fora.
 const ESTADOS = {
   bom:     { cor: 'var(--success)', rotulo: 'na meta' },
-  caminho: { cor: 'var(--warning)', rotulo: 'a caminho' },
-  atencao: { cor: 'var(--danger)',  rotulo: 'precisa acelerar' },
+  atencao: { cor: 'var(--danger)',  rotulo: 'fora da meta' },
 };
-const estadoDe = (a) => (a.atingiu ? ESTADOS.bom : a.pct >= 60 ? ESTADOS.caminho : ESTADOS.atencao);
+const estadoDe = (a) => (a.atingiu ? ESTADOS.bom : ESTADOS.atencao);
 
 // Régua do eixo em números redondos. "467" e "1.773" são o intervalo bruto
 // dividido em três; ninguém lê isso como referência — 0, 500, 1.000 sim.
@@ -353,52 +391,13 @@ function SemDados({ mini }) {
   );
 }
 
-function Progresso({ a, compacto, m }) {
-  const est = estadoDe(a);
-  const largura = Math.min(100, Math.max(0, a.pct));
-  // Onde deveria estar hoje, se o avanço fosse parelho do início até o prazo.
-  const ritmo = (() => {
-    if (!m?.prazo || !a.ms.length) return null;
-    const total = dias(a.ms[0][0], m.prazo);
-    if (total <= 0) return null;
-    return Math.min(100, Math.max(0, dias(a.ms[0][0], hoje()) / total * 100));
-  })();
-  return (
-    <div>
-      {!compacto && (
-        <div style={{ margin: '6px 0 2px', display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'var(--text-muted)' }}>
-          <span>Começou em <b style={{ color: 'var(--text)' }}>{a.T.fmt(a.cfg.inicial)}</b></span>
-          <span>Quer chegar em <b style={{ color: 'var(--text)' }}>{a.T.fmt(a.cfg.meta)}</b></span>
-        </div>
-      )}
-      <div style={{ position: 'relative', height: compacto ? 8 : 12, borderRadius: 99, background: 'var(--surface-2)', overflow: 'hidden', marginTop: compacto ? 4 : 0 }}>
-        <div style={{ width: `${largura}%`, height: '100%', background: est.cor, borderRadius: 99, transition: 'width .4s' }}/>
-      </div>
-      {/* A marca do ritmo mostra se o avanço está adiantado ou atrasado em
-          relação ao tempo que já passou — sem ela, 40% pode ser ótimo ou
-          péssimo dependendo do prazo. */}
-      {!compacto && ritmo != null && (
-        <div style={{ position: 'relative', height: 14 }}>
-          <div style={{ position: 'absolute', left: `${ritmo}%`, transform: 'translateX(-50%)', fontSize: 10, color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-            ▲ tempo decorrido
-          </div>
-        </div>
-      )}
-      {!compacto && (
-        <div style={{ fontSize: 12, marginTop: 5 }}>
-          Hoje está em <b>{a.T.fmt(a.atual)}</b> — já andou <b>{Math.round(a.pct)}%</b> do caminho até a meta
-          {ritmo != null && <span style={{ color: 'var(--text-muted)' }}> · {Math.round(ritmo)}% do prazo usado</span>}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function Grafico({ m, a, mini }) {
-  const t = m.grafico === 'auto' ? graficoAutomatico(m, a) : m.grafico;
+  // 'progresso' saiu: a barra que enchia da partida até a meta contava a
+  // mesma meia-verdade do "% do caminho". Metas antigas salvas com ela
+  // caem no automático.
+  const t = (m.grafico === 'auto' || m.grafico === 'progresso') ? graficoAutomatico(m, a) : m.grafico;
   if (t === 'linha') return <Linha m={m} a={a} mini={mini}/>;
-  if (t === 'barras') return <Barras m={m} a={a} mini={mini}/>;
-  return <Progresso a={a} m={m}/>;
+  return <Barras m={m} a={a} mini={mini}/>;
 }
 
 const Selo = ({ cor, children }) => <span style={{ fontSize: 11, fontWeight: 700, color: cor, background: `${cor}1f`, borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap' }}>{children}</span>;
@@ -567,9 +566,12 @@ export default function Metas({ userId, profile }) {
     const tipoAtual = foco ? (aberta.grafico === 'auto' ? graficoAutomatico(aberta, foco) : aberta.grafico) : null;
     const ks = medidasDe(aberta);
     const lancs = [...(aberta.lancamentos || [])].sort((a, b) => String(b.data).localeCompare(String(a.data)) || String(a.setor || '').localeCompare(String(b.setor || '')));
-    // Setor que mais segura o resultado: o de menor progresso médio.
+    // Área que mais segura o resultado: a que está mais longe da meta.
     const porSetor = sets.map(st => ({ nome: st.nome, r: resumo(aberta, st.nome) })).filter(x => x.r.as.length);
-    const setorPior = porSetor.length ? porSetor.reduce((p, x) => (x.r.pct < p.r.pct ? x : p), porSetor[0]) : null;
+    const foraDaMeta = porSetor.filter(x => !x.r.atingiu);
+    const setorPior = foraDaMeta.length
+      ? foraDaMeta.reduce((p, x) => ((x.r.pior?.folga || 0) > (p.r.pior?.folga || 0) ? x : p), foraDaMeta[0])
+      : null;
     return (
       <div>
         {cabecalho}
@@ -584,7 +586,7 @@ export default function Metas({ userId, profile }) {
               </div>
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Selo cor={rTotal.cor}>{rTotal.atingiu ? 'Meta atingida' : `${rTotal.pct}% do caminho`}</Selo>
+              <Selo cor={rTotal.cor}>{rTotal.atingiu ? '✓ Na meta' : 'Fora da meta'}</Selo>
               <button className="btn btn-primary btn-sm" onClick={() => { setLanc({ data: hoje(), valores: {}, porSetor: {}, observacao: '' }); setModal('lancar'); }}><Plus size={14}/> Lançar</button>
               {/* Editar existe principalmente para ligar o acompanhamento
                   por setor depois — antes só dava para isso apagando a meta
@@ -593,10 +595,14 @@ export default function Metas({ userId, profile }) {
               {dados.podeGerir && <button className="btn btn-ghost btn-sm" style={{ color: 'var(--danger)' }} onClick={() => apagarMeta(aberta)}><Trash2 size={14}/></button>}
             </div>
           </div>
-          {rTotal.pior && (
+          {rTotal.as.length > 0 && (
             <div style={{ marginTop: 10, background: 'rgba(232,98,42,.08)', border: '1px solid rgba(232,98,42,.2)', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, lineHeight: 1.55 }}>
-              {rTotal.atingiu ? 'Todas as medidas bateram a meta. 🎉' : <><b>{rTotal.pior.T.nome}</b> é o que mais segura o resultado: {rTotal.pior.frase}</>}
-              {setorPior && !rTotal.atingiu && <> <b>{setorPior.nome}</b> é o setor mais atrasado ({setorPior.r.pct}% do caminho).</>}
+              {/* Com uma medida só, dizer "X é o que mais segura o resultado"
+                  é encher linguiça — não há concorrência. */}
+              {rTotal.atingiu ? 'Todas as medidas bateram a meta. 🎉'
+                : <>{rTotal.as.length > 1 && <><b>{rTotal.pior.T.nome}</b> é o que mais segura o resultado. </>}{rTotal.pior.frase}</>}
+              {setorPior && !rTotal.atingiu && <> <b>{setorPior.nome}</b> é a área mais longe da meta{setorPior.r.pior ? ` (falta ${setorPior.r.pior.T.fmt(setorPior.r.pior.falta)} em ${setorPior.r.pior.T.nome.toLowerCase()})` : ''}.</>}
+              {foraDaMeta.length === 0 && sets.length > 0 && !rTotal.atingiu && <> Todas as áreas bateram — o que falta é no total.</>}
             </div>
           )}
         </div>
@@ -607,14 +613,14 @@ export default function Metas({ userId, profile }) {
           <div className="card" style={{ marginBottom: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
               <h3 style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>Por área</h3>
-              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Total = soma dos setores em quantidade e R$; o percentual do total é o lançado (ou média ponderada).</div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Bateu a meta ou não — a seta ao lado do número é a variação desde a medição anterior.</div>
             </div>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead><tr>
                   <th style={{ textAlign: 'left', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Setor</th>
                   {ks.map(k => <th key={k} style={{ textAlign: 'right', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{MEDIDAS[k].curto} · atual / meta</th>)}
-                  <th style={{ textAlign: 'right', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Caminho</th>
+                  <th style={{ textAlign: 'right', padding: '7px 8px', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' }}>Situação</th>
                 </tr></thead>
                 <tbody>
                   {[{ nome: TOTAL, r: rTotal }, ...porSetor].map(({ nome, r: rs }) => {
@@ -624,9 +630,9 @@ export default function Metas({ userId, profile }) {
                         <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', fontWeight: nome ? 600 : 800 }}>{nome || 'Total'}</td>
                         {ks.map(k => { const a = rs.as.find(x => x.k === k); return (
                           <td key={k} style={{ padding: '8px', borderBottom: '1px solid var(--border)', textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-                            {a ? <><b>{a.T.fmt(a.atual)}</b> <span style={{ color: 'var(--text-muted)' }}>· {metaLida(aberta, a)}</span></> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
+                            {a ? <><b>{a.T.fmt(a.atual)}</b> <span style={{ color: 'var(--text-muted)' }}>· {metaLida(aberta, a)}</span> <Variacao a={a} size={11}/></> : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                           </td>); })}
-                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', textAlign: 'right' }}><Selo cor={rs.cor}>{rs.atingiu ? '✓ atingiu' : `${rs.pct}%`}</Selo></td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid var(--border)', textAlign: 'right' }}><Selo cor={rs.cor}>{rs.atingiu ? '✓ na meta' : 'fora da meta'}</Selo></td>
                       </tr>
                     );
                   })}
@@ -641,7 +647,7 @@ export default function Metas({ userId, profile }) {
             <h3 style={{ fontWeight: 700, fontSize: 14, margin: 0 }}>{setorValido ? `${setorValido} — ` : sets.length ? 'Total — ' : ''}{foco ? foco.T.nome : 'Painel — as medidas lado a lado'}</h3>
             <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
               {foco && <button className="btn btn-sm" onClick={() => setMedida(null)}><LayoutGrid size={13}/> Ver painel</button>}
-              {[['auto', 'Automático'], ['linha', 'Linha'], ['barras', 'Barras'], ['progresso', 'Progresso']].map(([g, t]) => (
+              {[['auto', 'Automático'], ['linha', 'Linha'], ['barras', 'Barras']].map(([g, t]) => (
                 <button key={g} onClick={() => setGrafico(g)}
                   style={{ padding: '4px 10px', borderRadius: 99, fontSize: 12, fontWeight: 700, cursor: 'pointer',
                            border: `1px solid ${aberta.grafico === g ? 'var(--primary)' : 'var(--border)'}`,
@@ -659,7 +665,7 @@ export default function Metas({ userId, profile }) {
                     em tamanho grande, cansa a leitura. */}
                 {[['Atual', foco.T.fmt(foco.atual), foco.dataAtual ? br(foco.dataAtual) : 'partida', foco.cor],
                   ['Meta', foco.T.fmt(foco.cfg.meta), `até ${br(aberta.prazo)}`, null],
-                  ['Do caminho', `${Math.round(foco.pct)}%`, `saiu de ${foco.T.fmt(foco.cfg.inicial)}`, foco.cor],
+                  ['Falta', foco.atingiu ? '✓' : foco.T.fmt(foco.falta), foco.atingiu ? 'meta batida' : `para chegar em ${foco.T.fmt(foco.cfg.meta)}`, foco.cor],
                   ['Prazo', foco.restam >= 0 ? `${foco.restam}d` : 'vencido', foco.restam >= 0 ? 'restantes' : `${-foco.restam} dias atrás`, null]].map(([r1, v, s, c]) => (
                   <div key={r1} style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '10px 12px' }}>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>{r1}</div>
@@ -671,9 +677,10 @@ export default function Metas({ userId, profile }) {
                   </div>
                 ))}
               </div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.55 }}>{foco.frase}</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8, lineHeight: 1.55 }}>
+                <b style={{ color: foco.cor }}>{foco.atingiu ? '✓ Na meta.' : 'Fora da meta.'}</b> {foco.frase.replace(/^(Na meta|Fora da meta): /, '')}
+              </div>
               <Grafico m={aberta} a={foco}/>
-              {tipoAtual !== 'progresso' && <Progresso a={foco} m={aberta}/>}
             </>
           ) : (
             <>
@@ -686,9 +693,9 @@ export default function Metas({ userId, profile }) {
                       {/* A cor mora no selo, e o selo diz em palavras o que
                           a cor está dizendo — quem não distingue as cores lê
                           a mesma informação. */}
-                      <Selo cor={a.cor}>{a.atingiu ? '✓ na meta' : `${Math.round(a.pct)}% do caminho`}</Selo>
+                      <Selo cor={a.cor}>{a.atingiu ? '✓ na meta' : `falta ${a.T.fmt(a.falta)}`}</Selo>
                     </div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: '2px 0 4px', fontVariantNumeric: 'tabular-nums' }}>{a.T.fmt(a.atual)} <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>· meta {metaLida(aberta, a)}</span></div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: '2px 0 4px', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>{a.T.fmt(a.atual)} <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>· meta {metaLida(aberta, a)}</span> <Variacao a={a}/></div>
                     <Grafico m={aberta} a={a} mini/>
                   </div>
                 ))}
@@ -802,10 +809,10 @@ export default function Metas({ userId, profile }) {
       {cabecalho}
       <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 12.5, color: 'var(--text-muted)', marginBottom: 8 }}>
-          {dados.metas.length} meta(s) · {atingidas} atingida(s). Aqui você lança o número de cada período: das metas da loja e das de cada plano de ação. Todo plano do PDCA aparece nos filtros.
+          {dados.metas.length} meta(s) · {atingidas} atingida(s). Aqui você lança o número de cada período: das metas da empresa e das de cada plano de ação. Todo plano do PDCA aparece nos filtros.
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {[['todas', `Todas (${dados.metas.length})`], ['livres', `Da loja (${dados.metas.filter(m => !m.plano_id).length})`],
+          {[['todas', `Todas (${dados.metas.length})`], ['livres', `Da empresa (${dados.metas.filter(m => !m.plano_id).length})`],
             ...dados.planos.map(p => [p.id, `🎯 ${p.titulo} (${dados.metas.filter(m => m.plano_id === p.id).length})`])].map(([id, t]) => (
             <button key={id} onClick={() => setFiltro(id)}
               style={{ padding: '5px 11px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer',
@@ -832,20 +839,23 @@ export default function Metas({ userId, profile }) {
           <div key={m.id} className="card" onClick={() => { setAbertaId(m.id); setMedida(null); setSetorFoco(TOTAL); }}
             style={{ cursor: 'pointer', borderLeft: `4px solid ${r.cor}`, borderRadius: '0 12px 12px 0', marginBottom: 10 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
-              <b style={{ fontSize: 14 }}>{m.nome}</b><Selo cor={r.cor}>{r.atingiu ? 'Meta atingida' : `${r.pct}% do caminho`}</Selo>
+              <b style={{ fontSize: 14 }}>{m.nome}</b><Selo cor={r.cor}>{r.atingiu ? '✓ Na meta' : 'Fora da meta'}</Selo>
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{m.direcao === 'reduzir' ? 'Reduzir' : 'Aumentar'} · até {br(m.prazo)} · lança {FREQ[m.frequencia]}{p ? ` · 🎯 ${p.titulo}` : ''}</div>
             <div style={{ display: 'grid', gridTemplateColumns: `repeat(${r.as.length || 1}, 1fr)`, gap: 10, marginTop: 8 }}>
               {r.as.map(a => (
                 <div key={a.k}>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>{a.T.curto} · <b style={{ color: 'var(--text)' }}>{a.T.fmt(a.atual)}</b> <span style={{ fontWeight: 400 }}>· meta {metaLida(m, a)}</span></div>
-                  <Progresso a={a} compacto/>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+                    <Selo cor={a.cor}>{a.atingiu ? '✓ na meta' : `falta ${a.T.fmt(a.falta)}`}</Selo>
+                    <Variacao a={a} size={11}/>
+                  </div>
                 </div>
               ))}
             </div>
             {setoresDe(m).length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                {setoresDe(m).map(st => { const rs = resumo(m, st.nome); return <Selo key={st.nome} cor={rs.cor}>{st.nome} · {rs.atingiu ? 'atingiu' : `${rs.pct}%`}</Selo>; })}
+                {setoresDe(m).map(st => { const rs = resumo(m, st.nome); return <Selo key={st.nome} cor={rs.cor}>{st.nome} · {rs.atingiu ? '✓ na meta' : 'fora'}</Selo>; })}
               </div>
             )}
           </div>
