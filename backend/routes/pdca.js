@@ -13,6 +13,14 @@ const canManage = p => p && ['admin', 'supervisor', 'master'].includes(p.access_
 // tarefa comum, e quem repete é o motor de lá.
 const RECORRENCIAS = ['nenhuma', 'diaria', 'semanal', 'quinzenal', 'mensal'];
 
+// O que a pessoa lê na tarefa dela. O título é a ação (igual para o grupo);
+// a parte individual entra aqui, que é onde ela trabalha.
+function descricaoDaTarefa(tituloPlano, detalhe) {
+  const base = `Ação do Plano: ${tituloPlano}`;
+  return detalhe?.trim() ? `${base}
+Sua parte: ${detalhe.trim()}` : base;
+}
+
 const QUADRANTE_LABEL = { P: 'P — Planejar', D: 'D — Fazer', C: 'C — Checar', A: 'A — Agir' };
 
 // ── PLANOS ──────────────────────────────────────────────────
@@ -162,7 +170,7 @@ router.get('/:id/acoes', async (req, res) => {
 
 // POST /api/pdca/:id/acoes
 router.post('/:id/acoes', async (req, res) => {
-  const { requester_id, quadrante, descricao, responsavel_id, prazo, criar_tarefa, inicio, recorrencia, grupo_id } = req.body;
+  const { requester_id, quadrante, descricao, responsavel_id, prazo, criar_tarefa, inicio, recorrencia, grupo_id, detalhe } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
@@ -182,6 +190,8 @@ router.post('/:id/acoes', async (req, res) => {
     // vira tarefa e conclui no seu tempo), todas com o mesmo grupo para a
     // tela mostrar um cartão só.
     grupo_id: grupo_id || null,
+    // A parte desta pessoa dentro da ação comum. Fica só nela.
+    detalhe: detalhe?.trim() || null,
     recorrencia: RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma',
     concluida: false,
     criar_tarefa: criar_tarefa !== false,
@@ -210,7 +220,7 @@ router.post('/:id/acoes', async (req, res) => {
     const { data: tarefa } = await supabase.from('tarefas').insert({
       company: plano.company,
       title: descricao.trim(),
-      description: `Ação do Plano: ${plano.titulo}`,
+      description: descricaoDaTarefa(plano.titulo, detalhe),
       assigned_to: responsavel_id,
       // A tarefa aparece a partir do INÍCIO, não do prazo final: a pessoa
       // precisa ver o que fazer enquanto dá tempo de fazer.
@@ -234,7 +244,7 @@ router.post('/:id/acoes', async (req, res) => {
 
 // PUT /api/pdca/acoes/:id  — ANTES de PUT /:id para não conflitar
 router.put('/acoes/:id', async (req, res) => {
-  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia, aplicar_grupo } = req.body;
+  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia, aplicar_grupo, detalhe } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -250,6 +260,8 @@ router.put('/acoes/:id', async (req, res) => {
   if (responsavel_id !== undefined) updates.responsavel_id = responsavel_id || null;
   if (prazo !== undefined)        updates.prazo        = prazo || null;
   if (inicio !== undefined)       updates.inicio       = inicio || null;
+  // Individual de propósito: `detalhe` NUNCA entra no que se aplica ao grupo.
+  if (detalhe !== undefined)      updates.detalhe      = detalhe?.trim() || null;
   if (recorrencia !== undefined)  updates.recorrencia  = RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma';
   if (criar_tarefa !== undefined) updates.criar_tarefa = criar_tarefa;
   if (concluida !== undefined) {
@@ -293,6 +305,9 @@ router.put('/acoes/:id', async (req, res) => {
       recorrencia: RECORRENCIAS.includes(finalRepete) ? finalRepete : 'nenhuma',
       pdca_context: { ...(tAtual?.pdca_context || {}), repetir_ate: finalPrazo || null },
     };
+    if (detalhe !== undefined || descricao !== undefined) {
+      patchTarefa.description = descricaoDaTarefa(plano?.titulo, detalhe !== undefined ? detalhe : acaoAtual.detalhe);
+    }
     // A data só volta para trás se a tarefa ainda não foi feita nem
     // repactuada — mexer numa data já combinada seria atropelar a pessoa.
     const novaData = finalInicio || finalPrazo;
@@ -313,7 +328,7 @@ router.put('/acoes/:id', async (req, res) => {
     const { data: tarefa } = await supabase.from('tarefas').insert({
       company: plano?.company,
       title: data.descricao,
-      description: `Ação do Plano: ${plano?.titulo}`,
+      description: descricaoDaTarefa(plano?.titulo, detalhe !== undefined ? detalhe : acaoAtual.detalhe),
       assigned_to: finalResponsavel,
       due_date: finalInicio || finalPrazo,
       priority: 'normal',
@@ -341,7 +356,7 @@ router.put('/acoes/:id', async (req, res) => {
     }
     if (Object.keys(doGrupo).length) {
       const { data: irmas } = await supabase.from('acoes_pdca')
-        .select('id, tarefa_id')
+        .select('id, tarefa_id, detalhe')
         .eq('grupo_id', acaoAtual.grupo_id).neq('id', req.params.id);
 
       await supabase.from('acoes_pdca').update(doGrupo).eq('grupo_id', acaoAtual.grupo_id).neq('id', req.params.id);
@@ -352,7 +367,12 @@ router.put('/acoes/:id', async (req, res) => {
         const { data: t } = await supabase.from('tarefas')
           .select('due_date, pdca_context').eq('id', irma.tarefa_id).maybeSingle();
         const patch = {};
-        if (doGrupo.descricao !== undefined) patch.title = doGrupo.descricao;
+        // O título é o texto comum; a descrição mantém a parte de cada um
+        // (por isso lê o `detalhe` da irmã, não o de quem foi editado).
+        if (doGrupo.descricao !== undefined) {
+          patch.title = doGrupo.descricao;
+          patch.description = descricaoDaTarefa(plano?.titulo, irma.detalhe);
+        }
         if (doGrupo.recorrencia !== undefined) patch.recorrencia = doGrupo.recorrencia;
         if (doGrupo.prazo !== undefined || doGrupo.inicio !== undefined) {
           patch.pdca_context = { ...(t?.pdca_context || {}), repetir_ate: finalPrazo || null };

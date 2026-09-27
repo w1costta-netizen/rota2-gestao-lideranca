@@ -193,11 +193,11 @@ const RECORRENCIAS = [
   { key: 'mensal',    label: 'Todo mês' },
 ];
 
-const EMPTY_ACAO    = { descricao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true };
+const EMPTY_ACAO    = { descricao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
 const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
-const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true };
-const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true };
-const EMPTY_ACAO_A  = { padronizacao: '', comunicacao: '', treinamento: '', monitoramento: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true };
+const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
+const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
+const EMPTY_ACAO_A  = { padronizacao: '', comunicacao: '', treinamento: '', monitoramento: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
 
 const CLASSIFICACOES_C = [
   { key: 'com_resultado', label: 'Com resultado', cor: '#10b981', emoji: '✅', desc: 'melhorou — candidata a padronizar no A' },
@@ -417,12 +417,22 @@ export default function PlanoAcao({ userId, profile }) {
         };
         // O texto e as datas sao os mesmos para todo mundo do grupo: editar
         // em uma vale para todas (a conclusao de cada um nao se propaga).
+        const detalhes = formAcao.detalhes || {};
         const { data } = await api.put(`/pdca/acoes/${editingAcao.id}`,
-          { requester_id: userId, aplicar_grupo: true, ...payload });
+          { requester_id: userId, aplicar_grupo: true, detalhe: detalhes[editingAcao.id] ?? '', ...payload });
+
+        // A parte de cada um vai numa chamada própria, SEM aplicar_grupo:
+        // ela é individual e não pode escorregar para os outros.
+        const irmas = acoes.filter(a => editingAcao.grupo_id && a.grupo_id === editingAcao.grupo_id && a.id !== editingAcao.id);
+        await Promise.all(irmas
+          .filter(a => (detalhes[a.id] ?? '') !== (a.detalhe || ''))
+          .map(a => api.put(`/pdca/acoes/${a.id}`, { requester_id: userId, detalhe: detalhes[a.id] ?? '' })));
+
         setAcoes(as => as.map(a => {
           if (a.id === data.id) return data;
           if (editingAcao.grupo_id && a.grupo_id === editingAcao.grupo_id) {
-            return { ...a, descricao: data.descricao, prazo: data.prazo, inicio: data.inicio, recorrencia: data.recorrencia };
+            return { ...a, descricao: data.descricao, prazo: data.prazo, inicio: data.inicio,
+              recorrencia: data.recorrencia, detalhe: detalhes[a.id] ?? a.detalhe };
           }
           return a;
         }));
@@ -442,6 +452,8 @@ export default function PlanoAcao({ userId, profile }) {
             inicio: formAcao.inicio || null,
             recorrencia: formAcao.recorrencia || 'nenhuma',
             criar_tarefa: formAcao.criar_tarefa,
+            // Na criação a chave é o id da PESSOA (a ação ainda não existe).
+            detalhe: (formAcao.detalhes || {})[rid] || null,
           } : {}),
         })));
         setAcoes(as => [...as, ...criadas.map(r => r.data)]);
@@ -650,6 +662,9 @@ export default function PlanoAcao({ userId, profile }) {
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
                           criar_tarefa: acao.criar_tarefa !== false,
+                          // Chave = id da AÇÃO de cada pessoa (na edição já
+                          // existem linhas no banco).
+                          detalhes: Object.fromEntries(grupo.map(g => [g.id, g.detalhe || ''])),
                         });
                       } else if (acao.quadrante === 'D') {
                         // Idem: texto composto (O quê/Onde/Como/...) recarrega em "oque".
@@ -661,6 +676,9 @@ export default function PlanoAcao({ userId, profile }) {
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
                           criar_tarefa: acao.criar_tarefa !== false,
+                          // Chave = id da AÇÃO de cada pessoa (na edição já
+                          // existem linhas no banco).
+                          detalhes: Object.fromEntries(grupo.map(g => [g.id, g.detalhe || ''])),
                         });
                       } else if (acao.quadrante === 'A') {
                         setFormAcao({
@@ -671,6 +689,9 @@ export default function PlanoAcao({ userId, profile }) {
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
                           criar_tarefa: acao.criar_tarefa !== false,
+                          // Chave = id da AÇÃO de cada pessoa (na edição já
+                          // existem linhas no banco).
+                          detalhes: Object.fromEntries(grupo.map(g => [g.id, g.detalhe || ''])),
                         });
                       } else {
                         setFormAcao({
@@ -680,6 +701,9 @@ export default function PlanoAcao({ userId, profile }) {
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
                           criar_tarefa: acao.criar_tarefa !== false,
+                          // Chave = id da AÇÃO de cada pessoa (na edição já
+                          // existem linhas no banco).
+                          detalhes: Object.fromEntries(grupo.map(g => [g.id, g.detalhe || ''])),
                         });
                       }
                     }}
@@ -704,6 +728,11 @@ export default function PlanoAcao({ userId, profile }) {
             onSave={saveAcao}
             quadrante={addingTo}
             isNovo={!editingAcao}
+            // Editando uma ação de várias pessoas: o formulário precisa do
+            // grupo para listar a parte de cada um.
+            grupo={editingAcao?.grupo_id
+              ? acoes.filter(a => a.grupo_id === editingAcao.grupo_id)
+              : (editingAcao ? [editingAcao] : [])}
           />
         </Modal>
 
@@ -913,7 +942,7 @@ function AcaoFormPlanejar({ form, setForm, saving, onSave }) {
 }
 
 // D / C / A — ação delegável de verdade: responsável, prazo, tarefa vinculada
-function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadrante, isNovo }) {
+function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadrante, isNovo, grupo }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: typeof e === 'object' && e.target ? e.target.value : e }));
   const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === quadrante);
@@ -939,7 +968,7 @@ function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadr
 
       <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
 
-      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo}/>
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo} grupo={grupo}/>
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar ação'}
@@ -949,8 +978,14 @@ function AcaoFormPadrao({ form, setForm, membros, saving, hasTask, onSave, quadr
 }
 
 // Bloco reutilizável: Responsável + Prazo + toggle "criar tarefa automaticamente"
-function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNovo, textos = {} }) {
+function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNovo, textos = {}, grupo = [] }) {
   const ids = form.responsaveis_ids || [];
+  // Na criação a chave é a PESSOA (a ação ainda não existe); na edição é a
+  // AÇÃO de cada um, que é o que o servidor sabe atualizar.
+  const pessoasDoDetalhe = isNovo
+    ? (form.responsaveis_ids || []).map(id => ({ chave: id, nome: membros.find(m => m.id === id)?.full_name || 'Responsável' }))
+    : grupo.filter(g => g.responsavel).map(g => ({ chave: g.id, nome: g.responsavel.full_name }));
+
   const toggleResp = (id) => setForm(p => {
     const atuais = p.responsaveis_ids || [];
     return { ...p, responsaveis_ids: atuais.includes(id) ? atuais.filter(x => x !== id) : [...atuais, id] };
@@ -1032,6 +1067,31 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
         </div>
       </div>
 
+      {/* A ação é a mesma para o grupo, mas o papel de uma pessoa pode ser
+          diferente. Sem isto, o único jeito era editar a tarefa dela por
+          fora — e a próxima edição da ação apagava esse texto. */}
+      {pessoasDoDetalhe.length > 0 && (
+        <div className="form-group">
+          <label className="form-label">A parte de cada um (opcional)</label>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
+            Deixe em branco quando a ação for igual para a pessoa. O que você escrever aqui aparece na tarefa dela.
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {pessoasDoDetalhe.map(pes => (
+              <div key={pes.chave} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-muted)', minWidth: 120, flex: '0 0 auto' }}>
+                  {pes.nome}
+                </span>
+                <input className="input" style={{ flex: '1 1 180px', fontSize: 12.5 }}
+                  value={(form.detalhes || {})[pes.chave] || ''}
+                  onChange={e => setForm(pp => ({ ...pp, detalhes: { ...(pp.detalhes || {}), [pes.chave]: e.target.value } }))}
+                  placeholder="Ex: conferir o SLOT e registrar as fotos"/>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {podeToggleTarefa ? (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           background: 'var(--surface-2, #262B38)', borderRadius: 10, padding: '10px 14px' }}>
@@ -1072,7 +1132,7 @@ function Etapa({ numero, titulo, ajuda, cor }) {
   );
 }
 
-function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave, isNovo }) {
+function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave, isNovo, grupo }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
   // Na criação o resultado nasce escondido: ninguém tem número no dia em
   // que combina a medição, e o campo em branco fazia parecer que faltava
@@ -1106,7 +1166,7 @@ function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave, isNov
       </div>
 
       <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros}
-        podeToggleTarefa={podeToggleTarefa} isNovo={isNovo}
+        podeToggleTarefa={podeToggleTarefa} isNovo={isNovo} grupo={grupo}
         textos={{
           responsavel: 'Quem vai medir',
           prazo: 'Última medição (prazo)',
@@ -1174,7 +1234,7 @@ function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave, isNov
 
 // D — Fazer: 5W2H estruturado. "Por quem" e "Quando" já são os campos
 // Responsável e Prazo — aqui ficam O quê, Onde, Como, Por quê e Quanto custa.
-function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave, isNovo }) {
+function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave, isNovo, grupo }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
   const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === 'D');
@@ -1216,7 +1276,7 @@ function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave, isNovo
 
       <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
 
-      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo}/>
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo} grupo={grupo}/>
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar ação'}
@@ -1225,7 +1285,7 @@ function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave, isNovo
   );
 }
 
-function AcaoFormAgir({ form, setForm, membros, saving, hasTask, onSave, isNovo }) {
+function AcaoFormAgir({ form, setForm, membros, saving, hasTask, onSave, isNovo, grupo }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
   const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === 'A');
@@ -1262,7 +1322,7 @@ function AcaoFormAgir({ form, setForm, membros, saving, hasTask, onSave, isNovo 
 
       <div style={{ height: 1, background: 'var(--border)', margin: '2px 0' }}/>
 
-      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo}/>
+      <ResponsavelPrazoTarefa form={form} setForm={setForm} membros={membros} podeToggleTarefa={podeToggleTarefa} isNovo={isNovo} grupo={grupo}/>
 
       <button className="btn-primary" onClick={onSave} disabled={saving}>
         {saving ? 'Salvando...' : 'Salvar padronização'}
@@ -1322,10 +1382,18 @@ function AcaoCard({ acao, grupo, color, canManage, formatDate, onToggle, onToggl
                         : <Circle size={16} style={{ color: 'var(--text-muted)' }}/>}
                     </button>
                     <Avatar name={a.responsavel.full_name} avatarUrl={a.responsavel.avatar_url} size={20}/>
-                    <span style={{ fontSize: 11.5, color: 'var(--text-muted)',
-                      textDecoration: a.concluida ? 'line-through' : 'none' }}>
-                      {a.responsavel.full_name}
-                    </span>
+                    <div style={{ minWidth: 0 }}>
+                      <span style={{ fontSize: 11.5, color: 'var(--text-muted)',
+                        textDecoration: a.concluida ? 'line-through' : 'none' }}>
+                        {a.responsavel.full_name}
+                      </span>
+                      {/* A parte dela dentro da ação comum. */}
+                      {a.detalhe && (
+                        <div style={{ fontSize: 11, color: 'var(--text)', opacity: .85, lineHeight: 1.35 }}>
+                          {a.detalhe}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1337,6 +1405,9 @@ function AcaoCard({ acao, grupo, color, canManage, formatDate, onToggle, onToggl
               <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <Avatar name={acao.responsavel.full_name} avatarUrl={acao.responsavel.avatar_url} size={20}/>
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{acao.responsavel.full_name.split(' ')[0]}</span>
+                {acao.detalhe && (
+                  <span style={{ fontSize: 11, color: 'var(--text)', opacity: .85 }}>· {acao.detalhe}</span>
+                )}
               </div>
             )}
             {acao.prazo && (() => {
