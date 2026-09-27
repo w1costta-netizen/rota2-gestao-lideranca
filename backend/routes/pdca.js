@@ -207,6 +207,28 @@ router.get('/:id/acoes', async (req, res) => {
     .order('criado_em', { ascending: true });
 
   if (error) return res.status(500).json({ error: error.message });
+
+  // Quantas medições já foram feitas em cada ação do C. É o que mostra o
+  // andamento no cartão — a ação só fecha quando todas estiverem prontas.
+  const comMedicao = (data || []).filter(a => (a.datas_medicao || []).length);
+  if (comMedicao.length) {
+    const { data: tarefas } = await supabase.from('tarefas')
+      .select('status, pdca_context')
+      .in('pdca_context->>acao_id', comMedicao.map(a => a.id));
+    const feitas = {};
+    for (const t of tarefas || []) {
+      const id = t.pdca_context?.acao_id;
+      if (!id) continue;
+      if (!feitas[id]) feitas[id] = { total: 0, concluidas: 0 };
+      feitas[id].total++;
+      if (t.status === 'concluida') feitas[id].concluidas++;
+    }
+    for (const a of comMedicao) {
+      a.medicoes_total = feitas[a.id]?.total ?? (a.datas_medicao || []).length;
+      a.medicoes_feitas = feitas[a.id]?.concluidas || 0;
+    }
+  }
+
   res.json(data || []);
 });
 

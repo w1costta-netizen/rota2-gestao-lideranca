@@ -1549,7 +1549,8 @@ function AcaoCard({ acao, grupo, color, canManage, formatDate, onToggle, onToggl
                 <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5,
                   background: '#0ea5e922', color: '#38bdf8' }}
                   title={acao.datas_medicao.map(d => d.split('-').reverse().join('/')).join(' · ')}>
-                  📏 {acao.datas_medicao.length} medições{prox ? ` · próxima ${prox.split('-').reverse().join('/')}` : ' · encerradas'}
+                  📏 {acao.medicoes_feitas || 0} de {acao.medicoes_total || acao.datas_medicao.length} medições
+                  {prox ? ` · próxima ${prox.split('-').reverse().join('/')}` : ''}
                 </span>
               );
             })()}

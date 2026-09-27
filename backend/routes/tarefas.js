@@ -163,12 +163,24 @@ router.put('/:id', async (req, res) => {
   if (isManager(me) && assigned_to) updates.assigned_to = assigned_to;
   if (status) updates.status = status;
 
-  // Sync ação PDCA quando tarefa é marcada como concluída/pendente
+  // Sync ação PDCA quando tarefa é marcada como concluída/pendente.
+  //
+  // Medição do C tem VÁRIAS tarefas (uma por data) com o mesmo acao_id:
+  // concluir a primeira marcava a ação inteira como feita e o progresso do
+  // plano subia com cinco medições ainda por fazer. Com mais de uma tarefa,
+  // a ação só fecha quando todas estiverem concluídas.
   if (status !== undefined && task?.pdca_context?.acao_id) {
-    supabase.from('acoes_pdca').update({
-      concluida: status === 'concluida',
-      concluida_em: status === 'concluida' ? new Date().toISOString() : null,
-    }).eq('id', task.pdca_context.acao_id).then(() => {}).catch(() => {});
+    (async () => {
+      const acaoId = task.pdca_context.acao_id;
+      const { data: irmas } = await supabase.from('tarefas')
+        .select('id, status').eq('pdca_context->>acao_id', acaoId);
+      const todas = (irmas || []).map(t => (t.id === req.params.id ? { ...t, status } : t));
+      const fechou = todas.length > 0 && todas.every(t => t.status === 'concluida');
+      await supabase.from('acoes_pdca').update({
+        concluida: fechou,
+        concluida_em: fechou ? new Date().toISOString() : null,
+      }).eq('id', acaoId);
+    })().catch(() => {});
   }
 
   // Recorrência: ao concluir, cria próxima instância automaticamente
