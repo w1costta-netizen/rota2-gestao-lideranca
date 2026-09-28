@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { ChevronLeft, ChevronRight, Download, Users, X, Save, Trash2, Plus, CheckCircle,
          ShieldCheck, AlertTriangle, Crown, Pencil, BarChart3 } from 'lucide-react';
-import { gerarPDF } from '../lib/exportUtils';
+import { gerarPDF, gerarExcel } from '../lib/exportUtils';
 import RelatorioEscalaMes from './RelatorioEscalaMes';
 import api from '../api';
 import { useToast } from '../components/Toast';
@@ -996,6 +996,65 @@ export default function NativeSchedule({ userId, profile }) {
     }
   };
 
+  // ── Excel da escala ────────────────────────────────────────
+  //
+  // Sai no formato HORIZONTAL — uma linha por pessoa, os dias do mês em
+  // colunas — porque é assim que se lê uma escala de mês inteira e é o
+  // formato que estamos desenhando. Serve também de rascunho: dá para
+  // mexer na planilha e devolver mostrando o que se quer na tela.
+  //
+  // A segunda aba traz um lançamento por linha, com os quatro horários
+  // separados, para quem quiser somar horas ou montar tabela dinâmica.
+  const baixarExcel = () => {
+    const rotuloStatus = (st) => (STATUS[st]?.label || st || '').toUpperCase();
+    const celula = (e) => {
+      if (!e) return '';
+      if (e.status !== 'trabalha') return rotuloStatus(e.status);
+      if (!e.entrada && !e.saida) return rotuloStatus(e.status);
+      const turno = `${e.entrada || '?'}-${e.saida || '?'}`;
+      return e.intervalo && e.retorno_intervalo ? `${turno} (${e.intervalo}-${e.retorno_intervalo})` : turno;
+    };
+
+    const colunasMes = ['Setor', 'Matrícula', 'Colaborador',
+      ...allDates.map(d => `${d.slice(8)} ${DAY_NAME[getDOW(d)]}`)];
+    const linhasMes = [];
+    gruposDeMembros.forEach(g => {
+      g.membros.forEach(m => {
+        linhasMes.push([
+          g.setor === SEM_SETOR ? '' : g.setor, m.matricula || '', m.name,
+          ...allDates.map(d => celula(getEntry(m.id, d))),
+        ]);
+      });
+    });
+
+    const linhasDetalhe = [];
+    gruposDeMembros.forEach(g => {
+      g.membros.forEach(m => {
+        allDates.forEach(d => {
+          const e = getEntry(m.id, d);
+          if (!e) return;
+          linhasDetalhe.push([
+            g.setor === SEM_SETOR ? '' : g.setor, m.matricula || '', m.name,
+            `${d.slice(8)}/${d.slice(5, 7)}/${d.slice(0, 4)}`, DAY_FULL[getDOW(d)],
+            rotuloStatus(e.status), e.entrada || '', e.intervalo || '',
+            e.retorno_intervalo || '', e.saida || '',
+          ]);
+        });
+      });
+    });
+
+    gerarExcel({
+      nomeArquivo: `Escala_${rotuloDaEscala.replace(/[^\w]+/g, '_')}_${MONTHS_PT[month - 1]}_${year}`,
+      abas: [
+        { nome: 'Mês', colunas: colunasMes, rows: linhasMes },
+        { nome: 'Lançamentos',
+          colunas: ['Setor', 'Matrícula', 'Colaborador', 'Data', 'Dia', 'Situação', 'Entrada', 'Intervalo', 'Retorno', 'Saída'],
+          rows: linhasDetalhe },
+      ],
+    });
+    toast(`Excel gerado: ${linhasMes.length} pessoa(s), ${linhasDetalhe.length} lançamento(s).`);
+  };
+
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const downloadPDF = async () => {
     const el = document.getElementById('schedule-print');
@@ -1332,6 +1391,10 @@ export default function NativeSchedule({ userId, profile }) {
           )}
           <button onClick={downloadPDF} disabled={generatingPdf} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0, opacity: generatingPdf ? .6 : 1 }}>
             <Download size={11}/> {generatingPdf ? 'Gerando...' : 'Baixar PDF'}
+          </button>
+          <button onClick={baixarExcel} title="Baixar em Excel: uma linha por pessoa, os dias do mês em colunas"
+            style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #bbf7d0', background:'#f0fdf4', cursor:'pointer', fontSize:11, color:'#166534', whiteSpace:'nowrap', flexShrink:0, fontWeight:700 }}>
+            <Download size={11}/> Excel
           </button>
           {!submission && members.length > 0 && (
             <button onClick={copyFromPreviousMonth} disabled={copying} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', borderRadius:5, border:'none', background:'#0891b2', color:'#fff', cursor:'pointer', fontWeight:700, fontSize:11, whiteSpace:'nowrap', flexShrink:0, opacity: copying ? .6 : 1 }}>
