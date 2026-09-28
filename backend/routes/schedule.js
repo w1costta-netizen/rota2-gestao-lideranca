@@ -623,8 +623,15 @@ function duracao(e) {
   if (ini === null || fim === null) return null;
   if (fim <= ini) fim += 1440;
   let total = fim - ini;
-  const pausa = paraMinutos(e.intervalo);
-  const volta = paraMinutos(e.retorno_intervalo);
+  let pausa = paraMinutos(e.intervalo);
+  let volta = paraMinutos(e.retorno_intervalo);
+  // Mesma correção do turno noturno: sem trazer o intervalo para a linha do
+  // tempo da jornada, a pausa da madrugada não era descontada e a jornada
+  // saía uma hora mais longa do que é.
+  if (pausa !== null && volta !== null && fim > 1440) {
+    if (pausa < ini)   pausa += 1440;
+    if (volta < pausa) volta += 1440;
+  }
   if (pausa !== null && volta !== null && volta > pausa) total -= (volta - pausa);
   return total;
 }
@@ -723,8 +730,19 @@ router.get('/analise', async (req, res) => {
     if (saiu <= entrou) saiu += 1440;
     const bruta = saiu - entrou;
 
-    const pausa = paraMinutos(e.intervalo), volta = paraMinutos(e.retorno_intervalo);
+    let pausa = paraMinutos(e.intervalo), volta = paraMinutos(e.retorno_intervalo);
     const temIntervalo = pausa !== null && volta !== null;
+
+    // TURNO QUE VIRA O DIA. A saída já era trazida para a mesma linha do
+    // tempo (+1440); o intervalo não era. Numa jornada 23:00 -> 06:20, a
+    // pausa das 02:00 é numericamente MENOR que a entrada das 23:00, e a
+    // conferência de "intervalo dentro da jornada" acusava fora — ou seja,
+    // apontava erro num horário correto, justamente em quem trabalha à
+    // noite. Um relatório que acusa o certo perde o direito de ser lido.
+    if (temIntervalo && saiu > 1440) {
+      if (pausa < entrou) pausa += 1440;   // pausa já na madrugada
+      if (volta < pausa)  volta += 1440;   // retorno atravessa a meia-noite
+    }
 
     // ERRO DE LANÇAMENTO vem ANTES de qualquer regra de jornada, e é
     // categoria própria.

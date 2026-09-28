@@ -53,8 +53,15 @@ function fatiasDoTurno(e) {
   let fim = paraMinutos(e.saida);
   if (ini === null || fim === null) return [];
   if (fim <= ini) fim += 1440;          // vira o dia
-  const pausa = paraMinutos(e.intervalo);
-  const volta = paraMinutos(e.retorno_intervalo);
+  let pausa = paraMinutos(e.intervalo);
+  let volta = paraMinutos(e.retorno_intervalo);
+  // Turno que vira o dia: a pausa das 02:00 de quem entrou 23:00 precisa vir
+  // para a mesma linha do tempo, senão ela não é descontada e a pessoa
+  // aparece na loja durante o próprio intervalo.
+  if (pausa !== null && volta !== null && fim > 1440) {
+    if (pausa < ini)   pausa += 1440;
+    if (volta < pausa) volta += 1440;
+  }
   const temPausa = pausa !== null && volta !== null && volta > pausa;
 
   const dentro = [];
