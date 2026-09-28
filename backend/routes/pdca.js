@@ -33,8 +33,8 @@ function limparDatas(datas) {
 async function criarTarefasDeMedicao({ datas, acao, plano, responsavel_id, requester_id, detalhe, pdcaContext }) {
   const linhas = datas.map(data => ({
     company: plano?.company,
-    title: acao.descricao,
-    description: descricaoDaTarefa(plano?.titulo, detalhe),
+    title: partirAcao(acao.descricao).titulo,
+    description: descricaoDaTarefa(plano?.titulo, detalhe, partirAcao(acao.descricao).corpo),
     assigned_to: responsavel_id,
     due_date: data,
     priority: 'normal',
@@ -70,10 +70,41 @@ async function limparTarefasDeMedicao(acaoId) {
     .eq('status', 'pendente');
 }
 
-function descricaoDaTarefa(tituloPlano, detalhe) {
-  const base = `Ação do Plano: ${tituloPlano}`;
-  return detalhe?.trim() ? `${base}
-Sua parte: ${detalhe.trim()}` : base;
+// Os quadrantes estruturados guardam a ação como um texto com rótulos
+// ("Onde:", "Como:", "Por quê:"...). Esse texto inteiro virava o TÍTULO da
+// tarefa — um parágrafo de seis linhas onde devia haver um título. Aqui ele
+// é partido: a primeira linha (o "o quê") vira o título; o resto desce para
+// a descrição, cada rótulo na sua linha.
+const ROTULOS_ACAO = /^(Onde|Como|Por quê|Quanto custa|Comunicação|Treinamento|Monitoramento|Resultado observado|Problema|Meta|Causa raiz \(5 Porquês\)):/;
+
+function partirAcao(descricao) {
+  let linhas = String(descricao || '').split('\n');
+  // No C a primeira linha é a classificação (emoji + rótulo em maiúsculas):
+  // é estado da verificação, não o nome do que precisa ser feito.
+  if (linhas.length > 1 && /^(✅|⚠️|⏳)\s/.test(linhas[0].trim())) linhas = linhas.slice(1);
+  if (!linhas.join('').trim()) return { titulo: 'Ação do plano', corpo: '' };
+
+  const i = linhas.findIndex(l => ROTULOS_ACAO.test(l.trim()));
+  const livre    = (i < 0 ? linhas : linhas.slice(0, i)).join('\n').trim();
+  const rotulada = (i < 0 ? [] : linhas.slice(i)).join('\n').trim();
+
+  // O título é a primeira linha do texto livre. Se a ação só tem partes
+  // rotuladas, a primeira delas vira título — melhor que tarefa sem nome.
+  const fonte  = (livre || rotulada).split('\n');
+  const titulo = fonte[0].trim();
+  const resto  = fonte.slice(1).join('\n').trim();
+  return {
+    // 120 é folgado para um título e curto o bastante para caber no cartão.
+    titulo: titulo.length > 120 ? `${titulo.slice(0, 117)}...` : titulo,
+    corpo: livre ? [resto, rotulada].filter(Boolean).join('\n') : resto,
+  };
+}
+
+function descricaoDaTarefa(tituloPlano, detalhe, corpo) {
+  const partes = [`Ação do Plano: ${tituloPlano}`];
+  if (detalhe?.trim()) partes.push(`Sua parte: ${detalhe.trim()}`);
+  if (corpo?.trim()) partes.push('', corpo.trim());
+  return partes.join('\n');
 }
 
 const QUADRANTE_LABEL = { P: 'P — Planejar', D: 'D — Fazer', C: 'C — Checar', A: 'A — Agir' };
@@ -314,8 +345,8 @@ router.post('/:id/acoes', async (req, res) => {
     } else {
       const { data: tarefa } = await supabase.from('tarefas').insert({
         company: plano.company,
-        title: descricao.trim(),
-        description: descricaoDaTarefa(plano.titulo, detalhe),
+        title: partirAcao(descricao).titulo,
+        description: descricaoDaTarefa(plano.titulo, detalhe, partirAcao(descricao).corpo),
         assigned_to: responsavel_id,
         // A tarefa aparece a partir do INÍCIO, não do prazo final: a pessoa
         // precisa ver o que fazer enquanto dá tempo de fazer.
@@ -411,7 +442,11 @@ router.put('/acoes/:id', async (req, res) => {
       pdca_context: { ...(tAtual?.pdca_context || {}), repetir_ate: finalPrazo || null },
     };
     if (detalhe !== undefined || descricao !== undefined) {
-      patchTarefa.description = descricaoDaTarefa(plano?.titulo, detalhe !== undefined ? detalhe : acaoAtual.detalhe);
+      const partida = partirAcao(descricao !== undefined ? descricao : acaoAtual.descricao);
+      // O título também precisa acompanhar: editar o texto da ação e deixar
+      // o título velho na tarefa era mostrar duas versões da mesma coisa.
+      patchTarefa.title = partida.titulo;
+      patchTarefa.description = descricaoDaTarefa(plano?.titulo, detalhe !== undefined ? detalhe : acaoAtual.detalhe, partida.corpo);
     }
     // A data só volta para trás se a tarefa ainda não foi feita nem
     // repactuada — mexer numa data já combinada seria atropelar a pessoa.
@@ -432,8 +467,8 @@ router.put('/acoes/:id', async (req, res) => {
 
     const { data: tarefa } = await supabase.from('tarefas').insert({
       company: plano?.company,
-      title: data.descricao,
-      description: descricaoDaTarefa(plano?.titulo, detalhe !== undefined ? detalhe : acaoAtual.detalhe),
+      title: partirAcao(data.descricao).titulo,
+      description: descricaoDaTarefa(plano?.titulo, detalhe !== undefined ? detalhe : acaoAtual.detalhe, partirAcao(data.descricao).corpo),
       assigned_to: finalResponsavel,
       due_date: finalInicio || finalPrazo,
       priority: 'normal',
@@ -509,8 +544,8 @@ router.put('/acoes/:id', async (req, res) => {
         // O título é o texto comum; a descrição mantém a parte de cada um
         // (por isso lê o `detalhe` da irmã, não o de quem foi editado).
         if (doGrupo.descricao !== undefined) {
-          patch.title = doGrupo.descricao;
-          patch.description = descricaoDaTarefa(plano?.titulo, irma.detalhe);
+          patch.title = partirAcao(doGrupo.descricao).titulo;
+          patch.description = descricaoDaTarefa(plano?.titulo, irma.detalhe, partirAcao(doGrupo.descricao).corpo);
         }
         if (doGrupo.recorrencia !== undefined) patch.recorrencia = doGrupo.recorrencia;
         if (doGrupo.prazo !== undefined || doGrupo.inicio !== undefined) {

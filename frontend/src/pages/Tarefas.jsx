@@ -614,9 +614,22 @@ export default function Tarefas({ userId, profile, setPage }) {
                 </span>
               )}
             </div>
+            {/* A descrição vinda do plano tem uma linha por parte (Onde:,
+                Como:, Por quê:). Antes virava tudo emendado num parágrafo:
+                aqui cada parte fica na sua linha e o rótulo em destaque, para
+                o olho achar "Como" sem ler o texto inteiro. */}
             {t.description && (
-              <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:6, lineHeight:1.4 }}>
-                {t.description}
+              <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:6, lineHeight:1.5 }}>
+                {String(t.description).split('\n').map((linha, i) => {
+                  const m = linha.match(/^([^:]{2,30}):\s*(.*)$/);
+                  if (!linha.trim()) return <div key={i} style={{ height:5 }}/>;
+                  return (
+                    <div key={i} style={{ display:'flex', gap:6, alignItems:'baseline' }}>
+                      {m && <span style={{ fontWeight:700, color:'var(--text)', flexShrink:0 }}>{m[1]}:</span>}
+                      <span style={{ whiteSpace:'pre-line' }}>{m ? m[2] : linha}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
             {t.pdca_context && (
