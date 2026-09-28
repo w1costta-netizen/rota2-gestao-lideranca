@@ -1133,17 +1133,39 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
             </select>
           </div>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
-          {(() => {
-            const oQue = textos.oQue || 'A tarefa';
-            if (form.recorrencia && form.recorrencia !== 'nenhuma') {
-              return `${oQue} aparece ${form.inicio ? `a partir de ${form.inicio.split('-').reverse().join('/')}` : 'já'} e se repete ${(RECORRENCIAS.find(r => r.key === form.recorrencia)?.label || '').toLowerCase()}${form.prazo ? `, até ${form.prazo.split('-').reverse().join('/')}` : ''}.`;
-            }
-            return form.inicio
-              ? `${oQue} aparece em ${form.inicio.split('-').reverse().join('/')}.`
-              : `Sem data de início, ${oQue.toLowerCase()} aparece direto no prazo.`;
-          })()}
-        </div>
+        {/* Sem "Começa em", a tarefa nasce com a data do PRAZO — ou seja,
+            só aparece para a pessoa no último dia. O texto dizia que ela
+            aparecia "já", o que era falso, e o aviso era cinza e pequeno
+            demais para alguém reparar. Uma líder ficou sem ver a tarefa
+            dela por causa disso. */}
+        {(() => {
+          const oQue = textos.oQue || 'A tarefa';
+          const br = (d) => d.split('-').reverse().join('/');
+          const repete = form.recorrencia && form.recorrencia !== 'nenhuma';
+          const rotuloRepete = (RECORRENCIAS.find(r => r.key === form.recorrencia)?.label || '').toLowerCase();
+
+          if (!form.inicio) {
+            return (
+              <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'flex-start',
+                background: '#f59e0b14', border: '1px solid #f59e0b44', borderRadius: 8,
+                padding: '8px 10px', fontSize: 12, lineHeight: 1.5 }}>
+                <span style={{ flexShrink: 0 }}>⚠️</span>
+                <span>
+                  Sem <b>&quot;Começa em&quot;</b>, {oQue.toLowerCase()} só aparece na lista da pessoa
+                  {form.prazo ? <> <b>em {br(form.prazo)}</b>, o dia do prazo</> : ' no dia do prazo'}.
+                  {' '}Preencha a data em que o trabalho começa para ela ver desde já.
+                </span>
+              </div>
+            );
+          }
+          return (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+              {repete
+                ? `${oQue} aparece a partir de ${br(form.inicio)} e se repete ${rotuloRepete}${form.prazo ? `, até ${br(form.prazo)}` : ''}.`
+                : `${oQue} aparece em ${br(form.inicio)}.`}
+            </div>
+          );
+        })()}
       </div>
       )}
 
