@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
+const { analisarMes } = require('../lib/escalaMes');
 
 function getWeekStart(dateStr) {
   const d = new Date(dateStr + 'T12:00:00Z');
@@ -886,6 +887,95 @@ const semAcento = (t) => String(t || '').toLowerCase()
 // Cargo separado por barra vertical, e não vírgula: nome de cargo com vírgula
 // existe, e quebraria a lista sem dar erro nenhum.
 const SEPARADOR = '|';
+
+// GET /api/schedule/relatorio-mes?requester_id=&company=&year=&month=
+//
+// O RELATÓRIO DA LOJA NO MÊS. A Análise que já existe olha uma escala por
+// vez e procura infração de jornada; esta responde outra pergunta, que
+// ninguém consegue responder abrindo 23 escalas na mão: onde falta líder,
+// que dia ficou fino, onde as folgas se amontoaram, quanta gente de férias.
+//
+// Só admin e master: é dado da loja inteira, e um líder de setor não deve
+// ver a escala dos outros por aqui.
+router.get('/relatorio-mes', async (req, res) => {
+  const { requester_id, company: queryCompany, year, month } = req.query;
+  if (!requester_id || !year || !month) {
+    return res.status(400).json({ error: 'requester_id, year e month são obrigatórios' });
+  }
+  const { data: me } = await supabase
+    .from('profiles').select('id, access_level, company').eq('id', requester_id).maybeSingle();
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  if (!['admin', 'master', 'supervisor'].includes(me.access_level)) {
+    return res.status(403).json({ error: 'Só quem administra a empresa vê o relatório da loja inteira.' });
+  }
+  const company = me.access_level === 'master' ? (queryCompany || me.company) : me.company;
+  if (!company) return res.status(400).json({ error: 'Sem empresa definida' });
+
+  const ano = parseInt(year, 10), mes = parseInt(month, 10);
+  const ultimo = new Date(ano, mes, 0).getDate();
+  const p2 = (n) => String(n).padStart(2, '0');
+  const de  = `${ano}-${p2(mes)}-01`;
+  const ate = `${ano}-${p2(mes)}-${p2(ultimo)}`;
+
+  const { data: perfis } = await supabase
+    .from('profiles')
+    .select('id, full_name, sector, escala_setor, escala_lideranca, access_level')
+    .eq('company', company);
+  const ids = (perfis || []).map(p => p.id);
+  if (!ids.length) return res.json({ vazio: true });
+
+  // O Supabase corta em 1000 linhas SEM AVISAR. Um mês da loja inteira passa
+  // disso com folga (23 escalas x 30 pessoas x 30 dias), e um relatório
+  // montado sobre um terço dos dados mentiria sem dar sinal nenhum.
+  const linhas = [];
+  const PAGINA = 1000;
+  for (let inicio = 0; ; inicio += PAGINA) {
+    const { data: pagina, error } = await supabase
+      .from('schedule_entries')
+      .select('user_id, work_date, status, entrada, intervalo, retorno_intervalo, saida, team_members(name, role, sector)')
+      .in('user_id', ids)
+      .gte('work_date', de).lte('work_date', ate)
+      .order('work_date')
+      .range(inicio, inicio + PAGINA - 1);
+    if (error) {
+      logError({ company, user_id: requester_id, acao: 'relatorio_escala_mes', tabela: 'schedule_entries', rota: req.originalUrl, erro_mensagem: error.message });
+      return res.status(500).json({ error: 'Não foi possível montar o relatório.' });
+    }
+    linhas.push(...(pagina || []));
+    if (!pagina || pagina.length < PAGINA) break;
+  }
+
+  const setorDoDono = {};
+  (perfis || []).forEach(p => { setorDoDono[p.id] = (p.escala_setor || p.sector || '').trim(); });
+
+  const entries = linhas.map(e => ({
+    user_id: e.user_id,
+    work_date: e.work_date,
+    status: e.status,
+    entrada: e.entrada, intervalo: e.intervalo,
+    retorno_intervalo: e.retorno_intervalo, saida: e.saida,
+    nome: e.team_members?.name || 'Sem nome',
+    cargo: e.team_members?.role || '',
+    // O setor do COLABORADOR manda; o do dono da escala é rede de segurança
+    // para quem ainda não preencheu o campo por pessoa.
+    setor: (e.team_members?.sector || '').trim() || setorDoDono[e.user_id] || '',
+  }));
+
+  const [{ data: setores }, { data: fechadas }] = await Promise.all([
+    supabase.from('company_sectors').select('sector_name, efetivo_minimo').eq('company', company),
+    supabase.from('schedule_submissions').select('user_id').in('user_id', ids).eq('year', ano).eq('month', mes),
+  ]);
+
+  const relatorio = analisarMes({
+    entries, perfis: perfis || [], setores: setores || [],
+    entregues: new Set((fechadas || []).map(f => f.user_id)),
+    year: ano, month: mes,
+  });
+
+  logAction({ company, user_id: requester_id, acao: 'relatorio_escala_mes', tabela: 'schedule_entries',
+              depois: { year: ano, month: mes, linhas: entries.length, escalas: relatorio.escalas } });
+  res.json({ ...relatorio, company, linhas: entries.length });
+});
 
 router.get('/operators', async (req, res) => {
   const { escala_id, data: dia, cargos } = req.query;

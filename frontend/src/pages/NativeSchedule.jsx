@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { ChevronLeft, ChevronRight, Download, Users, X, Save, Trash2, Plus, CheckCircle,
-         ShieldCheck, AlertTriangle, Crown, Pencil } from 'lucide-react';
+         ShieldCheck, AlertTriangle, Crown, Pencil, BarChart3 } from 'lucide-react';
 import { gerarPDF } from '../lib/exportUtils';
+import RelatorioEscalaMes from './RelatorioEscalaMes';
 import api from '../api';
 import { useToast } from '../components/Toast';
 
@@ -582,6 +583,7 @@ export default function NativeSchedule({ userId, profile }) {
   const [cellSaving, setCellSaving] = useState(false);
   const [showTeam,   setShowTeam]   = useState(false);
   const [verAnalise, setVerAnalise] = useState(false);
+  const [verRelatorio, setVerRelatorio] = useState(false);
   const [fechando,   setFechando]   = useState(false);
   const [submission, setSubmission] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -1216,10 +1218,18 @@ export default function NativeSchedule({ userId, profile }) {
               <Crown size={11}/> {escalaDeLideranca ? 'Escala da liderança' : 'É a liderança?'}
             </button>
           )}
-          <button onClick={() => setVerAnalise(true)} title="Conferir a escala do mês"
+          <button onClick={() => setVerAnalise(true)} title="Conferir ESTA escala: jornada, descanso, folga"
             style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0 }}>
             <ShieldCheck size={11}/> Análise
           </button>
+          {/* A Análise olha ESTA escala; o relatório olha a loja inteira no
+              mês. São perguntas diferentes e por isso são dois botões. */}
+          {['admin', 'master', 'supervisor'].includes(profile?.access_level) && (
+            <button onClick={() => setVerRelatorio(true)} title="Relatório do mês da loja inteira: liderança, folgas, férias, horários"
+              style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #c7d2fe', background:'#eef2ff', cursor:'pointer', fontSize:11, color:'#3730a3', whiteSpace:'nowrap', flexShrink:0, fontWeight:700 }}>
+              <BarChart3 size={11}/> Relatório da loja
+            </button>
+          )}
           <button onClick={downloadPDF} disabled={generatingPdf} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px', borderRadius:5, border:'1px solid #e2e8f0', background:'#fff', cursor:'pointer', fontSize:11, color:'#374151', whiteSpace:'nowrap', flexShrink:0, opacity: generatingPdf ? .6 : 1 }}>
             <Download size={11}/> {generatingPdf ? 'Gerando...' : 'Baixar PDF'}
           </button>
@@ -1397,6 +1407,15 @@ export default function NativeSchedule({ userId, profile }) {
           aoFechar={() => { setVerAnalise(false); setFechando(false); }}
           aoConfirmar={fechando ? confirmarFechamento : null}
           confirmando={submitting}
+        />
+      )}
+
+      {verRelatorio && (
+        <RelatorioEscalaMes
+          userId={userId} profile={profile}
+          ano={year} mes={month}
+          toast={toast}
+          aoFechar={() => setVerRelatorio(false)}
         />
       )}
 
