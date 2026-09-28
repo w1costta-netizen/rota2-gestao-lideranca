@@ -841,6 +841,16 @@ export default function Tarefas({ userId, profile, setPage }) {
                 : filter === 'em_andamento' ? 'Ninguém marcou tarefa como em andamento.'
                 : filter === 'concluida' ? 'Nenhuma tarefa concluída ainda.'
                 : 'Nenhuma tarefa criada ainda.'}</p>
+              {/* A tela abre em "Para agora": sem este empurrão, quem tem
+                  trabalho só com prazo à frente acha que suas tarefas
+                  sumiram. Vale para qualquer aba vazia que tenha irmã cheia. */}
+              {filter !== 'proximas' && counts.proximas > 0 && (
+                <button onClick={() => setFilter('proximas')} style={{
+                  marginTop:10, padding:'7px 14px', borderRadius:20, cursor:'pointer', fontSize:12.5, fontWeight:700,
+                  border:'1px solid var(--border)', background:'var(--surface)', color:'var(--primary)' }}>
+                  Ver as {counts.proximas} de prazo à frente →
+                </button>
+              )}
             </div>
           )}
 
