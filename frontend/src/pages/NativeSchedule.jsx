@@ -39,6 +39,65 @@ const STATUS = {
 // separa por setor não deve nem perceber que isto existe.
 const SEM_SETOR = 'Sem setor definido';
 
+// O que conta como domingo folgado no rodízio "dois trabalhados, um de
+// folga". FÉRIAS e FALTA ficam de fora de propósito: não são descanso
+// semanal, e contá-las como folga faria a pessoa voltar das férias já
+// devendo dois domingos.
+const FOLGA_STATUS = ['folga', 'dsr', 'folga_premio', 'folga_feriado', 'feriado'];
+// Férias e falta não são descanso semanal NEM trabalho: não quebram o
+// rodízio e não contam como domingo trabalhado. Quem passou o domingo de
+// férias volta no mesmo ponto do ciclo em que estava.
+const NEUTRO_NO_RODIZIO = ['ferias', 'falta'];
+
+// Rodízio de domingo: dois trabalhados, um de folga.
+//
+// Fica fora do componente de propósito — é regra com peso trabalhista e
+// que ESCREVE na escala de gente de verdade. Função pura dá para rodar
+// contra casos montados à mão antes de subir.
+//
+// Devolve, por colaborador, de que ponto do ciclo ele parte no mês novo.
+// O ciclo NÃO reinicia: quem fechou setembro com dois domingos emendados
+// precisa folgar no primeiro domingo de outubro.
+export function planejarDomingos({ membros, domingosPorMembro, modeloPorMembro }) {
+  const plano = {};
+  membros.forEach((m, i) => {
+    const anteriores = domingosPorMembro[m.id] || [];
+    // Sem domingo nenhum no mês passado, o setor não abre domingo.
+    // Inventar domingo para essa gente seria pior do que não copiar.
+    if (!anteriores.length) return;
+
+    const folgou = (e) => FOLGA_STATUS.includes(e.status);
+    const modelo = anteriores.find(e => e.status === 'trabalha' && e.entrada) || modeloPorMembro[m.id];
+    if (!modelo || !modelo.entrada) return;
+
+    // Mantém o tipo de folga que a pessoa já usava (folga, DSR...): trocar
+    // sozinho mudaria o relatório de DSR sem ninguém pedir.
+    const tipoFolga = anteriores.filter(folgou).map(e => e.status)[0] || 'folga';
+
+    let trabalhados = 0;
+    for (let k = anteriores.length - 1; k >= 0; k--) {
+      const st = anteriores[k].status;
+      if (FOLGA_STATUS.includes(st)) break;
+      if (NEUTRO_NO_RODIZIO.includes(st)) continue;
+      trabalhados++;
+    }
+    // Nunca folgou domingo: a escala não vinha seguindo o rodízio. Passa a
+    // seguir agora, com o time ESCALONADO — se todos começassem do mesmo
+    // ponto, o mesmo domingo ficaria sem ninguém na loja.
+    if (!anteriores.some(folgou)) trabalhados = 2 - (i % 3);
+
+    plano[m.id] = { trabalhados, modelo, tipoFolga };
+  });
+  return plano;
+}
+
+// Decide UM domingo e já avança o ciclo da pessoa.
+export function decidirDomingo(plano) {
+  const folga = plano.trabalhados >= 2;
+  plano.trabalhados = folga ? 0 : plano.trabalhados + 1;
+  return folga;
+}
+
 function todayISO() { return new Date().toISOString().split('T')[0]; }
 function fmtDate(y, m, d) { return `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`; }
 function daysInMonth(y, m) { return new Date(y, m, 0).getDate(); }
@@ -861,13 +920,52 @@ export default function NativeSchedule({ userId, profile }) {
         if (!dowMap[e.team_member_id]) dowMap[e.team_member_id] = {};
         if (!dowMap[e.team_member_id][dow]) dowMap[e.team_member_id][dow] = e;
       });
+
+      // ── DOMINGO: dois trabalhados, um de folga ──────────────
+      //
+      // A cópia PULAVA domingo. Resultado: todo mês alguém refazia o
+      // rodízio na mão, e quem esquecia deixava gente trabalhando três,
+      // quatro domingos seguidos.
+      //
+      // O rodízio não pode reiniciar a cada mês: quem entrou em outubro
+      // já vindo de dois domingos trabalhados em setembro precisa folgar
+      // no PRIMEIRO de outubro. Por isso o contador continua de onde a
+      // pessoa parou, contado dos domingos do mês anterior.
+      const domingosAnteriores = {};
+      prevEntries
+        .filter(e => getDOW(e.work_date) === 0)
+        .sort((a, b) => a.work_date.localeCompare(b.work_date))
+        .forEach(e => { (domingosAnteriores[e.team_member_id] ||= []).push(e); });
+
+      // Modelo de horário para o domingo de quem não trabalhou nenhum
+      // domingo no mês passado: sábado, e depois sexta.
+      const modeloPorMembro = {};
+      members.forEach(m => { modeloPorMembro[m.id] = dowMap[m.id]?.[6] || dowMap[m.id]?.[5]; });
+      const planoDomingo = planejarDomingos({ membros: members, domingosPorMembro: domingosAnteriores, modeloPorMembro });
+
       // Para cada data do mês atual, copia se não tiver entrada e houver template
       const saves = [];
+      let domingosDeFolga = 0;
       allDates.forEach(date => {
         const dow = getDOW(date);
-        if (dow === 0) return; // pula domingos
         members.forEach(m => {
           if (getEntry(m.id, date)) return; // já tem entrada
+          if (dow === 0) {
+            const plano = planoDomingo[m.id];
+            if (!plano) return;
+            const folga = decidirDomingo(plano);
+            if (folga) domingosDeFolga++;
+            saves.push(api.post('/schedule/save', {
+              requester_id: userId, user_id: effectiveUserId,
+              team_member_id: m.id, work_date: date,
+              status: folga ? plano.tipoFolga : 'trabalha',
+              entrada:           folga ? null : plano.modelo.entrada,
+              intervalo:         folga ? null : plano.modelo.intervalo,
+              retorno_intervalo: folga ? null : plano.modelo.retorno_intervalo,
+              saida:             folga ? null : plano.modelo.saida,
+            }));
+            return;
+          }
           const tmpl = dowMap[m.id]?.[dow];
           if (!tmpl) return;
           saves.push(api.post('/schedule/save', {
@@ -886,7 +984,9 @@ export default function NativeSchedule({ userId, profile }) {
       if (!saves.length) { toast('Todos os dias já preenchidos ou sem padrão anterior.'); return; }
       const results = await Promise.all(saves);
       const newEntries = results.map(r => r.data).filter(Boolean);
-      toast(`✓ ${newEntries.length} horários copiados do mês anterior!`);
+      toast(domingosDeFolga > 0
+        ? `✓ ${newEntries.length} horários copiados · ${domingosDeFolga} folga(s) de domingo pelo rodízio de 2 por 1`
+        : `✓ ${newEntries.length} horários copiados do mês anterior!`);
       // Recarrega do servidor para confirmar persistência no banco
       await load();
     } catch {
@@ -1248,7 +1348,10 @@ export default function NativeSchedule({ userId, profile }) {
         {/* Banner: copiar mês anterior */}
         {!loading && !loadError && !submission && members.length > 0 && entries.length === 0 && (
           <div style={{ margin:'8px 10px', padding:'10px 16px', borderRadius:8, background:'#e0f2fe', border:'1px solid #7dd3fc', display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
-            <span style={{ fontSize:12, color:'#0369a1', flex:1, minWidth:150 }}>📋 Mês vazio — quer copiar os horários do mês anterior como base?</span>
+            <span style={{ fontSize:12, color:'#0369a1', flex:1, minWidth:150 }}>
+              📋 Mês vazio — quer copiar os horários do mês anterior como base?
+              <br/><span style={{ fontSize:11, opacity:.85 }}>Os domingos vêm no rodízio de dois trabalhados por um de folga, continuando de onde cada pessoa parou.</span>
+            </span>
             <button onClick={copyFromPreviousMonth} disabled={copying} style={{ padding:'6px 16px', borderRadius:6, border:'none', background:'#0891b2', color:'#fff', cursor:'pointer', fontWeight:700, fontSize:12, whiteSpace:'nowrap', opacity: copying ? .6 : 1 }}>
               {copying ? 'Copiando...' : 'Copiar mês anterior'}
             </button>
