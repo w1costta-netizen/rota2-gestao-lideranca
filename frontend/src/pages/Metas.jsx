@@ -20,6 +20,28 @@ const MEDIDAS = {
   percentual: { nome: 'Percentual (%)', curto: '%', ex: 'Ex.: 5% de ruptura, 100% da meta', fmt: v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + '%', passo: 0.1, ph: ['ex.: 12', 'ex.: 5'] },
 };
 const ORDEM = ['quantidade', 'reais', 'percentual'];
+
+// "1.300" é mil e trezentos, não 1,3.
+//
+// Os campos eram type="number": o navegador lia o ponto como separador
+// DECIMAL, então quem digitava 1.300 gravava 1,3 — e o gráfico mostrava 1.
+// O número errado entrava no banco sem nenhum aviso. Agora o campo é texto
+// e a leitura segue a convenção daqui: ponto separa milhar, vírgula separa
+// decimal.
+function numeroBR(txt) {
+  if (typeof txt === 'number') return Number.isFinite(txt) ? txt : null;
+  let t = String(txt ?? '').trim().replace(/[R$\s]/gi, '');
+  if (!t) return null;
+  if (t.includes(',')) {
+    // Com vírgula não há dúvida: ela é o decimal, o ponto é milhar.
+    t = t.replace(/\./g, '').replace(',', '.');
+  } else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) {
+    // Só pontos, separando grupos de três: milhar ("1.300", "1.234.567").
+    t = t.replace(/\./g, '');
+  }
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
 const FREQ = { diario: 'todo dia', semanal: 'toda semana', quinzenal: 'a cada 15 dias', mensal: 'todo mês' };
 // A verificação do C fala em recorrência; aqui a mesma coisa se chama
 // frequência. Este mapa evita que uma meta puxada do plano minta o ritmo.
@@ -104,9 +126,15 @@ function analisar(m, k, setor = TOTAL) {
   // checagens de daltonismo e contraste nos dois temas.
   const cor = atingiu ? 'var(--success)' : 'var(--danger)';
   const alvo = alvoTexto(m.direcao, T, cfg.meta);
+  // "falta 800" numa meta de REDUZIR lê como se fosse preciso SOMAR 800.
+  // O que falta ali é tirar: a pessoa está 800 ACIMA do alvo. O texto
+  // agora segue a direção da meta.
+  const distancia = m.direcao === 'reduzir'
+    ? `${T.fmt(falta)} acima da meta`
+    : `faltam ${T.fmt(falta)} para a meta`;
   const veredito = atingiu
     ? `Na meta: ${T.fmt(atual)} contra ${alvo}.`
-    : `Fora da meta: está em ${T.fmt(atual)} e a meta é ${alvo} — falta ${T.fmt(falta)}.`;
+    : `Fora da meta: está em ${T.fmt(atual)} — ${distancia} (${alvo}).`;
   const desde = !anterior ? ''
     : !variacao ? `Sem mudança desde a medição anterior (${br(anterior[0])}).`
     : `${melhorou ? 'Melhorou' : 'Piorou'} ${T.fmt(Math.abs(variacao))} desde a medição anterior (era ${T.fmt(anterior[1])} em ${br(anterior[0])}).`;
@@ -116,7 +144,11 @@ function analisar(m, k, setor = TOTAL) {
     : chega ? `No ritmo atual chega em ${T.fmt(projecao)} até o prazo.`
     : `No ritmo atual chegaria em ${T.fmt(projecao)}. Faltam ${restam} dias.`;
   const frase = [veredito, desde, ritmo].filter(Boolean).join(' ');
-  return { k, setor, T, cfg, ms, atual, dataAtual, atingiu, falta, folga, anterior, variacao, melhorou, restam, projecao, chega, cor, frase };
+  return { k, setor, T, cfg, ms, atual, dataAtual, atingiu, falta, folga, distancia,
+           // Versões curtas, para selo e para o rótulo do quadro.
+           distanciaCurta: m.direcao === 'reduzir' ? `${T.fmt(falta)} acima` : `falta ${T.fmt(falta)}`,
+           rotuloDistancia: m.direcao === 'reduzir' ? 'Acima da meta' : 'Falta',
+           anterior, variacao, melhorou, restam, projecao, chega, cor, frase };
 }
 // A meta só é "atingida" quando TODAS as medidas batem. Quem segura o
 // resultado é a que está proporcionalmente mais longe do alvo.
@@ -482,6 +514,27 @@ const Etiqueta = ({ rotulo, children, cor }) => (
   </span>
 );
 
+// Campo de número com a leitura do valor logo abaixo. O eco existe porque
+// o app aceita "1.300", "1300" e "1.300,50" — e quem digita precisa ver
+// que o app entendeu mil e trezentos, não um e três.
+const CampoNumero = ({ valor, onChange, placeholder, medida, estilo }) => {
+  const n = numeroBR(valor);
+  const cru = String(valor ?? '').trim();
+  const mostrarEco = cru !== '' && n !== null && /[.,]/.test(cru);
+  return (
+    <>
+      <input type="text" inputMode="decimal" style={estilo} value={valor ?? ''} placeholder={placeholder}
+        onChange={e => onChange(e.target.value)}/>
+      {cru !== '' && n === null && (
+        <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 3 }}>Não entendi este número.</div>
+      )}
+      {mostrarEco && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>= {MEDIDAS[medida].fmt(n)}</div>
+      )}
+    </>
+  );
+};
+
 const Selo = ({ cor, children }) => <span style={{ fontSize: 11, fontWeight: 700, color: cor, background: `${cor}1f`, borderRadius: 99, padding: '3px 9px', whiteSpace: 'nowrap' }}>{children}</span>;
 const Rotulo = ({ children }) => <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: .3, margin: '10px 0 4px' }}>{children}</label>;
 const inputStyle = { width: '100%', padding: '8px 10px', borderRadius: 'var(--radius)', border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13.5 };
@@ -571,12 +624,16 @@ export default function Metas({ userId, profile }) {
     if (!nova.nome.trim()) return toast('Diga o que você quer acompanhar (passo 1).', 'error');
     if (!ks.length) return toast('Marque pelo menos uma forma de medir (passo 3).', 'error');
     if (ks.some(k => nova.val[k].inicial === '' || nova.val[k].meta === '')) return toast('Em cada medida marcada, preencha "hoje está em" e "quer chegar em".', 'error');
+    // Número que o app não conseguiu ler não pode virar null no banco — sem
+    // isto, a meta era salva vazia e o gráfico nascia sem eixo.
+    const ilegivel = ks.find(k => numeroBR(nova.val[k].inicial) === null || numeroBR(nova.val[k].meta) === null);
+    if (ilegivel) return toast(`Não entendi o número de ${MEDIDAS[ilegivel].nome.toLowerCase()}. Use 1.300 ou 1300.`, 'error');
     if (!nova.prazo) return toast('Informe até quando (passo 4).', 'error');
-    const medidas = {}; ks.forEach(k => { medidas[k] = { inicial: Number(nova.val[k].inicial), meta: Number(nova.val[k].meta) }; });
+    const medidas = {}; ks.forEach(k => { medidas[k] = { inicial: numeroBR(nova.val[k].inicial), meta: numeroBR(nova.val[k].meta) }; });
     // Setores: só os marcados; cada um precisa de partida e meta nas medidas da meta.
-    const setores = nova.porSetor ? nova.setores.map(st => ({ nome: st.nome, medidas: Object.fromEntries(ks.filter(k => st.val?.[k]?.inicial !== '' && st.val?.[k]?.meta !== '' && st.val?.[k]).map(k => [k, { inicial: Number(st.val[k].inicial), meta: Number(st.val[k].meta) }])) })) : [];
+    const setores = nova.porSetor ? nova.setores.map(st => ({ nome: st.nome, medidas: Object.fromEntries(ks.filter(k => st.val?.[k]?.inicial !== '' && st.val?.[k]?.meta !== '' && st.val?.[k]).map(k => [k, { inicial: numeroBR(st.val[k].inicial), meta: numeroBR(st.val[k].meta) }])) })) : [];
     if (nova.porSetor && !setores.length) return toast('Marque pelo menos um setor (passo 5) ou desligue "acompanhar por setor".', 'error');
-    const incompleto = setores.find(st => ks.some(k => !st.medidas[k]));
+    const incompleto = setores.find(st => ks.some(k => !st.medidas[k] || st.medidas[k].inicial === null || st.medidas[k].meta === null));
     if (incompleto) return toast(`No setor "${incompleto.nome}", preencha "hoje está em" e "quer chegar em" em todas as medidas.`, 'error');
     // Tirar um setor que já tem números lançados é decisão com consequência:
     // os lançamentos ficam no banco, mas somem da tela. Por isso o aviso
@@ -609,7 +666,7 @@ export default function Metas({ userId, profile }) {
   };
   const salvarLanc = async () => {
     const ks = medidasDe(aberta);
-    const limpar = (obj, chaves) => { const v = {}; chaves.forEach(k => { if (obj?.[k] !== '' && obj?.[k] != null) v[k] = Number(obj[k]); }); return v; };
+    const limpar = (obj, chaves) => { const v = {}; chaves.forEach(k => { const n = numeroBR(obj?.[k]); if (n !== null) v[k] = n; }); return v; };
     if (!lanc.data) return toast('Informe a data.', 'error');
     // Um pedido por linha preenchida: total (sem setor) e cada setor.
     const pedidos = [];
@@ -770,7 +827,8 @@ export default function Metas({ userId, profile }) {
                     em tamanho grande, cansa a leitura. */}
                 {[['Atual', foco.T.fmt(foco.atual), foco.dataAtual ? br(foco.dataAtual) : 'partida', foco.cor],
                   ['Meta', foco.T.fmt(foco.cfg.meta), `até ${br(aberta.prazo)}`, null],
-                  ['Falta', foco.atingiu ? '✓' : foco.T.fmt(foco.falta), foco.atingiu ? 'meta batida' : `para chegar em ${foco.T.fmt(foco.cfg.meta)}`, foco.cor],
+                  [foco.atingiu ? 'Situação' : foco.rotuloDistancia, foco.atingiu ? '✓' : foco.T.fmt(foco.falta),
+                   foco.atingiu ? 'meta batida' : `para chegar em ${foco.T.fmt(foco.cfg.meta)}`, foco.cor],
                   ['Prazo', foco.restam >= 0 ? `${foco.restam}d` : 'vencido', foco.restam >= 0 ? 'restantes' : `${-foco.restam} dias atrás`, null]].map(([r1, v, s, c]) => (
                   <div key={r1} style={{ background: 'var(--surface-2)', borderRadius: 10, padding: '10px 12px' }}>
                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>{r1}</div>
@@ -798,7 +856,7 @@ export default function Metas({ userId, profile }) {
                       {/* A cor mora no selo, e o selo diz em palavras o que
                           a cor está dizendo — quem não distingue as cores lê
                           a mesma informação. */}
-                      <Selo cor={a.cor}>{a.atingiu ? '✓ na meta' : `falta ${a.T.fmt(a.falta)}`}</Selo>
+                      <Selo cor={a.cor}>{a.atingiu ? '✓ na meta' : a.distanciaCurta}</Selo>
                     </div>
                     <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: '2px 0 4px', fontVariantNumeric: 'tabular-nums', display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap' }}>{a.T.fmt(a.atual)} <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>· meta {metaLida(aberta, a)}</span> <Variacao a={a}/></div>
                     <Grafico m={aberta} a={a} mini/>
@@ -872,8 +930,8 @@ export default function Metas({ userId, profile }) {
               {ks.map(k => (
                 <div key={k}>
                   <Rotulo>{MEDIDAS[k].nome} — como ficou</Rotulo>
-                  <input type="number" step={MEDIDAS[k].passo} style={inputStyle} value={lanc.valores[k] ?? ''} placeholder={`a meta é ${MEDIDAS[k].fmt(aberta.medidas[k].meta)}`}
-                    onChange={e => setLanc(l => ({ ...l, valores: { ...l.valores, [k]: e.target.value } }))}/>
+                  <CampoNumero medida={k} estilo={inputStyle} valor={lanc.valores[k] ?? ''} placeholder={`a meta é ${MEDIDAS[k].fmt(aberta.medidas[k].meta)}`}
+                    onChange={v => setLanc(l => ({ ...l, valores: { ...l.valores, [k]: v } }))}/>
                 </div>
               ))}
             </div>
@@ -889,7 +947,7 @@ export default function Metas({ userId, profile }) {
                         <td style={{ padding: '4px', fontWeight: 600, whiteSpace: 'nowrap' }}>{st.nome}</td>
                         {ks.map(k => <td key={k} style={{ padding: '4px' }}>
                           {st.medidas[k]
-                            ? <input type="number" step={MEDIDAS[k].passo} style={{ ...inputStyle, minWidth: 110 }} value={lanc.porSetor[st.nome]?.[k] ?? ''} placeholder={`meta ${MEDIDAS[k].fmt(st.medidas[k].meta)}`}
+                            ? <CampoNumero medida={k} estilo={{ ...inputStyle, minWidth: 110 }} valor={lanc.porSetor[st.nome]?.[k] ?? ''} placeholder={`meta ${MEDIDAS[k].fmt(st.medidas[k].meta)}`}
                                 onChange={e => setLanc(l => ({ ...l, porSetor: { ...l.porSetor, [st.nome]: { ...(l.porSetor[st.nome] || {}), [k]: e.target.value } } }))}/>
                             : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                         </td>)}
@@ -900,7 +958,7 @@ export default function Metas({ userId, profile }) {
                         <td style={{ padding: '4px', fontWeight: 800, whiteSpace: 'nowrap' }}>Total</td>
                         {ks.map(k => <td key={k} style={{ padding: '4px' }}>
                           {k === 'percentual'
-                            ? <input type="number" step={0.1} style={{ ...inputStyle, minWidth: 110 }} value={lanc.valores.percentual ?? ''} placeholder={`meta ${MEDIDAS.percentual.fmt(aberta.medidas.percentual.meta)}`}
+                            ? <CampoNumero medida="percentual" estilo={{ ...inputStyle, minWidth: 110 }} valor={lanc.valores.percentual ?? ''} placeholder={`meta ${MEDIDAS.percentual.fmt(aberta.medidas.percentual.meta)}`}
                                 onChange={e => setLanc(l => ({ ...l, valores: { ...l.valores, percentual: e.target.value } }))}/>
                             : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>soma</span>}
                         </td>)}
@@ -1011,7 +1069,7 @@ export default function Metas({ userId, profile }) {
                 <div key={a.k}>
                   <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 700 }}>{a.T.curto} · <b style={{ color: 'var(--text)' }}>{a.T.fmt(a.atual)}</b> <span style={{ fontWeight: 400 }}>· meta {metaLida(m, a)}</span></div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-                    <Selo cor={a.cor}>{a.atingiu ? '✓ na meta' : `falta ${a.T.fmt(a.falta)}`}</Selo>
+                    <Selo cor={a.cor}>{a.atingiu ? '✓ na meta' : a.distanciaCurta}</Selo>
                     <Variacao a={a} size={11}/>
                   </div>
                 </div>
@@ -1117,8 +1175,8 @@ export default function Metas({ userId, profile }) {
                 <div key={k} style={{ border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', marginTop: 8 }}>
                   <b style={{ fontSize: 12.5 }}>{MEDIDAS[k].nome}</b>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                    <div><Rotulo>Hoje está em</Rotulo><input type="number" step={MEDIDAS[k].passo} style={inputStyle} value={nova.val[k].inicial} placeholder={MEDIDAS[k].ph[0]} onChange={e => setVal(k, 'inicial', e.target.value)}/></div>
-                    <div><Rotulo>Quer chegar em</Rotulo><input type="number" step={MEDIDAS[k].passo} style={inputStyle} value={nova.val[k].meta} placeholder={MEDIDAS[k].ph[1]} onChange={e => setVal(k, 'meta', e.target.value)}/></div>
+                    <div><Rotulo>Hoje está em</Rotulo><CampoNumero medida={k} estilo={inputStyle} valor={nova.val[k].inicial} placeholder={MEDIDAS[k].ph[0]} onChange={v => setVal(k, 'inicial', v)}/></div>
+                    <div><Rotulo>Quer chegar em</Rotulo><CampoNumero medida={k} estilo={inputStyle} valor={nova.val[k].meta} placeholder={MEDIDAS[k].ph[1]} onChange={v => setVal(k, 'meta', v)}/></div>
                   </div>
                 </div>
               ))}
@@ -1167,8 +1225,8 @@ export default function Metas({ userId, profile }) {
                         </div>
                         {ks.map(k => (
                           <div key={k} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                            <div><Rotulo>{MEDIDAS[k].nome} — hoje está em</Rotulo><input type="number" step={MEDIDAS[k].passo} style={inputStyle} value={st.val?.[k]?.inicial ?? ''} onChange={e => setValSetor(st.nome, k, 'inicial', e.target.value)}/></div>
-                            <div><Rotulo>Quer chegar em</Rotulo><input type="number" step={MEDIDAS[k].passo} style={inputStyle} value={st.val?.[k]?.meta ?? ''} onChange={e => setValSetor(st.nome, k, 'meta', e.target.value)}/></div>
+                            <div><Rotulo>{MEDIDAS[k].nome} — hoje está em</Rotulo><CampoNumero medida={k} estilo={inputStyle} valor={st.val?.[k]?.inicial ?? ''} onChange={v => setValSetor(st.nome, k, 'inicial', v)}/></div>
+                            <div><Rotulo>Quer chegar em</Rotulo><CampoNumero medida={k} estilo={inputStyle} valor={st.val?.[k]?.meta ?? ''} onChange={v => setValSetor(st.nome, k, 'meta', v)}/></div>
                           </div>
                         ))}
                       </div>
