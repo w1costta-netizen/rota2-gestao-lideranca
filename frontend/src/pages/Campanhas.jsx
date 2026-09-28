@@ -16,6 +16,19 @@ const TIPO_LABEL = { feira: '🛒 Feira', fds: '🏷️ Final de Semana', catalo
 const TIPO_LABEL_PDF = { feira: 'Feira', fds: 'Final de Semana', catalogo: 'Catálogo' };
 const TIPO_COLOR = { feira: '#6366f1', fds: '#E8681A', catalogo: '#0ea5e9' };
 
+// As duas razões para um item do flyer não ter foto: ele acabou (ruptura)
+// ou está na loja mas não chegou à área de venda. Cor, emoji e texto ficam
+// aqui porque aparecem em quatro lugares — cartão, contador, filtro e PDF —
+// e antes estavam escritos de novo em cada um.
+const SINAIS = {
+  ruptura:     { emoji: '⚠️', label: 'Ruptura', cor: '#f59e0b',
+                 contagem: n => (n === 1 ? 'em ruptura' : 'em ruptura'),
+                 pdf: 'EM RUPTURA' },
+  nao_exposto: { emoji: '📦', label: 'Armazenado, não exposto', cor: '#8b5cf6',
+                 contagem: n => (n === 1 ? 'armazenado, não exposto' : 'armazenados, não expostos'),
+                 pdf: 'ARMAZENADOS, NAO EXPOSTOS' },
+};
+
 function fmt(d) {
   if (!d) return '';
   const [y, m, day] = d.split('-');
@@ -202,11 +215,20 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
   // rolava a lista inteira procurando. Abre em "Faltam": cada item concluído
   // sai da vista, e sobra só o que precisa de foto. Busca para achar um
   // item pelo nome sem rolar.
-  const [filtroLista, setFiltroLista] = useState('faltam');   // faltam | prontos | todos
+  // faltam | prontos | todos | ruptura | nao_exposto
+  const [filtroLista, setFiltroLista] = useState('faltam');
   const [buscaItem, setBuscaItem] = useState('');
   const termoItem = buscaItem.trim().toLowerCase();
-  const itensVisiveis = itens.filter(i =>
-    (filtroLista === 'todos' ? true : filtroLista === 'prontos' ? estaPronto(i) : !estaPronto(i))
+  // O contador de ruptura e de armazenado existia, mas não havia como ver
+  // QUAIS itens eram: 29 em ruptura e nenhuma forma de listá-los. Viraram
+  // filtro, com os mesmos emoji e cor que o item já usa no cartão.
+  const passaFiltro = (i) => (
+    filtroLista === 'todos'   ? true
+    : filtroLista === 'prontos' ? estaPronto(i)
+    : filtroLista === 'faltam'  ? !estaPronto(i)
+    : i.sinalizacao === filtroLista
+  );
+  const itensVisiveis = itens.filter(i => passaFiltro(i)
     && (!termoItem || `${i.descricao || ''} ${i.categoria || ''}`.toLowerCase().includes(termoItem)));
   const sinalizadosRuptura   = itens.filter(i => i.sinalizacao === 'ruptura').length;
   const sinalizadosNaoExposto = itens.filter(i => i.sinalizacao === 'nao_exposto').length;
@@ -556,6 +578,38 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       doc.rect(14, barY, ((W - 28) * validadosPDF / total), 5, 'F');
 
       let y = barY + 12;
+
+      // Quem recebe o relatorio quer saber O QUE faltou, nao quantos.
+      // O resumo dizia "Ruptura: 29" e a pessoa tinha que caçar os 29 no
+      // meio de 237 linhas. Estas listas vem antes da lista completa.
+      for (const chave of ['ruptura', 'nao_exposto']) {
+        const doGrupo = its.filter(i => i.sinalizacao === chave);
+        if (!doGrupo.length) continue;
+        if (y > 245) { doc.addPage(); y = 15; }
+        const [cr, cg, cb] = chave === 'ruptura' ? [180, 110, 10] : [110, 70, 190];
+        doc.setFillColor(cr, cg, cb);
+        doc.rect(14, y - 5, W - 28, 8, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(10); doc.setFont('helvetica', 'bold');
+        doc.text(`${SINAIS[chave].pdf} (${doGrupo.length})`, 16, y + 0.5);
+        doc.setTextColor(0, 0, 0);
+        y += 10;
+        doc.setFontSize(9); doc.setFont('helvetica', 'normal');
+        for (const item of doGrupo) {
+          if (y > 275) { doc.addPage(); y = 15; }
+          const linha = doc.splitTextToSize(
+            `- ${item.descricao || 'Item sem nome'}${item.categoria ? `  (${item.categoria})` : ''}`, W - 34);
+          doc.text(linha, 18, y);
+          y += linha.length * 4.5;
+        }
+        y += 5;
+      }
+      if (rupturaCount > 0 || naoExpostoCount > 0) {
+        if (y > 260) { doc.addPage(); y = 15; }
+        doc.setFontSize(11); doc.setFont('helvetica', 'bold');
+        doc.text('TODOS OS ITENS', 14, y);
+        y += 8;
+      }
       for (const item of its) {
         const evs = item.campanha_evidencias || [];
         const sinal = item.sinalizacao;
@@ -718,10 +772,20 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
             background: concluido ? '#10b981' : 'linear-gradient(90deg, var(--primary), #f59e0b)',
           }} />
         </div>
+        {/* O número já estava aqui, mas era só número. Agora leva direto
+            para a lista daqueles itens — que é o que a pessoa quer quando
+            lê "29 em ruptura". */}
         {(sinalizadosRuptura > 0 || sinalizadosNaoExposto > 0) && (
-          <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 12, color: 'var(--text-muted)' }}>
-            {sinalizadosRuptura > 0 && <span>⚠️ {sinalizadosRuptura} em ruptura</span>}
-            {sinalizadosNaoExposto > 0 && <span>📦 {sinalizadosNaoExposto} armazenado(s), não expostos</span>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            {[['ruptura', sinalizadosRuptura], ['nao_exposto', sinalizadosNaoExposto]].map(([k, n]) => n > 0 && (
+              <button key={k} onClick={() => { setFiltroLista(k); setBuscaItem(''); }}
+                title={`Ver ${SINAIS[k].label.toLowerCase()}`}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                         fontSize: 12.5, fontWeight: 700, padding: '5px 11px', borderRadius: 99,
+                         border: `1px solid ${SINAIS[k].cor}55`, background: `${SINAIS[k].cor}14`, color: SINAIS[k].cor }}>
+                {SINAIS[k].emoji} {n} {SINAIS[k].contagem(n)} <span style={{ opacity: .75, fontWeight: 600 }}>ver →</span>
+              </button>
+            ))}
           </div>
         )}
         {concluido && (
@@ -737,13 +801,20 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       {itens.length > 0 && (
         <div className="card" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', padding: '10px 12px', marginBottom: 12,
                                        position: 'sticky', top: 0, zIndex: 5 }}>
-          {[['faltam', `Faltam (${itens.length - validados})`], ['prontos', `Prontos (${validados})`], ['todos', `Todos (${itens.length})`]].map(([id, rot]) => (
-            <button key={id} onClick={() => setFiltroLista(id)}
-              style={{ padding: '6px 12px', borderRadius: 99, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
-                       border: `1px solid ${filtroLista === id ? 'var(--primary)' : 'var(--border)'}`,
-                       background: filtroLista === id ? 'var(--primary)' : 'transparent',
-                       color: filtroLista === id ? '#fff' : 'var(--text-muted)' }}>{rot}</button>
-          ))}
+          {[['faltam', `Faltam (${itens.length - validados})`, null],
+            ['prontos', `Prontos (${validados})`, null],
+            ['ruptura', `${SINAIS.ruptura.emoji} Em ruptura (${sinalizadosRuptura})`, SINAIS.ruptura.cor],
+            ['nao_exposto', `${SINAIS.nao_exposto.emoji} Armazenados (${sinalizadosNaoExposto})`, SINAIS.nao_exposto.cor],
+            ['todos', `Todos (${itens.length})`, null]].map(([id, rot, cor]) => {
+            const on = filtroLista === id;
+            return (
+              <button key={id} onClick={() => setFiltroLista(id)}
+                style={{ padding: '6px 12px', borderRadius: 99, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap',
+                         border: `1px solid ${on ? (cor || 'var(--primary)') : (cor ? `${cor}55` : 'var(--border)')}`,
+                         background: on ? (cor ? `${cor}26` : 'var(--primary)') : 'transparent',
+                         color: on ? (cor || '#fff') : (cor || 'var(--text-muted)') }}>{rot}</button>
+            );
+          })}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 180px', background: 'var(--surface-2)', borderRadius: 'var(--radius)', padding: '6px 10px' }}>
             <Search size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }}/>
             <input value={buscaItem} onChange={e => setBuscaItem(e.target.value)} placeholder="Buscar item" spellCheck={false}
@@ -757,7 +828,11 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {!loading && itens.length > 0 && itensVisiveis.length === 0 && (
           <div className="card" style={{ textAlign: 'center', padding: 26, color: 'var(--text-muted)', fontSize: 13.5 }}>
-            {termoItem ? 'Nenhum item com esse nome.' : filtroLista === 'faltam' ? '🎉 Nada faltando — todos os itens têm foto ou sinalização.' : 'Nenhum item pronto ainda.'}
+            {termoItem ? 'Nenhum item com esse nome.'
+              : filtroLista === 'faltam' ? '🎉 Nada faltando — todos os itens têm foto ou sinalização.'
+              : filtroLista === 'ruptura' ? '✅ Nenhum item em ruptura.'
+              : filtroLista === 'nao_exposto' ? '✅ Nenhum item armazenado sem exposição.'
+              : 'Nenhum item pronto ainda.'}
           </div>
         )}
         {itensVisiveis.map(item => {
@@ -765,11 +840,7 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
           const sinal = item.sinalizacao; // 'ruptura' | 'nao_exposto' | null
           const ok  = evs.length > 0 || !!sinal;
           const cheio = evs.length >= 5;
-          const sinalInfo = sinal === 'ruptura'
-            ? { emoji: '⚠️', label: 'Ruptura', cor: '#f59e0b' }
-            : sinal === 'nao_exposto'
-              ? { emoji: '📦', label: 'Armazenado, não exposto', cor: '#8b5cf6' }
-              : null;
+          const sinalInfo = SINAIS[sinal] || null;
           return (
             <div key={item.id} style={{
               background: 'var(--surface)', borderRadius: 12, padding: '14px 16px',
