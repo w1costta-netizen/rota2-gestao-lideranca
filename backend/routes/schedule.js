@@ -1061,9 +1061,35 @@ router.get('/operators', async (req, res) => {
     };
   });
 
+  // POR QUE ESTÁ VAZIO. A tela dizia só "esta escala não tem horários
+  // lançados para este dia" e a pessoa ficava sem saber se o problema era a
+  // escala, o dia ou o cargo. Caso real: escala de outubro montada, mas os
+  // DOMINGOS em branco (a cópia do mês anterior pulava domingo), e o módulo
+  // de Caixas parecia quebrado.
+  const mes = String(dia).slice(0, 7);
+  const { data: doMes } = await supabase
+    .from('schedule_entries')
+    .select('work_date, status, entrada')
+    .eq('user_id', escala_id)
+    .gte('work_date', `${mes}-01`).lte('work_date', `${mes}-31`);
+
+  const ehDomingo = new Date(`${dia}T12:00:00Z`).getUTCDay() === 0;
+  const comHora = (e) => e.status === 'trabalha' && e.entrada;
+  const diasComTrabalho = new Set((doMes || []).filter(comHora).map(e => e.work_date));
+  const domingosComTrabalho = [...diasComTrabalho]
+    .filter(d => new Date(`${d}T12:00:00Z`).getUTCDay() === 0);
+
   res.json({
     data: dia,
     horas: resultado,
+    contexto: {
+      ehDomingo,
+      // Lançamentos do dia que não entram na conta e por quê.
+      noDia: (linhas || []).length,
+      noDiaSemHorario: (linhas || []).filter(e => !e.entrada || !e.saida).length,
+      diasComTrabalhoNoMes: diasComTrabalho.size,
+      domingosComTrabalhoNoMes: domingosComTrabalho.length,
+    },
     // Todos os cargos que aparecem nesta escala, com quantas jornadas cada um
     // tem no dia. A tela mostra para a pessoa ver o que entrou e o que ficou
     // de fora — era justamente o que ninguém conseguia enxergar antes.

@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Escala — proposta</title>
+<style>
+  :root{
+    --bg:#1a1029; --surface:#241634; --surface2:#2e1d42; --linha:#3d2a56;
+    --texto:#f3eefa; --fraco:#a99ebd; --primary:#E8681A;
+    --ok:#2F7D4F; --alerta:#B8862B; --erro:#C4324A;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--texto);
+       font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px}
+  .wrap{max-width:1500px;margin:0 auto;padding:18px}
+  h1{font-size:19px;margin:0 0 2px}
+  .sub{color:var(--fraco);font-size:12.5px;margin-bottom:16px}
+  .card{background:var(--surface);border:1px solid var(--linha);border-radius:12px;padding:14px;margin-bottom:14px}
+  .rotulo{font-size:10.5px;font-weight:800;color:var(--fraco);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px}
+
+  /* ── paleta de turnos ── */
+  .paleta{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .turno{display:inline-flex;align-items:center;gap:7px;border-radius:9px;padding:7px 11px;
+         cursor:pointer;border:2px solid transparent;background:var(--surface2);
+         font-size:12.5px;font-weight:700;transition:.12s}
+  .turno:hover{transform:translateY(-1px)}
+  .turno.sel{border-color:var(--texto);box-shadow:0 0 0 3px rgba(255,255,255,.1)}
+  .bolinha{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+  .turno small{font-weight:500;color:var(--fraco);font-size:11px}
+
+  /* ── grade ── */
+  .rolagem{overflow:auto;max-height:65vh;border:1px solid var(--linha);border-radius:10px}
+  table{border-collapse:separate;border-spacing:0;width:100%}
+  th,td{border-bottom:1px solid var(--linha);border-right:1px solid var(--linha);padding:0;text-align:center}
+  thead th{position:sticky;top:0;z-index:3;background:var(--surface2);font-size:10.5px;
+           font-weight:700;color:var(--fraco);padding:5px 2px;line-height:1.25}
+  thead th.fds{color:var(--primary)}
+  .nome{position:sticky;left:0;z-index:2;background:var(--surface);text-align:left;
+        padding:5px 9px;min-width:190px;max-width:190px;font-size:12.5px;font-weight:600;white-space:nowrap;
+        overflow:hidden;text-overflow:ellipsis}
+  thead .nome{z-index:4;background:var(--surface2)}
+  .setor td{background:#2a1a3d;text-align:left;padding:4px 10px;font-size:10.5px;
+            font-weight:800;color:#c4b5fd;letter-spacing:.5px;text-transform:uppercase}
+  .cel{width:30px;height:34px;cursor:pointer;position:relative;font-size:10.5px;font-weight:800}
+  .cel:hover{outline:2px solid var(--texto);outline-offset:-2px}
+  .chip{width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:#fff}
+  .num{background:var(--surface);color:var(--fraco);font-weight:700;font-size:11px;width:44px}
+  .aviso::after{content:'';position:absolute;top:0;right:0;border-width:0 7px 7px 0;
+                border-style:solid;border-color:transparent var(--erro) transparent transparent}
+  .cobertura td{background:var(--surface2);font-weight:800;font-size:11px;color:var(--fraco);height:26px}
+  .curto{color:var(--erro)}
+
+  .legenda{display:flex;gap:14px;flex-wrap:wrap;font-size:11.5px;color:var(--fraco);margin-top:10px}
+  .legenda span{display:inline-flex;align-items:center;gap:5px}
+  .ajuda{font-size:12px;color:var(--fraco);line-height:1.6}
+  .pill{display:inline-block;background:var(--surface2);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:700}
+  .btn{background:var(--surface2);color:var(--texto);border:1px solid var(--linha);border-radius:8px;
+       padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer}
+  .btn.on{background:var(--primary);border-color:var(--primary)}
+  .aviso-lista{font-size:12.5px;line-height:1.7}
+  .aviso-lista b{color:var(--erro)}
+  .nota{background:rgba(232,104,26,.08);border:1px solid rgba(232,104,26,.25);
+        border-radius:9px;padding:9px 12px;font-size:12.5px;line-height:1.6;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Escala — proposta para conversarmos</h1>
+  <div class="sub">Outubro de 2026 · protótipo, nada aqui salva nada. Mexa à vontade.</div>
+
+  <!-- ── 1. PALETA DE TURNOS ── -->
+  <div class="card">
+    <div class="rotulo">1. Escolha um turno e pinte os dias</div>
+    <div class="paleta" id="paleta"></div>
+    <div class="nota">
+      É a mudança maior: em vez de digitar quatro horários em cada dia, você escolhe o turno
+      uma vez e vai <b>clicando (ou arrastando)</b> pelos dias. Um mês de uma pessoa leva segundos.
+      Os turnos saem dos horários que a sua loja já usa — não precisa cadastrar nada.
+    </div>
+  </div>
+
+  <!-- ── 2. GRADE ── -->
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <div class="rotulo" style="margin:0">2. O mês inteiro numa tela</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn on" id="bMes">Mês</button>
+        <button class="btn" id="bSemana">Semana (como é hoje)</button>
+      </div>
+    </div>
+    <div class="rolagem"><table id="grade"></table></div>
+    <div class="legenda" id="legenda"></div>
+  </div>
+
+  <!-- ── 3. AVISOS ── -->
+  <div class="card">
+    <div class="rotulo">3. O aviso aparece enquanto você monta, não depois</div>
+    <div class="aviso-lista" id="avisos"></div>
+    <div class="nota">
+      Hoje os problemas só aparecem quando você abre a <b>Análise</b>, já com a escala montada.
+      Aqui o cantinho vermelho na célula avisa na hora — e o texto embaixo diz o quê e em quem.
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// PROTÓTIPO. Dados de mentira, nomes parecidos com os da loja.
+// O objetivo é discutir o DESENHO, não a implementação.
+// ─────────────────────────────────────────────────────────────
+const ANO = 2026, MES = 10;                       // outubro
+const ULT = new Date(ANO, MES, 0).getDate();
+const DIAS = Array.from({length:ULT}, (_,i)=>i+1);
+const DOW  = d => new Date(Date.UTC(ANO, MES-1, d)).getUTCDay();
+const NOME_DOW = ['D','S','T','Q','Q','S','S'];
+
+// Turnos: saem dos horários que a loja já usa.
+const TURNOS = [
+  { id:'M', nome:'Manhã',    hora:'07:00–15:20', cor:'#2F7D4F', ini:420,  fim:920,  h:8 },
+  { id:'T', nome:'Tarde',    hora:'14:00–22:20', cor:'#2F6FD0', ini:840,  fim:1340, h:8 },
+  { id:'N', nome:'Noturno',  hora:'23:00–06:20', cor:'#7A5AF8', ini:1380, fim:1820, h:6.3 },
+  { id:'I', nome:'Intermed.',hora:'10:00–18:20', cor:'#0E9488', ini:600,  fim:1100, h:8 },
+  { id:'F', nome:'Folga',    hora:'—',           cor:'#6b21a8', h:0, folga:true },
+  { id:'D', nome:'DSR',      hora:'—',           cor:'#9d174d', h:0, folga:true },
+  { id:'V', nome:'Férias',   hora:'—',           cor:'#B8862B', h:0, ausencia:true },
+];
+const TDE = Object.fromEntries(TURNOS.map(t=>[t.id,t]));
+
+const EQUIPE = [
+  { setor:'Frente de Loja', nome:'MARISTELA CARVALHO', base:'M' },
+  { setor:'Frente de Loja', nome:'ALICE VELOZO DIAS',  base:'T' },
+  { setor:'Frente de Loja', nome:'JAQUELINE MARIA',    base:'T' },
+  { setor:'Frente de Loja', nome:'LUCIANA ROCHA',      base:'M' },
+  { setor:'Mercearia',      nome:'WELTON GUILHERMESSON', base:'N' },
+  { setor:'Mercearia',      nome:'CLEIDSON OLIVEIRA',  base:'I' },
+  { setor:'Mercearia',      nome:'ELIZIANE SILVA',     base:'M' },
+  { setor:'Perecíveis',     nome:'FABIANA NUNES',      base:'M', ferias:[1,14] },
+  { setor:'Perecíveis',     nome:'RITA ALVES',         base:'T' },
+];
+const MINIMO = { 'Frente de Loja':2, 'Mercearia':2, 'Perecíveis':1 };
+
+// Escala inicial: turno base, folga rotativa, e alguns problemas de
+// propósito para o protótipo ter o que avisar.
+const escala = {};
+EQUIPE.forEach((p, i) => {
+  escala[p.nome] = {};
+  DIAS.forEach(d => {
+    if (p.ferias && d >= p.ferias[0] && d <= p.ferias[1]) { escala[p.nome][d] = 'V'; return; }
+    const domingo = DOW(d) === 0;
+    if (domingo)            escala[p.nome][d] = ((d/7|0) + i) % 3 === 0 ? 'D' : p.base;
+    else if ((d + i) % 7 === 0) escala[p.nome][d] = 'F';
+    else                    escala[p.nome][d] = p.base;
+  });
+});
+// Plantados: 8 dias seguidos sem folga, e uma virada de turno sem 11h.
+DIAS.slice(5,14).forEach(d => { if (escala['RITA ALVES'][d] === 'F') escala['RITA ALVES'][d] = 'T'; });
+escala['CLEIDSON OLIVEIRA'][9]  = 'T';
+escala['CLEIDSON OLIVEIRA'][10] = 'M';
+
+let selecionado = 'M', pintando = false, modo = 'mes';
+
+/* ── Regras conferidas enquanto monta ───────────────────────── */
+function problemas() {
+  const achados = [];
+  EQUIPE.forEach(p => {
+    let seguidos = 0;
+    DIAS.forEach(d => {
+      const t = TDE[escala[p.nome][d]];
+      // 6 dias seguidos sem folga (CLT art. 67)
+      if (t.folga || t.ausencia) seguidos = 0; else seguidos++;
+      if (seguidos === 7) achados.push({ nome:p.nome, dia:d, tipo:'sequencia',
+        txt:`7 dias seguidos sem folga até ${d}/${MES}` });
+      // 11h entre turnos (CLT art. 66)
+      const ant = d > 1 ? TDE[escala[p.nome][d-1]] : null;
+      if (ant && !ant.folga && !ant.ausencia && !t.folga && !t.ausencia) {
+        const descanso = (t.ini + 1440) - ant.fim;
+        if (descanso < 660) achados.push({ nome:p.nome, dia:d, tipo:'descanso',
+          txt:`só ${Math.floor(descanso/60)}h${String(descanso%60).padStart(2,'0')} de descanso entre ${d-1}/${MES} e ${d}/${MES}` });
+      }
+    });
+    // Rodízio de domingo: 2 trabalhados, 1 de folga
+    const doms = DIAS.filter(d => DOW(d) === 0);
+    let emenda = 0;
+    doms.forEach(d => {
+      const t = TDE[escala[p.nome][d]];
+      if (t.folga) emenda = 0; else if (!t.ausencia) emenda++;
+      if (emenda === 3) achados.push({ nome:p.nome, dia:d, tipo:'domingo',
+        txt:`3 domingos seguidos trabalhados (até ${d}/${MES})` });
+    });
+  });
+  return achados;
+}
+const chave = a => `${a.nome}|${a.dia}`;
+
+/* ── Cobertura por dia e por setor ──────────────────────────── */
+function cobertura(dia, setor) {
+  return EQUIPE.filter(p => (!setor || p.setor === setor))
+    .filter(p => { const t = TDE[escala[p.nome][dia]]; return !t.folga && !t.ausencia; }).length;
+}
+const horas = nome => DIAS.reduce((s,d) => s + TDE[escala[nome][d]].h, 0);
+const domingosTrab = nome => DIAS.filter(d => DOW(d)===0 && !TDE[escala[nome][d]].folga && !TDE[escala[nome][d]].ausencia).length;
+
+/* ── Desenho ────────────────────────────────────────────────── */
+function paleta() {
+  document.getElementById('paleta').innerHTML = TURNOS.map(t => `
+    <div class="turno ${t.id===selecionado?'sel':''}" data-t="${t.id}">
+      <span class="bolinha" style="background:${t.cor}"></span>
+      <span>${t.id} · ${t.nome}</span><small>${t.hora}</small>
+    </div>`).join('');
+  document.querySelectorAll('.turno').forEach(el =>
+    el.onclick = () => { selecionado = el.dataset.t; paleta(); });
+}
+
+function grade() {
+  const probs = problemas();
+  const marcados = new Set(probs.map(chave));
+  const visiveis = modo === 'mes' ? DIAS : DIAS.filter(d => d <= 7);
+
+  let h = '<thead><tr><th class="nome">Colaborador</th><th class="num">Horas</th><th class="num">Dom.</th>';
+  visiveis.forEach(d => {
+    const fds = DOW(d) === 0 || DOW(d) === 6;
+    h += `<th class="${fds?'fds':''}">${d}<br>${NOME_DOW[DOW(d)]}</th>`;
+  });
+  h += '</tr></thead><tbody>';
+
+  [...new Set(EQUIPE.map(p=>p.setor))].forEach(setor => {
+    h += `<tr class="setor"><td colspan="${visiveis.length+3}">${setor} · mínimo ${MINIMO[setor]} por dia</td></tr>`;
+    EQUIPE.filter(p=>p.setor===setor).forEach(p => {
+      const hs = horas(p.nome);
+      h += `<tr><td class="nome" title="${p.nome}">${p.nome}</td>`
+         + `<td class="num" style="${hs>200?'color:var(--erro)':''}">${hs.toFixed(0)}h</td>`
+         + `<td class="num">${domingosTrab(p.nome)}</td>`;
+      visiveis.forEach(d => {
+        const t = TDE[escala[p.nome][d]];
+        const av = marcados.has(`${p.nome}|${d}`) ? ' aviso' : '';
+        const dica = `${p.nome} · dia ${d}: ${t.nome}${t.hora!=='—'?' ('+t.hora+')':''}`;
+        h += `<td class="cel${av}" data-n="${p.nome}" data-d="${d}" title="${dica}">
+                <div class="chip" style="background:${t.cor}">${t.id}</div></td>`;
+      });
+      h += '</tr>';
+    });
+    // linha de cobertura do setor
+    h += `<tr class="cobertura"><td class="nome" style="background:var(--surface2);color:var(--fraco);font-size:11px">na loja ↑</td><td class="num"></td><td class="num"></td>`;
+    visiveis.forEach(d => {
+      const n = cobertura(d, setor), curto = n < MINIMO[setor];
+      h += `<td class="${curto?'curto':''}" title="${n} pessoa(s), mínimo ${MINIMO[setor]}">${n}</td>`;
+    });
+    h += '</tr>';
+  });
+  h += '</tbody>';
+  document.getElementById('grade').innerHTML = h;
+
+  document.querySelectorAll('.cel').forEach(c => {
+    const aplica = () => { escala[c.dataset.n][+c.dataset.d] = selecionado; grade(); };
+    c.onmousedown = e => { e.preventDefault(); pintando = true; aplica(); };
+    c.onmouseenter = () => { if (pintando) aplica(); };
+  });
+
+  document.getElementById('legenda').innerHTML = TURNOS.map(t =>
+    `<span><i class="bolinha" style="background:${t.cor}"></i> ${t.id} = ${t.nome}${t.hora!=='—'?' ('+t.hora+')':''}</span>`).join('')
+    + '<span>🔻 canto vermelho = problema nesse dia</span>';
+
+  const lista = probs.length
+    ? probs.map(a => `· <b>${a.nome}</b>: ${a.txt}`).join('<br>')
+    : '✓ Nenhum problema nesta escala.';
+  document.getElementById('avisos').innerHTML =
+    `<div style="margin-bottom:6px"><span class="pill">${probs.length} ponto(s) de atenção</span></div>${lista}`;
+}
+
+document.onmouseup = () => { pintando = false; };
+document.getElementById('bMes').onclick = () => { modo='mes';
+  document.getElementById('bMes').classList.add('on');
+  document.getElementById('bSemana').classList.remove('on'); grade(); };
+document.getElementById('bSemana').onclick = () => { modo='semana';
+  document.getElementById('bSemana').classList.add('on');
+  document.getElementById('bMes').classList.remove('on'); grade(); };
+
+paleta(); grade();
+</script>
+</body>
+</html>

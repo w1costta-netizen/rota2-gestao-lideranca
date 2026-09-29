@@ -262,15 +262,41 @@ export default function CashierAnalysis({ userId, profile }) {
       {!loading && !error && resp && (
         <>
           {horas.length === 0 ? (
-            <div className="card" style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>
-              <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
-              <p style={{ fontWeight: 600, color: 'var(--text)' }}>Ninguém escalado neste dia</p>
-              <p style={{ fontSize: 13, marginTop: 6 }}>
-                {cargos.length
-                  ? 'Há pessoas na escala, mas nenhuma dos cargos marcados acima. Ajuste os cargos ou escolha outro dia.'
-                  : 'Esta escala não tem horários lançados para este dia.'}
-              </p>
-            </div>
+            /* POR QUE ESTÁ VAZIO. Antes a tela dava sempre a mesma frase e a
+               pessoa não sabia se o problema era a escala, o dia ou o cargo.
+               Caso real: escala de outubro pronta, mas os DOMINGOS em branco
+               (a cópia do mês anterior pulava domingo) — e o módulo parecia
+               quebrado. Agora a tela diz o que encontrou e o que fazer. */
+            (() => {
+              const c = resp.contexto || {};
+              let titulo = 'Ninguém escalado neste dia';
+              let texto = 'Esta escala não tem horários lançados para este dia.';
+              if (cargos.length) {
+                titulo = 'Ninguém com cargo de caixa neste dia';
+                texto = 'Há pessoas escaladas, mas nenhuma nos cargos marcados acima. Ajuste os cargos ou escolha outro dia.';
+              } else if (c.ehDomingo && c.diasComTrabalhoNoMes > 0 && c.domingosComTrabalhoNoMes === 0) {
+                titulo = 'Os domingos do mês estão em branco';
+                texto = `Esta escala tem ${c.diasComTrabalhoNoMes} dia(s) lançados no mês, mas nenhum domingo. Abra a escala e preencha os domingos — quem copiou o mês anterior antes da correção do rodízio ficou sem eles.`;
+              } else if (c.noDia > 0 && c.noDiaSemHorario === c.noDia) {
+                titulo = 'Lançado, mas sem horário';
+                texto = `Há ${c.noDia} lançamento(s) neste dia, nenhum com entrada e saída preenchidas. O módulo de Caixas precisa do horário para contar por faixa.`;
+              } else if (c.diasComTrabalhoNoMes === 0) {
+                titulo = 'Esta escala não tem o mês lançado';
+                texto = 'Nenhum dia deste mês tem horário nesta escala. Confira se escolheu a escala certa no seletor acima.';
+              }
+              return (
+                <div className="card" style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: 36, marginBottom: 10 }}>📋</div>
+                  <p style={{ fontWeight: 600, color: 'var(--text)' }}>{titulo}</p>
+                  <p style={{ fontSize: 13, marginTop: 6, maxWidth: 520, marginInline: 'auto', lineHeight: 1.6 }}>{texto}</p>
+                  {c.diasComTrabalhoNoMes > 0 && (
+                    <p style={{ fontSize: 12, marginTop: 10, opacity: .8 }}>
+                      Nesta escala, no mês: {c.diasComTrabalhoNoMes} dia(s) com horário · {c.domingosComTrabalhoNoMes} domingo(s).
+                    </p>
+                  )}
+                </div>
+              );
+            })()
           ) : (
             <>
               <div className="stats-grid" style={{ marginBottom: 20 }}>
