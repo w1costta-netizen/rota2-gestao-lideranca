@@ -82,11 +82,14 @@ async function exigirSessao(req, res, next) {
 
   const cab = req.headers.authorization || '';
   const token = cab.startsWith('Bearer ') ? cab.slice(7).trim() : '';
-  if (!token) return res.status(401).json({ error: 'Sessão necessária. Entre de novo no app.' });
+  // `codigo: 'sessao'` existe para a TELA poder reagir com segurança. Várias
+  // rotas devolvem 401 por outro motivo (requester_id ausente, por exemplo),
+  // e deslogar alguém por causa desses seria pior que o problema original.
+  if (!token) return res.status(401).json({ error: 'Sessão necessária. Entre de novo no app.', codigo: 'sessao' });
 
   let id;
   try { id = await usuarioDoToken(token); } catch { id = null; }
-  if (!id) return res.status(401).json({ error: 'Sessão inválida ou expirada. Entre de novo no app.' });
+  if (!id) return res.status(401).json({ error: 'Sessão inválida ou expirada. Entre de novo no app.', codigo: 'sessao' });
   req.usuario = { id };
 
   // A chamada não pode dizer que é outra pessoa.

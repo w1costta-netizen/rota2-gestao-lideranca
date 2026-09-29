@@ -1,8 +1,18 @@
 import React, { useState } from 'react';
+import { CHAVE_EXPIROU } from '../api';
 import { supabase } from '../lib/supabase';
 import { Eye, EyeOff, LogIn } from 'lucide-react';
 
 export default function Login({ onGoRegister }) {
+  // Lido UMA vez e apagado: se ficasse guardado, o aviso reapareceria em
+  // todo login seguinte.
+  const [expirou] = useState(() => {
+    try {
+      const tem = localStorage.getItem(CHAVE_EXPIROU) === '1';
+      if (tem) localStorage.removeItem(CHAVE_EXPIROU);
+      return tem;
+    } catch { return false; }
+  });
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
@@ -47,6 +57,18 @@ export default function Login({ onGoRegister }) {
         <h2 style={{ fontSize: 20, fontWeight: 700 }}>Bem-vindo de volta</h2>
         <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>Acesse sua conta para continuar</p>
       </div>
+
+      {/* Quem chegou aqui porque a sessão venceu precisa SABER disso. Sem
+          este aviso, a pessoa só via o app "deslogar sozinho" — ou, pior,
+          telas vazias sem explicação nenhuma. */}
+      {expirou && (
+        <div style={{ background: 'rgba(184,134,43,.12)', border: '1px solid rgba(184,134,43,.35)',
+                      borderRadius: 10, padding: '10px 12px', marginBottom: 14,
+                      fontSize: 12.5, lineHeight: 1.55, color: 'var(--text)' }}>
+          ⏱️ <b>Sua sessão expirou.</b> Por segurança, o acesso vale por um tempo limitado.
+          Entre de novo — nada do seu trabalho foi perdido.
+        </div>
+      )}
 
       {error && <div className="auth-error">{error}</div>}
 

@@ -21,22 +21,56 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// 401 com sessão válida no navegador = aba com versão antiga do app. Quem
-// estava com o app aberto durante um deploy segue com o código de antes na
-// memória; se esse código não manda o que o servidor passou a exigir, tudo
-// vira 401 até recarregar — e a pessoa vê "módulo adicional" e "não foi
-// possível ativar" sem entender. Recarrega uma única vez por aba: se o 401
-// for real (sessão inválida no servidor), o app segue para o login normal.
-const CHAVE_401 = 'rota_recarregou_por_401';
+// SESSÃO EXPIRADA: renovar, repetir a chamada, e só desistir depois disso.
+//
+// O token do login vale 1 hora. Quando ele vencia, TODA chamada voltava 401
+// e cada tela mostrava o próprio "nada encontrado": Conversas vazia, lista
+// de usuários vazia, log sem registrar. Nada dizia que o problema era a
+// sessão — e o app parecia quebrado por inteiro. Aconteceu duas vezes.
+//
+// Agora: tenta renovar, repete a chamada com o token novo, e a pessoa nem
+// percebe. Se a renovação falhar, a sessão morreu de verdade: encerra e
+// manda para o login com a explicação, em vez de deixar telas vazias.
+export const CHAVE_EXPIROU = 'rota_sessao_expirou';
+
+// Só reage ao 401 do middleware de sessão. Várias rotas devolvem 401 por
+// outro motivo (requester_id ausente), e deslogar por causa desses seria
+// pior que o problema.
+const ehDeSessao = (erro) => erro?.response?.data?.codigo === 'sessao';
+
+// Uma renovação por vez. Dez telas carregando juntas dispariam dez refresh,
+// e o Supabase invalida o refresh token assim que um é usado — as outras
+// nove falhariam e derrubariam a sessão de quem estava bem.
+let renovando = null;
+const renovar = () => {
+  renovando = renovando || supabase.auth.refreshSession()
+    .finally(() => { renovando = null; });
+  return renovando;
+};
+
 api.interceptors.response.use(undefined, async (erro) => {
-  if (erro?.response?.status === 401) {
-    try {
-      if (!sessionStorage.getItem(CHAVE_401)) {
-        const { data } = await supabase.auth.getSession();
-        if (data?.session) { sessionStorage.setItem(CHAVE_401, '1'); window.location.reload(); }
-      }
-    } catch { /* sem sessionStorage não dá pra garantir o guarda: não recarrega */ }
-  }
+  const req = erro?.config;
+  if (!ehDeSessao(erro) || !req || req._jaRenovou) return Promise.reject(erro);
+  req._jaRenovou = true;
+
+  try {
+    const { data, error } = await renovar();
+    const token = data?.session?.access_token;
+    if (!error && token) {
+      // Na repetição o interceptor de request roda de novo e normalmente já
+      // pega o token novo pelo getSession(). O cabeçalho posto aqui à mão é
+      // a rede de segurança para quando o getSession falhar: nesse caso ele
+      // não sobrescreve nada, e a chamada ainda vai assinada.
+      req.headers = { ...(req.headers || {}), Authorization: `Bearer ${token}` };
+      return api.request(req);
+    }
+  } catch { /* segue para o encerramento */ }
+
+  try {
+    localStorage.setItem(CHAVE_EXPIROU, '1');
+    await supabase.auth.signOut();
+  } catch { /* sem storage ou sem rede: o reload abaixo resolve mesmo assim */ }
+  window.location.reload();
   return Promise.reject(erro);
 });
 
