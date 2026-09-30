@@ -326,21 +326,44 @@ function CommentSection({ taskId, userId, total = 0, novos = 0, aoVer }) {
               </div>
             ))}
           </div>
-          <div style={{ display:'flex', gap:6 }}>
+          <div style={{ display:'flex', gap:6, alignItems:'flex-end' }}>
+            {/* O BOTÃO NUNCA FOI REMOVIDO NEM BLOQUEADO POR PERMISSÃO —
+                uma usuária relatou que "não tinha" a seta e não conseguia
+                comentar. Conferido: ele é sempre desenhado, e o servidor
+                não restringe quem comenta.
+                O que havia: com o campo vazio ele ficava em opacity .5 —
+                laranja desbotado sobre fundo escuro passa por enfeite, não
+                por botão. Quem concluía que não podia comentar nem chegava
+                a digitar, e digitar era justamente o que o acenderia.
+                Agora, parado, ele tem cara de botão à espera (fundo neutro,
+                borda, ícone apagado) e ganha dica ao passar o mouse.
+                minWidth:0 e flexShrink:0 entram por precaução em tela
+                estreita: medido de 320px a 150px o botão já não saía, mas
+                sem eles isso depende da largura intrínseca do campo. */}
             <textarea value={text} onChange={e => setText(e.target.value)}
               placeholder="Adicionar atualização..."
               rows={1}
-              style={{ flex:1, padding:'7px 10px', borderRadius:8, border:'1px solid var(--border)',
+              onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send(); } }}
+              style={{ flex:1, minWidth:0, padding:'7px 10px', borderRadius:8, border:'1px solid var(--border)',
                 background:'var(--bg)', color:'var(--text)', fontSize:12,
                 resize:'none', overflowY:'hidden', lineHeight:'1.4',
                 fontFamily:'inherit' }}
               onInput={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}/>
-            <button onClick={send} disabled={sending || !text.trim()} style={{
-              background:'var(--primary)', border:'none', borderRadius:8, padding:'7px 10px',
-              cursor:'pointer', color:'#fff', display:'flex', alignItems:'center',
-              opacity: sending || !text.trim() ? 0.5 : 1 }}>
-              <Send size={13}/>
-            </button>
+            {(() => {
+              const pronto = !!text.trim() && !sending;
+              return (
+                <button onClick={send} disabled={!pronto}
+                  title={pronto ? 'Enviar (Ctrl+Enter)' : 'Escreva algo para enviar'}
+                  aria-label="Enviar"
+                  style={{ flexShrink:0, borderRadius:8, padding:'7px 10px', display:'flex', alignItems:'center',
+                    cursor: pronto ? 'pointer' : 'default',
+                    background: pronto ? 'var(--primary)' : 'var(--surface-2)',
+                    border: pronto ? '1px solid var(--primary)' : '1px solid var(--border)',
+                    color: pronto ? '#fff' : 'var(--text-muted)' }}>
+                  <Send size={13}/>
+                </button>
+              );
+            })()}
           </div>
         </div>
       )}
