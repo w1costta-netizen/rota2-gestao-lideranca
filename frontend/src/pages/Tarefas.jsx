@@ -510,14 +510,22 @@ export default function Tarefas({ userId, profile, setPage }) {
   // fechavam a conta e parecia erro do app.
   //
   // Agora as faixas de TEMPO não se sobrepõem e somam o total:
-  //   Para agora + Próximas + Concluídas = todas.
+  //   Atrasadas + Hoje + Próximas + Concluídas = todas.
   // "Em andamento" é estado, não data, e por isso fica separada por um
   // divisor — ela cruza as outras de propósito.
-  const ehParaAgora = t => t.status !== 'concluida' && !!t.due_date && t.due_date <= todayYMDList;
-  const ehProxima   = t => t.status !== 'concluida' && !ehParaAgora(t);
+  //
+  // ATRASADA NÃO ENTRA EM "HOJE", e isso é decisão de gestão, não de
+  // programação: quem acumula vencido teria a fila do dia soterrada pelo
+  // próprio atraso, e o time organizado perderia a visão do que é para
+  // hoje por causa de quem não se organiza. Separadas, cada uma cobra o
+  // que tem que cobrar.
+  const ehAtrasada = t => t.status !== 'concluida' && !!t.due_date && t.due_date < todayYMDList;
+  const ehHoje     = t => t.status !== 'concluida' && t.due_date === todayYMDList;
+  const ehProxima  = t => t.status !== 'concluida' && !ehAtrasada(t) && !ehHoje(t);
 
   let filtered = list.filter(t => {
-    if (filter === 'agora')        return ehParaAgora(t);
+    if (filter === 'agora')        return ehHoje(t);
+    if (filter === 'atrasada')     return ehAtrasada(t);
     if (filter === 'proximas')     return ehProxima(t);
     if (filter === 'em_andamento') return t.status === 'em_andamento';
     if (filter === 'concluida')    return t.status === 'concluida';
@@ -534,14 +542,12 @@ export default function Tarefas({ userId, profile, setPage }) {
   });
 
   const counts = {
-    agora: list.filter(ehParaAgora).length,
+    agora: list.filter(ehHoje).length,
+    atrasada: list.filter(ehAtrasada).length,
     proximas: list.filter(ehProxima).length,
     em_andamento: list.filter(t => t.status === 'em_andamento').length,
     concluida: list.filter(t => t.status === 'concluida').length,
   };
-  // Dentro de "Para agora", quantas já passaram do prazo. Não é aba: é o
-  // aviso que faz a pessoa olhar primeiro para o que está vencido.
-  const atrasadasAgora = list.filter(t => isOverdue(t.due_date, t.due_time, t.status)).length;
 
   // ── Visão Calendário ─────────────────────────────────
   // Usa fuso de Brasília explícito para evitar bug de meia-noite em UTC
@@ -755,8 +761,18 @@ export default function Tarefas({ userId, profile, setPage }) {
             {counts.agora === 0 && counts.proximas === 0
               ? `${list.length} tarefa${list.length !== 1 ? 's' : ''}`
               : <>
-                  <b style={{ color: 'var(--text)' }}>{counts.agora} para agora</b>
-                  {counts.proximas > 0 && ` · ${counts.proximas} próxima${counts.proximas !== 1 ? 's' : ''}`}
+                  <b style={{ color: 'var(--text)' }}>{counts.agora} para hoje</b>
+                  {counts.atrasada > 0 && <> · <b style={{ color: 'var(--danger)' }}>{counts.atrasada} atrasada{counts.atrasada !== 1 ? 's' : ''}</b></>}
+                  {counts.proximas > 0 && <>
+                    {' · '}
+                    <button onClick={() => setFilter(filter === 'proximas' ? 'agora' : 'proximas')}
+                      title="Ver as tarefas com prazo à frente"
+                      style={{ background:'none', border:'none', padding:0, cursor:'pointer', font:'inherit',
+                               color: filter === 'proximas' ? 'var(--primary)' : 'var(--text-muted)',
+                               textDecoration:'underline', textUnderlineOffset:3 }}>
+                      {counts.proximas} próxima{counts.proximas !== 1 ? 's' : ''}
+                    </button>
+                  </>}
                   {counts.concluida > 0 && ` · ${counts.concluida} concluída${counts.concluida !== 1 ? 's' : ''}`}
                 </>}
           </div>
@@ -825,16 +841,22 @@ export default function Tarefas({ userId, profile, setPage }) {
         <>
           {/* Filtros de status */}
           <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-            {[['agora','Para agora','var(--primary)'],
-              ['proximas','Próximas','var(--text)'],
+            {/* "Próximas" saiu das abas a pedido: a fila do dia é o que
+                interessa na tela. O acesso ao que tem prazo à frente
+                continua existindo — pelo número no alto, que é clicável, e
+                pelo atalho que aparece quando "Hoje" está vazia. Sumir de
+                vez com essas tarefas seria repetir o caso em que uma líder
+                ficou sem ver a tarefa dela. */}
+            {[['agora','Hoje','var(--primary)'],
+              ['atrasada','Atrasadas','#C4324A'],
               [null, null, null],
               ['em_andamento','Em andamento','#6366f1'],
               ['concluida','Concluídas','#10b981']].map(([key,label,color], i) => (
               key === null
                 ? <span key={`sep${i}`} style={{ width:1, background:'var(--border)', margin:'2px 4px' }}/>
                 : <button key={key} onClick={() => setFilter(key)}
-                    title={key === 'agora' ? 'Venceu ou vence hoje'
-                      : key === 'proximas' ? 'Prazo lá na frente, ou sem prazo definido'
+                    title={key === 'agora' ? 'Vence hoje'
+                      : key === 'atrasada' ? 'Passou do prazo e não foi concluída'
                       : key === 'em_andamento' ? 'Alguém já começou — pode estar em qualquer prazo'
                       : 'Já finalizadas'}
                     style={{
@@ -845,13 +867,6 @@ export default function Tarefas({ userId, profile, setPage }) {
                       border:`1px solid ${filter===key ? 'transparent' : 'var(--border)'}`,
                     }}>
                     {label} ({counts[key]})
-                    {/* O atraso aparece DENTRO de "Para agora": é o que precisa
-                        de olho primeiro, sem virar mais uma aba para somar. */}
-                    {key === 'agora' && atrasadasAgora > 0 && (
-                      <span style={{ fontSize:10.5, fontWeight:800, padding:'1px 6px', borderRadius:20,
-                        background: filter===key ? 'rgba(255,255,255,.25)' : '#f59e0b22',
-                        color: filter===key ? '#fff' : '#f59e0b' }}>{atrasadasAgora} atrasada{atrasadasAgora !== 1 ? 's' : ''}</span>
-                    )}
                   </button>
             ))}
           </div>
@@ -859,12 +874,13 @@ export default function Tarefas({ userId, profile, setPage }) {
           {filtered.length === 0 && (
             <div style={{ textAlign:'center', padding:60, color:'var(--text-muted)' }}>
               <ClipboardList size={40} style={{ opacity:.3, marginBottom:12 }}/>
-              <p>{filter === 'agora' ? '🎉 Nada para agora — nenhuma tarefa venceu nem vence hoje.'
+              <p>{filter === 'agora' ? '🎉 Nada para hoje.'
+                : filter === 'atrasada' ? '✓ Nenhuma tarefa atrasada.'
                 : filter === 'proximas' ? 'Nenhuma tarefa com prazo à frente.'
                 : filter === 'em_andamento' ? 'Ninguém marcou tarefa como em andamento.'
                 : filter === 'concluida' ? 'Nenhuma tarefa concluída ainda.'
                 : 'Nenhuma tarefa criada ainda.'}</p>
-              {/* A tela abre em "Para agora": sem este empurrão, quem tem
+              {/* A tela abre em "Hoje": sem este empurrão, quem tem
                   trabalho só com prazo à frente acha que suas tarefas
                   sumiram. Vale para qualquer aba vazia que tenha irmã cheia. */}
               {filter !== 'proximas' && counts.proximas > 0 && (
