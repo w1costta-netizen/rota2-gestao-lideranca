@@ -16,6 +16,34 @@ const canManage = p => p && ['admin', 'supervisor', 'lider', 'master'].includes(
 const CORES_AGENDA = ['azul', 'verde', 'roxo', 'rosa', 'laranja', 'amarelo', 'vermelho', 'cinza'];
 const corValida = c => (CORES_AGENDA.includes(c) ? c : null);
 
+// HH:MM ou nada. Campo de hora vem do navegador, mas a rota não pode
+// confiar nisso: um valor estranho aqui estragaria a ordenação da agenda e
+// a conta do lembrete.
+// Como o horário é dito nos avisos: "das 09:00 às 11:00", "às 09:00" ou
+// "dia todo". Uma função só, para os dois push não divergirem.
+const quando = (it) => it.dia_todo ? ' (dia todo)'
+  : it.time && it.hora_fim ? ` das ${it.time} às ${it.hora_fim}`
+  : it.time ? ` às ${it.time}` : '';
+
+const horaValida = (t) => (/^([01]\d|2[0-3]):[0-5]\d$/.test(String(t || '').trim()) ? String(t).trim() : '');
+
+// Dia inteiro MANDA sobre os horários. Guardar "das 00:00 às 23:59" faria o
+// compromisso aparecer como coisa de madrugada na lista e entrar em
+// qualquer conta de horário; e deixar hora guardada com dia_todo ligado
+// faria o lembrete tocar na hora errada.
+//
+// Fim antes do início é descartado em vez de recusado: quase sempre é
+// digitação, e travar o salvamento por causa disso faria a pessoa perder o
+// compromisso inteiro que acabou de escrever.
+function horarios({ time, hora_fim, dia_todo }) {
+  if (dia_todo) return { dia_todo: true, time: '', hora_fim: '' };
+  const ini = horaValida(time);
+  let fim = horaValida(hora_fim);
+  if (!ini) fim = '';
+  if (ini && fim && fim <= ini) fim = '';
+  return { dia_todo: false, time: ini, hora_fim: fim };
+}
+
 const DIA_POR_EXTENSO = {
   segunda:'Segunda', terca:'Terça', quarta:'Quarta', quinta:'Quinta',
   sexta:'Sexta', sabado:'Sábado', domingo:'Domingo',
@@ -102,7 +130,7 @@ const MAX_SEMANAS = 52;
 
 // POST /api/agenda — cria item (ou uma série semanal) e dispara push
 router.post('/', async (req, res) => {
-  const { title, description, week_start, target_type, target_value, day_of_week, time, created_by, lembrete_minutos, recorrencia_semanas, cor } = req.body;
+  const { title, description, week_start, target_type, target_value, day_of_week, time, hora_fim, dia_todo, created_by, lembrete_minutos, recorrencia_semanas, cor } = req.body;
   if (!title || !week_start || !target_type || !day_of_week)
     return res.status(400).json({ error: 'Campos obrigatórios: title, week_start, target_type, day_of_week' });
   if (!created_by) return res.status(401).json({ error: 'created_by obrigatório' });
@@ -118,7 +146,11 @@ router.post('/', async (req, res) => {
 
   const semanas = Math.min(MAX_SEMANAS, Math.max(1, parseInt(recorrencia_semanas, 10) || 1));
   const serie_id = semanas > 1 ? crypto.randomUUID() : null;
-  const base = { title, description: description || '', target_type, target_value: target_value || '', day_of_week, time: time || '', company, created_by: created_by || null, lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false, serie_id, cor: corValida(cor) };
+  // Dia inteiro manda: com ele ligado, hora de início e fim são apagadas em
+  // vez de guardadas "por via das dúvidas" — senão a lista mostraria um
+  // horário que não vale, e o lembrete dispararia na hora errada.
+  const h = horarios({ time, hora_fim, dia_todo });
+  const base = { title, description: description || '', target_type, target_value: target_value || '', day_of_week, ...h, company, created_by: created_by || null, lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false, serie_id, cor: corValida(cor) };
   const linhas = Array.from({ length: semanas }, (_, i) => ({ ...base, week_start: somarDias(week_start, 7 * i) }));
 
   const { data: criados, error } = await supabase.from('agenda_items').insert(linhas).select();
@@ -134,7 +166,7 @@ router.post('/', async (req, res) => {
     enviarPush(
       pessoas.filter(id => id !== created_by),
       '📅 Novo na agenda',
-      `${title}${time ? ' às ' + time : ''} — ${DIA_POR_EXTENSO[day_of_week] || day_of_week}${semanas > 1 ? ' (toda semana)' : ''}`,
+      `${title}${quando(h)} — ${DIA_POR_EXTENSO[day_of_week] || day_of_week}${semanas > 1 ? ' (toda semana)' : ''}`,
       'agenda',
       { company, rota: req.originalUrl },
     );
@@ -145,7 +177,7 @@ router.post('/', async (req, res) => {
 
 // PUT /api/agenda/:id — atualiza item e dispara push
 router.put('/:id', async (req, res) => {
-  const { title, description, week_start, target_type, target_value, day_of_week, time, updated_by, lembrete_minutos, cor } = req.body;
+  const { title, description, week_start, target_type, target_value, day_of_week, time, hora_fim, dia_todo, updated_by, lembrete_minutos, cor } = req.body;
   if (!updated_by) return res.status(401).json({ error: 'updated_by obrigatório' });
   const meUpdate = await getProfile(updated_by);
   if (!meUpdate || !canManage(meUpdate)) return res.status(403).json({ error: 'Acesso negado' });
@@ -156,7 +188,7 @@ router.put('/:id', async (req, res) => {
     company = me?.company;
   }
 
-  const mudancas = { title, description: description || '', target_type, target_value: target_value || '', day_of_week, time: time || '', lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false, cor: corValida(cor) };
+  const mudancas = { title, description: description || '', target_type, target_value: target_value || '', day_of_week, ...horarios({ time, hora_fim, dia_todo }), lembrete_minutos: lembrete_minutos ?? null, lembrete_enviado: false, cor: corValida(cor) };
 
   // Item de série: `escopo: 'futuros'` aplica a mudança a esta semana e às
   // seguintes da mesma série (cada uma mantém a própria week_start). Sem
@@ -189,7 +221,7 @@ router.put('/:id', async (req, res) => {
     enviarPush(
       pessoas.filter(id => id !== updated_by),
       '📅 Agenda alterada',
-      `${title}${time ? ' às ' + time : ''} — ${DIA_POR_EXTENSO[day_of_week] || day_of_week}`,
+      `${title}${quando(horarios({ time, hora_fim, dia_todo }))} — ${DIA_POR_EXTENSO[day_of_week] || day_of_week}`,
       'agenda',
       { company, rota: req.originalUrl },
     );

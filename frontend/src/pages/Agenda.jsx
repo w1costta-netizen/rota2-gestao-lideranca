@@ -8,7 +8,13 @@ import { getWeekStart, addDays, formatDate } from '../utils';
 
 const DAYS = ['segunda','terca','quarta','quinta','sexta','sabado','domingo'];
 const DAY_LABELS = { segunda:'Segunda', terca:'Terça', quarta:'Quarta', quinta:'Quinta', sexta:'Sexta', sabado:'Sábado', domingo:'Domingo' };
-const EMPTY_ITEM = { title: '', description: '', target_type: '', target_value: '', day_of_week: 'segunda', time: '', lembrete_minutos: null, recorrencia_semanas: 0, escopo: 'futuros', cor: null };
+const EMPTY_ITEM = { title: '', description: '', target_type: '', target_value: '', day_of_week: 'segunda', time: '', hora_fim: '', dia_todo: false, lembrete_minutos: null, recorrencia_semanas: 0, escopo: 'futuros', cor: null };
+
+// Como o horário aparece em toda parte: cartão, PDF, WhatsApp e aviso.
+// Uma função só, para os quatro não divergirem com o tempo.
+const horaDoItem = (i) => (i?.dia_todo ? 'Dia todo'
+  : i?.time && i?.hora_fim ? `${i.time}–${i.hora_fim}`
+  : i?.time || '');
 
 // Cor do item, escolhida pela pessoa (como nas Anotações). Sem cor, vale a
 // do destino — verde geral, amarelo setor, roxo pessoas — que já existia e
@@ -178,7 +184,7 @@ export default function Agenda({ userId, profile }) {
       const d = String(dt1.getUTCDate()).padStart(2, '0');
       const m = String(dt1.getUTCMonth() + 1).padStart(2, '0');
       msg += `*${DAY_LABELS[day]}, ${d}/${m}*\n`;
-      grouped[day].forEach(i => { const desc = i.description?.trim(); msg += `• ${i.time ? i.time + ' — ' : ''}${i.title}${desc ? '\n  _' + desc + '_' : ''}\n`; });
+      grouped[day].forEach(i => { const desc = i.description?.trim(); const h = horaDoItem(i); msg += `• ${h ? h + ' — ' : ''}${i.title}${desc ? '\n  _' + desc + '_' : ''}\n`; });
       msg += '\n';
     });
     msg += '_Enviado via Rota Líder_';
@@ -239,7 +245,7 @@ export default function Agenda({ userId, profile }) {
       msg += `*${DAY_LABELS[day]}, ${d}/${m}*\n`;
       grouped[day].forEach(i => {
         const desc = i.description?.trim();
-        msg += `• ${i.time ? i.time + ' — ' : ''}${i.title}${desc ? '\n  _' + desc + '_' : ''}\n`;
+        msg += `• ${horaDoItem(i) ? horaDoItem(i) + ' — ' : ''}${i.title}${desc ? '\n  _' + desc + '_' : ''}\n`;
       });
       msg += '\n';
     });
@@ -291,7 +297,7 @@ export default function Agenda({ userId, profile }) {
                   return p ? p.full_name.split(' ')[0] : '';
                 }).filter(Boolean).join(', ') : 'Individual';
             return `<tr>
-              <td style="padding:6px 8px;width:70px;font-weight:600;color:${corDoItem(i)};border-left:4px solid ${corDoItem(i)};">${i.time || '—'}</td>
+              <td style="padding:6px 8px;width:96px;font-weight:600;color:${corDoItem(i)};border-left:4px solid ${corDoItem(i)};">${horaDoItem(i) || '—'}</td>
               <td style="padding:6px 8px;">
                 <div style="font-weight:600;font-size:13px;">${i.title}</div>
                 ${i.description ? `<div style="font-size:11px;color:#666;margin-top:2px;">${i.description}</div>` : ''}
@@ -454,9 +460,9 @@ export default function Agenda({ userId, profile }) {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 4 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          {(item.time || item.serie_id) && (
+                          {(item.time || item.dia_todo || item.serie_id) && (
                             <div style={{ fontSize: 11, fontWeight: 700, color: barColor, marginBottom: 3, display: 'flex', alignItems: 'center', gap: 6 }}>
-                              {item.time}
+                              {horaDoItem(item)}
                               {item.serie_id && (
                                 <span title="Compromisso fixo: repete toda semana"
                                   style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 10, fontWeight: 600, color: 'var(--text-muted)' }}>
@@ -597,10 +603,31 @@ export default function Agenda({ userId, profile }) {
             </select>
           </div>
           <div className="form-group" style={{ margin: 0 }}>
-            <label className="form-label">Horário</label>
-            <input className="input" type="time" value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
+            <label className="form-label">Começa</label>
+            <input className="input" type="time" value={form.time} disabled={form.dia_todo}
+              onChange={e => setForm(f => ({ ...f, time: e.target.value }))} />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label className="form-label">Termina <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(opcional)</span></label>
+            <input className="input" type="time" value={form.hora_fim} disabled={form.dia_todo || !form.time}
+              min={form.time || undefined}
+              onChange={e => setForm(f => ({ ...f, hora_fim: e.target.value }))} />
           </div>
         </div>
+        {/* "Dia todo" é estado próprio, não "das 00:00 às 23:59": escrito
+            como horário, o compromisso apareceria como coisa de madrugada e
+            o lembrete tocaria na hora errada. Ligado, ele apaga os horários
+            — guardar hora que não vale é o que faz tela e aviso divergirem. */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 10 }}>
+          <input type="checkbox" checked={form.dia_todo}
+            onChange={e => setForm(f => ({ ...f, dia_todo: e.target.checked, ...(e.target.checked ? { time: '', hora_fim: '' } : {}) }))} />
+          <span>Ocupa o <b>dia todo</b></span>
+        </label>
+        {form.time && form.hora_fim && form.hora_fim <= form.time && (
+          <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>
+            O término precisa ser depois do começo — do jeito que está, ele será ignorado.
+          </div>
+        )}
         <div className="form-group">
           <label className="form-label">Cor <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(opcional)</span></label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -626,7 +653,7 @@ export default function Agenda({ userId, profile }) {
             </select>
             {form.recorrencia_semanas > 0 && (
               <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 5 }}>
-                Cria o compromisso toda {DAY_LABELS[form.day_of_week]?.toLowerCase()}{form.time ? ` às ${form.time}` : ''}, a partir da semana de {formatDate(week)}.
+                Cria o compromisso toda {DAY_LABELS[form.day_of_week]?.toLowerCase()}{form.dia_todo ? ' (dia todo)' : form.time ? ` · ${horaDoItem(form)}` : ''}, a partir da semana de {formatDate(week)}.
                 Depois dá para alterar ou remover só uma semana ou todas as seguintes.
               </div>
             )}
@@ -774,7 +801,7 @@ export default function Agenda({ userId, profile }) {
           <div style={{ marginBottom:16 }}>
             <p style={{ fontWeight:700, marginBottom:4 }}>{notify.item?.title}</p>
             <p style={{ fontSize:12, color:'var(--text-muted)' }}>
-              {DAY_LABELS[notify.item?.day_of_week]}{notify.item?.time ? ' às ' + notify.item.time : ''}
+              {DAY_LABELS[notify.item?.day_of_week]}{notify.item?.dia_todo ? ' (dia todo)' : notify.item?.time ? ` · ${horaDoItem(notify.item)}` : ''}
             </p>
           </div>
 
