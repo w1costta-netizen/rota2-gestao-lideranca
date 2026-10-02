@@ -11,9 +11,30 @@ async function getProfile(id) {
 }
 const isManager = p => p && ['admin','supervisor','master'].includes(p.access_level);
 
-function nextDueDate(due_date, recorrencia) {
+// 0 = domingo ... 6 = sábado, sem repetido e em ordem. Vem da tela, mas a
+// rota não confia: um número fora da faixa faria a tarefa nunca mais se
+// repetir, calada.
+const limparDiasSemana = (ds) => {
+  const limpos = [...new Set((Array.isArray(ds) ? ds : []).map(Number))]
+    .filter(n => Number.isInteger(n) && n >= 0 && n <= 6).sort();
+  return limpos.length ? limpos : null;
+};
+
+function nextDueDate(due_date, recorrencia, dias_semana) {
   if (!due_date || !recorrencia || recorrencia === 'nenhuma') return null;
   const d = new Date(due_date + 'T12:00:00');
+  // Dias escolhidos ("de segunda a quarta"): anda de um em um até cair num
+  // dia marcado. No máximo sete passos — se nenhum bater, a lista está
+  // vazia e a tarefa simplesmente não se repete, em vez de girar sem fim.
+  if (recorrencia === 'dias_semana') {
+    const dias = (dias_semana || []).map(Number).filter(n => n >= 0 && n <= 6);
+    if (!dias.length) return null;
+    for (let i = 0; i < 7; i++) {
+      d.setDate(d.getDate() + 1);
+      if (dias.includes(d.getDay())) return d.toISOString().split('T')[0];
+    }
+    return null;
+  }
   if (recorrencia === 'diaria')     d.setDate(d.getDate() + 1);
   if (recorrencia === 'semanal')    d.setDate(d.getDate() + 7);
   if (recorrencia === 'quinzenal')  d.setDate(d.getDate() + 15);
@@ -93,7 +114,7 @@ router.get('/', async (req, res) => {
 
 // POST /api/tarefas
 router.post('/', async (req, res) => {
-  const { requester_id, title, description, assigned_to, due_date, due_time, priority, company: bodyCompany, recorrencia, tags, lembrete_minutos } = req.body;
+  const { requester_id, title, description, assigned_to, due_date, due_time, priority, company: bodyCompany, recorrencia, dias_semana, tags, lembrete_minutos } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -114,6 +135,7 @@ router.post('/', async (req, res) => {
     due_time:         due_time || null,
     priority:         priority || 'normal',
     recorrencia:      recorrencia || 'nenhuma',
+    dias_semana:      limparDiasSemana(dias_semana),
     tags:             tags || [],
     lembrete_minutos: lembrete_minutos ?? null,
     lembrete_enviado: false,
@@ -137,14 +159,14 @@ router.post('/', async (req, res) => {
 
 // PUT /api/tarefas/:id
 router.put('/:id', async (req, res) => {
-  const { requester_id, title, description, assigned_to, due_date, due_time, priority, status, recorrencia, tags, lembrete_minutos } = req.body;
+  const { requester_id, title, description, assigned_to, due_date, due_time, priority, status, recorrencia, dias_semana, tags, lembrete_minutos } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Acesso negado' });
 
   const { data: task } = await supabase
     .from('tarefas')
-    .select('created_by, assigned_to, title, due_date, due_time, recorrencia, tags, company, description, priority, lembrete_minutos, pdca_context')
+    .select('created_by, assigned_to, title, due_date, due_time, recorrencia, dias_semana, tags, company, description, priority, lembrete_minutos, pdca_context')
     .eq('id', req.params.id).single();
 
   const isOwner = task?.created_by === requester_id && task?.assigned_to === requester_id;
@@ -157,6 +179,7 @@ router.put('/:id', async (req, res) => {
     if (due_time !== undefined)    updates.due_time    = due_time || null;
     if (priority)                  updates.priority    = priority;
     if (recorrencia !== undefined)        updates.recorrencia      = recorrencia;
+    if (dias_semana !== undefined)        updates.dias_semana      = limparDiasSemana(dias_semana);
     if (tags !== undefined)               updates.tags             = tags;
     if (lembrete_minutos !== undefined) { updates.lembrete_minutos = lembrete_minutos ?? null; updates.lembrete_enviado = false; }
   }
@@ -185,7 +208,7 @@ router.put('/:id', async (req, res) => {
 
   // Recorrência: ao concluir, cria próxima instância automaticamente
   if (status === 'concluida' && task?.recorrencia && task.recorrencia !== 'nenhuma') {
-    const proxData = nextDueDate(task.due_date, task.recorrencia);
+    const proxData = nextDueDate(task.due_date, task.recorrencia, task.dias_semana);
     // Tarefa de plano de ação repete só até o prazo da ação. Sem esta
     // trava, uma ação "toda segunda" continuaria nascendo para sempre,
     // muito depois de o plano ter acabado.
@@ -202,6 +225,7 @@ router.put('/:id', async (req, res) => {
         due_time:         task.due_time || null,
         priority:         task.priority || 'normal',
         recorrencia:      task.recorrencia,
+        dias_semana:      task.dias_semana || null,
         tags:             task.tags || [],
         lembrete_minutos: task.lembrete_minutos || null,
         status:           'pendente',

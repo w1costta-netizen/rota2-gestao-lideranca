@@ -11,7 +11,16 @@ const canManage = p => p && ['admin', 'supervisor', 'master'].includes(p.access_
 
 // As mesmas repetições que as Tarefas entendem — a tarefa da ação é uma
 // tarefa comum, e quem repete é o motor de lá.
-const RECORRENCIAS = ['nenhuma', 'diaria', 'semanal', 'quinzenal', 'mensal'];
+const RECORRENCIAS = ['nenhuma', 'diaria', 'dias_semana', 'semanal', 'quinzenal', 'mensal'];
+
+// 0 = domingo ... 6 = sábado. Mesma numeração do JavaScript, para não
+// precisar converter em lugar nenhum — converter dia da semana é fonte
+// clássica de erro de um dia.
+const limparDiasSemana = (ds) => {
+  const limpos = [...new Set((Array.isArray(ds) ? ds : []).map(Number))]
+    .filter(n => Number.isInteger(n) && n >= 0 && n <= 6).sort();
+  return limpos.length ? limpos : null;
+};
 
 // O que a pessoa lê na tarefa dela. O título é a ação (igual para o grupo);
 // a parte individual entra aqui, que é onde ela trabalha.
@@ -278,7 +287,7 @@ router.get('/:id/acoes', async (req, res) => {
 
 // POST /api/pdca/:id/acoes
 router.post('/:id/acoes', async (req, res) => {
-  const { requester_id, quadrante, descricao, responsavel_id, prazo, criar_tarefa, inicio, recorrencia, grupo_id, detalhe, datas_medicao } = req.body;
+  const { requester_id, quadrante, descricao, responsavel_id, prazo, criar_tarefa, inicio, recorrencia, dias_semana, grupo_id, detalhe, datas_medicao } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
@@ -303,6 +312,7 @@ router.post('/:id/acoes', async (req, res) => {
     // Só o C trabalha com lista de datas (ver criarTarefasDeMedicao).
     datas_medicao: quadrante === 'C' && limparDatas(datas_medicao).length ? limparDatas(datas_medicao) : null,
     recorrencia: RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma',
+    dias_semana: recorrencia === 'dias_semana' ? limparDiasSemana(dias_semana) : null,
     concluida: false,
     criar_tarefa: criar_tarefa !== false,
   }).select('*, responsavel:responsavel_id(id, full_name, avatar_url)').single();
@@ -353,6 +363,7 @@ router.post('/:id/acoes', async (req, res) => {
         due_date: inicio || prazo,
         priority: 'normal',
         recorrencia: RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma',
+        dias_semana: recorrencia === 'dias_semana' ? limparDiasSemana(dias_semana) : null,
         tags: ['plano_acao'],
         created_by: requester_id,
         pdca_context: { ...pdcaContext, repetir_ate: prazo },
@@ -372,7 +383,7 @@ router.post('/:id/acoes', async (req, res) => {
 
 // PUT /api/pdca/acoes/:id  — ANTES de PUT /:id para não conflitar
 router.put('/acoes/:id', async (req, res) => {
-  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia, aplicar_grupo, detalhe, datas_medicao } = req.body;
+  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia, dias_semana, aplicar_grupo, detalhe, datas_medicao } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -392,6 +403,12 @@ router.put('/acoes/:id', async (req, res) => {
   if (detalhe !== undefined)      updates.detalhe      = detalhe?.trim() || null;
   if (datas_medicao !== undefined) updates.datas_medicao = limparDatas(datas_medicao).length ? limparDatas(datas_medicao) : null;
   if (recorrencia !== undefined)  updates.recorrencia  = RECORRENCIAS.includes(recorrencia) ? recorrencia : 'nenhuma';
+  if (recorrencia !== undefined || dias_semana !== undefined) {
+    const repete = recorrencia !== undefined ? recorrencia : acaoAtual.recorrencia;
+    updates.dias_semana = repete === 'dias_semana'
+      ? limparDiasSemana(dias_semana !== undefined ? dias_semana : acaoAtual.dias_semana)
+      : null;
+  }
   if (criar_tarefa !== undefined) updates.criar_tarefa = criar_tarefa;
   if (concluida !== undefined) {
     updates.concluida    = concluida;
@@ -423,6 +440,8 @@ router.put('/acoes/:id', async (req, res) => {
   const finalPrazo      = prazo !== undefined ? prazo : acaoAtual.prazo;
   const finalInicio     = inicio !== undefined ? inicio : acaoAtual.inicio;
   const finalRepete     = recorrencia !== undefined ? recorrencia : acaoAtual.recorrencia;
+  const finalDias       = finalRepete === 'dias_semana'
+    ? limparDiasSemana(dias_semana !== undefined ? dias_semana : acaoAtual.dias_semana) : null;
   const plano           = acaoAtual.plano;
   // Verificação com datas combinadas é uma tarefa POR DATA. Tratá-la como
   // tarefa comum (uma só, com recorrência) fazia as duas coisas brigarem:
@@ -439,6 +458,7 @@ router.put('/acoes/:id', async (req, res) => {
       .select('due_date, pdca_context').eq('id', acaoAtual.tarefa_id).maybeSingle();
     const patchTarefa = {
       recorrencia: RECORRENCIAS.includes(finalRepete) ? finalRepete : 'nenhuma',
+      dias_semana: finalDias,
       pdca_context: { ...(tAtual?.pdca_context || {}), repetir_ate: finalPrazo || null },
     };
     if (detalhe !== undefined || descricao !== undefined) {
@@ -473,6 +493,7 @@ router.put('/acoes/:id', async (req, res) => {
       due_date: finalInicio || finalPrazo,
       priority: 'normal',
       recorrencia: RECORRENCIAS.includes(finalRepete) ? finalRepete : 'nenhuma',
+      dias_semana: finalDias,
       tags: ['plano_acao'],
       created_by: requester_id,
       pdca_context: { ...pdcaContext, repetir_ate: finalPrazo },
@@ -525,7 +546,7 @@ router.put('/acoes/:id', async (req, res) => {
   // `concluida` NUNCA se propaga: cada pessoa conclui a sua.
   if (aplicar_grupo && acaoAtual.grupo_id) {
     const doGrupo = {};
-    for (const campo of ['descricao', 'prazo', 'inicio', 'recorrencia', 'criar_tarefa']) {
+    for (const campo of ['descricao', 'prazo', 'inicio', 'recorrencia', 'dias_semana', 'criar_tarefa']) {
       if (updates[campo] !== undefined) doGrupo[campo] = updates[campo];
     }
     if (Object.keys(doGrupo).length) {
@@ -547,7 +568,12 @@ router.put('/acoes/:id', async (req, res) => {
           patch.title = partirAcao(doGrupo.descricao).titulo;
           patch.description = descricaoDaTarefa(plano?.titulo, irma.detalhe, partirAcao(doGrupo.descricao).corpo);
         }
-        if (doGrupo.recorrencia !== undefined) patch.recorrencia = doGrupo.recorrencia;
+        if (doGrupo.recorrencia !== undefined) {
+          patch.recorrencia = doGrupo.recorrencia;
+          // Os dias escolhidos fazem parte da repetição: propagar uma sem a
+          // outra deixaria a tarefa das irmãs repetindo em dia errado.
+          patch.dias_semana = finalDias;
+        }
         if (doGrupo.prazo !== undefined || doGrupo.inicio !== undefined) {
           patch.pdca_context = { ...(t?.pdca_context || {}), repetir_ate: finalPrazo || null };
           const novaData = finalInicio || finalPrazo;

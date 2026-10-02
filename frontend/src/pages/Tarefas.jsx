@@ -11,7 +11,17 @@ const STATUS_LABEL = { pendente: 'Pendente', em_andamento: 'Em andamento', concl
 const STATUS_COLOR = { pendente: '#f59e0b', em_andamento: '#6366f1', concluida: '#10b981' };
 const PRIORITY_LABEL = { baixa: 'Baixa', normal: 'Normal', alta: 'Alta' };
 const PRIORITY_COLOR = { baixa: '#6b7280', normal: '#6366f1', alta: '#ef4444' };
-const RECORRENCIA_LABEL = { nenhuma: 'Não repete', diaria: 'Diária', semanal: 'Semanal', quinzenal: 'Quinzenal', mensal: 'Mensal' };
+const RECORRENCIA_LABEL = { nenhuma: 'Não repete', diaria: 'Diária', dias_semana: 'Dias escolhidos', semanal: 'Semanal', quinzenal: 'Quinzenal', mensal: 'Mensal' };
+
+// 0 = domingo ... 6 = sábado, igual ao servidor e ao JavaScript.
+const DIA_CURTO = ['dom','seg','ter','qua','qui','sex','sáb'];
+// "seg, ter, qua" em vez de "Dias escolhidos": o rótulo genérico obriga a
+// abrir a tarefa para descobrir quando ela cai.
+const rotuloRepeticao = (t) => (t.recorrencia === 'dias_semana'
+  ? ((t.dias_semana || []).length
+      ? (t.dias_semana || []).map(n => DIA_CURTO[n]).join(', ')
+      : 'Dias escolhidos')
+  : RECORRENCIA_LABEL[t.recorrencia]);
 
 const TAGS_DISPONIVEIS = ['urgente','estoque','cliente','reunião','treinamento','operação','limpeza','segurança','financeiro','fornecedor'];
 const TAG_COLOR = { urgente:'#ef4444', estoque:'#f59e0b', cliente:'#10b981', reunião:'#6366f1', treinamento:'#8b5cf6',
@@ -631,7 +641,7 @@ export default function Tarefas({ userId, profile, setPage }) {
               {recorre && (
                 <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
                   background:'#6366f122', color:'#6366f1', display:'flex', alignItems:'center', gap:3 }}>
-                  <RefreshCw size={9}/> {RECORRENCIA_LABEL[t.recorrencia]}
+                  <RefreshCw size={9}/> {rotuloRepeticao(t)}
                 </span>
               )}
               {t.pdca_context && (
@@ -1009,6 +1019,10 @@ export default function Tarefas({ userId, profile, setPage }) {
               if (selectedCalDay < t.due_date) return false;
               // Checa padrão de recorrência
               if (t.recorrencia === 'diaria') return true;
+              if (t.recorrencia === 'dias_semana') {
+                const [cy,cm,cd] = selectedCalDay.split('-').map(Number);
+                return (t.dias_semana || []).includes(new Date(cy, cm-1, cd).getDay());
+              }
               const [dy,dm,dd] = t.due_date.split('-').map(Number);
               const [sy2,sm2,sd2] = selectedCalDay.split('-').map(Number);
               if (t.recorrencia === 'semanal')

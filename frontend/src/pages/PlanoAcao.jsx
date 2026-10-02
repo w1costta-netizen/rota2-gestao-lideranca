@@ -186,18 +186,36 @@ const EMPTY_PLANO  = { titulo: '', problema: '', meta: '', prazo_final: '' };
 // Repetições que as Tarefas entendem. "Começa em" + "repete" é o que faz a
 // ação aparecer ao longo do caminho, e não só no último dia.
 const RECORRENCIAS = [
-  { key: 'nenhuma',   label: 'Uma vez só' },
-  { key: 'diaria',    label: 'Todo dia' },
-  { key: 'semanal',   label: 'Toda semana' },
-  { key: 'quinzenal', label: 'A cada 15 dias' },
-  { key: 'mensal',    label: 'Todo mês' },
+  { key: 'nenhuma',     label: 'Uma vez só' },
+  { key: 'diaria',      label: 'Todo dia' },
+  // "De segunda a quarta" era o caso mais comum do plano e não existia:
+  // quem precisava marcava "todo dia" e a pessoa recebia a tarefa também
+  // na quinta, na sexta e no domingo.
+  { key: 'dias_semana', label: 'Em dias escolhidos da semana' },
+  { key: 'semanal',     label: 'Toda semana' },
+  { key: 'quinzenal',   label: 'A cada 15 dias' },
+  { key: 'mensal',      label: 'Todo mês' },
 ];
 
-const EMPTY_ACAO    = { descricao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
+// 0 = domingo ... 6 = sábado — a mesma numeração usada no servidor e no
+// JavaScript, para não haver conversão em lugar nenhum.
+const DIAS_SEMANA = [
+  { n: 1, curto: 'Seg' }, { n: 2, curto: 'Ter' }, { n: 3, curto: 'Qua' },
+  { n: 4, curto: 'Qui' }, { n: 5, curto: 'Sex' }, { n: 6, curto: 'Sáb' },
+  { n: 0, curto: 'Dom' },
+];
+const textoDosDias = (ds) => {
+  const sel = DIAS_SEMANA.filter(d => (ds || []).includes(d.n));
+  if (!sel.length) return 'nenhum dia escolhido';
+  if (sel.length === 7) return 'todos os dias';
+  return sel.map(d => d.curto.toLowerCase()).join(', ');
+};
+
+const EMPTY_ACAO    = { descricao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', dias_semana: [], criar_tarefa: true, detalhes: {} };
 const EMPTY_ACAO_P  = { problema: '', porques: ['', '', '', '', ''], meta_smart: '' };
-const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {}, datas_medicao: [] };
-const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
-const EMPTY_ACAO_A  = { padronizacao: '', comunicacao: '', treinamento: '', monitoramento: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', criar_tarefa: true, detalhes: {} };
+const EMPTY_ACAO_C  = { descricao: '', resultado: '', classificacao: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', dias_semana: [], criar_tarefa: true, detalhes: {}, datas_medicao: [] };
+const EMPTY_ACAO_D  = { oque: '', onde: '', como: '', porque: '', quanto: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', dias_semana: [], criar_tarefa: true, detalhes: {} };
+const EMPTY_ACAO_A  = { padronizacao: '', comunicacao: '', treinamento: '', monitoramento: '', responsaveis_ids: [], prazo: '', inicio: '', recorrencia: 'nenhuma', dias_semana: [], criar_tarefa: true, detalhes: {} };
 
 const CLASSIFICACOES_C = [
   { key: 'com_resultado', label: 'Com resultado', cor: '#10b981', emoji: '✅', desc: 'melhorou — candidata a padronizar no A' },
@@ -480,6 +498,7 @@ export default function PlanoAcao({ userId, profile }) {
             prazo: formAcao.prazo,
             inicio: formAcao.inicio || null,
             recorrencia: formAcao.recorrencia || 'nenhuma',
+            dias_semana: formAcao.dias_semana || [],
             criar_tarefa: formAcao.criar_tarefa,
             ...(addingTo === 'C' ? { datas_medicao: formAcao.datas_medicao || [] } : {}),
           } : {}),
@@ -523,6 +542,7 @@ export default function PlanoAcao({ userId, profile }) {
             responsavel_id: rid, prazo: formAcao.prazo,
             inicio: formAcao.inicio || null,
             recorrencia: formAcao.recorrencia || 'nenhuma',
+            dias_semana: formAcao.dias_semana || [],
             criar_tarefa: formAcao.criar_tarefa,
             // Na criação a chave é o id da PESSOA (a ação ainda não existe).
             detalhe: (formAcao.detalhes || {})[rid] || null,
@@ -733,6 +753,7 @@ export default function PlanoAcao({ userId, profile }) {
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
+                          dias_semana: acao.dias_semana || [],
                           criar_tarefa: acao.criar_tarefa !== false,
                           // Chave = id da AÇÃO de cada pessoa (na edição já
                           // existem linhas no banco).
@@ -746,6 +767,7 @@ export default function PlanoAcao({ userId, profile }) {
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
+                          dias_semana: acao.dias_semana || [],
                           criar_tarefa: acao.criar_tarefa !== false,
                           // Chave = id da AÇÃO de cada pessoa (na edição já
                           // existem linhas no banco).
@@ -759,6 +781,7 @@ export default function PlanoAcao({ userId, profile }) {
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
+                          dias_semana: acao.dias_semana || [],
                           criar_tarefa: acao.criar_tarefa !== false,
                           // Chave = id da AÇÃO de cada pessoa (na edição já
                           // existem linhas no banco).
@@ -771,6 +794,7 @@ export default function PlanoAcao({ userId, profile }) {
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
+                          dias_semana: acao.dias_semana || [],
                           criar_tarefa: acao.criar_tarefa !== false,
                           // Chave = id da AÇÃO de cada pessoa (na edição já
                           // existem linhas no banco).
@@ -1133,6 +1157,32 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
             </select>
           </div>
         </div>
+        {form.recorrencia === 'dias_semana' && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Em quais dias?</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {DIAS_SEMANA.map(d => {
+                const on = (form.dias_semana || []).includes(d.n);
+                return (
+                  <button key={d.n} type="button"
+                    onClick={() => setForm(p => {
+                      const atual = p.dias_semana || [];
+                      return { ...p, dias_semana: on ? atual.filter(x => x !== d.n) : [...atual, d.n].sort() };
+                    })}
+                    style={{ padding: '6px 12px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                             border: `1px solid ${on ? '#E8681A' : 'var(--border)'}`,
+                             background: on ? '#E8681A' : 'transparent',
+                             color: on ? '#fff' : 'var(--text-muted)' }}>{d.curto}</button>
+                );
+              })}
+            </div>
+            {!(form.dias_semana || []).length && (
+              <div style={{ fontSize: 11.5, color: '#f59e0b', marginTop: 6 }}>
+                Escolha ao menos um dia — sem isso a tarefa não se repete.
+              </div>
+            )}
+          </div>
+        )}
         {/* Sem "Começa em", a tarefa nasce com a data do PRAZO — ou seja,
             só aparece para a pessoa no último dia. O texto dizia que ela
             aparecia "já", o que era falso, e o aviso era cinza e pequeno
@@ -1161,7 +1211,7 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
           return (
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
               {repete
-                ? `${oQue} aparece a partir de ${br(form.inicio)} e se repete ${rotuloRepete}${form.prazo ? `, até ${br(form.prazo)}` : ''}.`
+                ? `${oQue} aparece a partir de ${br(form.inicio)} e se repete ${form.recorrencia === 'dias_semana' ? `às ${textoDosDias(form.dias_semana)}` : rotuloRepete}${form.prazo ? `, até ${br(form.prazo)}` : ''}.`
                 : `${oQue} aparece em ${br(form.inicio)}.`}
             </div>
           );
