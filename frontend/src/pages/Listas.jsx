@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Mic, Trash2, X, ListChecks, RotateCcw } from 'lucide-react';
+import { Plus, Mic, Trash2, X, ListChecks, RotateCcw, Pencil, Check } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
 
@@ -18,6 +18,15 @@ export default function Listas({ userId }) {
   const [novaLista, setNovaLista] = useState(false);
   const [nomeLista, setNomeLista] = useState('');
   const [emojiLista, setEmojiLista] = useState('📝');
+  // Editar o que já existe. O servidor sempre soube renomear lista e trocar
+  // o texto do item; faltava o caminho na tela — quem errava uma palavra
+  // tinha que apagar e redigitar, e apagar item concluído perde o registro
+  // de que ele foi feito.
+  const [editandoLista, setEditandoLista] = useState(false);
+  const [nomeEdit, setNomeEdit]   = useState('');
+  const [emojiEdit, setEmojiEdit] = useState('📝');
+  const [itemEdit, setItemEdit]   = useState(null);   // id do item em edição
+  const [textoEdit, setTextoEdit] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [ouvindo, setOuvindo] = useState(false);
   const recRef = useRef(null);
@@ -103,6 +112,36 @@ export default function Listas({ userId }) {
       if (texto === undefined) setNovoItem(t);
       toast('Erro ao adicionar item', 'error');
     }
+  };
+
+  const abrirEdicaoLista = () => {
+    setNomeEdit(listaAtiva?.nome || '');
+    setEmojiEdit(listaAtiva?.emoji || '📝');
+    setEditandoLista(true);
+  };
+
+  const salvarLista = async () => {
+    const nome = nomeEdit.trim();
+    if (!nome) return toast('A lista precisa de um nome.', 'error');
+    try {
+      const r = await api.put(`/listas/${listaAtiva.id}`, { requester_id: userId, nome, emoji: emojiEdit });
+      setListas(ls => ls.map(l => l.id === listaAtiva.id ? { ...l, nome: r.data.nome, emoji: r.data.emoji } : l));
+      setEditandoLista(false);
+      toast('Lista renomeada.');
+    } catch { toast('Não foi possível renomear.', 'error'); }
+  };
+
+  const salvarItem = async (item) => {
+    const texto = textoEdit.trim();
+    // Texto apagado não vira item vazio: cancela a edição e mantém o que
+    // estava. Para tirar o item existe o X, que é explícito.
+    if (!texto || texto === item.texto) { setItemEdit(null); return; }
+    try {
+      const r = await api.put(`/listas/itens/${item.id}`, { requester_id: userId, texto });
+      setListas(ls => ls.map(l => l.id !== listaAtiva.id ? l
+        : { ...l, itens: l.itens.map(i => i.id === item.id ? { ...i, texto: r.data.texto } : i) }));
+      setItemEdit(null);
+    } catch { toast('Não foi possível salvar o item.', 'error'); }
   };
 
   const toggleItem = async (item) => {
@@ -208,15 +247,46 @@ export default function Listas({ userId }) {
           {listaAtiva && (
             <div className="card" style={{ flex: 1, minWidth: 280 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div>
-                  <h2 style={{ fontSize: 18, fontWeight: 800 }}>{listaAtiva.emoji} {listaAtiva.nome}</h2>
-                  <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
-                    {listaAtiva.itens.length} {listaAtiva.itens.length === 1 ? 'item' : 'itens'} · {listaAtiva.itens.filter(i => i.concluido).length} concluído{listaAtiva.itens.filter(i => i.concluido).length !== 1 ? 's' : ''}
-                  </p>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  {editandoLista ? (
+                    <div>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                        {EMOJIS.map(e => (
+                          <button key={e} type="button" onClick={() => setEmojiEdit(e)}
+                            style={{ fontSize: 18, lineHeight: 1, padding: '4px 6px', borderRadius: 8, cursor: 'pointer',
+                                     border: `2px solid ${emojiEdit === e ? 'var(--primary)' : 'transparent'}`,
+                                     background: emojiEdit === e ? 'rgba(232,98,42,.1)' : 'var(--surface-2)' }}>{e}</button>
+                        ))}
+                      </div>
+                      <form onSubmit={ev => { ev.preventDefault(); salvarLista(); }} style={{ display: 'flex', gap: 8 }}>
+                        <input className="input" autoFocus value={nomeEdit} maxLength={60}
+                          onChange={ev => setNomeEdit(ev.target.value)}
+                          onKeyDown={ev => { if (ev.key === 'Escape') setEditandoLista(false); }}
+                          style={{ flex: 1, minWidth: 0 }}/>
+                        <button type="submit" className="btn btn-primary btn-sm">Salvar</button>
+                        <button type="button" className="btn btn-sm" onClick={() => setEditandoLista(false)}>Cancelar</button>
+                      </form>
+                    </div>
+                  ) : (
+                    <>
+                      <h2 style={{ fontSize: 18, fontWeight: 800 }}>{listaAtiva.emoji} {listaAtiva.nome}</h2>
+                      <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+                        {listaAtiva.itens.length} {listaAtiva.itens.length === 1 ? 'item' : 'itens'} · {listaAtiva.itens.filter(i => i.concluido).length} concluído{listaAtiva.itens.filter(i => i.concluido).length !== 1 ? 's' : ''}
+                      </p>
+                    </>
+                  )}
                 </div>
-                <button className="btn-icon" onClick={() => apagarLista(listaAtiva)} title="Apagar lista" style={{ color: 'var(--danger)' }}>
-                  <Trash2 size={16}/>
-                </button>
+                {!editandoLista && (
+                  <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <button className="btn-icon" onClick={abrirEdicaoLista} title="Renomear lista e trocar o ícone"
+                      style={{ color: 'var(--text-muted)' }}>
+                      <Pencil size={15}/>
+                    </button>
+                    <button className="btn-icon" onClick={() => apagarLista(listaAtiva)} title="Apagar lista" style={{ color: 'var(--danger)' }}>
+                      <Trash2 size={16}/>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Formulário de verdade, e não um campo solto.
@@ -281,16 +351,44 @@ export default function Listas({ userId }) {
                       }}>
                         {item.concluido && <span style={{ color: '#fff', fontSize: 11 }}>✓</span>}
                       </div>
-                      <span style={{
-                        flex: 1, fontSize: 14,
-                        color: item.concluido ? 'var(--text-muted)' : 'var(--text)',
-                        textDecoration: item.concluido ? 'line-through' : 'none',
-                      }}>
-                        {item.texto}
-                      </span>
-                      <button className="btn-icon" onClick={() => apagarItem(item)} style={{ color: 'var(--text-muted)' }}>
-                        <X size={14}/>
-                      </button>
+                      {itemEdit === item.id ? (
+                        <form onSubmit={ev => { ev.preventDefault(); salvarItem(item); }}
+                          style={{ flex: 1, display: 'flex', gap: 6, minWidth: 0 }}>
+                          <input className="input" autoFocus value={textoEdit} style={{ flex: 1, minWidth: 0, fontSize: 14 }}
+                            onChange={ev => setTextoEdit(ev.target.value)}
+                            onKeyDown={ev => { if (ev.key === 'Escape') setItemEdit(null); }}/>
+                          <button type="submit" className="btn-icon" title="Salvar" style={{ color: 'var(--success)' }}>
+                            <Check size={16}/>
+                          </button>
+                          <button type="button" className="btn-icon" title="Cancelar" onClick={() => setItemEdit(null)}
+                            style={{ color: 'var(--text-muted)' }}>
+                            <X size={14}/>
+                          </button>
+                        </form>
+                      ) : (
+                        <>
+                          {/* Clicar no texto edita. O lápis fica ali para quem
+                              não adivinha que o texto é clicável — descobrir
+                              por acaso não é descobrir. */}
+                          <span onClick={() => { setItemEdit(item.id); setTextoEdit(item.texto); }}
+                            title="Clique para editar"
+                            style={{
+                              flex: 1, fontSize: 14, cursor: 'text', minWidth: 0,
+                              color: item.concluido ? 'var(--text-muted)' : 'var(--text)',
+                              textDecoration: item.concluido ? 'line-through' : 'none',
+                            }}>
+                            {item.texto}
+                          </span>
+                          <button className="btn-icon" title="Editar" onClick={() => { setItemEdit(item.id); setTextoEdit(item.texto); }}
+                            style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+                            <Pencil size={13}/>
+                          </button>
+                          <button className="btn-icon" title="Apagar item" onClick={() => apagarItem(item)}
+                            style={{ color: 'var(--text-muted)', flexShrink: 0 }}>
+                            <X size={14}/>
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
