@@ -383,7 +383,7 @@ router.post('/:id/acoes', async (req, res) => {
 
 // PUT /api/pdca/acoes/:id  — ANTES de PUT /:id para não conflitar
 router.put('/acoes/:id', async (req, res) => {
-  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia, dias_semana, aplicar_grupo, detalhe, datas_medicao } = req.body;
+  const { requester_id, descricao, responsavel_id, prazo, concluida, criar_tarefa, inicio, recorrencia, dias_semana, aplicar_grupo, detalhe, datas_medicao, grupo_id } = req.body;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
@@ -410,6 +410,10 @@ router.put('/acoes/:id', async (req, res) => {
       : null;
   }
   if (criar_tarefa !== undefined) updates.criar_tarefa = criar_tarefa;
+  // Uma ação que era de uma pessoa só vira grupo quando alguém acrescenta
+  // mais gente na edição: sem receber o grupo aqui, as ações novas nasceriam
+  // soltas e a tela mostraria dois cartões para a mesma ação.
+  if (grupo_id !== undefined) updates.grupo_id = grupo_id || null;
   if (concluida !== undefined) {
     updates.concluida    = concluida;
     updates.concluida_em = concluida ? new Date().toISOString() : null;

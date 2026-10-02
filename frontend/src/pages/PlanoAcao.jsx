@@ -490,11 +490,37 @@ export default function PlanoAcao({ userId, profile }) {
     setSavingAcao(true);
     try {
       if (editingAcao) {
-        // Edição: sempre 1 ação só, no máximo o primeiro responsável marcado
+        // Quem está no grupo HOJE e quem ficou marcado agora.
+        const doGrupo = editingAcao.grupo_id
+          ? acoes.filter(a => a.grupo_id === editingAcao.grupo_id)
+          : [editingAcao];
+        const atuais     = [...new Set(doGrupo.map(a => a.responsavel_id).filter(Boolean))];
+        const escolhidos = usaResponsaveis ? (formAcao.responsaveis_ids || []) : atuais;
+        const adicionados = escolhidos.filter(id => !atuais.includes(id));
+        const removidos   = atuais.filter(id => !escolhidos.includes(id));
+
+        if (usaResponsaveis && atuais.length && !escolhidos.length) {
+          setSavingAcao(false);
+          return toast('Deixe ao menos uma pessoa. Para tirar a ação inteira, use o ícone de excluir.');
+        }
+        if (removidos.length) {
+          const nomes = removidos.map(id => membros.find(m => m.id === id)?.full_name || 'pessoa').join(', ');
+          if (!window.confirm(`Tirar ${nomes} desta ação?\n\nA ação e a tarefa dessa pessoa serão apagadas. O que ela já concluiu se perde.`)) {
+            setSavingAcao(false);
+            return;
+          }
+        }
+        // Ação que era de uma pessoa só vira grupo agora.
+        const grupoId = editingAcao.grupo_id
+          || (adicionados.length ? (crypto.randomUUID?.() || String(Date.now())) : null);
+
         const payload = {
           descricao: descricaoFinal,
+          ...(grupoId && !editingAcao.grupo_id ? { grupo_id: grupoId } : {}),
           ...(usaResponsaveis ? {
-            responsavel_id: (formAcao.responsaveis_ids || [])[0] || null,
+            responsavel_id: escolhidos.includes(editingAcao.responsavel_id)
+              ? editingAcao.responsavel_id
+              : (escolhidos[0] || null),
             prazo: formAcao.prazo,
             inicio: formAcao.inicio || null,
             recorrencia: formAcao.recorrencia || 'nenhuma',
@@ -515,6 +541,29 @@ export default function PlanoAcao({ userId, profile }) {
         await Promise.all(irmas
           .filter(a => (detalhes[a.id] ?? '') !== (a.detalhe || ''))
           .map(a => api.put(`/pdca/acoes/${a.id}`, { requester_id: userId, detalhe: detalhes[a.id] ?? '' })));
+
+        // Tira quem foi desmarcado. Vem DEPOIS da atualização: se a pessoa
+        // retirada for a da ação que está aberta, a atualização dela não
+        // importa mais e a linha some de qualquer jeito.
+        const paraApagar = doGrupo.filter(a => removidos.includes(a.responsavel_id));
+        for (const a of paraApagar) {
+          await api.delete(`/pdca/acoes/${a.id}?requester_id=${userId}`);
+        }
+        // Acrescenta quem foi marcado agora: uma ação por pessoa, no mesmo
+        // grupo, para a tela continuar mostrando um cartão só.
+        if (adicionados.length) {
+          await Promise.all(adicionados.map(rid => api.post(`/pdca/${selectedPlan.id}/acoes`, {
+            requester_id: userId, quadrante: editingAcao.quadrante, descricao: descricaoFinal,
+            grupo_id: grupoId, responsavel_id: rid, prazo: formAcao.prazo,
+            inicio: formAcao.inicio || null,
+            recorrencia: formAcao.recorrencia || 'nenhuma',
+            dias_semana: formAcao.dias_semana || [],
+            criar_tarefa: formAcao.criar_tarefa,
+            detalhe: null,
+            ...(editingAcao.quadrante === 'C' ? { datas_medicao: formAcao.datas_medicao || [] } : {}),
+          })));
+          toast(`${adicionados.length} pessoa(s) acrescentada(s) à ação.`);
+        }
 
         setAcoes(as => as.map(a => {
           if (a.id === data.id) return data;
@@ -749,7 +798,7 @@ export default function PlanoAcao({ userId, profile }) {
                           ...EMPTY_ACAO_C,
                           ...decomporC(acao.descricao),
                           datas_medicao: acao.datas_medicao || [],
-                          responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
+                          responsaveis_ids: [...new Set(grupo.map(g => g.responsavel_id).filter(Boolean))],
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
@@ -763,7 +812,7 @@ export default function PlanoAcao({ userId, profile }) {
                         setFormAcao({
                           ...EMPTY_ACAO_D,
                           ...decomporD(acao.descricao),
-                          responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
+                          responsaveis_ids: [...new Set(grupo.map(g => g.responsavel_id).filter(Boolean))],
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
@@ -777,7 +826,7 @@ export default function PlanoAcao({ userId, profile }) {
                         setFormAcao({
                           ...EMPTY_ACAO_A,
                           ...decomporA(acao.descricao),
-                          responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
+                          responsaveis_ids: [...new Set(grupo.map(g => g.responsavel_id).filter(Boolean))],
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
@@ -790,7 +839,7 @@ export default function PlanoAcao({ userId, profile }) {
                       } else {
                         setFormAcao({
                           descricao: acao.descricao,
-                          responsaveis_ids: acao.responsavel_id ? [acao.responsavel_id] : [],
+                          responsaveis_ids: [...new Set(grupo.map(g => g.responsavel_id).filter(Boolean))],
                           prazo: acao.prazo || '',
                           inicio: acao.inicio || '',
                           recorrencia: acao.recorrencia || 'nenhuma',
@@ -1091,14 +1140,19 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
       <div className="form-group">
         <label className="form-label">
           {textos.responsavel || 'Responsável(is)'}
-          {isNovo && ids.length > 1 && (
+          {ids.length > 1 && (
             <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--primary)', fontWeight: 600 }}>
-              {ids.length} selecionados — cria 1 ação pra cada
+              {ids.length} selecionados — 1 ação pra cada
             </span>
           )}
         </label>
-        {isNovo ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto',
+        {/* A edição também marca várias pessoas. Antes era um seletor de um
+            só, e acrescentar gente numa ação existente exigia apagar tudo e
+            refazer — perdendo o que cada um já tinha concluído.
+            Marcar alguém CRIA a ação daquela pessoa; desmarcar APAGA a dela.
+            Por isso a remoção pede confirmação com os nomes: é a tarefa de
+            uma pessoa de verdade que some. */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto',
             border: '1px solid var(--border)', borderRadius: 8, padding: '8px 4px' }}>
             {membros.length === 0 && (
               <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', padding: '8px 0' }}>Nenhum membro cadastrado.</p>
@@ -1117,12 +1171,10 @@ function ResponsavelPrazoTarefa({ form, setForm, membros, podeToggleTarefa, isNo
               );
             })}
           </div>
-        ) : (
-          // Editando: só faz sentido 1 responsável (a ação já existe)
-          <select className="input" value={ids[0] || ''} onChange={e => setForm(p => ({ ...p, responsaveis_ids: e.target.value ? [e.target.value] : [] }))}>
-            <option value="">— sem responsável —</option>
-            {membros.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
-          </select>
+        {!isNovo && (
+          <div style={{ fontSize: 11.5, color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
+            Marcar alguém cria a ação dessa pessoa. Desmarcar apaga a dela — com aviso antes.
+          </div>
         )}
       </div>
       <div className="form-group">
