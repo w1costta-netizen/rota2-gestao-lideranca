@@ -18,16 +18,10 @@ import { useAuth } from '../contexts/AuthContext';
 import Avatar from '../components/Avatar';
 import { formatDate } from '../utils';
 
-// Uma tarefa só "cobra" como pendente depois que o dia e horário do prazo passarem
-function isOverdue(due_date, due_time, status) {
-  if (!due_date || status === 'concluida') return false;
-  const now = new Date();
-  const [y, mo, d] = due_date.split('-').map(Number);
-  if (due_time) {
-    const [h, min] = due_time.split(':').map(Number);
-    return now > new Date(y, mo - 1, d, h, min, 0);
-  }
-  return now > new Date(y, mo - 1, d, 23, 59, 59);
+// Data de hoje pelo relógio local, não em UTC — a loja é de Recife e
+// `toISOString()` vira o dia seguinte às 21h.
+function toYMD(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 // Para o Dashboard, sempre usa a semana real do dia atual (não avança no fds)
@@ -187,13 +181,21 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   const dayNames = ['domingo','segunda','terca','quarta','quinta','sexta','sabado'];
   const todayKey = dayNames[todayIdx];
 
-  // Tarefas — "pendente" só conta depois que o prazo (dia + horário) passar
-  const tarefasPendentes  = tarefas.filter(t => t.status === 'pendente' && isOverdue(t.due_date, t.due_time, t.status));
+  // Hoje pelo relógio de quem está olhando. Era `toISOString()`, que é UTC:
+  // das 21h em diante o painel já achava que era amanhã e dava a tarefa de
+  // hoje como vencida.
+  const hojeYMD = toYMD(new Date());
+
+  // ATRASADA É UMA COISA SÓ NO APP INTEIRO: `estaAtrasada` em
+  // lib/recorrencia.js, a mesma que a aba "Atrasadas" da tela de Tarefas
+  // usa. O número do painel e o da aba têm que ser o mesmo número.
+  //
+  // Aqui havia a regra escrita à mão — "data menor que hoje" — e ela conta
+  // a rotina como atrasada: a tarefa que se repete é UMA linha cuja data só
+  // anda quando alguém conclui, então a rotina de hoje fica com data antiga
+  // de propósito. Não reescreva a regra; importe.
+  const tarefasAtrasadas   = tarefas.filter(t => estaAtrasada(t, hojeYMD));
   const tarefasEmAndamento = tarefas.filter(t => t.status === 'em_andamento');
-  const tarefasAtrasadas  = tarefas.filter(t => {
-    if (!t.due_date || t.status === 'concluida') return false;
-    return t.due_date < new Date().toISOString().split('T')[0];
-  });
 
   // Comunicados não lidos
   const naoLidos = comunicados.filter(c => !c.lido);
@@ -324,7 +326,7 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       {/* Stats */}
       <div className="stats-grid">
         <StatCard icon={CheckSquare} color="#6366f1" bg="#6366f115"
-          value={tarefasPendentes.length} label="Tarefas atrasadas"
+          value={tarefasAtrasadas.length} label="Tarefas atrasadas"
           onClick={() => setPage('tarefas')}/>
         <StatCard icon={Clock} color="#f59e0b" bg="#f59e0b15"
           value={tarefasEmAndamento.length} label="Em andamento"
@@ -424,7 +426,6 @@ export default function Dashboard({ setPage, profile: propProfile }) {
                     // mais antiga que seja a data guardada. O painel dizia
                     // "vencida 29/09" na mesma tarefa que a tela de Tarefas
                     // mostrava como de hoje.
-                    const hojeYMD = new Date().toISOString().split('T')[0];
                     const rotinaDeHoje = caiNoDia(t, hojeYMD);
                     const atrasada = estaAtrasada(t, hojeYMD);
                     return (
