@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/Toast';
+import { useTheme } from '../contexts/ThemeContext';
 import CardNotificacoes from '../components/CardNotificacoes';
 import { User, Lock, Save, Eye, EyeOff, Building2, Phone, Briefcase, Hash, Shield, Camera, X, AlertTriangle } from 'lucide-react';
 import api from '../api';
@@ -10,6 +11,74 @@ import { formatPhone } from '../utils';
 import { reportAction, reportError } from '../lib/reportError';
 
 const FUNCOES = ['Diretor(a)','Gerente','Coordenador(a)','Supervisor(a)','Líder','Analista','Assistente','Outro'];
+
+// ── Aparência ────────────────────────────────────────────────
+// Claro ou escuro, e — no escuro — em qual tom. A escolha fica no
+// aparelho de cada um (localStorage), igual ao botão de sol da barra
+// lateral: é preferência de quem olha a tela, não dado da empresa.
+//
+// O tom aparece em cima de uma amostra do próprio tom, não de um texto
+// dizendo o nome: a pessoa está escolhendo cor, e cor se escolhe vendo.
+function CardAparencia() {
+  const { theme, toggle, tom, setTom, tons } = useTheme();
+  const escuro = theme === 'dark';
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>Aparência</div>
+          <p style={{ fontSize: 12.5, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.5 }}>
+            Vale só neste aparelho. Se você usa o app no celular e no computador, escolhe em cada um.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+          {[['light', 'Claro'], ['dark', 'Escuro']].map(([v, r]) => (
+            <button key={v} type="button" onClick={() => { if ((v === 'dark') !== escuro) toggle(); }}
+              aria-pressed={escuro === (v === 'dark')}
+              style={{ padding: '6px 14px', borderRadius: 99, fontSize: 12.5, fontWeight: 700, cursor: 'pointer',
+                       border: `1px solid ${escuro === (v === 'dark') ? 'var(--primary)' : 'var(--border)'}`,
+                       background: escuro === (v === 'dark') ? 'var(--primary)' : 'transparent',
+                       color: escuro === (v === 'dark') ? '#fff' : 'var(--text-muted)' }}>{r}</button>
+          ))}
+        </div>
+      </div>
+
+      {escuro && (
+        <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase',
+                        letterSpacing: .3, marginBottom: 8 }}>Tom do escuro</div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+            {tons.map(t => {
+              const ativo = tom === t.id;
+              return (
+                <button key={t.id} type="button" onClick={() => setTom(t.id)} aria-pressed={ativo}
+                  style={{ textAlign: 'left', cursor: 'pointer', padding: 10, borderRadius: 10,
+                           border: `1.5px solid ${ativo ? 'var(--primary)' : 'var(--border)'}`,
+                           background: 'transparent', color: 'var(--text)', font: 'inherit' }}>
+                  {/* Amostra: fundo e cartão lado a lado, que é a diferença
+                      que a pessoa está realmente escolhendo. */}
+                  <span style={{ display: 'flex', height: 30, borderRadius: 6, overflow: 'hidden',
+                                 border: '1px solid var(--border)', marginBottom: 8 }}>
+                    <span style={{ flex: '0 0 55%', background: t.amostra[0] }}/>
+                    <span style={{ flex: 1, background: t.amostra[1] }}/>
+                  </span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700 }}>
+                    {t.nome}
+                    {ativo && <span style={{ color: 'var(--primary)', fontSize: 12 }}>✓</span>}
+                  </span>
+                  <span style={{ display: 'block', fontSize: 11.5, color: 'var(--text-muted)', marginTop: 2, lineHeight: 1.4 }}>
+                    {t.descricao}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 const NIVEL_LABELS = { admin: 'Administrador', gestor: 'Gestor', lider: 'Líder' };
 const NIVEL_COLORS = { admin: '#6366f1', gestor: '#f59e0b', lider: '#10b981' };
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
@@ -284,6 +353,8 @@ export default function Profile() {
           <div style={{ marginTop:4 }}>{formatPhone(form.phone)}</div>
         </div>
       </div>
+
+      <CardAparencia />
 
       <CardNotificacoes userId={session?.user?.id} />
 

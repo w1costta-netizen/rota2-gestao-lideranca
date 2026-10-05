@@ -751,6 +751,41 @@ tbody td { padding: 12px 14px; font-size: 13.5px; color: var(--text); }
    cima do cartão #2A1A3D: "Cancelar", "Fechar" e "Ver ativas" ficavam
    praticamente invisíveis. A variável não muda porque ela também é FUNDO
    (a barra lateral); só o botão troca de cor. */
+/* ── TONS DO MODO ESCURO ───────────────────────────────────────
+   O modo escuro vem em três tons, e quem escolhe é cada pessoa
+   (Perfil → Aparência; guardado em `rl-tom`). Só o FUNDO muda — texto,
+   laranja da marca, verde/vermelho de estado e as cores de área dos
+   gráficos são os mesmos nos três.
+
+   OS TRÊS ESTÃO NO MESMO DEGRAU DE LUMINOSIDADE do roxo original:
+   L* 4,8 no fundo, 13,0 no cartão, 17,6 no interno (CIELAB) — degrau de
+   8,3 e 4,6. Foi feito assim de propósito: assim ninguém escolhe no olho
+   um tom que, por acaso, fica menos legível que os outros. Conferido:
+   texto ~12,2:1, texto apagado ~4,8:1 e as seis cores de área ≥3,9:1
+   sobre a superfície interna — praticamente idênticos nos três tons.
+
+   AO ACRESCENTAR UM TOM NOVO: gere as cores no mesmo L*, não escolha
+   hexadecimal parecido. A distância entre dois hexadecimais não
+   corresponde ao que o olho enxerga — é o mesmo aviso do bloco acima. */
+
+[data-theme="dark"][data-tom="grafite"] {
+  --bg:            #0F1015;
+  --bg-dark:       #090A0D;
+  --surface:       #212228;
+  --surface-2:     #2A2B31;
+  --border:        #393A42;
+  --border-strong: #4A4A54;
+}
+
+[data-theme="dark"][data-tom="azul"] {
+  --bg:            #031124;
+  --bg-dark:       #020B18;
+  --surface:       #122337;
+  --surface-2:     #1C2C40;
+  --border:        #293C53;
+  --border-strong: #394C66;
+}
+
 [data-theme="dark"] .btn-ghost { color: var(--text); }
 [data-theme="dark"] .btn-ghost:hover { background: rgba(255,255,255,.08); color: var(--text); }
 
