@@ -20,7 +20,7 @@ function detectarTipo(val) {
 /**
  * Parser para o formato real do arquivo de vendas:
  * Cada bloco começa com uma linha onde row[0] = CANAL | DEPARTAMENTO | CATEGORIA | ITEM
- * Colunas: Nome | Sócios | YoY | Ticket Médio | YoY | Gasto Médio | YoY | Volume | YoY | Receita | YoY | Saldo Receita | Margem | Saldo Margem | % Margem
+ * Colunas: Nome | Sócios | LFL | Ticket Médio | LFL | Gasto Médio | LFL | Volume | LFL | Receita | LFL | Saldo Receita | Margem | Saldo Margem | % Margem
  */
 export async function parseVendasXlsx(file) {
   const buffer = await file.arrayBuffer();
@@ -39,8 +39,8 @@ export async function parseVendasXlsx(file) {
       // Linha de cabeçalho do bloco — mapeia índices das colunas pelo nome
       const headers = row.map(c => String(c).trim().toUpperCase());
 
-      // Índices das colunas (o arquivo tem YoY repetido; pegamos pela posição)
-      // Ordem conhecida: Nome(0) Sócios(1) YoY(2) TicketMédio(3) YoY(4) GastoMédio(5) YoY(6) Volume(7) YoY(8) Receita(9) YoY(10) SaldoReceita(11) Margem(12) SaldoMargem(13) %Margem(14)
+      // Índices das colunas (o arquivo repete a coluna de LFL; pegamos pela posição)
+      // Ordem conhecida: Nome(0) Sócios(1) LFL(2) TicketMédio(3) LFL(4) GastoMédio(5) LFL(6) Volume(7) LFL(8) Receita(9) LFL(10) SaldoReceita(11) Margem(12) SaldoMargem(13) %Margem(14)
       const IDX = {
         socios:        findCol(headers, ['SÓCIOS', 'SOCIOS', 'CLIENTES', 'MEMBROS'], 1),
         yoy_socios:    2,
@@ -59,6 +59,7 @@ export async function parseVendasXlsx(file) {
       };
 
       i++;
+      const doBloco = [];
       while (i < rows.length) {
         const dr = rows[i];
         const nome = String(dr[0] || '').trim();
@@ -71,13 +72,13 @@ export async function parseVendasXlsx(file) {
         const saldo   = toNum(dr[IDX.saldo_receita]);
         const yoyR    = toNum(dr[IDX.yoy_receita]);  // decimal, ex: 0.048
 
-        linhas.push({
+        doBloco.push({
           tipo,
           nome,
           // meta = receita ano anterior = receita - saldo
           meta:      receita - saldo,
           realizado: receita,
-          // percentual = crescimento YoY em % (positivo = cresceu)
+          // percentual = crescimento LFL em % (positivo = cresceu)
           percentual: Math.round(yoyR * 100 * 10) / 10,
           extras: {
             socios:       toNum(dr[IDX.socios]),
@@ -95,6 +96,8 @@ export async function parseVendasXlsx(file) {
         });
         i++;
       }
+      marcarLinhaTotal(doBloco);
+      linhas.push(...doBloco);
     } else {
       i++;
     }
@@ -107,8 +110,13 @@ export async function parseVendasXlsx(file) {
   }
 
   const base = porTipo['CANAL'] || porTipo[Object.keys(porTipo)[0]] || [];
-  const totalReceita = base.reduce((s, l) => s + l.realizado, 0);
-  const totalSaldo   = base.reduce((s, l) => s + (l.extras?.saldo_receita || 0), 0);
+  // A linha de total da loja ENTRA no bloco junto com os canais. Somar o
+  // bloco inteiro contava a loja duas vezes — era daí que saía uma receita
+  // de R$ 4,4 milhões para uma loja que fez R$ 2,2 milhões.
+  const total = base.find(l => l.extras?.linha_total);
+  const soma = (campo) => base.reduce((s, l) => s + (campo(l) || 0), 0);
+  const totalReceita = total ? total.realizado : soma(l => l.realizado);
+  const totalSaldo   = total ? (total.extras?.saldo_receita || 0) : soma(l => l.extras?.saldo_receita);
 
   return {
     linhas,
@@ -121,6 +129,29 @@ export async function parseVendasXlsx(file) {
       blocos: Object.keys(porTipo),
     },
   };
+}
+
+/**
+ * QUAL LINHA DO BLOCO É O TOTAL DA LOJA.
+ *
+ * O arquivo não diz. No bloco CANAL vem PISO, ECOM, TELEVENDAS e depois
+ * "Recife" — que é a loja inteira, não um quarto canal. Reconhece-se pela
+ * receita: a última linha vale o que as anteriores somam.
+ *
+ * Isso é decidido AQUI, na importação, e fica gravado em
+ * `extras.linha_total`. Antes a tela adivinhava na hora de desenhar, e a
+ * adivinhação não tinha como funcionar para sócios: 3073 + 359 + 6 = 3438,
+ * mas a loja tem 3406 sócios — quem compra no piso e no site é UMA pessoa.
+ * Sócio não soma. Por isso o número tem que vir da linha de total, e por
+ * isso ela precisa ser identificada, não estimada.
+ */
+function marcarLinhaTotal(bloco) {
+  if (bloco.length < 2) return;
+  const ultima = bloco[bloco.length - 1];
+  const soma = bloco.slice(0, -1).reduce((s, l) => s + (l.realizado || 0), 0);
+  if (soma <= 0) return;
+  const desvio = Math.abs(ultima.realizado - soma) / soma;
+  if (desvio < 0.02) ultima.extras.linha_total = true;
 }
 
 function findCol(headers, keywords, fallback) {

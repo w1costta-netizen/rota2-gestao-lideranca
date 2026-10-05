@@ -48,7 +48,9 @@ function KpiCard({ label, value, sub, cor, icon: Icon }) {
   );
 }
 
-function BadgeYoY({ yoy }) {
+// LFL (Like-for-Like): a comparação com o mesmo período do ano
+// anterior. É como a rede chama; "YoY" não é o termo usado na loja.
+function BadgeLFL({ yoy }) {
   if (yoy === undefined || yoy === null) return null;
   const cor = yoy > 0 ? '#22c55e' : yoy < 0 ? '#ef4444' : '#94a3b8';
   const Icon = yoy > 0 ? TrendingUp : yoy < 0 ? TrendingDown : null;
@@ -76,7 +78,7 @@ function CardItem({ l, isTotal }) {
           {l.nome}
           {isTotal && <span style={{ fontSize: 10, color: 'var(--primary)', marginLeft: 6, fontWeight: 700 }}>TOTAL</span>}
         </span>
-        <BadgeYoY yoy={yoy} />
+        <BadgeLFL yoy={yoy} />
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px 4px' }}>
         <div>
@@ -111,7 +113,7 @@ function CardItem({ l, isTotal }) {
 const COLUNAS_TABELA = [
   { label: 'Nome',    key: 'nome',       left: true,  fn: l => l.nome },
   { label: 'Receita', key: 'realizado',  left: false, fn: l => l.realizado || 0 },
-  { label: 'YoY',     key: 'yoy',        left: false, fn: l => l.extras?.yoy_receita ?? l.percentual ?? 0 },
+  { label: 'LFL',     key: 'yoy',        left: false, fn: l => l.extras?.yoy_receita ?? l.percentual ?? 0 },
   { label: 'Saldo',   key: 'saldo',      left: false, fn: l => { const e = l.extras || {}; return e.saldo_receita ?? (l.realizado - l.meta); } },
   { label: 'Margem',  key: 'margem',     left: false, fn: l => l.extras?.margem || 0 },
   { label: '% Marg.', key: 'pct_margem', left: false, fn: l => l.extras?.pct_margem || 0 },
@@ -246,7 +248,7 @@ const TabelaVendas = React.memo(function TabelaVendas({ linhas, marcarTotal }) {
                   {l.nome}{isTotal && <span style={{ fontSize: 10, color: 'var(--primary)', marginLeft: 6 }}>TOTAL</span>}
                 </td>
                 <td style={{ padding: '10px 6px', textAlign: 'right', color: 'var(--text)', fontWeight: isTotal ? 800 : 600 }}>{fmtR(l.realizado)}</td>
-                <td style={{ padding: '10px 6px', textAlign: 'right' }}><BadgeYoY yoy={e.yoy_receita ?? l.percentual} /></td>
+                <td style={{ padding: '10px 6px', textAlign: 'right' }}><BadgeLFL yoy={e.yoy_receita ?? l.percentual} /></td>
                 <td style={{ padding: '10px 6px', textAlign: 'right', color: corSaldo, fontWeight: 600 }}>{fmtR(saldo)}</td>
                 <td style={{ padding: '10px 6px', textAlign: 'right', color: 'var(--text-muted)' }}>{fmtR(e.margem)}</td>
                 <td style={{ padding: '10px 6px', textAlign: 'right', color: 'var(--text-muted)' }}>{e.pct_margem !== undefined ? `${e.pct_margem}%` : '—'}</td>
@@ -263,10 +265,21 @@ const TabelaVendas = React.memo(function TabelaVendas({ linhas, marcarTotal }) {
 });
 
 /**
- * Detecta linha de total: o valor da última linha ≈ soma das anteriores.
- * Retorna { totalRow, subRows } — se não detectar total, totalRow = null.
+ * Separa a linha de total da loja das linhas de canal.
+ *
+ * Quem decide é a IMPORTAÇÃO (`extras.linha_total`, em parseVendasXlsx):
+ * lá a estrutura de blocos do arquivo está à vista. Aqui só se lê a marca.
+ *
+ * A estimativa pela soma continua abaixo porque os arquivos importados
+ * antes desta marca existir seguem no banco sem ela. Reimportado, cai no
+ * caminho de cima. Não faça a estimativa virar a regra: ela acerta receita
+ * e erra sócios, que não somam.
  */
 function detectarTotal(linhas) {
+  const marcada = linhas.findIndex(l => l.extras?.linha_total);
+  if (marcada >= 0) {
+    return { totalRow: linhas[marcada], subRows: linhas.filter((_, i) => i !== marcada) };
+  }
   if (linhas.length < 2) return { totalRow: null, subRows: linhas };
   const sub = linhas.slice(0, -1);
   const last = linhas[linhas.length - 1];
@@ -449,19 +462,32 @@ export default function PainelVendas({ profile }) {
     </div>
   );
 
-  // KPIs globais — usa linha de total do bloco CANAL se detectada, senão soma tudo
+  // ── KPIs da loja ────────────────────────────────────────
+  //
+  // Vêm da LINHA DE TOTAL do bloco CANAL (no arquivo da loja, "Recife"),
+  // nunca da soma dos canais. Somar dobrava a receita, porque a linha da
+  // loja vem dentro do mesmo bloco, e inventava sócios que não existem:
+  // 3073 no piso + 359 no site + 6 em televendas = 3438, mas a loja tem
+  // 3406 sócios. Quem compra em dois canais é uma pessoa só.
   const baseCanais = canais.length ? canais : dados;
-  const { totalRow: canalTotal, subRows: canalSubs } = detectarTotal(baseCanais);
-  const kpiBase = canalTotal ? [canalTotal] : baseCanais;
-  const totalReceita = kpiBase.reduce((s, d) => s + (d.realizado || 0), 0);
-  const totalSaldo   = kpiBase.reduce((s, d) => s + (d.extras?.saldo_receita ?? (d.realizado - d.meta) ?? 0), 0);
-  const totalMargem  = kpiBase.reduce((s, d) => s + (d.extras?.margem || 0), 0);
-  const totalSocios  = kpiBase.reduce((s, d) => s + (d.extras?.socios || 0), 0);
-  const crescimento  = (totalReceita - totalSaldo) > 0
-    ? Math.round((totalSaldo / (totalReceita - totalSaldo)) * 100 * 10) / 10
-    : 0;
+  const { totalRow: canalTotal } = detectarTotal(baseCanais);
+  const soma = (fn) => baseCanais.reduce((s, d) => s + (fn(d) || 0), 0);
+  const totalReceita = canalTotal ? (canalTotal.realizado || 0) : soma(d => d.realizado);
+  const totalSaldo   = canalTotal
+    ? (canalTotal.extras?.saldo_receita ?? (canalTotal.realizado - canalTotal.meta) ?? 0)
+    : soma(d => d.extras?.saldo_receita ?? (d.realizado - d.meta));
+  const totalMargem  = canalTotal ? (canalTotal.extras?.margem || 0) : soma(d => d.extras?.margem);
+  const pctMargem    = canalTotal?.extras?.pct_margem ?? null;
+  // Sócios da loja e o LFL deles, os dois da mesma linha de total.
+  const totalSocios  = canalTotal ? (canalTotal.extras?.socios || 0) : soma(d => d.extras?.socios);
+  const lflSocios    = canalTotal ? (canalTotal.extras?.yoy_socios ?? null) : null;
+  const crescimento  = canalTotal
+    ? (canalTotal.extras?.yoy_receita ?? canalTotal.percentual ?? 0)
+    : ((totalReceita - totalSaldo) > 0
+        ? Math.round((totalSaldo / (totalReceita - totalSaldo)) * 100 * 10) / 10
+        : 0);
 
-  // Atenção: YoY receita negativo — apenas itens individuais (produtos)
+  // Atenção: LFL de receita negativo — apenas itens individuais (produtos)
   const atencao = useMemo(() => itens
     .filter(d => {
       const yoy = d.extras?.yoy_receita ?? d.percentual ?? 0;
@@ -506,7 +532,7 @@ export default function PainelVendas({ profile }) {
             { ind: 'Saldo vs Meta',   val: fmtR(totalSaldo) },
             { ind: 'Margem Total',    val: fmtR(totalMargem) },
             { ind: 'Sócios',          val: fmtN(totalSocios) },
-            { ind: 'Crescimento YoY', val: `${crescimento > 0 ? '+' : ''}${crescimento}%` },
+            { ind: 'Crescimento LFL', val: `${crescimento > 0 ? '+' : ''}${crescimento}%` },
           ],
         },
         {
@@ -534,7 +560,7 @@ export default function PainelVendas({ profile }) {
       abas: [
         {
           nome: 'Departamentos',
-          colunas: ['Departamento', 'Realizado', 'Meta', 'Saldo', '% vs Meta', 'Margem', 'YoY%'],
+          colunas: ['Departamento', 'Realizado', 'Meta', 'Saldo', '% vs Meta', 'Margem', 'LFL%'],
           rows: deptos.map(d => [
             d.nome, d.realizado, d.meta,
             d.extras?.saldo_receita ?? (d.realizado - d.meta),
@@ -550,7 +576,7 @@ export default function PainelVendas({ profile }) {
         },
         {
           nome: 'Atenção',
-          colunas: ['Item', 'YoY%'],
+          colunas: ['Item', 'LFL%'],
           rows: atencao.map(d => [d.nome || d.item || d.categoria || d.departamento, d.extras?.yoy_receita ?? d.percentual]),
         },
       ],
@@ -566,7 +592,7 @@ export default function PainelVendas({ profile }) {
       `📊 Saldo vs Meta: ${fmtR(totalSaldo)}`,
       `🏷️ Margem: ${fmtR(totalMargem)}`,
       `👥 Sócios: ${fmtN(totalSocios)}`,
-      `${sinal} Crescimento YoY: ${crescimento > 0 ? '+' : ''}${crescimento}%`,
+      `${sinal} Crescimento LFL: ${crescimento > 0 ? '+' : ''}${crescimento}%`,
       atencao.length ? `⚠️ ${atencao.length} itens em atenção` : '',
     ].filter(Boolean).join('\n'));
   }
@@ -581,7 +607,7 @@ export default function PainelVendas({ profile }) {
         `Saldo vs Meta: ${fmtR(totalSaldo)}`,
         `Margem Total: ${fmtR(totalMargem)}`,
         `Sócios: ${fmtN(totalSocios)}`,
-        `Crescimento YoY: ${crescimento > 0 ? '+' : ''}${crescimento}%`,
+        `Crescimento LFL: ${crescimento > 0 ? '+' : ''}${crescimento}%`,
         atencao.length ? `\nAtenção: ${atencao.length} itens com performance negativa` : '',
       ].join('\n'),
     });
@@ -640,13 +666,18 @@ export default function PainelVendas({ profile }) {
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 24 }}>
             <KpiCard label="Receita Total" value={fmtR(totalReceita)} icon={DollarSign}
               sub={`Saldo: ${fmtR(totalSaldo)}`} />
-            <KpiCard label="Crescimento YoY" value={fmtPct(crescimento)}
+            <KpiCard label="Crescimento LFL" value={fmtPct(crescimento)}
               cor={corCrescimento} icon={TrendingUp}
               sub={crescimento > 0 ? 'Acima do período anterior' : crescimento < 0 ? 'Abaixo do período anterior' : ''} />
             <KpiCard label="Margem Total" value={fmtR(totalMargem)} icon={BarChart2}
-              sub="Resultado bruto" />
-            <KpiCard label="Total Sócios" value={fmtN(totalSocios)} icon={Users}
-              sub="Clientes ativos" />
+              sub={pctMargem !== null ? `${String(pctMargem).replace('.', ',')}% da receita` : 'Resultado bruto'} />
+            {/* Quantidade de sócios e o LFL deles, lado a lado: o número
+                sozinho não diz se a base cresceu ou encolheu. */}
+            <KpiCard label="Total Sócios" icon={Users}
+              value={<span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {fmtN(totalSocios)}<BadgeLFL yoy={lflSocios} />
+              </span>}
+              sub={canalTotal ? 'Sócios da loja (não é a soma dos canais)' : 'Soma dos canais — reimporte o arquivo'} />
           </div>
 
           {/* Tabs */}
@@ -707,7 +738,7 @@ export default function PainelVendas({ profile }) {
                 {filtros}
               </div>
               <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
-                Todos os itens com receita abaixo do período anterior (YoY negativo), do pior para o melhor.
+                Todos os itens com receita abaixo do período anterior (LFL negativo), do pior para o melhor.
               </p>
               <TabelaVendas linhas={atencaoFiltrada} />
             </>
