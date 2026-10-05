@@ -681,16 +681,19 @@ export default function Tarefas({ userId, profile, setPage }) {
                 background:PRIORITY_COLOR[t.priority]+'22', color:PRIORITY_COLOR[t.priority] }}>
                 {PRIORITY_LABEL[t.priority]}
               </span>
-              {/* "Comecei" só aparece em tarefa que ainda não começou e que
-                  é de quem está olhando: marcar que OUTRA pessoa começou não
-                  faz sentido, e o selo seria só mais um botão na tela. */}
-              {!asRecurring && t.status === 'pendente' && t.assigned_to === userId && (
+              {/* Marcar o início vale para quem RECEBEU e para quem DELEGOU:
+                  é comum a pessoa avisar que começou pelo WhatsApp ou no
+                  corredor, sem abrir o app, e quem acompanha precisa poder
+                  registrar isso. Fora essas duas, ninguém marca a tarefa de
+                  outro — e o selo "Em andamento" continua aparecendo para
+                  todo mundo que enxerga a tarefa. */}
+              {!asRecurring && t.status === 'pendente' && (t.assigned_to === userId || t.created_by === userId) && (
                 <button onClick={() => updateStatus(t, 'em_andamento')}
-                  title="Avisar que você já começou esta tarefa"
+                  title={t.assigned_to === userId ? 'Avisar que você já começou esta tarefa' : 'Marcar que esta pessoa já começou'}
                   style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:6, cursor:'pointer',
                     background:'transparent', border:'1px solid #6366f155', color:'#6366f1',
                     display:'inline-flex', alignItems:'center', gap:3 }}>
-                  <Clock size={9}/> Comecei
+                  <Clock size={9}/> {t.assigned_to === userId ? 'Comecei' : 'Já começou'}
                 </button>
               )}
               {!asRecurring && (
