@@ -21,6 +21,38 @@
   --danger:        #C4324A;
   --success:       #2F7D4F;
 
+  /* ── Cores de ÁREA (identidade, nunca estado) ──────────────────
+     Usadas para dizer QUAL área, nos gráficos empilhados de Resultados.
+     Nunca para dizer se algo está bom ou ruim — isso é das três cores
+     acima, e elas não entram no interior de um gráfico de área.
+
+     Escolhidas por medição, não a olho: todos os 15 pares têm separação
+     ≥15 em visão normal e ≥9,3 sob protanopia, deuteranopia e tritanopia
+     (ΔE OKLab ×100), e todas contrastam ≥3:1 com a superfície do cartão.
+     São SEIS porque seis é o limite real nesta superfície clara — da
+     sétima área em diante o gráfico repete a cor e acrescenta hachura.
+     Ao trocar qualquer uma, refazer a medição dos pares; hexadecimal
+     parecido não quer dizer parecido para o olho. */
+  --area-1:        #2F6FD0;
+  --area-2:        #919303;
+  --area-3:        #5339A8;
+  --area-4:        #AF4D7E;
+  --area-5:        #823B15;
+  --area-6:        #915B0A;
+  /* Tinta do número ESCRITO DENTRO do pedaço. Não é "branco porque fica
+     bonito": é a opção com mais contraste sobre cada cor, medida uma a uma.
+     Branco sobre o tom 2 dá 3,29:1 e o número some; em tinta escura dá
+     5,57:1. Todas as seis ficam acima de 4,5:1. */
+  --area-1-ink:    #FFFFFF;
+  --area-2-ink:    #1A1026;
+  --area-3-ink:    #FFFFFF;
+  --area-4-ink:    #FFFFFF;
+  --area-5-ink:    #FFFFFF;
+  --area-6-ink:    #FFFFFF;
+  /* Risco da hachura (área 7 em diante): mesma lógica da tinta — tem que
+     aparecer em cima da cor, não da superfície. */
+  --area-hachura:  rgba(255,255,255,.55);
+
   /* Backgrounds */
   --bg:            #F0EDF5;
   --bg-dark:       #2E1A47;
@@ -68,6 +100,27 @@
   --bg-dark:       #100918;
   --surface:       #2A1A3D;   /* L* 13,0 — degrau 8,3 sobre o fundo */
   --surface-2:     #352348;   /* L* 17,6 — degrau 4,6 sobre o cartão */
+
+  /* Cores de área no escuro: tons próprios, não as do claro clareadas.
+     A superfície escura daqui é roxa, e cor de meio-tom some nela — as
+     do tema claro ficavam abaixo de 3:1 de contraste. Medidas igual:
+     15 pares, ≥15 em visão normal e ≥8,4 sob daltonismo. */
+  --area-1:        #8FB6F2;
+  --area-2:        #17A192;
+  --area-3:        #D0E552;
+  --area-4:        #DB640E;
+  --area-5:        #74ECFC;
+  --area-6:        #EB6488;
+  /* No escuro as seis cores são claras — todas pedem tinta escura. Branco
+     sobre o tom 5 dá 1,39:1, ou seja, o número simplesmente não existe. */
+  --area-1-ink:    #1A1026;
+  --area-2-ink:    #1A1026;
+  --area-3-ink:    #1A1026;
+  --area-4-ink:    #1A1026;
+  --area-5-ink:    #1A1026;
+  --area-6-ink:    #1A1026;
+  --area-hachura:  rgba(26,16,38,.5);
+
   --border:        #46305F;
   --border-strong: #5A3F78;
   --text:          #F0EDF5;

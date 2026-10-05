@@ -81,6 +81,50 @@ function serie(m, k, setor) {
   }).sort((a, b) => a[0].localeCompare(b[0]));
 }
 
+// ── Total E cada área, no mesmo gráfico ──────────────────────
+//
+// Antes só dava para ver um de cada vez: o seletor trocava a tela inteira
+// entre "Total" e uma área. A pergunta que se faz na reunião é das duas ao
+// mesmo tempo — "deu quanto no total, e veio de onde?".
+//
+// Empilhado responde às duas: a ALTURA da barra é o total, cada pedaço é
+// uma área. Vale para quantidade e R$, que somam. NÃO vale para percentual:
+// 5% numa área e 5% noutra não dão 10%, dão 5% — por isso percentual
+// continua no gráfico simples.
+function serieEmpilhada(m, k) {
+  const sets = setoresDe(m).filter(s => s.medidas?.[k]);
+  if (!sets.length) return null;
+  const ls = (m.lancamentos || []).filter(l => l.valores?.[k] != null);
+  const datas = [...new Set(ls.filter(l => l.setor).map(l => String(l.data).slice(0, 10)))].sort();
+  if (!datas.length) return null;
+
+  const valor = (st, d) => {
+    const l = ls.find(x => (x.setor || '') === st && String(x.data).slice(0, 10) === d);
+    return l ? Number(l.valores[k]) : 0;
+  };
+  // Área que nunca teve número não ocupa espaço na legenda.
+  const areas = sets.map(s => s.nome).filter(nome => datas.some(d => valor(nome, d) !== 0));
+  const porData = datas.map(d => {
+    const partes = areas.map(nome => ({ nome, v: valor(nome, d) }));
+    const soma = partes.reduce((s, p) => s + p.v, 0);
+    // Lançamento de total feito à mão (meta antiga, antes de ter áreas):
+    // nesse caso a pilha NÃO representa o total, e é mais honesto desenhar
+    // a barra inteira do que mostrar pedaços que não fecham a conta.
+    const explicito = ls.find(x => !x.setor && String(x.data).slice(0, 10) === d);
+    const total = explicito ? Number(explicito.valores[k]) : soma;
+    return { data: d, partes, soma, total, confere: Math.abs(total - soma) < 1e-6 };
+  });
+  return { areas, porData };
+}
+
+// Cor da área: identidade, nunca estado. São seis; da sétima em diante a
+// cor repete COM hachura, para a barra não ter dois pedaços iguais.
+const corArea = (i) => `var(--area-${(i % 6) + 1})`;
+// Tinta do número escrito dentro do pedaço — medida por cor, não escolhida
+// a olho: branco em cima de amarelo claro desaparece.
+const tintaArea = (i) => `var(--area-${(i % 6) + 1}-ink)`;
+const hachurada = (i) => i >= 6;
+
 // "500 / 800" numa meta de REDUZIR parecia que faltava chegar a 800,
 // quando 500 já é melhor que a meta. O sinal resolve a leitura.
 const alvoTexto = (direcao, T, meta) => `${direcao === 'reduzir' ? 'até' : 'mín.'} ${T.fmt(meta)}`;
@@ -417,6 +461,107 @@ function Barras({ m, a, mini }) {
   );
 }
 
+// Barras empilhadas: altura = total, cada pedaço = uma área.
+//
+// A COR AQUI DIZ "QUAL ÁREA", NUNCA "BATEU A META". Os dois significados
+// não cabem no mesmo lugar: medindo, o azul de área e o verde de sucesso
+// ficam a ΔE 1,4 sob protanopia — quem não distingue as cores leria um
+// pedaço de área como "está bom". Por isso o estado mora fora do desenho:
+// no ✓ acima da barra, na linha tracejada da meta e no selo escrito.
+function BarrasAreas({ m, a, mini }) {
+  const { caixa, em, fora } = useDica();
+  const emp = serieEmpilhada(m, a.k);
+  const pontos = emp.porData.slice(-12);
+  const W = 640, H = mini ? 120 : 240, P = mini ? { l: 44, r: 10, t: 16, b: 20 } : { l: 58, r: 18, t: 30, b: 34 };
+  const y1 = Math.max(...pontos.map(p => p.total), a.cfg.meta, 0) * 1.15 || 1, y0 = 0;
+  const sy = v => P.t + (1 - (v - y0) / (y1 - y0)) * (H - P.t - P.b);
+  const faixa = (W - P.l - P.r) / pontos.length;
+  const bw = Math.min(28, faixa - 2);
+  const rot = d => (m.frequencia === 'mensal' ? new Date(d + 'T12:00:00Z').toLocaleDateString('pt-BR', { month: 'short', timeZone: 'UTC' }) : br(d).slice(0, 5));
+  const bateu = v => (m.direcao === 'reduzir' ? v <= a.cfg.meta : v >= a.cfg.meta);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {caixa}
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" style={{ maxHeight: mini ? 140 : 280, display: 'block' }} onMouseLeave={fora}>
+        <defs>
+          {/* Hachura da sétima área em diante: a cor repete, o risco separa. */}
+          <pattern id="hachuraArea" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="6" height="6" fill="rgba(255,255,255,.001)"/>
+            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--area-hachura)" strokeWidth="2.5"/>
+          </pattern>
+        </defs>
+
+        {marcasY(y0, y1, mini ? 1 : 2).map(v => (
+          <g key={v}>
+            <line x1={P.l} x2={W - P.r} y1={sy(v)} y2={sy(v)} stroke="var(--border)" strokeWidth="1"/>
+            <text x={P.l - 6} y={sy(v) + 4} fontSize={mini ? 9 : 10.5} fill="var(--text-muted)" textAnchor="end">{a.T.fmt(v)}</text>
+          </g>))}
+
+        <line x1={P.l} x2={W - P.r} y1={sy(a.cfg.meta)} y2={sy(a.cfg.meta)} stroke="var(--text-muted)" strokeWidth="1" strokeDasharray="5 4" opacity=".85"/>
+        {!mini && <text x={P.l + 2} y={sy(a.cfg.meta) - 5} fontSize="10.5" fill="var(--text-muted)">meta {a.T.fmt(a.cfg.meta)}</text>}
+
+        {pontos.map((p, i) => {
+          const x = P.l + i * faixa + (faixa - bw) / 2;
+          let acum = 0;
+          return (
+            <g key={p.data}>
+              {p.confere ? p.partes.filter(parte => parte.v > 0).map(parte => {
+                const idx = emp.areas.indexOf(parte.nome);
+                const yTopo = sy(acum + parte.v), yBase = sy(acum);
+                acum += parte.v;
+                // 2px de respiro entre pedaços: encostados, dois tons viram
+                // um bloco só e a divisão some.
+                const h = Math.max(1, yBase - yTopo - 2);
+                const pct = p.total ? Math.round(parte.v / p.total * 100) : 0;
+                return (
+                  <g key={parte.nome}
+                    onMouseMove={e => em(e, { titulo: `${parte.nome} · ${br(p.data)}`, valor: a.T.fmt(parte.v),
+                                              extra: `${pct}% do total de ${a.T.fmt(p.total)}` })}>
+                    <rect x={x} y={yTopo} width={bw} height={h} rx="2" fill={corArea(idx)}/>
+                    {hachurada(idx) && <rect x={x} y={yTopo} width={bw} height={h} rx="2" fill="url(#hachuraArea)"/>}
+                    {/* Número dentro do pedaço quando cabe: identidade que
+                        não depende de distinguir a cor. */}
+                    {!mini && h >= 15 && (
+                      <text x={x + bw / 2} y={yTopo + h / 2 + 4} fontSize="10.5" fontWeight="700"
+                        textAnchor="middle" fill={tintaArea(idx)} style={{ pointerEvents: 'none' }}>{a.T.fmt(parte.v)}</text>
+                    )}
+                  </g>
+                );
+              }) : (
+                // A conta não fecha: total lançado à mão numa meta que ganhou
+                // áreas depois. Barra inteira, sem fingir composição.
+                <rect x={x} y={sy(p.total)} width={bw} height={Math.max(1, sy(0) - sy(p.total))} rx="3"
+                  fill="var(--text-muted)" opacity=".55"
+                  onMouseMove={e => em(e, { titulo: br(p.data), valor: a.T.fmt(p.total), extra: 'total lançado à mão — sem divisão por área' })}/>
+              )}
+
+              {/* Total em cima da pilha, que é o número que a reunião pergunta */}
+              <text x={x + bw / 2} y={sy(p.total) - (mini ? 5 : 8)} fontSize={mini ? 10 : 13}
+                fontWeight="800" textAnchor="middle" fill="var(--text)">{a.T.fmt(p.total)}</text>
+              {/* ✓ em tinta de texto, não em verde: dentro deste gráfico a
+                  cor já está ocupada dizendo qual área é cada pedaço. */}
+              {!mini && bateu(p.total) && <text x={x + bw / 2} y={sy(p.total) - 23} fontSize="11" textAnchor="middle" fill="var(--text-muted)">✓ na meta</text>}
+              <text x={x + bw / 2} y={H - 6} fontSize="10.5" textAnchor="middle" fill="var(--text-muted)">{rot(p.data)}</text>
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Legenda: identidade escrita, para não depender da cor */}
+      <div style={{ display: 'flex', gap: mini ? 7 : 12, flexWrap: 'wrap', marginTop: 6, justifyContent: 'center' }}>
+        {emp.areas.map((nome, i) => (
+          <span key={nome} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: mini ? 10.5 : 12, color: 'var(--text-muted)' }}>
+            <span style={{ width: 10, height: 10, borderRadius: 3, background: corArea(i), flexShrink: 0,
+                           backgroundImage: hachurada(i) ? 'repeating-linear-gradient(45deg, var(--area-hachura) 0 2px, transparent 2px 5px)' : 'none' }}/>
+            {nome}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SemDados({ mini }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
@@ -434,6 +579,14 @@ function Grafico({ m, a, mini }) {
   // mesma meia-verdade do "% do caminho". Metas antigas salvas com ela
   // caem no automático.
   const t = (m.grafico === 'auto' || m.grafico === 'progresso') ? graficoAutomatico(m, a) : m.grafico;
+
+  // No TOTAL de uma meta com áreas, a barra se abre por área: a altura
+  // continua sendo o total e cada pedaço mostra de onde ele veio. Só em
+  // barras — empilhar linha não quer dizer nada — e nunca em percentual,
+  // que não soma entre áreas.
+  if (t !== 'linha' && !a.setor && a.k !== 'percentual' && serieEmpilhada(m, a.k)) {
+    return <BarrasAreas m={m} a={a} mini={mini}/>;
+  }
   if (t === 'linha') return <Linha m={m} a={a} mini={mini}/>;
   return <Barras m={m} a={a} mini={mini}/>;
 }
