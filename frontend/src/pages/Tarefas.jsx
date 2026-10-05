@@ -629,7 +629,13 @@ export default function Tarefas({ userId, profile, setPage }) {
 
   // ── Card de tarefa ────────────────────────────────────
   const renderTask = (t, hideDate = false, asRecurring = false) => {
-    const overdue   = isOverdue(t.due_date, t.due_time, t.status);
+    // Rotina que se repete HOJE não é tarefa vencida, por mais que a data
+    // guardada seja antiga. A linha no banco só anda quando alguém conclui,
+    // então uma diária aberta fica parada em 03/10 — mas o que a pessoa
+    // precisa fazer é a de HOJE. Mostrar "vencida 03/10" nela, dentro da
+    // aba Hoje, é o app se contradizendo na mesma tela.
+    const rotinaDeHoje = t.status !== 'concluida' && t.due_date !== todayYMDList && caiNoDia(t, todayYMDList);
+    const overdue   = !rotinaDeHoje && isOverdue(t.due_date, t.due_time, t.status);
     const concluida = t.status === 'concluida';
     const borderColor = asRecurring ? '#6366f1' : PRIORITY_COLOR[t.priority] || 'var(--border)';
     const recorre   = t.recorrencia && t.recorrencia !== 'nenhuma';
@@ -743,8 +749,9 @@ export default function Tarefas({ userId, profile, setPage }) {
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
               <div style={{ display:'flex', gap:12, flexWrap:'wrap', fontSize:12, color:'var(--text-muted)', alignItems:'center' }}>
                 {t.due_date && (
-                  <span style={{ color: overdue && !asRecurring ? '#ef4444' : 'var(--text-muted)', fontWeight: overdue && !asRecurring ? 700 : 400 }}>
-                    📅 {formatDate(t.due_date)}{t.due_time ? ` às ${t.due_time}` : ''}{overdue && !asRecurring ? ' · vencida' : ''}
+                  <span title={rotinaDeHoje ? `Rotina que se repete. A última em aberto é de ${formatDate(t.due_date)}.` : undefined}
+                    style={{ color: overdue && !asRecurring ? '#ef4444' : 'var(--text-muted)', fontWeight: overdue && !asRecurring ? 700 : 400 }}>
+                    📅 {rotinaDeHoje ? 'Hoje' : formatDate(t.due_date)}{t.due_time ? ` às ${t.due_time}` : ''}{overdue && !asRecurring ? ' · vencida' : ''}
                   </span>
                 )}
                 {!t.due_date && t.due_time && <span>🕐 {t.due_time}</span>}
