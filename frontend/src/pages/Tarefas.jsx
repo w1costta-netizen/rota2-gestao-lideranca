@@ -688,12 +688,24 @@ export default function Tarefas({ userId, profile, setPage }) {
                   outro — e o selo "Em andamento" continua aparecendo para
                   todo mundo que enxerga a tarefa. */}
               {!asRecurring && t.status === 'pendente' && (t.assigned_to === userId || t.created_by === userId) && (
+                /* TEM QUE PARECER BOTÃO. Na primeira versão era uma pílula
+                   de contorno fino, do mesmo tamanho dos selos "Normal" e
+                   "Pendente" ao lado — e o usuário não achou, porque lia
+                   como etiqueta. Agora é sólido, um pouco maior e com
+                   sombra: a diferença entre o que se aperta e o que só
+                   informa precisa ser visível sem ninguém explicar.
+                   O texto também mudou: "Comecei" obrigava a traduzir na
+                   cabeça para o estado "Em andamento". Agora são as mesmas
+                   palavras do selo que vai aparecer depois. */
                 <button onClick={() => updateStatus(t, 'em_andamento')}
-                  title={t.assigned_to === userId ? 'Avisar que você já começou esta tarefa' : 'Marcar que esta pessoa já começou'}
-                  style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:6, cursor:'pointer',
-                    background:'transparent', border:'1px solid #6366f155', color:'#6366f1',
-                    display:'inline-flex', alignItems:'center', gap:3 }}>
-                  <Clock size={9}/> {t.assigned_to === userId ? 'Comecei' : 'Já começou'}
+                  title={t.assigned_to === userId
+                    ? 'Marcar que você já começou esta tarefa'
+                    : 'Marcar que esta pessoa já começou'}
+                  style={{ fontSize:11, fontWeight:700, padding:'4px 11px', borderRadius:7, cursor:'pointer',
+                    background:'#6366f1', border:'none', color:'#fff',
+                    boxShadow:'0 1px 3px rgba(99,102,241,.45)',
+                    display:'inline-flex', alignItems:'center', gap:5 }}>
+                  <Clock size={11}/> Em andamento
                 </button>
               )}
               {!asRecurring && (
