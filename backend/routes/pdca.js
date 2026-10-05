@@ -109,6 +109,77 @@ function partirAcao(descricao) {
   };
 }
 
+// PÕE A TAREFA DE UMA AÇÃO EM DIA — atualiza o que existe, adota a órfã,
+// e cria se não houver nenhuma viva.
+//
+// Existia em dois lugares com regras diferentes: um para a ação editada e
+// outro, mais pobre, para as outras pessoas do grupo (ele pulava quem não
+// tivesse `tarefa_id` e nunca criava nada). Resultado real: salvar a ação
+// arrumava a tarefa de uma líder e deixava a da outra no formato antigo,
+// e uma terceira sem tarefa nenhuma. Agora é a mesma função para todos.
+async function porTarefaEmDia({ acao, plano, descricao, detalhe, repete, dias, inicio, prazo, criarTarefa, requesterId }) {
+  const contexto = {
+    plano_id: acao.plano_id,
+    plano_titulo: plano?.titulo,
+    quadrante: acao.quadrante,
+    quadrante_label: QUADRANTE_LABEL[acao.quadrante] || acao.quadrante,
+    meta: plano?.meta,
+    acao_id: acao.id,
+    repetir_ate: prazo || null,
+  };
+
+  const { data: ligadas } = await supabase.from('tarefas')
+    .select('id, due_date, status')
+    .eq('pdca_context->>acao_id', acao.id)
+    .neq('status', 'concluida');
+
+  // A referência antiga alcança a tarefa que PERDEU o vínculo — a
+  // recorrência não copiava o contexto até o conserto de 05/10. Ela é
+  // adotada de volta em vez de virar uma segunda tarefa na tela.
+  const vivas = [...(ligadas || [])];
+  if (acao.tarefa_id && !vivas.some(t => t.id === acao.tarefa_id)) {
+    const { data: solta } = await supabase.from('tarefas')
+      .select('id, due_date, status').eq('id', acao.tarefa_id).maybeSingle();
+    // Pode apontar para linha APAGADA ou para tarefa já concluída: nos dois
+    // casos não existe tarefa viva, e é por isso que a criação abaixo não
+    // pode se guiar por `tarefa_id`.
+    if (solta && solta.status !== 'concluida') vivas.push(solta);
+  }
+
+  const partida = partirAcao(descricao);
+  const base = {
+    recorrencia: RECORRENCIAS.includes(repete) ? repete : 'nenhuma',
+    dias_semana: dias,
+    title: partida.titulo,
+    description: descricaoDaTarefa(plano?.titulo, detalhe, partida.corpo),
+    pdca_context: contexto,
+  };
+  const novaData = inicio || prazo;
+
+  for (const t of vivas) {
+    const patch = { ...base };
+    // A data só muda na tarefa que a ação referencia. Empurrar todas as
+    // ocorrências em aberto para a mesma data juntaria tudo no mesmo dia.
+    if (t.id === acao.tarefa_id && novaData && t.due_date !== novaData) patch.due_date = novaData;
+    await supabase.from('tarefas').update(patch).eq('id', t.id);
+  }
+
+  if (vivas.length || !criarTarefa || !acao.responsavel_id || !prazo) return null;
+
+  const { data: nova } = await supabase.from('tarefas').insert({
+    company: plano?.company,
+    ...base,
+    assigned_to: acao.responsavel_id,
+    due_date: novaData,
+    priority: 'normal',
+    tags: ['plano_acao'],
+    created_by: requesterId,
+    status: 'pendente',
+  }).select('id').single();
+  if (nova) await supabase.from('acoes_pdca').update({ tarefa_id: nova.id }).eq('id', acao.id);
+  return nova?.id || null;
+}
+
 function descricaoDaTarefa(tituloPlano, detalhe, corpo) {
   const partes = [`Ação do Plano: ${tituloPlano}`];
   if (detalhe?.trim()) partes.push(`Sua parte: ${detalhe.trim()}`);
@@ -455,107 +526,20 @@ router.put('/acoes/:id', async (req, res) => {
     ? limparDatas(datas_medicao !== undefined ? datas_medicao : acaoAtual.datas_medicao)
     : [];
 
-  // Editou a ação: TODAS as tarefas em aberto dela acompanham.
-  //
-  // Antes isto atualizava só `acoes_pdca.tarefa_id`, ou seja, a PRIMEIRA
-  // tarefa. Só que a recorrência cria a próxima ocorrência como linha nova,
-  // e essa linha não fica ligada à ação. Resultado real: ao trocar o texto
-  // e a repetição, a pessoa ficava com DUAS tarefas na tela — a atualizada
-  // e um resto da versão anterior, ainda com o texto antigo e "Diária".
-  //
-  // Concluída não se mexe: é registro do que aconteceu.
-  if (!datasFinais.length && (inicio !== undefined || prazo !== undefined || recorrencia !== undefined || descricao !== undefined || detalhe !== undefined)) {
-    const { data: abertas } = await supabase.from('tarefas')
-      .select('id, due_date, pdca_context')
-      .eq('pdca_context->>acao_id', req.params.id)
-      .neq('status', 'concluida');
-
-    // Tarefa antiga pode ter perdido o pdca_context (a recorrência não o
-    // copiava até o conserto de hoje). A referência da ação entra como rede
-    // de segurança para alcançar essa.
-    const ids = new Set((abertas || []).map(t => t.id));
-    if (acaoAtual.tarefa_id) ids.add(acaoAtual.tarefa_id);
-
-    if (ids.size) {
-      const partida = partirAcao(descricao !== undefined ? descricao : acaoAtual.descricao);
-      const base = {
-        recorrencia: RECORRENCIAS.includes(finalRepete) ? finalRepete : 'nenhuma',
-        dias_semana: finalDias,
-        title: partida.titulo,
-        description: descricaoDaTarefa(plano?.titulo, detalhe !== undefined ? detalhe : acaoAtual.detalhe, partida.corpo),
-      };
-      const novaData = finalInicio || finalPrazo;
-
-      // O contexto é REMONTADO a partir da ação, não herdado da tarefa.
-      // Assim a tarefa alcançada pela referência antiga — que pode ter
-      // perdido o vínculo, porque a recorrência não o copiava — volta a
-      // pertencer à ação em vez de continuar órfã. Sem isso, a criação
-      // logo abaixo não a enxergaria e abriria uma SEGUNDA tarefa.
-      const contexto = {
-        plano_id: acaoAtual.plano_id,
-        plano_titulo: plano?.titulo,
-        quadrante: acaoAtual.quadrante,
-        quadrante_label: QUADRANTE_LABEL[acaoAtual.quadrante] || acaoAtual.quadrante,
-        meta: plano?.meta,
-        acao_id: req.params.id,
-        repetir_ate: finalPrazo || null,
-      };
-
-      for (const id of ids) {
-        const atual = (abertas || []).find(t => t.id === id);
-        const patch = { ...base, pdca_context: contexto };
-        // A data só muda na tarefa que a ação referencia. Empurrar todas as
-        // ocorrências em aberto para a mesma data juntaria todas no mesmo
-        // dia — e é assim que nasce a duplicata que a tela mostra.
-        if (id === acaoAtual.tarefa_id && novaData && atual?.due_date !== novaData) patch.due_date = novaData;
-        await supabase.from('tarefas').update(patch).eq('id', id);
-      }
-    }
-  }
-
-  // CRIAR QUANDO NÃO HÁ TAREFA VIVA — e não só quando a ação nunca teve.
-  //
-  // A condição era `!acaoAtual.tarefa_id`. Mas a referência fica apontando
-  // para linha apagada (ou para tarefa já concluída), e aí salvar a ação
-  // não criava nada: a pessoa ficava SEM tarefa nenhuma e ninguém via o
-  // problema. Caso real: duas líderes de um plano sem tarefa alguma, e uma
-  // terceira sem nada no banco.
-  const { data: vivas } = await supabase.from('tarefas')
-    .select('id')
-    .eq('pdca_context->>acao_id', req.params.id)
-    .neq('status', 'concluida')
-    .limit(1);
-  const semTarefaViva = !vivas?.length;
-
-  if (!datasFinais.length && finalCriar && finalResponsavel && finalPrazo && semTarefaViva) {
-    const pdcaContext = {
-      plano_id: acaoAtual.plano_id,
-      plano_titulo: plano?.titulo,
-      quadrante: acaoAtual.quadrante,
-      quadrante_label: QUADRANTE_LABEL[acaoAtual.quadrante] || acaoAtual.quadrante,
-      meta: plano?.meta,
-      acao_id: req.params.id,
-    };
-
-    const { data: tarefa } = await supabase.from('tarefas').insert({
-      company: plano?.company,
-      title: partirAcao(data.descricao).titulo,
-      description: descricaoDaTarefa(plano?.titulo, detalhe !== undefined ? detalhe : acaoAtual.detalhe, partirAcao(data.descricao).corpo),
-      assigned_to: finalResponsavel,
-      due_date: finalInicio || finalPrazo,
-      priority: 'normal',
-      recorrencia: RECORRENCIAS.includes(finalRepete) ? finalRepete : 'nenhuma',
-      dias_semana: finalDias,
-      tags: ['plano_acao'],
-      created_by: requester_id,
-      pdca_context: { ...pdcaContext, repetir_ate: finalPrazo },
-      status: 'pendente',
-    }).select('id').single();
-
-    if (tarefa) {
-      await supabase.from('acoes_pdca').update({ tarefa_id: tarefa.id }).eq('id', req.params.id);
-      data.tarefa_id = tarefa.id;
-    }
+  // A tarefa da ação acompanha a edição: atualiza o que existe, adota a
+  // órfã e cria se não houver nenhuma viva. Mesma função usada para as
+  // outras pessoas do grupo, mais abaixo.
+  if (!datasFinais.length && (inicio !== undefined || prazo !== undefined || recorrencia !== undefined || descricao !== undefined || detalhe !== undefined || criar_tarefa !== undefined)) {
+    const novaId = await porTarefaEmDia({
+      acao: { ...acaoAtual, id: req.params.id, responsavel_id: finalResponsavel },
+      plano,
+      descricao: descricao !== undefined ? descricao : acaoAtual.descricao,
+      detalhe: detalhe !== undefined ? detalhe : acaoAtual.detalhe,
+      repete: finalRepete, dias: finalDias,
+      inicio: finalInicio, prazo: finalPrazo,
+      criarTarefa: finalCriar, requesterId: requester_id,
+    });
+    if (novaId) data.tarefa_id = novaId;
   }
 
   // Refaz as tarefas de medição que ainda estão pendentes; as concluídas
@@ -617,35 +601,28 @@ router.put('/acoes/:id', async (req, res) => {
     }
     if (Object.keys(doGrupo).length) {
       const { data: irmas } = await supabase.from('acoes_pdca')
-        .select('id, tarefa_id, detalhe')
+        .select('id, tarefa_id, detalhe, responsavel_id')
         .eq('grupo_id', acaoAtual.grupo_id).neq('id', req.params.id);
 
       await supabase.from('acoes_pdca').update(doGrupo).eq('grupo_id', acaoAtual.grupo_id).neq('id', req.params.id);
 
-      // As tarefas das outras pessoas acompanham a mesma mudança.
+      // As outras pessoas do grupo passam pela MESMA função. Antes havia
+      // aqui uma versão mais pobre: pulava quem não tivesse `tarefa_id` e
+      // nunca criava nada — então salvar a ação arrumava a tarefa de uma
+      // líder, deixava a da outra no formato antigo e uma terceira sem
+      // tarefa nenhuma.
       for (const irma of (irmas || [])) {
-        if (!irma.tarefa_id) continue;
-        const { data: t } = await supabase.from('tarefas')
-          .select('due_date, pdca_context').eq('id', irma.tarefa_id).maybeSingle();
-        const patch = {};
-        // O título é o texto comum; a descrição mantém a parte de cada um
-        // (por isso lê o `detalhe` da irmã, não o de quem foi editado).
-        if (doGrupo.descricao !== undefined) {
-          patch.title = partirAcao(doGrupo.descricao).titulo;
-          patch.description = descricaoDaTarefa(plano?.titulo, irma.detalhe, partirAcao(doGrupo.descricao).corpo);
-        }
-        if (doGrupo.recorrencia !== undefined) {
-          patch.recorrencia = doGrupo.recorrencia;
-          // Os dias escolhidos fazem parte da repetição: propagar uma sem a
-          // outra deixaria a tarefa das irmãs repetindo em dia errado.
-          patch.dias_semana = finalDias;
-        }
-        if (doGrupo.prazo !== undefined || doGrupo.inicio !== undefined) {
-          patch.pdca_context = { ...(t?.pdca_context || {}), repetir_ate: finalPrazo || null };
-          const novaData = finalInicio || finalPrazo;
-          if (novaData && t?.due_date !== novaData) patch.due_date = novaData;
-        }
-        if (Object.keys(patch).length) await supabase.from('tarefas').update(patch).eq('id', irma.tarefa_id);
+        await porTarefaEmDia({
+          acao: { ...irma, plano_id: acaoAtual.plano_id, quadrante: acaoAtual.quadrante },
+          plano,
+          descricao: doGrupo.descricao !== undefined ? doGrupo.descricao : acaoAtual.descricao,
+          // O texto comum vem de quem foi editado; a parte de cada um
+          // continua sendo a da própria pessoa.
+          detalhe: irma.detalhe,
+          repete: finalRepete, dias: finalDias,
+          inicio: finalInicio, prazo: finalPrazo,
+          criarTarefa: finalCriar, requesterId: requester_id,
+        });
       }
     }
   }
