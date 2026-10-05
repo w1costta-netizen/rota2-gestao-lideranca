@@ -433,19 +433,26 @@ export default function Tarefas({ userId, profile, setPage }) {
   const loadingRef = useRef(false);
   const company = profile?.company || '';
 
-  const load = useCallback(() => {
+  // `silencioso` existe para a RECARGA DE FUNDO. Concluir uma tarefa que se
+  // repete precisa rebuscar a lista (o servidor acabou de criar a próxima
+  // ocorrência), e isso jogava a tela inteira para "Carregando..." e de
+  // volta — parecia que o app tinha recarregado só porque a pessoa marcou
+  // um item. A lista já foi atualizada na hora; a rebusca é só para trazer
+  // o que nasceu no servidor, e ninguém precisa ver isso acontecendo.
+  const load = useCallback((silencioso = false) => {
     if (!userId) return;
     if (loadingRef.current) return;
     loadingRef.current = true;
-    setLoading(true);
+    if (!silencioso) setLoading(true);
     const q = company ? `&company=${encodeURIComponent(company)}` : '';
     api.get(`/tarefas?requester_id=${userId}${q}`)
       .then(r => setList(Array.isArray(r.data) ? r.data : []))
-      .catch(() => toast('Erro ao carregar tarefas', 'error'))
-      .finally(() => { setLoading(false); loadingRef.current = false; });
+      .catch(() => { if (!silencioso) toast('Erro ao carregar tarefas', 'error'); })
+      .finally(() => { if (!silencioso) setLoading(false); loadingRef.current = false; });
   }, [userId, company]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load]);   // a primeira carga mostra o "Carregando"
+
 
   useEffect(() => {
     if (isAdmin && userId) {
@@ -517,10 +524,12 @@ export default function Tarefas({ userId, profile, setPage }) {
   const updateStatus = async (t, status) => {
     const updated = await api.put(`/tarefas/${t.id}`, { requester_id: userId, status }).catch(() => null);
     if (updated) {
-      if (status === 'concluida' && t.recorrencia && t.recorrencia !== 'nenhuma') {
-        setTimeout(() => load(), 800);
-      }
+      // A linha já muda aqui, na hora. A rebusca vem depois e em silêncio,
+      // só para a próxima ocorrência aparecer sozinha.
       setList(l => l.map(x => x.id === t.id ? updated.data : x));
+      if (status === 'concluida' && t.recorrencia && t.recorrencia !== 'nenhuma') {
+        setTimeout(() => load(true), 800);
+      }
     }
   };
 
@@ -780,7 +789,10 @@ export default function Tarefas({ userId, profile, setPage }) {
                 <Avatar name={t.assigned?.full_name} avatarUrl={t.assigned?.avatar_url} size={28}/>
               </div>
             </div>
-            {!asRecurring && <BlocoPrazo t={t} userId={userId} onMudou={load}/>}
+            {/* Também em silêncio: aceitar ou recusar um novo prazo é uma
+                ação dentro do cartão, e piscar a tela inteira depois dela
+                dá a mesma impressão de que o app recarregou sozinho. */}
+            {!asRecurring && <BlocoPrazo t={t} userId={userId} onMudou={() => load(true)}/>}
             <CommentSection taskId={t.id} userId={userId}
               total={t.comentarios} novos={t.comentarios_novos}
               aoVer={() => setList(l => l.map(x => x.id === t.id ? { ...x, comentarios_novos: 0 } : x))}/>
