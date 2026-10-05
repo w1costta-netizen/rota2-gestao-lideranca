@@ -321,6 +321,63 @@ function PermissionsSection({ values, onChange }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// MIGRAÇÃO ÚNICA DOS ARQUIVOS DE EVIDÊNCIA — só o master vê.
+//
+// Mover arquivo de cliente exige a chave secreta, que só existe no
+// servidor; por isso a migração é uma rota, e isto é só o gatilho. Ela
+// roda em dois tempos de propósito: primeiro SIMULA e mostra quantos
+// arquivos sairiam do lugar, e só depois executa. Nada de mexer no
+// arquivo de alguém sem deixar olhar antes.
+//
+// Pode ser removido deste arquivo depois que a migração rodar — a rota
+// é idempotente, então rodar de novo não faz nada.
+// ─────────────────────────────────────────────────────────────
+function ManutencaoEvidencias({ userId }) {
+  const [resultado, setResultado] = useState(null);
+  const [rodando, setRodando]     = useState(false);
+
+  // O resultado aparece inteiro na tela, abaixo dos botões: numa operação
+  // que mexe em arquivo de cliente, o aviso que some em 3 segundos não
+  // serve — tem que dar para ler, conferir e, se precisar, copiar.
+  const chamar = async (confirmar) => {
+    setRodando(true);
+    try {
+      const r = await api.post('/admin/migrar-evidencias', { requester_id: userId, confirmar });
+      setResultado(r.data);
+    } catch (e) {
+      setResultado({ erro: e?.response?.data?.error || e.message || 'Não foi possível rodar.' });
+    } finally {
+      setRodando(false);
+    }
+  };
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <h3 style={{ fontWeight: 700, fontSize: 14, margin: '0 0 4px' }}>Manutenção — arquivos de evidência</h3>
+      <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.55, margin: '0 0 10px' }}>
+        Move as fotos e PDFs de relatórios e campanhas para a pasta de cada empresa.
+        Rode a simulação primeiro: ela não muda nada, só mostra o que seria feito.
+      </p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="btn btn-sm" disabled={rodando} onClick={() => chamar(false)}>
+          {rodando ? 'Conferindo…' : 'Simular'}
+        </button>
+        <button className="btn btn-sm btn-primary" disabled={rodando || !resultado?.simulacao || !resultado?.total}
+          onClick={() => chamar(true)}>
+          Mover de verdade
+        </button>
+      </div>
+      {resultado && (
+        <pre style={{ marginTop: 10, fontSize: 11.5, background: 'var(--surface-2)', padding: 10,
+                      borderRadius: 8, overflowX: 'auto', whiteSpace: 'pre-wrap' }}>
+          {JSON.stringify(resultado, null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+}
+
 export default function UsersAdmin({ userId, profile }) {
   const [users,    setUsers]    = useState([]);
   const [roles,    setRoles]    = useState([]);
@@ -618,6 +675,8 @@ export default function UsersAdmin({ userId, profile }) {
           </div>
         )}
       </div>
+
+      {isMaster && <ManutencaoEvidencias userId={userId} />}
 
       {/* Modal — Novo Usuário */}
       {showNew && (

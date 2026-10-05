@@ -4,6 +4,11 @@ const multer    = require('multer');
 const Anthropic = require('@anthropic-ai/sdk');
 const supabase  = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
+const { assinar } = require('../lib/arquivos');
+
+// Campos que guardam CAMINHO de arquivo. Saem daqui como link temporário,
+// nunca como endereço fixo — ver backend/lib/arquivos.js.
+const ARQUIVOS = ['flyer_pdf_url', 'foto_url'];
 
 const upload  = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -34,7 +39,7 @@ router.get('/', async (req, res) => {
     .order('created_at', { ascending: false });
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  res.json(await assinar(data, ARQUIVOS));
 });
 
 // POST /api/campanhas
@@ -56,7 +61,7 @@ router.post('/', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company, user_id: requester_id, acao: 'criar_campanha', tabela: 'campanhas', depois: { id: data.id, titulo: data.titulo, tipo: data.tipo } });
-  res.json(data);
+  res.json(await assinar(data, ARQUIVOS));
 });
 
 // PUT /api/campanhas/:id
@@ -79,7 +84,7 @@ router.put('/:id', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: me.company, user_id: requester_id, acao: 'editar_campanha', tabela: 'campanhas', depois: updates });
-  res.json(data);
+  res.json(await assinar(data, ARQUIVOS));
 });
 
 // DELETE /api/campanhas/:id
@@ -110,7 +115,7 @@ router.get('/:id/itens', async (req, res) => {
     .eq('campanha_id', req.params.id)
     .order('ordem');
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  res.json(await assinar(data, ARQUIVOS));
 });
 
 // POST /api/campanhas/:id/itens
@@ -325,7 +330,7 @@ router.post('/evidencias', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: camp?.company, user_id: requester_id, acao: 'adicionar_foto_flyer', tabela: 'campanha_evidencias', depois: { campanha_titulo: camp?.titulo, foto_url } });
-  res.json(data);
+  res.json(await assinar(data, ARQUIVOS));
 });
 
 // DELETE /api/campanhas/evidencias/:evId
@@ -355,7 +360,7 @@ router.get('/:id/relatorio', async (req, res) => {
     .select('*, campanha_evidencias(id, foto_url, obs, created_at, user:user_id(full_name))')
     .eq('campanha_id', req.params.id).order('ordem');
 
-  res.json({ campanha, itens: itens || [] });
+  res.json(await assinar({ campanha, itens: itens || [] }, ARQUIVOS));
 });
 
 module.exports = router;

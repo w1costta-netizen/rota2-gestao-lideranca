@@ -385,4 +385,100 @@ router.delete('/sectors/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+
+// ─────────────────────────────────────────────────────────────
+// MIGRAÇÃO ÚNICA — arquivos de evidência para a pasta da loja
+//
+// Até 05/10/2026 o balde `evidencias` era aberto e o banco guardava o
+// endereço permanente do arquivo. Isso deixava as fotos de dentro da loja
+// de TODAS as empresas acessíveis a qualquer pessoa com a chave pública,
+// e não dava para fechar: sem a loja no caminho, não existe regra para o
+// banco conferir.
+//
+// Esta rota move cada arquivo para `<loja>/<caminho antigo>` e troca, no
+// banco, o endereço pelo CAMINHO. Roda uma vez; depois dela é que o balde
+// pode ser fechado (supabase_fechar_evidencias.sql).
+//
+// A migração é guiada pelo BANCO, não pela lista de arquivos: é a linha
+// que sabe de qual loja o arquivo é. Arquivo que nenhuma linha aponta
+// fica para trás de propósito — ninguém o exibe, e depois do fechamento
+// ele deixa de ser alcançável.
+//
+// Idempotente: valor que já é caminho (não começa com http) é pulado, e
+// arquivo já movido não é movido de novo. Pode rodar quantas vezes
+// quiser; a segunda não faz nada.
+// ─────────────────────────────────────────────────────────────
+router.post('/migrar-evidencias', async (req, res) => {
+  const { requester_id, confirmar } = req.body || {};
+  const { data: me } = await supabase.from('profiles').select('access_level').eq('id', requester_id).maybeSingle();
+  if (!me || me.access_level !== 'master') return res.status(403).json({ error: 'Só o master roda a migração.' });
+
+  const BALDE = 'evidencias';
+  const MARCA = '/evidencias/';
+  const pastaDaLoja = (c) => String(c || '').replace(/\//g, '-');
+  const caminhoDoEndereco = (v) => {
+    if (typeof v !== 'string' || !/^https?:\/\//.test(v)) return null;
+    const i = v.indexOf(MARCA);
+    if (i < 0) return null;
+    try { return decodeURIComponent(v.slice(i + MARCA.length).split('?')[0]); }
+    catch { return null; }
+  };
+
+  // Tudo que guarda arquivo: a tabela, o campo, e como descobrir a loja.
+  const ALVOS = [
+    { tabela: 'relatorios_fotograficos', campo: 'pdf_url',       select: 'id, company, pdf_url' },
+    { tabela: 'relatorio_fotos',         campo: 'photo_url',     select: 'id, photo_url, relatorio:relatorio_id(company)' },
+    { tabela: 'relatorio_fotos',         campo: 'evidencia_url', select: 'id, evidencia_url, relatorio:relatorio_id(company)' },
+    { tabela: 'campanhas',               campo: 'flyer_pdf_url', select: 'id, company, flyer_pdf_url' },
+    { tabela: 'campanha_evidencias',     campo: 'foto_url',      select: 'id, foto_url, campanha:campanha_id(company)' },
+  ];
+
+  const resumo = { movidos: 0, linhas: 0, pulados: 0, semLoja: 0, erros: [] };
+  const planoTodo = [];
+
+  for (const alvo of ALVOS) {
+    // Paginado: o Supabase corta em 1000 linhas sem avisar.
+    for (let de = 0; ; de += 1000) {
+      const { data, error } = await supabase.from(alvo.tabela).select(alvo.select).range(de, de + 999);
+      if (error) { resumo.erros.push(`${alvo.tabela}.${alvo.campo}: ${error.message}`); break; }
+      if (!data?.length) break;
+      for (const linha of data) {
+        const valor = linha[alvo.campo];
+        if (!valor) continue;
+        const antigo = caminhoDoEndereco(valor);
+        if (!antigo) { resumo.pulados++; continue; }       // já é caminho
+        const company = linha.company || linha.relatorio?.company || linha.campanha?.company;
+        if (!company) { resumo.semLoja++; continue; }
+        const pasta = pastaDaLoja(company);
+        if (antigo.startsWith(pasta + '/')) { resumo.pulados++; continue; }
+        planoTodo.push({ ...alvo, id: linha.id, de: antigo, para: `${pasta}/${antigo}` });
+      }
+      if (data.length < 1000) break;
+    }
+  }
+
+  // Sem `confirmar: true` só mostra o que faria. Mexer em arquivo de
+  // cliente sem deixar olhar antes não é coisa que se faça.
+  if (!confirmar) return res.json({ simulacao: true, total: planoTodo.length, resumo, exemplos: planoTodo.slice(0, 10) });
+
+  for (const item of planoTodo) {
+    const { error: errMove } = await supabase.storage.from(BALDE).move(item.de, item.para);
+    // "not found" aqui quer dizer que o arquivo já foi movido numa rodada
+    // anterior e só o banco ficou para trás — seguir e atualizar a linha.
+    const jaMovido = errMove && /not found|exists/i.test(errMove.message || '');
+    if (errMove && !jaMovido) { resumo.erros.push(`${item.de}: ${errMove.message}`); continue; }
+    if (!errMove) resumo.movidos++;
+
+    const { error: errLinha } = await supabase.from(item.tabela)
+      .update({ [item.campo]: item.para }).eq('id', item.id);
+    if (errLinha) resumo.erros.push(`${item.tabela}#${item.id}: ${errLinha.message}`);
+    else resumo.linhas++;
+  }
+
+  registrarLog('migrar_evidencias', 'storage', resumo.erros.length ? 'erro' : 'sucesso', {
+    user_id: requester_id, depois: { movidos: resumo.movidos, linhas: resumo.linhas, erros: resumo.erros.length },
+  });
+  res.json({ simulacao: false, ...resumo });
+});
+
 module.exports = router;

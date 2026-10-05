@@ -2,6 +2,11 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
+const { assinar } = require('../lib/arquivos');
+
+// Campos que guardam CAMINHO de arquivo. Saem daqui como link temporário,
+// nunca como endereço fixo — ver backend/lib/arquivos.js.
+const ARQUIVOS = ['pdf_url', 'photo_url', 'evidencia_url'];
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -23,7 +28,7 @@ router.get('/', async (req, res) => {
 
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  res.json(await assinar(data, ARQUIVOS));
 });
 
 // GET /api/relatorios/:id?requester_id=
@@ -37,11 +42,14 @@ router.get('/:id', async (req, res) => {
     .from('relatorios_fotograficos')
     .select('*, creator:created_by(full_name), fotos:relatorio_fotos(*)')
     .eq('id', req.params.id)
+    // A loja ENTRA na busca: sem isto bastava trocar o id na chamada para
+    // ler o relatório — e as fotos — de outra empresa.
+    .eq('company', me.company)
     .order('order_index', { referencedTable: 'relatorio_fotos', ascending: true })
     .single();
 
   if (error) return res.status(404).json({ error: 'Relatório não encontrado' });
-  res.json(data);
+  res.json(await assinar(data, ARQUIVOS));
 });
 
 // POST /api/relatorios
@@ -75,7 +83,8 @@ router.put('/:id', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
-  const { data: rel } = await supabase.from('relatorios_fotograficos').select('created_by').eq('id', req.params.id).single();
+  const { data: rel } = await supabase.from('relatorios_fotograficos')
+    .select('created_by').eq('id', req.params.id).eq('company', me.company).single();
   if (!rel) return res.status(404).json({ error: 'Não encontrado' });
   const isOwner = rel.created_by === requester_id;
   if (!isOwner && !['admin', 'supervisor', 'master'].includes(me.access_level))
@@ -94,7 +103,7 @@ router.put('/:id', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   registrarLog('editar_tour_4x4', 'relatorios_fotograficos', 'sucesso', { company: me.company, user_id: requester_id, depois: updates });
-  res.json(data);
+  res.json(await assinar(data, ARQUIVOS));
 });
 
 // DELETE /api/relatorios/:id
@@ -104,7 +113,8 @@ router.delete('/:id', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Acesso negado' });
 
-  const { data: rel } = await supabase.from('relatorios_fotograficos').select('created_by').eq('id', req.params.id).single();
+  const { data: rel } = await supabase.from('relatorios_fotograficos')
+    .select('created_by').eq('id', req.params.id).eq('company', me.company).single();
   if (!rel) return res.status(404).json({ error: 'Não encontrado' });
   const isOwner = rel.created_by === requester_id;
   if (!isOwner && !['admin', 'supervisor', 'master'].includes(me.access_level))
@@ -139,14 +149,18 @@ router.post('/:id/fotos', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: rel?.company, user_id: requester_id, acao: 'adicionar_foto_tour', tabela: 'relatorio_fotos', depois: { relatorio_id: req.params.id, relatorio_titulo: rel?.title, photo_url } });
-  res.json(data);
+  res.json(await assinar(data, ARQUIVOS));
 });
 
 // PUT /api/relatorios/fotos/:fotoId
 router.put('/fotos/:fotoId', async (req, res) => {
-  const { caption, annotations, order_index, evidencia_url, evidencia_comentario, evidencia_at, evidencia_by } = req.body;
+  const { caption, annotations, order_index, photo_url, evidencia_url, evidencia_comentario, evidencia_at, evidencia_by } = req.body;
   const updates = {};
   if (caption !== undefined)              updates.caption               = caption;
+  // `photo_url` não era aceito aqui: salvar uma foto ANOTADA gravava as
+  // formas e descartava a imagem, então ela voltava ao original no
+  // recarregamento. A tela mentia porque atualizava o próprio estado.
+  if (photo_url !== undefined)            updates.photo_url             = photo_url;
   if (annotations !== undefined)          updates.annotations           = annotations;
   if (order_index !== undefined)          updates.order_index           = order_index;
   if (evidencia_url !== undefined)        updates.evidencia_url         = evidencia_url;
@@ -163,7 +177,7 @@ router.put('/fotos/:fotoId', async (req, res) => {
     user_id: evidencia_by || req.body.requester_id,
     depois: { foto_id: req.params.fotoId, campos: Object.keys(updates) },
   });
-  res.json(data);
+  res.json(await assinar(data, ARQUIVOS));
 });
 
 // DELETE /api/relatorios/fotos/:fotoId

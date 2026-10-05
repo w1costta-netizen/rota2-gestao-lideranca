@@ -3,6 +3,7 @@ import { Plus, Camera, ChevronRight, Trash2, FileText, Check, X, Upload,
          Image, Edit3, ArrowLeft, Download, Share2, Mail, MessageCircle, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import api from '../api';
+import { caminhoDaLoja } from '../lib/arquivos';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import FotoEditor from '../components/FotoEditor';
@@ -295,14 +296,16 @@ function PainelCompartilhar({ rel, fotos, creatorName, userId }) {
       setPdfBlob(blob);
 
       // Upload para Supabase Storage
-      const path = `relatorios/pdfs/${rel.id}.pdf`;
+      // O arquivo mora na pasta da loja, e o que vai para o banco é o
+      // CAMINHO. O link de ver vem do servidor, que só o emite depois de
+      // conferir a empresa de quem pediu.
+      const path = caminhoDaLoja(rel.company, `relatorios/pdfs/${rel.id}.pdf`);
       const { error: upErr } = await supabase.storage.from('evidencias')
         .upload(path, blob, { contentType: 'application/pdf', upsert: true });
       if (upErr) throw upErr;
 
-      const { data: { publicUrl } } = supabase.storage.from('evidencias').getPublicUrl(path);
-      await api.put(`/relatorios/${rel.id}`, { requester_id: userId, pdf_url: publicUrl, status: 'finalizado' });
-      setPdfUrl(publicUrl);
+      const r = await api.put(`/relatorios/${rel.id}`, { requester_id: userId, pdf_url: path, status: 'finalizado' });
+      setPdfUrl(r.data?.pdf_url || null);
       toast('PDF gerado com sucesso!');
     } catch (e) {
       toast('Erro ao gerar PDF: ' + e.message, 'error');
@@ -780,7 +783,7 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
 }
 
 // ─── Modal de evidência de conclusão ─────────────────────────────────────────
-function ModalEvidencia({ foto, userId, onSave, onClose }) {
+function ModalEvidencia({ foto, company, userId, onSave, onClose }) {
   const toast = useToast();
   const fileRef = useRef();
   const ignorarBackdrop = useRef(false);
@@ -808,7 +811,7 @@ function ModalEvidencia({ foto, userId, onSave, onClose }) {
       let evidUrl = foto.evidencia_url || null;
       if (imgFile) {
         const blob = await resizeImage(imgFile);
-        const path = `relatorios/evidencias/${foto.id}_${Date.now()}.jpg`;
+        const path = caminhoDaLoja(company, `relatorios/evidencias/${foto.id}_${Date.now()}.jpg`);
         // ArrayBuffer em vez do Blob direto — evita "No content provided" em
         // navegadores in-app (WhatsApp/Instagram WebView) que não serializam
         // Blob corretamente no upload.
@@ -816,8 +819,7 @@ function ModalEvidencia({ foto, userId, onSave, onClose }) {
         const { error: upErr } = await supabase.storage.from('evidencias')
           .upload(path, arrayBuffer, { contentType:'image/jpeg', upsert:true });
         if (upErr) throw upErr;
-        const { data: { publicUrl } } = supabase.storage.from('evidencias').getPublicUrl(path);
-        evidUrl = publicUrl;
+        evidUrl = path;
       }
       await onSave({ foto, evidUrl, comentario });
     } catch (e) {
@@ -928,12 +930,11 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
       const file = files[i];
       try {
         const blob = await resizeImage(file);
-        const path = `relatorios/${rel.id}/${Date.now()}_${i}.jpg`;
+        const path = caminhoDaLoja(rel.company, `relatorios/${rel.id}/${Date.now()}_${i}.jpg`);
         const { error: upErr } = await supabase.storage.from('evidencias').upload(path, blob, { contentType:'image/jpeg' });
         if (upErr) throw upErr;
-        const { data: { publicUrl } } = supabase.storage.from('evidencias').getPublicUrl(path);
         const res = await api.post(`/relatorios/${rel.id}/fotos`, {
-          requester_id: userId, photo_url: publicUrl, order_index: fotos.length + i,
+          requester_id: userId, photo_url: path, order_index: fotos.length + i,
         });
         novos.push(res.data);
       } catch (e) {
@@ -963,13 +964,14 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
       for (let i = 0; i < binary.length; i++) arr[i] = binary.charCodeAt(i);
       const blob = new Blob([arr], { type: mime });
 
-      const path = `relatorios/${rel.id}/annotated_${foto.id}.jpg`;
+      const path = caminhoDaLoja(rel.company, `relatorios/${rel.id}/annotated_${foto.id}.jpg`);
       const { error: upErr } = await supabase.storage.from('evidencias')
         .upload(path, blob, { contentType:'image/jpeg', upsert:true });
       if (upErr) throw upErr;
-      const { data: { publicUrl } } = supabase.storage.from('evidencias').getPublicUrl(path);
-      await api.put(`/relatorios/fotos/${foto.id}`, { photo_url: publicUrl, annotations: { shapes } });
-      setFotos(f => f.map(x => x.id === foto.id ? { ...x, photo_url: publicUrl, annotations: { shapes } } : x));
+      const r = await api.put(`/relatorios/fotos/${foto.id}`, { photo_url: path, annotations: { shapes } });
+      // A foto exibida vem da resposta: é lá que o caminho virou link.
+      setFotos(f => f.map(x => x.id === foto.id
+        ? { ...x, photo_url: r.data?.photo_url || x.photo_url, annotations: { shapes } } : x));
       setEditandoFoto(null);
       toast('Anotações salvas!');
     } catch (e) {
@@ -992,14 +994,15 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
   };
 
   const saveEvidencia = async ({ foto, evidUrl, comentario }) => {
-    await api.put(`/relatorios/fotos/${foto.id}`, {
+    const r = await api.put(`/relatorios/fotos/${foto.id}`, {
       evidencia_url:        evidUrl,
       evidencia_comentario: comentario,
       evidencia_at:         new Date().toISOString(),
       evidencia_by:         userId,
     });
+    // O que se manda é o caminho; o que se mostra é o link que volta.
     setFotos(f => f.map(x => x.id === foto.id
-      ? { ...x, evidencia_url: evidUrl, evidencia_comentario: comentario, evidencia_at: new Date().toISOString() }
+      ? { ...x, evidencia_url: r.data?.evidencia_url || null, evidencia_comentario: comentario, evidencia_at: new Date().toISOString() }
       : x));
     setEvidenciando(null);
     toast('Conclusão registrada!');
@@ -1203,6 +1206,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
       {evidenciando && (
         <ModalEvidencia
           foto={evidenciando}
+          company={rel.company}
           userId={userId}
           onSave={saveEvidencia}
           onClose={() => setEvidenciando(null)}

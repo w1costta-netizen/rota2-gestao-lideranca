@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2, Camera, CheckCircle, Circle, FileText, ChevronRig
 import * as XLSX from 'xlsx';
 import api, { cabecalhoSessao } from '../api';
 import { comprimirImagem } from '../lib/imagem';
+import { caminhoDaLoja } from '../lib/arquivos';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import { supabase } from '../lib/supabase';
@@ -414,15 +415,16 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
     if (!file) return;
     setFlyerUploading(true);
     try {
-      const path = `flyers/${campanha.id}_${Date.now()}.pdf`;
+      // Pasta da loja + o banco guarda o CAMINHO. O link de ver vem do
+      // servidor, que o emite depois de conferir a empresa de quem pediu.
+      const path = caminhoDaLoja(campanha.company, `flyers/${campanha.id}_${Date.now()}.pdf`);
       const { error: upErr } = await supabase.storage.from('evidencias').upload(path, file, { upsert: true });
       if (upErr) throw upErr;
-      const { data: urlData } = supabase.storage.from('evidencias').getPublicUrl(path);
-      await api.put(`/campanhas/${campanha.id}`, {
+      const r = await api.put(`/campanhas/${campanha.id}`, {
         requester_id: userId,
-        flyer_pdf_url: urlData.publicUrl,
+        flyer_pdf_url: path,
       });
-      setCampanha(c => ({ ...c, flyer_pdf_url: urlData.publicUrl }));
+      setCampanha(c => ({ ...c, flyer_pdf_url: r.data?.flyer_pdf_url || null }));
       toast('✅ Flyer PDF salvo!');
     } catch (err) {
       toast('Erro ao enviar PDF: ' + err.message);
@@ -484,15 +486,14 @@ function CampanhaDetalhe({ campanha: campanhaInicial, userId, profile, onBack })
       // Já veio comprimida do passo anterior — comprimir de novo era o
       // segundo carregamento da imagem inteira na memória.
       const blob = fotoPreview.file;
-      const path = `${campanha.id}/${fotoModal.id}_${Date.now()}.jpg`;
+      const path = caminhoDaLoja(campanha.company, `${campanha.id}/${fotoModal.id}_${Date.now()}.jpg`);
       const { error: upErr } = await supabase.storage.from('evidencias').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
       if (upErr) throw upErr;
-      const { data: urlData } = supabase.storage.from('evidencias').getPublicUrl(path);
       await api.post('/campanhas/evidencias', {
         requester_id: userId,
         item_id: fotoModal.id,
         campanha_id: campanha.id,
-        foto_url: urlData.publicUrl,
+        foto_url: path,
         obs,
       });
       toast('✅ Item validado!');
