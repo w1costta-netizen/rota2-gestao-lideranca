@@ -515,9 +515,23 @@ router.put('/acoes/:id', async (req, res) => {
   // NÃO mudaram: é o que permite consertar uma ação cujas tarefas não
   // chegaram a nascer — basta abrir e salvar de novo.
   if (datasFinais.length && acaoAtual.quadrante === 'C' && finalCriar) {
-    const datas = datasFinais;
     await limparTarefasDeMedicao(req.params.id);
     const respFinal = finalResponsavel;
+
+    // SÓ AS DATAS QUE FICARAM SEM TAREFA.
+    //
+    // A limpeza acima apaga apenas as PENDENTES — as concluídas ficam, são o
+    // registro do que foi medido. Mas a criação recriava a lista inteira, e
+    // as datas já concluídas ganhavam uma segunda tarefa a cada vez que a
+    // ação era salva. Quem salvou a ação três vezes ficou com a mesma
+    // medição três vezes na lista.
+    const { data: jaTem } = await supabase.from('tarefas')
+      .select('due_date')
+      .eq('pdca_context->>acao_id', req.params.id)
+      .eq('pdca_context->>medicao', 'true');
+    const comTarefa = new Set((jaTem || []).map(t => t.due_date));
+    const datas = datasFinais.filter(d => !comTarefa.has(d));
+
     if (datas.length && respFinal) {
       const pdcaContext = {
         plano_id: acaoAtual.plano_id,
