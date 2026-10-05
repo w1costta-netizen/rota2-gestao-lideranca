@@ -524,7 +524,13 @@ export default function Tarefas({ userId, profile, setPage }) {
     }
   };
 
-  const nextStatus = (s) => s === 'pendente' ? 'em_andamento' : s === 'em_andamento' ? 'concluida' : 'pendente';
+  // O CÍRCULO CONCLUI. Antes ele ciclava pendente -> em andamento ->
+  // concluída: quem tocava uma vez achava que tinha terminado, e a tarefa
+  // só havia mudado de aba. Agora vale a convenção que todo mundo conhece
+  // — círculo marcado é feito — e tocar de novo reabre, que é o desfazer.
+  // "Em andamento" saiu do círculo e virou um botão próprio, visível só em
+  // tarefa que ainda não começou.
+  const nextStatus = (s) => (s === 'concluida' ? 'pendente' : 'concluida');
 
   const toggleTag = (tag) => setForm(f => ({
     ...f, tags: f.tags.includes(tag) ? f.tags.filter(t => t !== tag) : [...f.tags, tag],
@@ -648,7 +654,7 @@ export default function Tarefas({ userId, profile, setPage }) {
       }}>
         <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
           <button onClick={() => updateStatus(t, nextStatus(t.status))}
-            title={`${STATUS_LABEL[t.status]} — clique para avançar`}
+            title={t.status === 'concluida' ? 'Concluída — clique para reabrir' : 'Clique para concluir'}
             style={{ background:'none', border:'none', cursor:'pointer', padding:0, marginTop:2, flexShrink:0 }}>
             {t.status==='concluida' ? <CheckCircle size={20} style={{ color:'#10b981' }}/>
               : t.status==='em_andamento' ? <Clock size={20} style={{ color:'#6366f1' }}/>
@@ -666,6 +672,18 @@ export default function Tarefas({ userId, profile, setPage }) {
                 background:PRIORITY_COLOR[t.priority]+'22', color:PRIORITY_COLOR[t.priority] }}>
                 {PRIORITY_LABEL[t.priority]}
               </span>
+              {/* "Comecei" só aparece em tarefa que ainda não começou e que
+                  é de quem está olhando: marcar que OUTRA pessoa começou não
+                  faz sentido, e o selo seria só mais um botão na tela. */}
+              {!asRecurring && t.status === 'pendente' && t.assigned_to === userId && (
+                <button onClick={() => updateStatus(t, 'em_andamento')}
+                  title="Avisar que você já começou esta tarefa"
+                  style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:6, cursor:'pointer',
+                    background:'transparent', border:'1px solid #6366f155', color:'#6366f1',
+                    display:'inline-flex', alignItems:'center', gap:3 }}>
+                  <Clock size={9}/> Comecei
+                </button>
+              )}
               {!asRecurring && (
                 <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:6,
                   background:STATUS_COLOR[t.status]+'22', color:STATUS_COLOR[t.status] }}>
