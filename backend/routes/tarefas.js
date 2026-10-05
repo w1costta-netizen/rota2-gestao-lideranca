@@ -139,7 +139,12 @@ router.post('/', async (req, res) => {
     tags:             tags || [],
     lembrete_minutos: lembrete_minutos ?? null,
     lembrete_enviado: false,
-  }).select('*, assigned:assigned_to(id,full_name,sector), creator:created_by(full_name)').single();
+    // A FOTO entra aqui também. Listar e atualizar já traziam avatar_url;
+    // só a criação não — e por isso a tarefa recém-criada aparecia com a
+    // inicial no lugar do rosto até alguém recarregar a página. O mesmo
+    // dado, três consultas, uma delas diferente: é assim que esse tipo de
+    // defeito se esconde.
+  }).select('*, assigned:assigned_to(id,full_name,sector,avatar_url), creator:created_by(full_name,avatar_url)').single();
 
   if (error) {
     logError({ company: targetCompany, user_id: requester_id, acao: 'criar_tarefa', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: error.message });
