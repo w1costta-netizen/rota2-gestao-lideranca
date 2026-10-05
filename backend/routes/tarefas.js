@@ -215,23 +215,47 @@ router.put('/:id', async (req, res) => {
     const limite = task?.pdca_context?.repetir_ate;
     const passouDoPrazo = limite && proxData && proxData > limite;
     if (proxData && !passouDoPrazo) {
-      supabase.from('tarefas').insert({
-        company:          task.company,
-        title:            task.title,
-        description:      task.description || null,
-        assigned_to:      task.assigned_to,
-        created_by:       task.created_by,
-        due_date:         proxData,
-        due_time:         task.due_time || null,
-        priority:         task.priority || 'normal',
-        recorrencia:      task.recorrencia,
-        dias_semana:      task.dias_semana || null,
-        tags:             task.tags || [],
-        lembrete_minutos: task.lembrete_minutos || null,
-        status:           'pendente',
-      }).then(({ error: e }) => {
-        if (e) console.error('[recorrencia] falha ao criar próxima instância:', e.message);
-      }).catch(err => console.error('[recorrencia] erro inesperado:', err));
+      // DUAS CORREÇÕES AQUI, as duas descobertas por tarefa duplicada na
+      // tela de um líder.
+      //
+      // 1. O pdca_context NÃO era copiado. A partir da segunda ocorrência a
+      //    tarefa perdia o vínculo com o plano: sumia o selo do plano na
+      //    tela, e sumia junto o `repetir_ate` — ou seja, a tarefa passava
+      //    a repetir PARA SEMPRE, muito depois de o plano acabar. A trava
+      //    logo acima só funcionava na primeira vez.
+      //
+      // 2. Não havia nada impedindo criar a próxima duas vezes. Concluir,
+      //    reabrir e concluir de novo gerava duas cópias idênticas — e o
+      //    círculo da tarefa cicla pendente → em andamento → concluída →
+      //    pendente, então isso acontece sem ninguém querer.
+      const { data: jaExiste } = await supabase.from('tarefas')
+        .select('id')
+        .eq('assigned_to', task.assigned_to)
+        .eq('title', task.title)
+        .eq('due_date', proxData)
+        .neq('id', req.params.id)
+        .limit(1);
+
+      if (!jaExiste?.length) {
+        supabase.from('tarefas').insert({
+          company:          task.company,
+          title:            task.title,
+          description:      task.description || null,
+          assigned_to:      task.assigned_to,
+          created_by:       task.created_by,
+          due_date:         proxData,
+          due_time:         task.due_time || null,
+          priority:         task.priority || 'normal',
+          recorrencia:      task.recorrencia,
+          dias_semana:      task.dias_semana || null,
+          tags:             task.tags || [],
+          lembrete_minutos: task.lembrete_minutos || null,
+          pdca_context:     task.pdca_context || null,
+          status:           'pendente',
+        }).then(({ error: e }) => {
+          if (e) console.error('[recorrencia] falha ao criar próxima instância:', e.message);
+        }).catch(err => console.error('[recorrencia] erro inesperado:', err));
+      }
     }
   }
 
