@@ -31,6 +31,7 @@ export default class ErrorBoundary extends React.Component {
       userId: this.props.userId,
       acao: 'erro_tela',
       erro: error,
+      tela: this.props.tela,
     });
   }
 

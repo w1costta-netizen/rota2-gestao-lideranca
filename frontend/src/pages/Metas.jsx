@@ -517,6 +517,12 @@ const Etiqueta = ({ rotulo, children, cor }) => (
 // Campo de número com a leitura do valor logo abaixo. O eco existe porque
 // o app aceita "1.300", "1300" e "1.300,50" — e quem digita precisa ver
 // que o app entendeu mil e trezentos, não um e três.
+//
+// `onChange` RECEBE O TEXTO, não o evento: use `onChange={v => ...}`, nunca
+// `onChange={e => ... e.target.value}`. Quando os campos `type="number"`
+// viraram CampoNumero, dois lugares ficaram com o jeito antigo — e ler
+// `.target` de uma string derrubava a tela inteira na hora de digitar, com
+// "Algo deu errado", só nas metas que têm áreas.
 const CampoNumero = ({ valor, onChange, placeholder, medida, estilo }) => {
   const n = numeroBR(valor);
   const cru = String(valor ?? '').trim();
@@ -948,7 +954,7 @@ export default function Metas({ userId, profile }) {
                         {ks.map(k => <td key={k} style={{ padding: '4px' }}>
                           {st.medidas[k]
                             ? <CampoNumero medida={k} estilo={{ ...inputStyle, minWidth: 110 }} valor={lanc.porSetor[st.nome]?.[k] ?? ''} placeholder={`meta ${MEDIDAS[k].fmt(st.medidas[k].meta)}`}
-                                onChange={e => setLanc(l => ({ ...l, porSetor: { ...l.porSetor, [st.nome]: { ...(l.porSetor[st.nome] || {}), [k]: e.target.value } } }))}/>
+                                onChange={v => setLanc(l => ({ ...l, porSetor: { ...l.porSetor, [st.nome]: { ...(l.porSetor[st.nome] || {}), [k]: v } } }))}/>
                             : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                         </td>)}
                       </tr>
@@ -959,7 +965,7 @@ export default function Metas({ userId, profile }) {
                         {ks.map(k => <td key={k} style={{ padding: '4px' }}>
                           {k === 'percentual'
                             ? <CampoNumero medida="percentual" estilo={{ ...inputStyle, minWidth: 110 }} valor={lanc.valores.percentual ?? ''} placeholder={`meta ${MEDIDAS.percentual.fmt(aberta.medidas.percentual.meta)}`}
-                                onChange={e => setLanc(l => ({ ...l, valores: { ...l.valores, percentual: e.target.value } }))}/>
+                                onChange={v => setLanc(l => ({ ...l, valores: { ...l.valores, percentual: v } }))}/>
                             : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>soma</span>}
                         </td>)}
                       </tr>

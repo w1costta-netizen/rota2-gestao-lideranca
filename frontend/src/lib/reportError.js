@@ -37,10 +37,16 @@ function descreverDispositivo() {
 //
 // Nunca lança exceção: se o próprio envio do log falhar, isso não pode
 // atrapalhar o fluxo de quem está usando o app.
-export function reportError({ userId, acao, tabela, erro }) {
+export function reportError({ userId, acao, tabela, erro, tela }) {
   try {
     const mensagem = erro?.message || erro?.name || String(erro || 'falha desconhecida');
     if (!userId || !mensagem) return;
+    // A TELA É O QUE TORNA O ERRO DIAGNOSTICÁVEL. O arquivo que roda no
+    // navegador é minificado, então uma mensagem como "Cannot read
+    // properties of undefined (reading 'value')" sozinha não leva a lugar
+    // nenhum — ela cabe em dezenas de lugares do app. Com o nome da tela,
+    // a busca cai para um arquivo.
+    const onde = tela ? ` · tela: ${tela}` : '';
     api.post('/logs/frontend', {
       requester_id: userId,
       status: 'falha',
@@ -49,7 +55,7 @@ export function reportError({ userId, acao, tabela, erro }) {
       rota: typeof window !== 'undefined' ? window.location.pathname : null,
       // O aparelho vai junto da mensagem para aparecer direto na lista de
       // logs, sem precisar perguntar ao usuário qual celular ele usa.
-      erro_mensagem: `${mensagem} — [${descreverDispositivo()}]`,
+      erro_mensagem: `${mensagem} — [${descreverDispositivo()}${onde}]`,
     }).catch(() => {});
   } catch {
     /* silencioso de propósito */

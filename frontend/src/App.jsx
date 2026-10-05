@@ -631,7 +631,10 @@ function AppContent() {
             Carregando...
           </div>
         }>
-          <ErrorBoundary key={page} userId={userId}>
+          {/* `tela` vai junto no log: sem ela, "Cannot read properties of
+              undefined" chega sem dizer onde aconteceu, e o arquivo no ar
+              é minificado — não dá para achar pela mensagem. */}
+          <ErrorBoundary key={page} userId={userId} tela={page}>
             {paginaAtual}
           </ErrorBoundary>
         </React.Suspense>
