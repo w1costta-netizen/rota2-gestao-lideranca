@@ -486,12 +486,24 @@ router.put('/acoes/:id', async (req, res) => {
       };
       const novaData = finalInicio || finalPrazo;
 
+      // O contexto é REMONTADO a partir da ação, não herdado da tarefa.
+      // Assim a tarefa alcançada pela referência antiga — que pode ter
+      // perdido o vínculo, porque a recorrência não o copiava — volta a
+      // pertencer à ação em vez de continuar órfã. Sem isso, a criação
+      // logo abaixo não a enxergaria e abriria uma SEGUNDA tarefa.
+      const contexto = {
+        plano_id: acaoAtual.plano_id,
+        plano_titulo: plano?.titulo,
+        quadrante: acaoAtual.quadrante,
+        quadrante_label: QUADRANTE_LABEL[acaoAtual.quadrante] || acaoAtual.quadrante,
+        meta: plano?.meta,
+        acao_id: req.params.id,
+        repetir_ate: finalPrazo || null,
+      };
+
       for (const id of ids) {
         const atual = (abertas || []).find(t => t.id === id);
-        const patch = {
-          ...base,
-          pdca_context: { ...(atual?.pdca_context || {}), repetir_ate: finalPrazo || null },
-        };
+        const patch = { ...base, pdca_context: contexto };
         // A data só muda na tarefa que a ação referencia. Empurrar todas as
         // ocorrências em aberto para a mesma data juntaria todas no mesmo
         // dia — e é assim que nasce a duplicata que a tela mostra.
@@ -501,7 +513,21 @@ router.put('/acoes/:id', async (req, res) => {
     }
   }
 
-  if (!datasFinais.length && finalCriar && finalResponsavel && finalPrazo && !acaoAtual.tarefa_id) {
+  // CRIAR QUANDO NÃO HÁ TAREFA VIVA — e não só quando a ação nunca teve.
+  //
+  // A condição era `!acaoAtual.tarefa_id`. Mas a referência fica apontando
+  // para linha apagada (ou para tarefa já concluída), e aí salvar a ação
+  // não criava nada: a pessoa ficava SEM tarefa nenhuma e ninguém via o
+  // problema. Caso real: duas líderes de um plano sem tarefa alguma, e uma
+  // terceira sem nada no banco.
+  const { data: vivas } = await supabase.from('tarefas')
+    .select('id')
+    .eq('pdca_context->>acao_id', req.params.id)
+    .neq('status', 'concluida')
+    .limit(1);
+  const semTarefaViva = !vivas?.length;
+
+  if (!datasFinais.length && finalCriar && finalResponsavel && finalPrazo && semTarefaViva) {
     const pdcaContext = {
       plano_id: acaoAtual.plano_id,
       plano_titulo: plano?.titulo,
