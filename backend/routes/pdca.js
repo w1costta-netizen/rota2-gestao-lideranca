@@ -337,19 +337,23 @@ router.get('/:id/acoes', async (req, res) => {
   const comMedicao = (data || []).filter(a => (a.datas_medicao || []).length);
   if (comMedicao.length) {
     const { data: tarefas } = await supabase.from('tarefas')
-      .select('status, pdca_context')
+      .select('status, due_date, pdca_context')
       .in('pdca_context->>acao_id', comMedicao.map(a => a.id));
     const feitas = {};
     for (const t of tarefas || []) {
       const id = t.pdca_context?.acao_id;
       if (!id) continue;
-      if (!feitas[id]) feitas[id] = { total: 0, concluidas: 0 };
+      if (!feitas[id]) feitas[id] = { total: 0, concluidas: 0, datas: [] };
       feitas[id].total++;
-      if (t.status === 'concluida') feitas[id].concluidas++;
+      if (t.status === 'concluida') { feitas[id].concluidas++; feitas[id].datas.push(t.due_date); }
     }
     for (const a of comMedicao) {
       a.medicoes_total = feitas[a.id]?.total ?? (a.datas_medicao || []).length;
       a.medicoes_feitas = feitas[a.id]?.concluidas || 0;
+      // QUAIS datas já foram medidas. Sem isso o cartão dizia "próxima
+      // 05/10" num dia 05/10 em que a medição JÁ estava concluída — e
+      // quem lia concluía que a tarefa tinha sumido.
+      a.medicoes_datas_feitas = feitas[a.id]?.datas || [];
     }
   }
 

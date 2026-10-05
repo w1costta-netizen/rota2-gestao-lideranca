@@ -1736,13 +1736,21 @@ function AcaoCard({ acao, grupo, color, canManage, formatDate, onToggle, onToggl
                 quando é a próxima, que é o que o gestor quer saber. */}
             {(acao.datas_medicao || []).length > 0 && (() => {
               const hoje = new Date().toISOString().slice(0, 10);
-              const prox = acao.datas_medicao.find(d => d >= hoje);
+              // "Próxima" é a primeira data daqui para a frente que AINDA
+              // NÃO foi medida. Olhando só a data, o cartão dizia "próxima
+              // 05/10" num dia 05/10 em que a medição já estava concluída —
+              // e quem lia concluía que a tarefa da pessoa tinha sumido.
+              const jaFeitas = new Set(acao.medicoes_datas_feitas || []);
+              const prox = acao.datas_medicao.find(d => d >= hoje && !jaFeitas.has(d));
+              const todasFeitas = !prox && acao.datas_medicao.every(d => jaFeitas.has(d));
               return (
                 <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5,
                   background: '#0ea5e922', color: '#38bdf8' }}
                   title={acao.datas_medicao.map(d => d.split('-').reverse().join('/')).join(' · ')}>
                   📏 {acao.medicoes_feitas || 0} de {acao.medicoes_total || acao.datas_medicao.length} medições
-                  {prox ? ` · próxima ${prox.split('-').reverse().join('/')}` : ''}
+                  {prox ? ` · próxima ${prox.split('-').reverse().join('/')}`
+                    : todasFeitas ? ' · todas feitas'
+                    : ''}
                 </span>
               );
             })()}
