@@ -1,3 +1,4 @@
+import { caiNoDia } from '../lib/recorrencia';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Plus, Pencil, Trash2, CheckCircle, Circle, Clock, ClipboardList, MessageSquare, Send, ChevronDown, ChevronUp, RefreshCw, Tag, CalendarDays, List, ChevronLeft, ChevronRight, CalendarClock } from 'lucide-react';
 import api from '../api';
@@ -17,34 +18,6 @@ const RECORRENCIA_LABEL = { nenhuma: 'Não repete', diaria: 'Diária', dias_sema
 const DIA_CURTO = ['dom','seg','ter','qua','qui','sex','sáb'];
 // "seg, ter, qua" em vez de "Dias escolhidos": o rótulo genérico obriga a
 // abrir a tarefa para descobrir quando ela cai.
-// A tarefa que SE REPETE cai em que dias?
-//
-// A linha no banco é uma só, com a data da próxima vez. Ela só anda quando
-// alguém conclui — então uma rotina diária que ninguém fechou fica parada
-// na data antiga. Com "Hoje" e "Atrasadas" separadas, essa tarefa sumia da
-// fila do dia e ia parar em Atrasadas, mesmo sendo a rotina de hoje.
-//
-// Esta é a MESMA regra que o calendário já usava. Virou função para os dois
-// não divergirem — era de lá que vinha a resposta certa.
-function caiNoDia(t, diaYMD) {
-  if (!t.recorrencia || t.recorrencia === 'nenhuma' || !t.due_date) return false;
-  if (diaYMD < t.due_date) return false;                       // ainda não começou
-  const ate = t.pdca_context?.repetir_ate;
-  if (ate && diaYMD > ate) return false;                       // já passou do fim
-  if (t.recorrencia === 'diaria') return true;
-  const [cy, cm, cd] = diaYMD.split('-').map(Number);
-  const dowDia = new Date(cy, cm - 1, cd).getDay();
-  if (t.recorrencia === 'dias_semana') return (t.dias_semana || []).includes(dowDia);
-  const [dy, dm, dd] = t.due_date.split('-').map(Number);
-  if (t.recorrencia === 'semanal')  return new Date(dy, dm - 1, dd).getDay() === dowDia;
-  if (t.recorrencia === 'quinzenal') {
-    const diff = Math.round((new Date(diaYMD) - new Date(t.due_date)) / 86400000);
-    return diff % 14 === 0;
-  }
-  if (t.recorrencia === 'mensal') return t.due_date.split('-')[2] === diaYMD.split('-')[2];
-  return false;
-}
-
 const rotuloRepeticao = (t) => (t.recorrencia === 'dias_semana'
   ? ((t.dias_semana || []).length
       ? (t.dias_semana || []).map(n => DIA_CURTO[n]).join(', ')

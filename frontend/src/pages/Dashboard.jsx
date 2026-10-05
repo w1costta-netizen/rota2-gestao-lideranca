@@ -1,3 +1,4 @@
+import { caiNoDia, estaAtrasada } from '../lib/recorrencia';
 import React, { useEffect, useState } from 'react';
 import {
   Megaphone, CheckSquare, CalendarDays, ListChecks, StickyNote, Pin,
@@ -419,7 +420,13 @@ export default function Dashboard({ setPage, profile: propProfile }) {
                   })
                   .slice(0,5)
                   .map(t => {
-                    const atrasada = t.due_date && t.due_date < new Date().toISOString().split('T')[0];
+                    // Rotina que se repete HOJE não é tarefa vencida, por
+                    // mais antiga que seja a data guardada. O painel dizia
+                    // "vencida 29/09" na mesma tarefa que a tela de Tarefas
+                    // mostrava como de hoje.
+                    const hojeYMD = new Date().toISOString().split('T')[0];
+                    const rotinaDeHoje = caiNoDia(t, hojeYMD);
+                    const atrasada = estaAtrasada(t, hojeYMD);
                     return (
                       <div key={t.id} style={{
                         display:'flex', alignItems:'center', gap:8, padding:'8px 0',
@@ -437,7 +444,7 @@ export default function Dashboard({ setPage, profile: propProfile }) {
                             {t.due_date && (
                               <span style={{ color: atrasada ? '#ef4444' : 'var(--text-muted)', fontWeight: atrasada ? 700 : 400 }}>
                                 {atrasada ? '⚠ vencida: ' : '📅 '}
-                                {new Date(t.due_date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                {rotinaDeHoje ? 'hoje' : new Date(t.due_date + 'T12:00:00').toLocaleDateString('pt-BR')}
                               </span>
                             )}
                           </div>
