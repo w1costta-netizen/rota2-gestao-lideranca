@@ -455,28 +455,50 @@ router.put('/acoes/:id', async (req, res) => {
     ? limparDatas(datas_medicao !== undefined ? datas_medicao : acaoAtual.datas_medicao)
     : [];
 
-  // Mudou a data ou a repetição de uma ação que JÁ tem tarefa: a tarefa
-  // acompanha. Sem isso, corrigir o plano não corrigia o que a pessoa vê.
-  if (!datasFinais.length && acaoAtual.tarefa_id && (inicio !== undefined || prazo !== undefined || recorrencia !== undefined)) {
-    const { data: tAtual } = await supabase.from('tarefas')
-      .select('due_date, pdca_context').eq('id', acaoAtual.tarefa_id).maybeSingle();
-    const patchTarefa = {
-      recorrencia: RECORRENCIAS.includes(finalRepete) ? finalRepete : 'nenhuma',
-      dias_semana: finalDias,
-      pdca_context: { ...(tAtual?.pdca_context || {}), repetir_ate: finalPrazo || null },
-    };
-    if (detalhe !== undefined || descricao !== undefined) {
+  // Editou a ação: TODAS as tarefas em aberto dela acompanham.
+  //
+  // Antes isto atualizava só `acoes_pdca.tarefa_id`, ou seja, a PRIMEIRA
+  // tarefa. Só que a recorrência cria a próxima ocorrência como linha nova,
+  // e essa linha não fica ligada à ação. Resultado real: ao trocar o texto
+  // e a repetição, a pessoa ficava com DUAS tarefas na tela — a atualizada
+  // e um resto da versão anterior, ainda com o texto antigo e "Diária".
+  //
+  // Concluída não se mexe: é registro do que aconteceu.
+  if (!datasFinais.length && (inicio !== undefined || prazo !== undefined || recorrencia !== undefined || descricao !== undefined || detalhe !== undefined)) {
+    const { data: abertas } = await supabase.from('tarefas')
+      .select('id, due_date, pdca_context')
+      .eq('pdca_context->>acao_id', req.params.id)
+      .neq('status', 'concluida');
+
+    // Tarefa antiga pode ter perdido o pdca_context (a recorrência não o
+    // copiava até o conserto de hoje). A referência da ação entra como rede
+    // de segurança para alcançar essa.
+    const ids = new Set((abertas || []).map(t => t.id));
+    if (acaoAtual.tarefa_id) ids.add(acaoAtual.tarefa_id);
+
+    if (ids.size) {
       const partida = partirAcao(descricao !== undefined ? descricao : acaoAtual.descricao);
-      // O título também precisa acompanhar: editar o texto da ação e deixar
-      // o título velho na tarefa era mostrar duas versões da mesma coisa.
-      patchTarefa.title = partida.titulo;
-      patchTarefa.description = descricaoDaTarefa(plano?.titulo, detalhe !== undefined ? detalhe : acaoAtual.detalhe, partida.corpo);
+      const base = {
+        recorrencia: RECORRENCIAS.includes(finalRepete) ? finalRepete : 'nenhuma',
+        dias_semana: finalDias,
+        title: partida.titulo,
+        description: descricaoDaTarefa(plano?.titulo, detalhe !== undefined ? detalhe : acaoAtual.detalhe, partida.corpo),
+      };
+      const novaData = finalInicio || finalPrazo;
+
+      for (const id of ids) {
+        const atual = (abertas || []).find(t => t.id === id);
+        const patch = {
+          ...base,
+          pdca_context: { ...(atual?.pdca_context || {}), repetir_ate: finalPrazo || null },
+        };
+        // A data só muda na tarefa que a ação referencia. Empurrar todas as
+        // ocorrências em aberto para a mesma data juntaria todas no mesmo
+        // dia — e é assim que nasce a duplicata que a tela mostra.
+        if (id === acaoAtual.tarefa_id && novaData && atual?.due_date !== novaData) patch.due_date = novaData;
+        await supabase.from('tarefas').update(patch).eq('id', id);
+      }
     }
-    // A data só volta para trás se a tarefa ainda não foi feita nem
-    // repactuada — mexer numa data já combinada seria atropelar a pessoa.
-    const novaData = finalInicio || finalPrazo;
-    if (novaData && tAtual?.due_date !== novaData) patchTarefa.due_date = novaData;
-    await supabase.from('tarefas').update(patchTarefa).eq('id', acaoAtual.tarefa_id);
   }
 
   if (!datasFinais.length && finalCriar && finalResponsavel && finalPrazo && !acaoAtual.tarefa_id) {
