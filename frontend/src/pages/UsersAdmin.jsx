@@ -340,10 +340,10 @@ function ManutencaoEvidencias({ userId }) {
   // O resultado aparece inteiro na tela, abaixo dos botões: numa operação
   // que mexe em arquivo de cliente, o aviso que some em 3 segundos não
   // serve — tem que dar para ler, conferir e, se precisar, copiar.
-  const chamar = async (confirmar) => {
+  const chamar = async (rota, confirmar) => {
     setRodando(true);
     try {
-      const r = await api.post('/admin/migrar-evidencias', { requester_id: userId, confirmar });
+      const r = await api.post(`/admin/${rota}`, { requester_id: userId, confirmar });
       setResultado(r.data);
     } catch (e) {
       setResultado({ erro: e?.response?.data?.error || e.message || 'Não foi possível rodar.' });
@@ -360,13 +360,35 @@ function ManutencaoEvidencias({ userId }) {
         Rode a simulação primeiro: ela não muda nada, só mostra o que seria feito.
       </p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button className="btn btn-sm" disabled={rodando} onClick={() => chamar(false)}>
-          {rodando ? 'Conferindo…' : 'Simular'}
+        <button className="btn btn-sm" disabled={rodando} onClick={() => chamar('migrar-evidencias', false)}>
+          {rodando ? 'Conferindo…' : 'Simular migração'}
         </button>
         <button className="btn btn-sm btn-primary" disabled={rodando || !resultado?.simulacao || !resultado?.total}
-          onClick={() => chamar(true)}>
+          onClick={() => chamar('migrar-evidencias', true)}>
           Mover de verdade
         </button>
+      </div>
+
+      {/* Limpeza do lixo. Separada da migração de propósito: uma MOVE e a
+          outra APAGA, e botão que apaga não fica encostado em botão que
+          não apaga. */}
+      <div style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+        <div style={{ fontWeight: 700, fontSize: 13 }}>Liberar espaço</div>
+        <p style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.55, margin: '4px 0 10px' }}>
+          Apaga arquivos que nenhuma tela usa mais — foto removida cujo arquivo ficou para trás, e
+          imagem anotada que nunca chegou a ser apontada. Simule primeiro: a simulação não apaga nada
+          e diz quanto espaço seria liberado.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="btn btn-sm" disabled={rodando} onClick={() => chamar('limpar-evidencias-orfas', false)}>
+            {rodando ? 'Conferindo…' : 'Simular limpeza'}
+          </button>
+          <button className="btn btn-sm" disabled={rodando || !resultado?.simulacao || !resultado?.orfaos}
+            onClick={() => { if (window.confirm(`Apagar ${resultado?.orfaos} arquivo(s), liberando ${resultado?.espaco}? Não tem volta.`)) chamar('limpar-evidencias-orfas', true); }}
+            style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}>
+            Apagar de verdade
+          </button>
+        </div>
       </div>
       {resultado && (
         <pre style={{ marginTop: 10, fontSize: 11.5, background: 'var(--surface-2)', padding: 10,

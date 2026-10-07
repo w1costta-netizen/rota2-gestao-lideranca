@@ -481,4 +481,101 @@ router.post('/migrar-evidencias', async (req, res) => {
   res.json({ simulacao: false, ...resumo });
 });
 
+
+// ─────────────────────────────────────────────────────────────
+// LIMPEZA — arquivos de evidência que nenhuma linha do banco aponta
+//
+// Duas coisas acumulavam lixo sozinhas:
+//  1. Apagar uma foto apagava a linha e DEIXAVA o arquivo.
+//  2. A foto anotada era gravada, mas até 05/10 a rota ignorava
+//     `photo_url` — então o arquivo de 5 a 7 MB nunca foi apontado por
+//     ninguém. Conferido no banco: ZERO linhas apontam para `annotated_`.
+//
+// Resultado: 1 GB estourado e o projeto bloqueado pelo Supabase, com o
+// app fora do ar para a loja inteira.
+//
+// APAGAR AQUI É PELA API DE ARMAZENAMENTO, nunca por SQL em
+// `storage.objects`: apagar a linha no SQL tira o registro e deixa o
+// arquivo ocupando espaço, invisível — fica pior do que estava.
+//
+// Regra do que sai: arquivo que NENHUMA coluna de arquivo referencia, e
+// com mais de uma hora de vida. A hora existe para não apagar o arquivo
+// que acabou de subir enquanto a linha dele ainda está sendo gravada.
+// ─────────────────────────────────────────────────────────────
+router.post('/limpar-evidencias-orfas', async (req, res) => {
+  const { requester_id, confirmar } = req.body || {};
+  const { data: me } = await supabase.from('profiles').select('access_level').eq('id', requester_id).maybeSingle();
+  if (!me || me.access_level !== 'master') return res.status(403).json({ error: 'Só o master roda a limpeza.' });
+
+  const BALDE = 'evidencias';
+  const MARCA = '/evidencias/';
+  // Aceita as duas formas: o endereço antigo inteiro e o caminho novo.
+  const paraCaminho = (v) => {
+    if (typeof v !== 'string' || !v) return null;
+    if (!/^https?:\/\//.test(v)) return v;
+    const i = v.indexOf(MARCA);
+    if (i < 0) return null;
+    try { return decodeURIComponent(v.slice(i + MARCA.length).split('?')[0]); } catch { return null; }
+  };
+
+  const ALVOS = [
+    ['relatorios_fotograficos', 'pdf_url'],
+    ['relatorio_fotos',         'photo_url'],
+    ['relatorio_fotos',         'evidencia_url'],
+    ['campanhas',               'flyer_pdf_url'],
+    ['campanha_evidencias',     'foto_url'],
+  ];
+
+  // Tudo que está EM USO. Se qualquer uma destas leituras falhar, a
+  // limpeza para: apagar com a lista de usados incompleta apagaria foto
+  // que alguém ainda vê.
+  const usados = new Set();
+  for (const [tabela, campo] of ALVOS) {
+    for (let de = 0; ; de += 1000) {
+      const { data, error } = await supabase.from(tabela).select(`id, ${campo}`).range(de, de + 999);
+      if (error) return res.status(500).json({ error: `Não consegui ler ${tabela}.${campo}: ${error.message}. Nada foi apagado.` });
+      if (!data?.length) break;
+      for (const l of data) { const c = paraCaminho(l[campo]); if (c) usados.add(c); }
+      if (data.length < 1000) break;
+    }
+  }
+
+  // Todos os arquivos do balde, direto da tabela do armazenamento — a
+  // listagem da API é por pasta e não desce sozinha na árvore.
+  const corte = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const orfaos = [];
+  let bytes = 0;
+  for (let de = 0; ; de += 1000) {
+    const { data, error } = await supabase.schema('storage').from('objects')
+      .select('name, metadata, created_at').eq('bucket_id', BALDE).lt('created_at', corte)
+      .order('name').range(de, de + 999);
+    if (error) return res.status(500).json({ error: `Não consegui listar os arquivos: ${error.message}. Nada foi apagado.` });
+    if (!data?.length) break;
+    for (const o of data) {
+      if (usados.has(o.name)) continue;
+      orfaos.push(o.name);
+      bytes += Number(o.metadata?.size) || 0;
+    }
+    if (data.length < 1000) break;
+  }
+
+  const mb = (b) => `${(b / 1024 / 1024).toFixed(1)} MB`;
+  const resumo = { total_arquivos_em_uso: usados.size, orfaos: orfaos.length, espaco: mb(bytes) };
+
+  if (!confirmar) return res.json({ simulacao: true, ...resumo, exemplos: orfaos.slice(0, 15) });
+
+  let apagados = 0;
+  const erros = [];
+  // De 100 em 100: a API recusa listas muito grandes de uma vez.
+  for (let i = 0; i < orfaos.length; i += 100) {
+    const lote = orfaos.slice(i, i + 100);
+    const { error } = await supabase.storage.from(BALDE).remove(lote);
+    if (error) erros.push(error.message); else apagados += lote.length;
+  }
+  registrarLog('limpar_evidencias_orfas', 'storage', erros.length ? 'erro' : 'sucesso', {
+    user_id: requester_id, depois: { apagados, espaco: resumo.espaco, erros: erros.length },
+  });
+  res.json({ simulacao: false, ...resumo, apagados, erros });
+});
+
 module.exports = router;
