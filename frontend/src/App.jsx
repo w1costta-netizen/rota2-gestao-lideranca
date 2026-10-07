@@ -481,7 +481,12 @@ function AppContent() {
     conferencia_secao: () => has('conferencia_secao') ? <ConferenciaSecao userId={userId} profile={effectiveProfile} />      : negado('conferencia_secao', 'Conferência de Seção'),
     vendas_gestao:() => has('vendas_gestao') ? <GestaoVendas userId={userId} profile={effectiveProfile} />           : negado('vendas_gestao', 'Gestão de Vendas'),
     vendas_painel:() => has('vendas_painel') ? <PainelVendas userId={userId} profile={effectiveProfile} />           : negado('vendas_painel', 'Painel de Vendas'),
-    usersadmin:   () => has('usuarios')      ? <UsersAdmin userId={userId} profile={effectiveProfile} />             : <AccessDenied />,
+    // `ehMasterReal` vai separado do perfil: quando o master escolhe uma
+    // loja para visualizar, o `effectiveProfile` vira ADMIN daquela loja —
+    // é o que faz ele ver os dados dela. A manutenção do armazenamento é
+    // do projeto inteiro, não de uma loja, então ela precisa saber quem a
+    // pessoa é de verdade. Sem isso o cartão simplesmente não aparecia.
+    usersadmin:   () => has('usuarios')      ? <UsersAdmin userId={userId} profile={effectiveProfile} ehMasterReal={isMaster} /> : <AccessDenied />,
     lojas:        () => has('lojas')         ? <MasterDashboard userId={userId} viewingStore={viewingStore} ehMaster={isMaster} onSelectStore={(name) => { setViewingStoreAndSave(name); setPage('dashboard'); }} /> : <AccessDenied />,
     estoque:          () => has('estoque')          ? <Estoque profile={effectiveProfile} />           : negado('estoque', 'Estoque'),
     importador_estoque: () => has('importador_estoque') ? <ImportadorEstoque profile={effectiveProfile} /> : negado('importador_estoque', 'Importador de Estoque'),

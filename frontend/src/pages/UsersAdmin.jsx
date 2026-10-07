@@ -400,7 +400,7 @@ function ManutencaoEvidencias({ userId }) {
   );
 }
 
-export default function UsersAdmin({ userId, profile }) {
+export default function UsersAdmin({ userId, profile, ehMasterReal }) {
   const [users,    setUsers]    = useState([]);
   const [roles,    setRoles]    = useState([]);
   const [sectors,  setSectors]  = useState([]);
@@ -698,7 +698,9 @@ export default function UsersAdmin({ userId, profile }) {
         )}
       </div>
 
-      {isMaster && <ManutencaoEvidencias userId={userId} />}
+      {/* `ehMasterReal`, não `isMaster`: com uma loja selecionada o master
+          é tratado como admin dela, e o cartão sumia. */}
+      {ehMasterReal && <ManutencaoEvidencias userId={userId} />}
 
       {/* Modal — Novo Usuário */}
       {showNew && (
