@@ -169,7 +169,21 @@ export default function FotoEditor({ photoUrl, initialAnnotations, onSave, onCan
     setSelId(null);
     requestAnimationFrame(() => {
       try {
-        const dataUrl = stageRef.current?.toDataURL({ pixelRatio: 1 / scale });
+        // JPEG COMPRIMIDO, não o PNG que o Konva usa por padrão.
+        //
+        // Sem isto a foto anotada saía em PNG sem compressão: 5 a 7 MB
+        // cada, contra ~250 kB da mesma imagem em JPEG. Uma loja encheu
+        // 1 GB de armazenamento em poucos meses e o projeto inteiro foi
+        // bloqueado — ninguém conseguia entrar no app.
+        //
+        // JPEG é seguro aqui porque a foto PREENCHE a tela do editor
+        // (a KonvaImage usa as mesmas dimensões do Stage). Se um dia
+        // sobrar área vazia em volta, ela sairia preta — JPEG não tem
+        // transparência — e aí o certo é desenhar um fundo branco antes,
+        // não voltar para PNG.
+        const dataUrl = stageRef.current?.toDataURL({
+          pixelRatio: 1 / scale, mimeType: 'image/jpeg', quality: 0.75,
+        });
         onSave({ dataUrl, shapes });
       } catch (err) {
         console.error('Erro ao exportar canvas:', err);
