@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Plus, Mic, Trash2, X, Pin, PinOff, Search, Archive, ArchiveRestore, StickyNote, Share2, MessageCircle, FileText } from 'lucide-react';
+import { Plus, Mic, Trash2, X, Pin, PinOff, Search, Archive, ArchiveRestore, StickyNote, Share2, MessageCircle, FileText, LayoutGrid, List } from 'lucide-react';
 import api from '../api';
 import { useToast } from '../components/Toast';
 import ExportMenu from '../components/ExportMenu';
@@ -35,6 +35,36 @@ function vozDisponivel() {
   return !!(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
+// Galeria (como era) ou lista. Guardado no aparelho, como o tema: é jeito
+// de olhar, não dado da empresa. Em aba anônima o acesso LANÇA, então
+// tudo aqui é protegido — preferência não pode derrubar a tela.
+const lerModo = () => {
+  try { return localStorage.getItem('rl-anotacoes-modo') === 'lista' ? 'lista' : 'galeria'; }
+  catch { return 'galeria'; }
+};
+const gravarModo = (m) => {
+  try { localStorage.setItem('rl-anotacoes-modo', m); } catch { /* aba anônima */ }
+};
+
+// "hoje", "ontem" ou a data. Na galeria o cartão não mostra data nenhuma;
+// na lista ela é metade da informação — é por ela que a pessoa reconhece
+// a anotação quando o título é curto.
+function quando(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const dia = (x) => `${x.getFullYear()}-${x.getMonth()}-${x.getDate()}`;
+  const hoje = new Date();
+  const ontem = new Date(); ontem.setDate(ontem.getDate() - 1);
+  if (dia(d) === dia(hoje)) return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (dia(d) === dia(ontem)) return 'ontem';
+  const mesmoAno = d.getFullYear() === hoje.getFullYear();
+  return d.toLocaleDateString('pt-BR', mesmoAno ? { day: '2-digit', month: '2-digit' } : { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Primeira linha com conteúdo, para a prévia de uma linha da lista.
+const primeiraLinha = (txt) => String(txt || '').split('\n').find(l => l.trim()) || '';
+
 export default function Anotacoes({ userId }) {
   const toast = useToast();
   const [anotacoes, setAnotacoes] = useState([]);
@@ -42,6 +72,7 @@ export default function Anotacoes({ userId }) {
   const [busca, setBusca] = useState('');
   const [vendoArquivadas, setVendoArquivadas] = useState(false);
   const [editando, setEditando] = useState(null); // null = fechado
+  const [modo, setModo] = useState(lerModo);
   const [ouvindo, setOuvindo] = useState(false);
   const recRef = useRef(null);
 
@@ -319,6 +350,83 @@ export default function Anotacoes({ userId }) {
     );
   };
 
+  // ── Uma anotação na LISTA ──────────────────────────────────
+  //
+  // A lista existe para quem tem muita anotação: na galeria o cartão
+  // cresce com o texto, e procurar vira rolagem. Aqui cada uma ocupa uma
+  // linha de altura fixa, então cabe três vezes mais na tela.
+  //
+  // A COR NÃO SOME: ela vira uma faixa na lateral. Sem isso quem usa cor
+  // para separar assunto perderia a separação ao trocar de modo — e
+  // trocar de modo não pode custar informação.
+  const Linha = ({ a }) => {
+    const c = CORES[a.cor] || CORES.padrao;
+    // Com título, a prévia é o começo do texto. Sem título, o título já
+    // virou a primeira linha do texto — então a prévia pega da segunda em
+    // diante, senão a mesma frase apareceria duas vezes na linha.
+    const previa = primeiraLinha(a.titulo ? a.texto : String(a.texto || '').split('\n').slice(1).join(' '));
+    const botaoIcone = {
+      background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)',
+      padding:7, margin:-3, borderRadius:8, display:'flex', alignItems:'center', flexShrink:0,
+    };
+    return (
+      <div
+        onClick={() => setEditando({ id:a.id, titulo:a.titulo, texto:a.texto, cor:a.cor })}
+        style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 14px', cursor:'pointer',
+                 borderBottom:'1px solid var(--border)', position:'relative' }}>
+        <span style={{ position:'absolute', left:0, top:6, bottom:6, width:3, borderRadius:99,
+                       background: a.cor === 'padrao' ? 'var(--border-strong)' : c.fundo }}/>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
+            {a.fixada && <Pin size={12} style={{ color:'var(--primary)', flexShrink:0 }}/>}
+            <span style={{ fontWeight:600, fontSize:14, color:'var(--text)',
+                           overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+              {a.titulo || primeiraLinha(a.texto) || 'Sem título'}
+            </span>
+          </div>
+          <div style={{ display:'flex', gap:8, marginTop:2, fontSize:12, color:'var(--text-muted)', minWidth:0 }}>
+            <span style={{ flexShrink:0, fontVariantNumeric:'tabular-nums' }}>{quando(a.updated_at)}</span>
+            {previa && (
+              <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{previa}</span>
+            )}
+          </div>
+        </div>
+        {/* As mesmas ações da galeria. Compartilhar fica de fora aqui: o
+            menu dele abre para cima e, numa linha estreita, encostava na
+            de baixo. Quem quer compartilhar abre a anotação. */}
+        <button onClick={(e) => { e.stopPropagation(); alternar(a, 'fixada'); }}
+          title={a.fixada ? 'Desafixar' : 'Fixar no topo'}
+          aria-label={a.fixada ? 'Desafixar anotação' : 'Fixar anotação no topo'}
+          style={{ ...botaoIcone, color: a.fixada ? 'var(--primary)' : 'var(--text-muted)' }}>
+          {a.fixada ? <Pin size={16}/> : <PinOff size={16}/>}
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); alternar(a, 'arquivada'); }}
+          title={a.arquivada ? 'Tirar do arquivo' : 'Arquivar'}
+          aria-label={a.arquivada ? 'Tirar do arquivo' : 'Arquivar anotação'}
+          style={botaoIcone}>
+          {a.arquivada ? <ArchiveRestore size={16}/> : <Archive size={16}/>}
+        </button>
+        <button onClick={(e) => { e.stopPropagation(); excluir(a); }}
+          title="Excluir" aria-label="Excluir anotação" style={botaoIcone}>
+          <Trash2 size={16}/>
+        </button>
+      </div>
+    );
+  };
+
+  // Um grupo de anotações, no modo que estiver escolhido.
+  const Grupo = ({ itens, estilo }) => (
+    modo === 'lista'
+      ? <div className="card" style={{ padding:0, overflow:'hidden', ...estilo }}>
+          {itens.map(a => <Linha key={a.id} a={a}/>)}
+        </div>
+      : <div style={{ columns:'240px', columnGap:10, ...estilo }}>
+          {itens.map(a => <Cartao key={a.id} a={a}/>)}
+        </div>
+  );
+
+  const trocarModo = (m) => { setModo(m); gravarModo(m); };
+
   return (
     <div>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom:6 }}>
@@ -329,6 +437,19 @@ export default function Anotacoes({ userId }) {
           </p>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          {/* Galeria ou lista. Os dois ficam à vista, com o atual marcado —
+              um botão só, que alterna, esconde o que existe do outro lado. */}
+          <div style={{ display:'flex', border:'1px solid var(--border)', borderRadius:99, overflow:'hidden' }}>
+            {[['galeria', LayoutGrid, 'Ver como galeria'], ['lista', List, 'Ver como lista']].map(([m, Icone, titulo]) => (
+              <button key={m} type="button" onClick={() => trocarModo(m)}
+                title={titulo} aria-label={titulo} aria-pressed={modo === m}
+                style={{ display:'flex', alignItems:'center', padding:'6px 11px', border:'none', cursor:'pointer',
+                         background: modo === m ? 'var(--primary)' : 'transparent',
+                         color: modo === m ? '#fff' : 'var(--text-muted)' }}>
+                <Icone size={15}/>
+              </button>
+            ))}
+          </div>
           <ExportMenu onPDF={() => exportarPDF()} onWhatsApp={whatsTodas} onPDFWhatsApp={pdfTodasWhats} label="Exportar" disabled={!visiveis.length}/>
           <button className="btn btn-ghost" style={{ fontSize:12 }} onClick={() => setVendoArquivadas(v => !v)}>
             <Archive size={14}/> {vendoArquivadas ? 'Ver ativas' : 'Arquivadas'}
@@ -368,11 +489,9 @@ export default function Anotacoes({ userId }) {
           <div style={{ fontSize:11, color:'var(--text-muted)', marginBottom:8, display:'flex', alignItems:'center', gap:5 }}>
             <Pin size={12}/> FIXADAS
           </div>
-          {/* Colunas de altura variável, como um mural de post-its: o cartão
-              ocupa só a altura do que tem dentro, em vez de esticar todos. */}
-          <div style={{ columns:'240px', columnGap:10, marginBottom:18 }}>
-            {fixadas.map(a => <Cartao key={a.id} a={a}/>)}
-          </div>
+          {/* Na galeria, colunas de altura variável, como um mural de
+              post-its: o cartão ocupa só a altura do que tem dentro. */}
+          <Grupo itens={fixadas} estilo={{ marginBottom:18 }}/>
         </>
       )}
 
@@ -381,9 +500,7 @@ export default function Anotacoes({ userId }) {
           {fixadas.length > 0 && (
             <div style={{ fontSize:11, color:'var(--text-muted)', marginBottom:8 }}>OUTRAS</div>
           )}
-          <div style={{ columns:'240px', columnGap:10 }}>
-            {demais.map(a => <Cartao key={a.id} a={a}/>)}
-          </div>
+          <Grupo itens={demais}/>
         </>
       )}
 
