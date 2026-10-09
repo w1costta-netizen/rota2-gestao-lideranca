@@ -4,11 +4,12 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError } = require('../lib/auditLog');
+const { perfilDe, lojaPermitida } = require('../lib/lojaPermitida');
 
-async function getProfile(id) {
-  const { data } = await supabase.from('profiles').select('access_level, company').eq('id', id).single();
-  return data;
-}
+// A loja de cada leitura e escrita é decidida em lib/lojaPermitida.js —
+// até out/2026 a agenda buscava sem empresa e mostrava os compromissos
+// "gerais" de TODAS as empresas para qualquer usuário.
+const getProfile = perfilDe;
 const canManage = p => p && ['admin', 'supervisor', 'lider', 'master'].includes(p.access_level);
 
 // Cor escolhida pela pessoa (opcional). Sem cor, a tela usa a do destino
@@ -70,10 +71,18 @@ async function destinatarios(target_type, target_value, company) {
 // (geral / próprio setor / individual) OU o que ela mesma criou. Ninguém —
 // nem admin/master — vê automaticamente a agenda de outra pessoa.
 router.get('/', async (req, res) => {
-  const { week_start, user_id, sector, company } = req.query;
+  const { week_start, user_id, sector } = req.query;
   if (!user_id) return res.json([]); // requester_id obrigatório para não vazar tudo
 
-  let query = supabase.from('agenda_items').select('*').order('day_of_week').order('time');
+  // `user_id` é o dono do token (conferido em lib/sessao.js), então o perfil
+  // daqui é de quem está pedindo de verdade.
+  const me = await getProfile(user_id);
+  const company = await lojaPermitida(me, req.query.company);
+  // Sem loja não há o que mostrar — e buscar sem filtro é exatamente o
+  // vazamento que esta função existe para impedir.
+  if (!company) return res.json([]);
+
+  let query = supabase.from('agenda_items').select('*').eq('company', company).order('day_of_week').order('time');
   if (week_start) {
     // Busca por intervalo da semana (segunda a domingo) para tolerar
     // itens salvos com week_start ligeiramente diferente por bug de fuso horário
@@ -82,7 +91,6 @@ router.get('/', async (req, res) => {
     const week_end = endDate.toISOString().split('T')[0];
     query = query.gte('week_start', week_start).lt('week_start', week_end);
   }
-  if (company) query = query.eq('company', company);
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
@@ -101,8 +109,16 @@ router.get('/leader/:id', async (req, res) => {
   const { data: leader, error: le } = await supabase.from('leaders').select('*').eq('id', req.params.id).single();
   if (le) return res.status(404).json({ error: 'Líder não encontrado' });
 
+  // Monta a mensagem de WhatsApp da semana. Buscava os itens de TODAS as
+  // empresas — o "geral" de outra loja entrava na mensagem. A tabela
+  // `leaders` é antiga e não tem empresa; quem define a loja é a pessoa
+  // que está pedindo, pela mesma regra da agenda.
+  const me = await getProfile(req.usuario?.id);
+  const company = await lojaPermitida(me, req.query.company);
+  if (!company) return res.json({ leader, items: [] });
+
   const { data: items, error: ie } = await supabase.from('agenda_items')
-    .select('*').eq('week_start', week_start).order('day_of_week').order('time');
+    .select('*').eq('week_start', week_start).eq('company', company).order('day_of_week').order('time');
   if (ie) return res.status(500).json({ error: ie.message });
 
   const filtered = items.filter(item => {
@@ -194,8 +210,12 @@ router.put('/:id', async (req, res) => {
   // seguintes da mesma série (cada uma mantém a própria week_start). Sem
   // escopo, ou 'este', mexe só nesta semana — e ela sai da série, para não
   // ser sobrescrita numa edição futura "deste e dos próximos".
-  const { data: atual } = await supabase.from('agenda_items').select('serie_id, week_start').eq('id', req.params.id).maybeSingle();
-  if (!atual) return res.status(404).json({ error: 'Item não encontrado' });
+  const { data: atual } = await supabase.from('agenda_items').select('serie_id, week_start, company').eq('id', req.params.id).maybeSingle();
+  // Item de outra loja responde como inexistente: sem esta trava, bastava
+  // o id para editar o compromisso de outra empresa.
+  if (!atual || atual.company !== await lojaPermitida(meUpdate, atual.company)) {
+    return res.status(404).json({ error: 'Item não encontrado' });
+  }
   const emSerie = req.body.escopo === 'futuros' && atual.serie_id;
 
   let data, error;
@@ -237,6 +257,9 @@ router.delete('/:id', async (req, res) => {
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
 
   const { data: item } = await supabase.from('agenda_items').select('title, company, serie_id, week_start').eq('id', req.params.id).single();
+  if (!item || item.company !== await lojaPermitida(me, item.company)) {
+    return res.status(404).json({ error: 'Item não encontrado' });
+  }
 
   // ?escopo=futuros apaga esta semana e as seguintes da série; o passado fica.
   const emSerie = req.query.escopo === 'futuros' && item?.serie_id;

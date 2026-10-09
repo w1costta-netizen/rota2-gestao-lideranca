@@ -89,7 +89,7 @@ export const leadersAPI = {
 
 export const agendaAPI = {
   list: (week_start, company) => api.get('/agenda', { params: { week_start, ...(company ? { company } : {}) } }),
-  forLeader: (id, week_start) => api.get(`/agenda/leader/${id}`, { params: { week_start } }),
+  forLeader: (id, week_start, company) => api.get(`/agenda/leader/${id}`, { params: { week_start, company } }),
   create: (data) => api.post('/agenda', data),
   update: (id, data) => api.put(`/agenda/${id}`, data),
   remove: (id, requesterId) => api.delete(`/agenda/${id}`, { params: { requester_id: requesterId } }),
@@ -98,8 +98,8 @@ export const agendaAPI = {
 export const pdfAPI = {
   // Baixa pela API (com token), não por window.open na URL: uma aba nova
   // não leva o Authorization e o servidor responderia 401.
-  download: async (leaderId, week_start) => {
-    const r = await api.get(`/pdf/leader/${leaderId}`, { params: { week_start }, responseType: 'blob' });
+  download: async (leaderId, week_start, company) => {
+    const r = await api.get(`/pdf/leader/${leaderId}`, { params: { week_start, company }, responseType: 'blob' });
     const nome = (r.headers?.['content-disposition'] || '').match(/filename="?([^"]+)"?/)?.[1] || 'agenda.pdf';
     const url = URL.createObjectURL(r.data);
     const a = document.createElement('a');

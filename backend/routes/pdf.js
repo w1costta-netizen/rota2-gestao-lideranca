@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const PDFDocument = require('pdfkit');
 const supabase = require('../supabase');
+const { perfilDe, lojaPermitida } = require('../lib/lojaPermitida');
 
 const DAY_LABELS = {
   domingo: 'Domingo',
@@ -21,8 +22,14 @@ router.get('/leader/:id', async (req, res) => {
 
   const workDays = leader.work_days;
 
-  const { data: items } = await supabase.from('agenda_items')
-    .select('*').eq('week_start', week_start).order('day_of_week').order('time');
+  // Buscava os itens de TODAS as empresas: o "geral" de outra loja saía no
+  // PDF. A tabela `leaders` não tem empresa; quem define a loja é a pessoa
+  // que pediu o PDF (lib/lojaPermitida.js).
+  const company = await lojaPermitida(await perfilDe(req.usuario?.id), req.query.company);
+  const { data: items } = company
+    ? await supabase.from('agenda_items')
+        .select('*').eq('week_start', week_start).eq('company', company).order('day_of_week').order('time')
+    : { data: [] };
 
   const filtered = (items || []).filter(item => {
     if (!workDays.includes(item.day_of_week)) return false;

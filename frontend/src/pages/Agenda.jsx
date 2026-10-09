@@ -91,7 +91,9 @@ export default function Agenda({ userId, profile }) {
   const company = profile?.company || '';
 
   const load = () => {
-    api.get('/agenda', { params: { week_start: week, user_id: userId, sector: profile?.sector || '' } })
+    // `company` é a loja que está na tela. O servidor decide se a pessoa pode
+    // vê-la — sem ela, ele usa a loja do próprio perfil.
+    api.get('/agenda', { params: { week_start: week, user_id: userId, sector: profile?.sector || '', company } })
       .then(r => setItems(r.data));
   };
 
@@ -171,7 +173,7 @@ export default function Agenda({ userId, profile }) {
   const openSend = (leader) => { setSendLeader(leader); setSendModal(true); };
 
   const buildWhatsAppMessage = async (leader) => {
-    const r = await agendaAPI.forLeader(leader.id, week);
+    const r = await agendaAPI.forLeader(leader.id, week, company);
     const { items: li } = r.data;
     if (li.length === 0) return `Olá ${leader.name}! Não há itens de agenda para você esta semana.`;
     const grouped = {};
@@ -389,7 +391,7 @@ export default function Agenda({ userId, profile }) {
               <button className="btn btn-ghost btn-sm" onClick={() => openSend(l)} title="Enviar WhatsApp">
                 <Send size={13} /> {l.name}
               </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => pdfAPI.download(l.id, week).catch(() => toast('Não foi possível gerar o PDF.', 'error'))} title="Baixar PDF">
+              <button className="btn btn-ghost btn-sm" onClick={() => pdfAPI.download(l.id, week, company).catch(() => toast('Não foi possível gerar o PDF.', 'error'))} title="Baixar PDF">
                 <FileDown size={13} />
               </button>
             </div>
