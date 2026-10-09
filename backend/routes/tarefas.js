@@ -37,6 +37,9 @@ function nextDueDate(due_date, recorrencia, dias_semana) {
   }
   if (recorrencia === 'diaria')     d.setDate(d.getDate() + 1);
   if (recorrencia === 'semanal')    d.setDate(d.getDate() + 7);
+  // 15, não 14 — decisão do usuário (09/10/2026). O frontend decide em que
+  // dia a rotina APARECE com a mesma conta (`caiNoDia`, em
+  // frontend/src/lib/recorrencia.js). Se mudar aqui, muda lá.
   if (recorrencia === 'quinzenal')  d.setDate(d.getDate() + 15);
   if (recorrencia === 'mensal')     d.setMonth(d.getMonth() + 1);
   return d.toISOString().split('T')[0];

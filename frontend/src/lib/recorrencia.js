@@ -29,9 +29,15 @@ export function caiNoDia(t, diaYMD) {
 
   const [dy, dm, dd] = t.due_date.split('-').map(Number);
   if (t.recorrencia === 'semanal') return new Date(dy, dm - 1, dd).getDay() === dowDia;
+  // QUINZENAL = A CADA 15 DIAS, decisão do usuário em 09/10/2026.
+  // Aqui era 14 enquanto o servidor criava a próxima com 15
+  // (`nextDueDate`, backend/routes/tarefas.js) e toda a tela dizia "a cada
+  // 15 dias". A lista mostrava a rotina num dia e o servidor fazia ela
+  // nascer no dia seguinte — com o tempo, cada vez mais longe.
+  // Os dois lados TÊM que dar o mesmo número; se mudar, muda nos dois.
   if (t.recorrencia === 'quinzenal') {
     const diff = Math.round((new Date(diaYMD) - new Date(t.due_date)) / 86400000);
-    return diff % 14 === 0;
+    return diff % 15 === 0;
   }
   if (t.recorrencia === 'mensal') return t.due_date.split('-')[2] === diaYMD.split('-')[2];
   return false;
