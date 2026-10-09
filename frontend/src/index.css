@@ -267,6 +267,19 @@ input, select, textarea {
 .main-content {
   margin-left: 240px;
   flex: 1;
+  /* SEM ISTO, QUALQUER TEXTO LONGO ALARGA A PÁGINA INTEIRA.
+     `.main-content` é item de `.layout`, que é flexível. O padrão de item
+     flexível é não ficar mais estreito que o próprio conteúdo — então uma
+     frase com `white-space: nowrap` lá dentro (a prévia de uma anotação,
+     um título comprido) virava a largura mínima da área principal. A
+     página passava da janela, e o cabeçalho ia junto: nas Anotações, os
+     botões de galeria/lista, Exportar e Nova ficaram fora da tela, e quem
+     usava achou que tinham sumido.
+
+     No celular o defeito não aparecia porque lá esta mesma área tem
+     `overflow-x: hidden` (ver o bloco mobile), que escondia o excesso.
+     Testar só no celular, ou só a tela isolada, não pega isto. */
+  min-width: 0;
   padding: 32px;
   min-height: 100vh;
 }
