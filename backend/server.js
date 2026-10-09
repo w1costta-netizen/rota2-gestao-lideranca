@@ -49,7 +49,15 @@ app.use('/api/chat',         require('./routes/chat'));
 app.use('/api/atas',         require('./routes/atas'));
 app.use('/api/gamificacao',  require('./routes/gamificacao'));
 
-app.get('/api/health', (_, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+// `versao` é o commit que o Render publicou (ele preenche RENDER_GIT_COMMIT
+// sozinho). Sem isto não havia como saber se uma correção do servidor já
+// estava no ar — "respondeu ok" valia tanto para a versão nova quanto para
+// a antiga. Mesma ideia do /version.json do frontend.
+app.get('/api/health', (_, res) => res.json({
+  ok: true,
+  ts: new Date().toISOString(),
+  versao: (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || null,
+}));
 
 // ── Cron job interno: dispara alertas de escala todo dia às 08h ──
 // No Render (free tier) o servidor "dorme", então usamos um ping externo

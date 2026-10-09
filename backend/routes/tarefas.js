@@ -42,6 +42,37 @@ function nextDueDate(due_date, recorrencia, dias_semana) {
   return d.toISOString().split('T')[0];
 }
 
+// Hoje no relógio da loja, não do servidor (que roda em UTC: das 21h em
+// diante ele já está "amanhã").
+const hojeBR = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+
+// A PRÓXIMA OCORRÊNCIA QUE AINDA NÃO PASSOU.
+//
+// `nextDueDate` anda um passo a partir da data guardada. Concluir uma
+// rotina atrasada criava a próxima AINDA NO PASSADO, e ela voltava para
+// "Atrasadas" na hora. Uma rotina de segunda a quarta parada em 29/09,
+// concluída numa sexta, virava 30/09, depois 01/10, depois 06/10... A
+// pessoa clicava, a tarefa voltava, e parecia que o app não salvava.
+//
+// Quem conclui atrasado está fazendo a rotina AGORA — não seis vezes. A
+// conclusão vale pela de hoje, e a próxima é a primeira DEPOIS de hoje.
+//
+// Anda de passo em passo a partir da data antiga, em vez de calcular a
+// partir de hoje, para não perder a âncora: uma rotina "toda segunda"
+// concluída numa sexta tem que continuar caindo na segunda, não virar
+// "toda sexta". Concluir adiantado (data no futuro) não muda nada: o
+// primeiro passo já cai depois de hoje.
+function proximaOcorrenciaFutura(due_date, recorrencia, dias_semana) {
+  const hoje = hojeBR();
+  let d = nextDueDate(due_date, recorrencia, dias_semana);
+  // Teto de segurança: ~3 anos de rotina diária. Nunca deveria chegar
+  // perto, mas um laço sem teto num servidor não é risco que se corre.
+  for (let i = 0; d && d <= hoje && i < 1100; i++) {
+    d = nextDueDate(d, recorrencia, dias_semana);
+  }
+  return d;
+}
+
 // GET /api/tarefas
 router.get('/', async (req, res) => {
   const { requester_id, company: queryCompany } = req.query;
@@ -213,7 +244,7 @@ router.put('/:id', async (req, res) => {
 
   // Recorrência: ao concluir, cria próxima instância automaticamente
   if (status === 'concluida' && task?.recorrencia && task.recorrencia !== 'nenhuma') {
-    const proxData = nextDueDate(task.due_date, task.recorrencia, task.dias_semana);
+    const proxData = proximaOcorrenciaFutura(task.due_date, task.recorrencia, task.dias_semana);
     // Tarefa de plano de ação repete só até o prazo da ação. Sem esta
     // trava, uma ação "toda segunda" continuaria nascendo para sempre,
     // muito depois de o plano ter acabado.
