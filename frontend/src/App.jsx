@@ -11,6 +11,7 @@ import Register from './pages/Register';
 import Welcome from './pages/Welcome';
 import AceiteTermos from './pages/AceiteTermos';
 import { VERSAO_ESPERADA } from './lib/notificacoes';
+import { saiuVersaoNova } from './lib/versaoApp';
 
 // Lazy-load de todas as páginas — reduz o bundle inicial em ~70%
 //
@@ -333,6 +334,34 @@ function AppContent() {
     }).catch(() => {});
   }, []);
 
+  // ── Versão nova do APP (não do service worker) ─────────────
+  //
+  // O aviso acima só dispara quando muda o sw.js, que quase nunca muda.
+  // Uma correção comum não tocava nele, então ninguém com a aba aberta
+  // ficava sabendo: continuava no código antigo por horas, reclamando de
+  // defeito já resolvido. Aqui a pergunta é a cada publicação.
+  //
+  // Quando perguntar: ao VOLTAR para a aba (é o caso de quem deixa o app
+  // aberto o dia todo e volta depois do almoço) e a cada 5 minutos com a
+  // aba à vista. Aba escondida não pergunta — não gasta rede de ninguém
+  // à toa. E no máximo uma vez por minuto, para trocar de aba várias
+  // vezes seguidas não virar uma chuva de pedidos.
+  const [versaoNova, setVersaoNova] = useState(false);
+  useEffect(() => {
+    let ultima = 0;
+    let parar = false;
+    const conferir = async () => {
+      if (parar || document.visibilityState !== 'visible') return;
+      if (Date.now() - ultima < 60 * 1000) return;
+      ultima = Date.now();
+      if (await saiuVersaoNova()) { setVersaoNova(true); parar = true; }
+    };
+    const aoVoltar = () => { if (document.visibilityState === 'visible') conferir(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+    const relogio = setInterval(conferir, 5 * 60 * 1000);
+    return () => { document.removeEventListener('visibilitychange', aoVoltar); clearInterval(relogio); };
+  }, []);
+
   // Engine de alarme — inicia quando o usuário faz login
   const userId = session?.user?.id;
   useEffect(() => {
@@ -581,7 +610,7 @@ function AppContent() {
         </div>
       )}
 
-      {swUpdate && (
+      {(swUpdate || versaoNova) && (
         <div style={{
           position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)',
           zIndex: 9999, background: 'var(--primary)', color: '#fff',
@@ -589,10 +618,10 @@ function AppContent() {
           alignItems: 'center', boxShadow: '0 4px 20px rgba(0,0,0,.4)', fontSize: 13,
           whiteSpace: 'nowrap',
         }}>
-          {/* O número aqui era fixo no código e nunca mudava, então mostrava
-              a mesma versão para sempre — e atrapalhou o diagnóstico do push,
-              porque parecia ser a versão real do aparelho. */}
-          <span>Nova versão disponível — {VERSAO_ESPERADA}</span>
+          {/* Frase para quem usa, não código. Antes aparecia o nome técnico
+              do cache ("rota2-v22"), que não diz nada para a equipe da loja.
+              O nome técnico continua no título, para quem for diagnosticar. */}
+          <span title={VERSAO_ESPERADA}>Saiu uma versão nova do app</span>
           <button
             onClick={() => { limparCacheDeArquivos().then(() => window.location.reload()); }}
             style={{ background: '#fff', color: 'var(--primary)', border: 'none',
