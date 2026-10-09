@@ -377,9 +377,18 @@ export default function Anotacoes({ userId }) {
         <span style={{ position:'absolute', left:0, top:6, bottom:6, width:3, borderRadius:99,
                        background: a.cor === 'padrao' ? 'var(--border-strong)' : c.fundo }}/>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ display:'flex', alignItems:'baseline', gap:8 }}>
+          {/* `minWidth:0` NOS DOIS TEXTOS, e não só nos pais.
+              Dentro de uma linha flexível, o padrão é o item não encolher
+              abaixo do tamanho do próprio conteúdo. Um texto com
+              `whiteSpace:nowrap` tem conteúdo do tamanho da frase inteira
+              — então, em vez de cortar com reticências, ele ALARGA a
+              página. Aconteceu de verdade: uma anotação de texto longo
+              empurrou a largura e levou junto os botões do cabeçalho, que
+              foram parar fora da tela. Quem viu achou que os botões
+              tinham sumido. */}
+          <div style={{ display:'flex', alignItems:'baseline', gap:8, minWidth:0 }}>
             {a.fixada && <Pin size={12} style={{ color:'var(--primary)', flexShrink:0 }}/>}
-            <span style={{ fontWeight:600, fontSize:14, color:'var(--text)',
+            <span style={{ fontWeight:600, fontSize:14, color:'var(--text)', minWidth:0,
                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
               {a.titulo || primeiraLinha(a.texto) || 'Sem título'}
             </span>
@@ -387,7 +396,7 @@ export default function Anotacoes({ userId }) {
           <div style={{ display:'flex', gap:8, marginTop:2, fontSize:12, color:'var(--text-muted)', minWidth:0 }}>
             <span style={{ flexShrink:0, fontVariantNumeric:'tabular-nums' }}>{quando(a.updated_at)}</span>
             {previa && (
-              <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{previa}</span>
+              <span style={{ minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{previa}</span>
             )}
           </div>
         </div>
