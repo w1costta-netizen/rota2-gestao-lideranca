@@ -246,6 +246,28 @@ function AppContent() {
   const [authPage, setAuthPage] = useState('login');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Volta da autorização do Google Agenda (ver backend/routes/google.js).
+  // O servidor manda para "/?google=conectado" ou "/?google=erro&motivo=…".
+  // Leva para a Agenda, diz em palavras o que aconteceu e limpa o endereço
+  // — senão o aviso apareceria de novo a cada recarregamento.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const q = new URLSearchParams(window.location.search);
+    const g = q.get('google');
+    if (!g) return;
+    const MOTIVOS = {
+      recusado: 'Você não autorizou o acesso à agenda no Google.',
+      sem_permissao_agenda: 'Na tela do Google, a permissão da agenda ficou desmarcada. Conecte de novo e deixe ela marcada.',
+      expirado: 'A autorização demorou demais. Tente conectar de novo.',
+      sem_renovacao: 'O Google não liberou o acesso contínuo. Conecte de novo.',
+      nao_configurado: 'A ligação com o Google ainda não foi configurada.',
+    };
+    if (g === 'conectado') toast('Google Agenda conectado. Suas reuniões já aparecem aqui.', 'success');
+    else toast(MOTIVOS[q.get('motivo')] || 'Não foi possível conectar o Google Agenda. Tente de novo.', 'error');
+    setPage('agenda');
+    window.history.replaceState({}, '', '/');
+  }, [session?.user?.id]);
+
   // A última página é da CONTA, não do aparelho. Sem isto, quem entra com
   // outra conta no mesmo celular (loja com aparelho compartilhado, teste de
   // cadastro) caía na tela que a conta anterior deixou aberta — inclusive

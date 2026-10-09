@@ -176,7 +176,22 @@
       <tr><td><strong>Supabase</strong></td><td>Banco de dados e autenticação (infraestrutura da plataforma)</td></tr>
       <tr><td><strong>Netlify / Render</strong></td><td>Hospedagem do frontend e backend</td></tr>
       <tr><td><strong>Gateway de pagamento</strong><br><small>(Hotmart, Kiwify ou similar)</small></td><td>Processamento de cobranças e assinaturas</td></tr>
+      <tr><td><strong>Anthropic</strong></td><td>Inteligência artificial que lê o texto de uma foto quando o usuário pede (anotações, encartes). A imagem é enviada só no momento da leitura e não é guardada pelo Rota Líder.</td></tr>
+      <tr><td><strong>Google</strong></td><td>Somente se o usuário conectar o Google Agenda — ver abaixo.</td></tr>
     </table>
+
+    <h3 style="margin-top:18px;font-size:15px;">Integração com o Google Agenda</h3>
+    <p>O usuário pode, por escolha própria, conectar a sua conta Google para que as reuniões do Google Agenda apareçam na Agenda do Rota Líder.</p>
+    <ul>
+      <li><strong>O que acessamos:</strong> somente a leitura dos eventos da agenda principal (permissão <em>calendar.events.readonly</em>) e o endereço de e-mail da conta conectada. Não acessamos e-mails, contatos, arquivos ou outras agendas.</li>
+      <li><strong>Para que usamos:</strong> exclusivamente para mostrar ao próprio usuário as suas reuniões dentro da Agenda do Rota Líder — título, data, horário, local e link da reunião.</li>
+      <li><strong>Quem vê:</strong> apenas o próprio usuário. Os compromissos vindos do Google não são exibidos a líderes, colegas nem administradores da empresa, e não são incluídos em mensagens, relatórios ou exportações destinadas a outras pessoas.</li>
+      <li><strong>O que nunca fazemos:</strong> criar, alterar ou apagar eventos no Google; vender, compartilhar ou usar esses dados para publicidade; usá-los para treinar modelos de inteligência artificial.</li>
+      <li><strong>Como guardamos:</strong> a autorização de acesso é armazenada cifrada. Os eventos ficam na agenda do usuário pelo tempo em que a conexão existir.</li>
+      <li><strong>Como desligar:</strong> a qualquer momento, pelo botão "Desconectar" na Agenda do Rota Líder — a autorização é revogada no Google e os compromissos vindos de lá são removidos. Também é possível revogar em <em>myaccount.google.com/permissions</em>.</li>
+    </ul>
+    <p>O uso e a transferência, pelo Rota Líder, de informações recebidas das APIs do Google para qualquer outro aplicativo obedecerão à <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Política de Dados do Usuário dos Serviços de API do Google</a>, incluindo os requisitos de Uso Limitado.</p>
+    <p style="font-size:12px;color:var(--text-faint);"><em>Rota Líder's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.</em></p>
 
     <p><strong>Nunca vendemos, alugamos ou cedemos</strong> dados pessoais a terceiros para fins comerciais ou publicitários.</p>
     <p>Podemos divulgar dados quando exigido por lei, ordem judicial ou autoridade competente.</p>
@@ -295,7 +310,7 @@
 
   <div class="rodape-box">
     <p>Esta Política de Privacidade é parte integrante dos <a href="termos-de-uso-rotalider.html" style="color:var(--orange);font-weight:700;">Termos de Uso</a> do Rota Líder.</p>
-    <p style="font-size:11px;color:var(--text-faint);margin-top:6px;">Versão 1.0 · Última atualização: 01/08/2026 · Grupo F7 · rotalider.com.br</p>
+    <p style="font-size:11px;color:var(--text-faint);margin-top:6px;">Versão 1.1 · Última atualização: 09/10/2026 · Grupo F7 · rotalider.com.br</p>
   </div>
 
 </div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, FileDown, Send, CalendarDays, Printer, Repeat } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight, FileDown, Send, CalendarDays, Printer, Repeat, RefreshCw, Link2Off } from 'lucide-react';
 import { agendaAPI, leadersAPI, pdfAPI } from '../api';
 import api from '../api';
 import { useToast } from '../components/Toast';
@@ -98,6 +98,70 @@ export default function Agenda({ userId, profile }) {
   };
 
   useEffect(() => { if (userId) load(); }, [week, company, userId]);
+
+  // ── Google Agenda ──────────────────────────────────────────
+  // Some da tela enquanto as credenciais do Google não estão no servidor
+  // (`configurado: false`): botão que leva a erro é pior que botão nenhum.
+  const [google, setGoogle] = useState(null);
+  const [sincronizando, setSincronizando] = useState(false);
+
+  const sincronizarGoogle = async (silencioso) => {
+    setSincronizando(true);
+    try {
+      await api.post('/google/sincronizar', { requester_id: userId });
+      load();
+      const r = await api.get('/google/status', { params: { requester_id: userId } });
+      setGoogle(r.data);
+      if (!silencioso) toast('Reuniões do Google atualizadas.', 'success');
+    } catch (e) {
+      if (e?.response?.data?.reconectar) setGoogle(g => g && ({ ...g, precisa_reconectar: true }));
+      if (!silencioso) toast(e?.response?.data?.error || 'Não foi possível atualizar agora.', 'error');
+    } finally {
+      setSincronizando(false);
+    }
+  };
+
+  // Ao abrir a Agenda, busca as reuniões se a última leitura tem mais de 5
+  // minutos. O agendamento do servidor roda de 15 em 15; isto é o que faz a
+  // reunião marcada agora aparecer quando a pessoa abre a tela.
+  useEffect(() => {
+    if (!userId) return;
+    api.get('/google/status', { params: { requester_id: userId } }).then(r => {
+      setGoogle(r.data);
+      const ultima = r.data?.ultima_sincronizacao ? new Date(r.data.ultima_sincronizacao).getTime() : 0;
+      if (r.data?.conectado && !r.data.precisa_reconectar && Date.now() - ultima > 5 * 60 * 1000) sincronizarGoogle(true);
+    }).catch(() => setGoogle(null));
+  }, [userId]);
+
+  const conectarGoogle = async () => {
+    try {
+      const r = await api.post('/google/conectar', { requester_id: userId });
+      window.location.href = r.data.url;
+    } catch (e) {
+      toast(e?.response?.data?.error || 'Não foi possível abrir o Google agora.', 'error');
+    }
+  };
+
+  const desconectarGoogle = async () => {
+    if (!window.confirm('Desconectar o Google Agenda? As reuniões que vieram de lá saem desta agenda (no Google nada muda).')) return;
+    try {
+      await api.post('/google/desconectar', { requester_id: userId });
+      setGoogle(g => ({ ...g, conectado: false, email: null, precisa_reconectar: false }));
+      load();
+      toast('Google Agenda desconectado.');
+    } catch {
+      toast('Não foi possível desconectar agora.', 'error');
+    }
+  };
+
+  const haQuanto = (iso) => {
+    if (!iso) return 'ainda não';
+    const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (min < 1) return 'agora';
+    if (min < 60) return `há ${min} min`;
+    const h = Math.round(min / 60);
+    return h < 24 ? `há ${h} h` : `há ${Math.round(h / 24)} dia(s)`;
+  };
   useEffect(() => {
     leadersAPI.list().then(r => {
       setLeaders(r.data);
@@ -352,6 +416,8 @@ export default function Agenda({ userId, profile }) {
   };
 
   const targetLabel = (item) => {
+    if (item.origem === 'google') return { label: 'Google Agenda · só você vê', cls: 'badge-purple' };
+    if (item.target_type === 'pessoal') return { label: 'Só você vê', cls: 'badge-purple' };
     if (item.target_type === 'geral') return { label: 'Geral', cls: 'badge-green' };
     if (item.target_type === 'setor') return { label: `Setor: ${item.target_value}`, cls: 'badge-amber' };
     const ids = item.target_value ? item.target_value.split(',') : [];
@@ -369,7 +435,9 @@ export default function Agenda({ userId, profile }) {
           <div className="page-title">Agenda Semanal</div>
           <div className="page-subtitle">{items.length} itens esta semana</div>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        {/* Quebra linha no celular: sem isto, "Novo item" ficava cortado
+            pela metade na borda da tela. */}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <button className="btn btn-ghost btn-sm" onClick={prevWeek}><ChevronLeft size={15} /></button>
           <span style={{ fontWeight: 600, fontSize: 13 }}>{formatDate(week)}</span>
           <button className="btn btn-ghost btn-sm" onClick={nextWeek}><ChevronRight size={15} /></button>
@@ -396,6 +464,42 @@ export default function Agenda({ userId, profile }) {
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Google Agenda ─────────────────────────────────────
+          Some enquanto o servidor não tem as credenciais do Google. */}
+      {google?.configurado && (
+        <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', padding:'10px 14px', borderRadius:8,
+          border:'1px solid var(--border)', background:'var(--surface)', marginBottom:12, fontSize:13 }}>
+          <CalendarDays size={16} style={{ color:'var(--primary)', flexShrink:0 }}/>
+          {!google.conectado ? (
+            <>
+              <span style={{ flex:1, minWidth:180 }}>
+                Suas reuniões do <b>Google Agenda</b> podem aparecer aqui sozinhas. Só você vê.
+              </span>
+              <button className="btn btn-primary btn-sm" onClick={conectarGoogle}>Conectar Google Agenda</button>
+            </>
+          ) : google.precisa_reconectar ? (
+            <>
+              <span style={{ flex:1, minWidth:180, color:'var(--danger)' }}>
+                A ligação com o Google expirou — as reuniões novas não estão chegando.
+              </span>
+              <button className="btn btn-primary btn-sm" onClick={conectarGoogle}>Conectar de novo</button>
+            </>
+          ) : (
+            <>
+              <span style={{ flex:1, minWidth:180, color:'var(--text-muted)' }}>
+                Google Agenda <b style={{ color:'var(--text)' }}>{google.email || 'conectado'}</b> · atualizado {haQuanto(google.ultima_sincronizacao)}
+              </span>
+              <button className="btn btn-ghost btn-sm" onClick={() => sincronizarGoogle(false)} disabled={sincronizando} title="Buscar as reuniões agora">
+                <RefreshCw size={13} style={sincronizando ? { animation:'spin 1s linear infinite' } : undefined}/> {sincronizando ? 'Atualizando…' : 'Atualizar'}
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={desconectarGoogle} title="Desconectar o Google Agenda">
+                <Link2Off size={13}/>{!isMobile && ' Desconectar'}
+              </button>
+            </>
+          )}
         </div>
       )}
 
@@ -477,9 +581,11 @@ export default function Agenda({ userId, profile }) {
                           {item.target_type !== 'geral' && (
                             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{label}</div>
                           )}
-                          {item.description && <div className="agenda-item-desc" style={{ marginTop: 3 }}>{item.description}</div>}
+                          {item.description && <div className="agenda-item-desc" style={{ marginTop: 3, whiteSpace: 'pre-line', overflowWrap: 'anywhere' }}>{item.description}</div>}
                         </div>
-                        {canManage && (
+                        {/* Compromisso do Google não se edita aqui: a próxima
+                            sincronização desfaria a mudança. */}
+                        {canManage && item.origem !== 'google' && (
                           <div className="agenda-item-actions" style={{ flexShrink: 0 }}>
                             <button className="btn-icon" style={{ padding: 4 }} onClick={() => openEdit(item)}><Pencil size={12} /></button>
                             <button className="btn-icon danger" style={{ padding: 4 }} onClick={() => remove(item)}><Trash2 size={12} /></button>

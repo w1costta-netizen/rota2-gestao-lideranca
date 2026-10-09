@@ -14,6 +14,7 @@ app.use(require('./lib/sessao').exigirSessao);
 
 app.use('/api/leaders',  require('./routes/leaders'));
 app.use('/api/agenda',   require('./routes/agenda'));
+app.use('/api/google',   require('./routes/google'));
 app.use('/api/pdf',      require('./routes/pdf'));
 app.use('/api/profile',  require('./routes/profile'));
 app.use('/api/scale',    require('./routes/scale-import'));

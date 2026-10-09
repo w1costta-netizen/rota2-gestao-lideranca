@@ -1,0 +1,30 @@
+# Traz as reuniões do Google Agenda para a Agenda do Rota.
+#
+# De 15 em 15 minutos, o servidor lê a agenda de cada pessoa que conectou o
+# Google e atualiza a do Rota. Além disso, a própria tela da Agenda pede
+# uma leitura quando a pessoa abre e a última tem mais de 5 minutos — é
+# isso que faz a reunião marcada agora aparecer na hora.
+#
+# Enquanto as credenciais do Google não estão no Render, a rota responde
+# {"ok":true,"configurado":false} e não faz nada.
+#
+# Roda de graça: agendamento em repositório público não consome cota. O
+# horário do GitHub é aproximado e atrasa sob carga — não importa aqui.
+
+name: Sincronizar Google Agenda
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar /api/google/sincronizar-todos
+        run: |
+          resposta=$(curl -s --max-time 280 -X POST -H "x-cron-segredo: ${{ secrets.CRON_SEGREDO }}" \
+            https://rota2-gestao-lideranca.onrender.com/api/google/sincronizar-todos)
+          echo "Resposta: $resposta"
+          echo "$resposta" | grep -q '"ok":true' || echo "::warning::A sincronização do Google não respondeu ok"

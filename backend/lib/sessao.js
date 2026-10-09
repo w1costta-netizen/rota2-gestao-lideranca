@@ -29,6 +29,10 @@ const SEM_SESSAO = [
   '/api/resumo/descadastrar-diario',
   '/api/notificacoes/recebido',
   '/api/notificacoes/inscrever',
+  // Volta do Google depois da autorização: é um redirecionamento do
+  // navegador, sem o token do app. Quem prova de quem é o pedido é o
+  // `state` assinado (lib/googleAgenda.js).
+  '/api/google/callback',
 ];
 
 // Rotas em que `user_id` é QUEM CHAMA (e não a pessoa consultada). Em
@@ -59,7 +63,7 @@ async function usuarioDoToken(token) {
 // Crons do GitHub Actions: sem sessão, mas com um segredo compartilhado no
 // header. Fail-closed: sem CRON_SEGREDO configurado no Render, o cron não
 // roda — e registra no log para não falhar em silêncio.
-const CRONS = ['/api/resumo/diario', '/api/resumo/diario-bordo', '/api/hotmart/verificar-vencimentos'];
+const CRONS = ['/api/resumo/diario', '/api/resumo/diario-bordo', '/api/hotmart/verificar-vencimentos', '/api/google/sincronizar-todos'];
 function cronAutorizado(req, res) {
   const esperado = process.env.CRON_SEGREDO;
   if (!esperado) {

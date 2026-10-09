@@ -210,11 +210,16 @@ router.put('/:id', async (req, res) => {
   // seguintes da mesma série (cada uma mantém a própria week_start). Sem
   // escopo, ou 'este', mexe só nesta semana — e ela sai da série, para não
   // ser sobrescrita numa edição futura "deste e dos próximos".
-  const { data: atual } = await supabase.from('agenda_items').select('serie_id, week_start, company').eq('id', req.params.id).maybeSingle();
+  const { data: atual } = await supabase.from('agenda_items').select('serie_id, week_start, company, origem').eq('id', req.params.id).maybeSingle();
   // Item de outra loja responde como inexistente: sem esta trava, bastava
   // o id para editar o compromisso de outra empresa.
   if (!atual || atual.company !== await lojaPermitida(meUpdate, atual.company)) {
     return res.status(404).json({ error: 'Item não encontrado' });
+  }
+  // Veio do Google: a próxima sincronização desfaria a edição. Quem manda
+  // nesse compromisso é o Google Agenda.
+  if (atual.origem === 'google') {
+    return res.status(400).json({ error: 'Este compromisso vem do Google Agenda. Altere por lá — ele atualiza aqui sozinho.' });
   }
   const emSerie = req.body.escopo === 'futuros' && atual.serie_id;
 
@@ -256,9 +261,13 @@ router.delete('/:id', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
 
-  const { data: item } = await supabase.from('agenda_items').select('title, company, serie_id, week_start').eq('id', req.params.id).single();
+  const { data: item } = await supabase.from('agenda_items').select('title, company, serie_id, week_start, origem').eq('id', req.params.id).single();
   if (!item || item.company !== await lojaPermitida(me, item.company)) {
     return res.status(404).json({ error: 'Item não encontrado' });
+  }
+  // Apagado aqui, voltaria na próxima sincronização.
+  if (item.origem === 'google') {
+    return res.status(400).json({ error: 'Este compromisso vem do Google Agenda. Para tirar daqui, apague ou recuse por lá.' });
   }
 
   // ?escopo=futuros apaga esta semana e as seguintes da série; o passado fica.
