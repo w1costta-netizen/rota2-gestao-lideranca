@@ -196,6 +196,15 @@ function localBR(iso) {
 
 const recusou = (ev) => (ev.attendees || []).some(a => a.self && a.responseStatus === 'declined');
 
+// Eventos que o Google mostra na agenda mas não são compromisso:
+//  • workingLocation — o "local de trabalho" (Escritório / Casa) que o
+//    Google da empresa marca TODO DIA. No primeiro teste real (09/10/2026)
+//    ele encheu a semana inteira de "Escritório · Dia todo".
+//  • birthday — aniversários dos contatos.
+// "Fora do escritório" (outOfOffice) e "tempo de foco" (focusTime) ficam:
+// são blocos que a própria pessoa marcou, e dizem que ela não está livre.
+const NAO_E_COMPROMISSO = ['workingLocation', 'birthday'];
+
 function descricaoDo(ev) {
   const partes = [];
   if (ev.location) partes.push(`Local: ${ev.location}`);
@@ -208,7 +217,7 @@ function descricaoDo(ev) {
 // dias vira uma linha por dia (até 14 — um evento de férias de um mês não
 // precisa encher a agenda inteira).
 function linhasDoEvento(ev, { userId, company }) {
-  if (ev.status === 'cancelled' || recusou(ev)) return [];
+  if (ev.status === 'cancelled' || recusou(ev) || NAO_E_COMPROMISSO.includes(ev.eventType)) return [];
   const base = {
     title: String(ev.summary || '(sem título)').slice(0, 200),
     description: descricaoDo(ev),
