@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import api from '../api';
-import { registrarSeJaPermitido, removerInscricaoDesteAparelho } from '../lib/notificacoes';
+import { removerInscricaoDesteAparelho } from '../lib/notificacoes';
 import { reportError } from '../lib/reportError';
 
 // O padrão precisa ser um objeto, não null: quando sai uma versão nova e o
@@ -108,11 +108,9 @@ export function AuthProvider({ children }) {
     // `undefined` prenderia o app na tela de carregamento para sempre.
     setProfile(carregado);
 
-    // Mantém o cadastro do aparelho em dia. O navegador troca a inscrição
-    // sozinho de vez em quando (reinstalação, restauração de backup), e sem
-    // isto a pessoa pararia de receber sem nenhum aviso. Não usa await: é
-    // manutenção de fundo e não pode segurar a entrada no app.
-    registrarSeJaPermitido(userId).catch(() => {});
+    // O cadastro do aparelho para notificação é mantido pelo
+    // <AvisoNotificacoes> (ao abrir e ao voltar para o app), que também
+    // mostra o botão de reativar quando o aparelho exige um toque.
   }
 
   async function signOut() {

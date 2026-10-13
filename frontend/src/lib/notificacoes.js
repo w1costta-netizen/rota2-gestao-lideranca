@@ -95,6 +95,7 @@ export async function ativarNotificacoes(userId) {
       inscricao: inscricao.toJSON(),
     });
 
+    marcarQueJaAtivou();
     return { ok: true, servico: resposta.data?.servico || null };
   } catch (e) {
     return { ok: false, motivo: 'erro_inscricao', detalhe: e?.message || String(e) };
@@ -125,22 +126,72 @@ async function guardarConfig(userId, chavePublica) {
   } catch { /* sem cache: perde só a reinscrição automática */ }
 }
 
-// Chamada a cada abertura do app, quando a permissão já foi concedida.
-// Barata (só atualiza a linha) e é o que mantém o cadastro em dia depois de
-// uma reinstalação.
+// A pessoa já ativou notificação neste aparelho alguma vez. É o que permite
+// distinguir "nunca quis" (não incomodar) de "parou sozinho" (avisar).
+const JA_ATIVOU = 'rota_push_ja_ativou';
+function marcarQueJaAtivou() {
+  try { localStorage.setItem(JA_ATIVOU, '1'); } catch { /* aba anônima */ }
+}
+function jaAtivouAqui() {
+  try { return localStorage.getItem(JA_ATIVOU) === '1'; } catch { return false; }
+}
+
+// O CADASTRO DO APARELHO SE MANTÉM SOZINHO.
+//
+// Chamada ao abrir o app e ao voltar para ele. Antes, se a permissão
+// estava dada mas a inscrição tinha sumido (saiu da conta, o sistema do
+// celular descartou, reinstalou), a função desistia — "só o usuário pode
+// recriar" — e a pessoa ficava sem notificação até ir no Perfil e ativar
+// de novo. Era exatamente o atrito que os líderes relataram (13/10/2026).
+//
+// Agora: com a permissão dada, refaz a inscrição sem perguntar nada (a
+// permissão já foi concedida; o navegador não pergunta de novo). Só se o
+// aparelho recusar fazer isso sem um toque é que a tela pede UM toque.
+//
+// Devolve:
+//   'ok'           — registrado (ou re-registrado) neste aparelho
+//   'precisa_toque'— parou e só volta com um toque da pessoa
+//   'nada'         — não se aplica (sem suporte, nunca ativou, bloqueado)
 export async function registrarSeJaPermitido(userId) {
-  if (!userId || !suportaNotificacoes()) return;
-  if (Notification.permission !== 'granted') return;
+  if (!userId || !suportaNotificacoes()) return 'nada';
+  if (ehIOS() && !instaladoNaTelaDeInicio()) return 'nada';
+
+  if (Notification.permission === 'denied') return 'nada';
+  if (Notification.permission !== 'granted') {
+    // Permissão voltou a "perguntar" (reinstalação do app, por exemplo):
+    // só quem já usava merece o aviso.
+    return jaAtivouAqui() ? 'precisa_toque' : 'nada';
+  }
+
   try {
-    const registro = await navigator.serviceWorker.ready;
-    const inscricao = await registro.pushManager.getSubscription();
-    if (!inscricao) return; // sem inscrição: só o usuário pode recriar, com um clique
+    const registro = await comLimite(navigator.serviceWorker.ready, 5000);
+    if (!registro) return 'nada';
 
     const { data } = await api.get('/notificacoes/chave-publica');
-    if (data?.chavePublica) await guardarConfig(userId, data.chavePublica);
+    if (!data?.chavePublica) return 'nada';
 
+    let inscricao = await registro.pushManager.getSubscription();
+    if (!inscricao) {
+      try {
+        inscricao = await registro.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: chaveParaBytes(data.chavePublica),
+        });
+      } catch {
+        // Alguns aparelhos (iPhone, principalmente) só refazem a inscrição
+        // a partir de um toque. Aí a tela mostra o botão.
+        return 'precisa_toque';
+      }
+    }
+
+    await guardarConfig(userId, data.chavePublica);
     await api.post('/notificacoes/inscrever', { user_id: userId, inscricao: inscricao.toJSON() });
-  } catch { /* silencioso: é manutenção de fundo, não pode atrapalhar o login */ }
+    marcarQueJaAtivou();
+    return 'ok';
+  } catch {
+    // Rede, servidor dormindo: tenta de novo na próxima volta ao app.
+    return 'nada';
+  }
 }
 
 export async function enviarTeste(userId) {
@@ -174,16 +225,22 @@ export async function removerInscricaoDesteAparelho() {
     const inscricao = await registro.pushManager.getSubscription();
     if (!inscricao) return;
 
-    // Some do banco (para o servidor parar de enviar) e do navegador (para
-    // o aparelho parar de aceitar). Só um dos dois deixaria brecha.
+    // Some do BANCO — é o banco que decide para quem o servidor envia, então
+    // isto basta para quem saiu parar de receber neste aparelho.
+    //
+    // A inscrição do NAVEGADOR fica, de propósito. Antes ela era desfeita
+    // aqui, e quem saía e entrava de novo (ou tinha a sessão encerrada)
+    // voltava sem notificação, sem aviso, até ir no Perfil e ativar outra
+    // vez. Mantida, ela é religada sozinha a quem entrar em seguida.
     // Limite curto próprio: o padrão do app é 90 segundos, tempo demais para
-    // segurar alguém que só quer sair. Se o servidor estiver lento, some do
-    // navegador agora e o registro no banco cai no próximo login.
-    await api.delete('/notificacoes/inscricao', {
+    // segurar alguém que só quer sair.
+    const apagou = await api.delete('/notificacoes/inscricao', {
       data: { endpoint: inscricao.endpoint },
       timeout: 4000,
-    }).catch(() => {});
-    await inscricao.unsubscribe().catch(() => {});
+    }).then(() => true).catch(() => false);
+    // Se o servidor não respondeu, aí sim desfaz no navegador: é a única
+    // garantia que sobra de que quem saiu não recebe aqui.
+    if (!apagou) await inscricao.unsubscribe().catch(() => {});
 
     // A configuração guardada traz o id de quem estava logado: sair sem
     // apagá-la deixaria o service worker se reinscrevendo por essa pessoa.

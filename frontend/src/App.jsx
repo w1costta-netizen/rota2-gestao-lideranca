@@ -4,6 +4,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { hasPermission, moduloNaoContratado, ehDonoDeGrupo } from './lib/permissions';
 import { ToastProvider, useToast } from './components/Toast';
 import ErrorBoundary from './components/ErrorBoundary';
+import AvisoNotificacoes from './components/AvisoNotificacoes';
 import { startAlarmEngine, stopAlarmEngine } from './lib/alarm';
 import Sidebar from './components/Sidebar';
 import Login from './pages/Login';
@@ -680,6 +681,9 @@ function AppContent() {
             </button>
           </div>
         )}
+
+        {/* Notificação que parou neste aparelho: refaz sozinho, ou pede um toque. */}
+        <AvisoNotificacoes userId={userId} />
 
         <React.Suspense fallback={
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center',
