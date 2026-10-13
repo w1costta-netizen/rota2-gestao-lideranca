@@ -488,10 +488,26 @@ export default function Tarefas({ userId, profile, setPage }) {
   };
 
   const remove = async (id) => {
-    if (!window.confirm('Excluir esta tarefa?')) return;
-    await api.delete(`/tarefas/${id}?requester_id=${userId}`).catch(() => toast('Erro ao remover'));
-    setList(l => l.filter(t => t.id !== id));
-    toast('Tarefa removida');
+    // Tarefa de uma ação do plano que se repete: apagar tira só esta data.
+    // Quem manda na rotina é o plano — dizer isso antes evita a surpresa
+    // de a tarefa "voltar" amanhã, e diz onde se encerra de verdade.
+    const t = list.find(x => x.id === id);
+    const doPlano = t?.pdca_context?.acao_id && !t.pdca_context.medicao && t.recorrencia && t.recorrencia !== 'nenhuma';
+    const pergunta = doPlano
+      ? `Excluir a tarefa de ${formatDate(t.due_date)}?\n\nEla faz parte do plano "${t.pdca_context.plano_titulo || ''}" e se repete. As próximas datas continuam até ${formatDate(t.pdca_context.repetir_ate)}.\n\nPara encerrar a rotina, conclua ou exclua a ação no Plano de Ação.`
+      : 'Excluir esta tarefa?';
+    if (!window.confirm(pergunta)) return;
+    let resp;
+    try {
+      ({ data: resp } = await api.delete(`/tarefas/${id}?requester_id=${userId}`));
+    } catch { toast('Erro ao remover'); return; }
+    setList(l => l.filter(x => x.id !== id));
+    if (resp?.proxima) {
+      toast(`Tarefa removida. A próxima do plano fica para ${formatDate(resp.proxima.due_date)}.`);
+      load(true);
+    } else {
+      toast('Tarefa removida');
+    }
   };
 
   const updateStatus = async (t, status) => {

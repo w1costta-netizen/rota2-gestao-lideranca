@@ -4,6 +4,8 @@ const supabase = require('../supabase');
 const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 const { vistosDe, marcarVisto, comentariosPorItem, avisarDesde } = require('../lib/leituras');
+const { proximaOcorrenciaFutura } = require('../lib/recorrencia');
+const { garantirProximaTarefa, garantirTarefasDaEmpresa } = require('../lib/tarefasDoPlano');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name, created_at').eq('id', id).single();
@@ -19,62 +21,6 @@ const limparDiasSemana = (ds) => {
     .filter(n => Number.isInteger(n) && n >= 0 && n <= 6).sort();
   return limpos.length ? limpos : null;
 };
-
-function nextDueDate(due_date, recorrencia, dias_semana) {
-  if (!due_date || !recorrencia || recorrencia === 'nenhuma') return null;
-  const d = new Date(due_date + 'T12:00:00');
-  // Dias escolhidos ("de segunda a quarta"): anda de um em um até cair num
-  // dia marcado. No máximo sete passos — se nenhum bater, a lista está
-  // vazia e a tarefa simplesmente não se repete, em vez de girar sem fim.
-  if (recorrencia === 'dias_semana') {
-    const dias = (dias_semana || []).map(Number).filter(n => n >= 0 && n <= 6);
-    if (!dias.length) return null;
-    for (let i = 0; i < 7; i++) {
-      d.setDate(d.getDate() + 1);
-      if (dias.includes(d.getDay())) return d.toISOString().split('T')[0];
-    }
-    return null;
-  }
-  if (recorrencia === 'diaria')     d.setDate(d.getDate() + 1);
-  if (recorrencia === 'semanal')    d.setDate(d.getDate() + 7);
-  // 15, não 14 — decisão do usuário (09/10/2026). O frontend decide em que
-  // dia a rotina APARECE com a mesma conta (`caiNoDia`, em
-  // frontend/src/lib/recorrencia.js). Se mudar aqui, muda lá.
-  if (recorrencia === 'quinzenal')  d.setDate(d.getDate() + 15);
-  if (recorrencia === 'mensal')     d.setMonth(d.getMonth() + 1);
-  return d.toISOString().split('T')[0];
-}
-
-// Hoje no relógio da loja, não do servidor (que roda em UTC: das 21h em
-// diante ele já está "amanhã").
-const hojeBR = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
-
-// A PRÓXIMA OCORRÊNCIA QUE AINDA NÃO PASSOU.
-//
-// `nextDueDate` anda um passo a partir da data guardada. Concluir uma
-// rotina atrasada criava a próxima AINDA NO PASSADO, e ela voltava para
-// "Atrasadas" na hora. Uma rotina de segunda a quarta parada em 29/09,
-// concluída numa sexta, virava 30/09, depois 01/10, depois 06/10... A
-// pessoa clicava, a tarefa voltava, e parecia que o app não salvava.
-//
-// Quem conclui atrasado está fazendo a rotina AGORA — não seis vezes. A
-// conclusão vale pela de hoje, e a próxima é a primeira DEPOIS de hoje.
-//
-// Anda de passo em passo a partir da data antiga, em vez de calcular a
-// partir de hoje, para não perder a âncora: uma rotina "toda segunda"
-// concluída numa sexta tem que continuar caindo na segunda, não virar
-// "toda sexta". Concluir adiantado (data no futuro) não muda nada: o
-// primeiro passo já cai depois de hoje.
-function proximaOcorrenciaFutura(due_date, recorrencia, dias_semana) {
-  const hoje = hojeBR();
-  let d = nextDueDate(due_date, recorrencia, dias_semana);
-  // Teto de segurança: ~3 anos de rotina diária. Nunca deveria chegar
-  // perto, mas um laço sem teto num servidor não é risco que se corre.
-  for (let i = 0; d && d <= hoje && i < 1100; i++) {
-    d = nextDueDate(d, recorrencia, dias_semana);
-  }
-  return d;
-}
 
 // GET /api/tarefas
 router.get('/', async (req, res) => {
@@ -96,6 +42,13 @@ router.get('/', async (req, res) => {
 
     const targetCompany = me.access_level === 'master' ? queryCompany : me.company;
     if (me.access_level === 'master' && !targetCompany) return res.json([]);
+
+    // Rede de segurança do Plano de Ação: ação que se repete e ficou sem a
+    // próxima tarefa (apagada, falha ao criar, qualquer motivo) ganha a
+    // dela aqui, ANTES da leitura — assim ela já aparece nesta resposta.
+    // Roda no máximo a cada poucos minutos por empresa; erro aqui nunca
+    // impede a lista de carregar.
+    await garantirTarefasDaEmpresa(targetCompany).catch(() => {});
 
     // Privacidade: cada pessoa só vê tarefas que ela mesma criou/delegou
     // (created_by) ou que estão atribuídas a ela (assigned_to) — mesmo
@@ -225,19 +178,34 @@ router.put('/:id', async (req, res) => {
   if (isManager(me) && assigned_to) updates.assigned_to = assigned_to;
   if (status) updates.status = status;
 
+  // A próxima ocorrência de uma rotina, se houver. Calculada aqui em cima
+  // porque a sincronia com o plano, logo abaixo, precisa saber.
+  const repete = status === 'concluida' && task?.recorrencia && task.recorrencia !== 'nenhuma';
+  const proxData = repete ? proximaOcorrenciaFutura(task.due_date, task.recorrencia, task.dias_semana) : null;
+  // Tarefa de plano de ação repete só até o prazo da ação. Sem esta
+  // trava, uma ação "toda segunda" continuaria nascendo para sempre,
+  // muito depois de o plano ter acabado.
+  const limite = task?.pdca_context?.repetir_ate;
+  const vaiRepetir = !!proxData && !(limite && proxData > limite);
+
   // Sync ação PDCA quando tarefa é marcada como concluída/pendente.
   //
   // Medição do C tem VÁRIAS tarefas (uma por data) com o mesmo acao_id:
   // concluir a primeira marcava a ação inteira como feita e o progresso do
   // plano subia com cinco medições ainda por fazer. Com mais de uma tarefa,
   // a ação só fecha quando todas estiverem concluídas.
+  //
+  // E a ação que SE REPETE só fecha na última vez. Antes, concluir a
+  // tarefa de hoje marcava a ação inteira como concluída no plano: esta
+  // conta lia as tarefas antes de a próxima ocorrência existir, via "todas
+  // concluídas" e fechava — com semanas de rotina ainda pela frente.
   if (status !== undefined && task?.pdca_context?.acao_id) {
     (async () => {
       const acaoId = task.pdca_context.acao_id;
       const { data: irmas } = await supabase.from('tarefas')
         .select('id, status').eq('pdca_context->>acao_id', acaoId);
       const todas = (irmas || []).map(t => (t.id === req.params.id ? { ...t, status } : t));
-      const fechou = todas.length > 0 && todas.every(t => t.status === 'concluida');
+      const fechou = !vaiRepetir && todas.length > 0 && todas.every(t => t.status === 'concluida');
       await supabase.from('acoes_pdca').update({
         concluida: fechou,
         concluida_em: fechou ? new Date().toISOString() : null,
@@ -246,14 +214,8 @@ router.put('/:id', async (req, res) => {
   }
 
   // Recorrência: ao concluir, cria próxima instância automaticamente
-  if (status === 'concluida' && task?.recorrencia && task.recorrencia !== 'nenhuma') {
-    const proxData = proximaOcorrenciaFutura(task.due_date, task.recorrencia, task.dias_semana);
-    // Tarefa de plano de ação repete só até o prazo da ação. Sem esta
-    // trava, uma ação "toda segunda" continuaria nascendo para sempre,
-    // muito depois de o plano ter acabado.
-    const limite = task?.pdca_context?.repetir_ate;
-    const passouDoPrazo = limite && proxData && proxData > limite;
-    if (proxData && !passouDoPrazo) {
+  if (repete) {
+    if (vaiRepetir) {
       // DUAS CORREÇÕES AQUI, as duas descobertas por tarefa duplicada na
       // tela de um líder.
       //
@@ -530,7 +492,7 @@ router.delete('/:id', async (req, res) => {
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Acesso negado' });
-  const { data: task } = await supabase.from('tarefas').select('created_by, assigned_to, title, company').eq('id', req.params.id).single();
+  const { data: task } = await supabase.from('tarefas').select('created_by, assigned_to, title, company, due_date, pdca_context').eq('id', req.params.id).single();
   const isOwner = task?.created_by === requester_id && task?.assigned_to === requester_id;
   if (!isManager(me) && !isOwner) return res.status(403).json({ error: 'Acesso negado' });
   const { error } = await supabase.from('tarefas').delete().eq('id', req.params.id);
@@ -538,8 +500,22 @@ router.delete('/:id', async (req, res) => {
     logError({ company: task?.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: error.message });
     return res.status(500).json({ error: error.message });
   }
-  logAction({ company: task?.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', antes: { title: task?.title } });
-  res.json({ ok: true });
+  logAction({ company: task?.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', antes: { title: task?.title, due_date: task?.due_date, plano: task?.pdca_context?.plano_titulo || undefined } });
+
+  // TAREFA DE UMA AÇÃO DO PLANO QUE SE REPETE: apagar tira ESTA data, não
+  // a rotina inteira.
+  //
+  // A rotina é uma linha só, que anda para a próxima data quando alguém
+  // conclui. Apagar essa linha não deixava nada para andar — as próximas
+  // simplesmente nunca nasciam, nem para o líder nem para quem fazia. Quem
+  // manda na rotina é o plano (início, repetição e prazo); para encerrar
+  // antes, é lá que se conclui ou apaga a ação.
+  let proxima = null;
+  if (task?.pdca_context?.acao_id && !task.pdca_context.medicao) {
+    proxima = await garantirProximaTarefa(task.pdca_context.acao_id, { depoisDe: task.due_date })
+      .catch(e => { logError({ company: task.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: `próxima do plano: ${e.message}` }); return null; });
+  }
+  res.json({ ok: true, proxima });
 });
 
 module.exports = router;

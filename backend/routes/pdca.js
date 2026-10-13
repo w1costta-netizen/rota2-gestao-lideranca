@@ -2,6 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
+const { QUADRANTE_LABEL, partirAcao, descricaoDaTarefa, contextoDaAcao, garantirProximaTarefa } = require('../lib/tarefasDoPlano');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -79,36 +80,6 @@ async function limparTarefasDeMedicao(acaoId) {
     .eq('status', 'pendente');
 }
 
-// Os quadrantes estruturados guardam a ação como um texto com rótulos
-// ("Onde:", "Como:", "Por quê:"...). Esse texto inteiro virava o TÍTULO da
-// tarefa — um parágrafo de seis linhas onde devia haver um título. Aqui ele
-// é partido: a primeira linha (o "o quê") vira o título; o resto desce para
-// a descrição, cada rótulo na sua linha.
-const ROTULOS_ACAO = /^(Onde|Como|Por quê|Quanto custa|Comunicação|Treinamento|Monitoramento|Resultado observado|Problema|Meta|Causa raiz \(5 Porquês\)):/;
-
-function partirAcao(descricao) {
-  let linhas = String(descricao || '').split('\n');
-  // No C a primeira linha é a classificação (emoji + rótulo em maiúsculas):
-  // é estado da verificação, não o nome do que precisa ser feito.
-  if (linhas.length > 1 && /^(✅|⚠️|⏳)\s/.test(linhas[0].trim())) linhas = linhas.slice(1);
-  if (!linhas.join('').trim()) return { titulo: 'Ação do plano', corpo: '' };
-
-  const i = linhas.findIndex(l => ROTULOS_ACAO.test(l.trim()));
-  const livre    = (i < 0 ? linhas : linhas.slice(0, i)).join('\n').trim();
-  const rotulada = (i < 0 ? [] : linhas.slice(i)).join('\n').trim();
-
-  // O título é a primeira linha do texto livre. Se a ação só tem partes
-  // rotuladas, a primeira delas vira título — melhor que tarefa sem nome.
-  const fonte  = (livre || rotulada).split('\n');
-  const titulo = fonte[0].trim();
-  const resto  = fonte.slice(1).join('\n').trim();
-  return {
-    // 120 é folgado para um título e curto o bastante para caber no cartão.
-    titulo: titulo.length > 120 ? `${titulo.slice(0, 117)}...` : titulo,
-    corpo: livre ? [resto, rotulada].filter(Boolean).join('\n') : resto,
-  };
-}
-
 // PÕE A TAREFA DE UMA AÇÃO EM DIA — atualiza o que existe, adota a órfã,
 // e cria se não houver nenhuma viva.
 //
@@ -118,15 +89,7 @@ function partirAcao(descricao) {
 // arrumava a tarefa de uma líder e deixava a da outra no formato antigo,
 // e uma terceira sem tarefa nenhuma. Agora é a mesma função para todos.
 async function porTarefaEmDia({ acao, plano, descricao, detalhe, repete, dias, inicio, prazo, criarTarefa, requesterId }) {
-  const contexto = {
-    plano_id: acao.plano_id,
-    plano_titulo: plano?.titulo,
-    quadrante: acao.quadrante,
-    quadrante_label: QUADRANTE_LABEL[acao.quadrante] || acao.quadrante,
-    meta: plano?.meta,
-    acao_id: acao.id,
-    repetir_ate: prazo || null,
-  };
+  const contexto = contextoDaAcao(acao, plano, prazo);
 
   const { data: ligadas } = await supabase.from('tarefas')
     .select('id, due_date, status')
@@ -179,15 +142,6 @@ async function porTarefaEmDia({ acao, plano, descricao, detalhe, repete, dias, i
   if (nova) await supabase.from('acoes_pdca').update({ tarefa_id: nova.id }).eq('id', acao.id);
   return nova?.id || null;
 }
-
-function descricaoDaTarefa(tituloPlano, detalhe, corpo) {
-  const partes = [`Ação do Plano: ${tituloPlano}`];
-  if (detalhe?.trim()) partes.push(`Sua parte: ${detalhe.trim()}`);
-  if (corpo?.trim()) partes.push('', corpo.trim());
-  return partes.join('\n');
-}
-
-const QUADRANTE_LABEL = { P: 'P — Planejar', D: 'D — Fazer', C: 'C — Checar', A: 'A — Agir' };
 
 // ── PLANOS ──────────────────────────────────────────────────
 
@@ -286,6 +240,14 @@ router.put('/:id', async (req, res) => {
     return res.status(500).json({ error: error.message });
   }
   logAction({ company: data.company, user_id: requester_id, acao: 'editar_plano_pdca', tabela: 'planos_acao', depois: updates });
+
+  // Plano reaberto: as rotinas dele voltam a ter a próxima tarefa.
+  if (status === 'andamento') {
+    const { data: acoesDoPlano } = await supabase.from('acoes_pdca').select('*').eq('plano_id', req.params.id);
+    for (const a of acoesDoPlano || []) {
+      await garantirProximaTarefa(a, { plano: data }).catch(() => null);
+    }
+  }
   res.json(data);
 });
 
@@ -298,12 +260,16 @@ router.delete('/:id', async (req, res) => {
 
   const { data: plano } = await supabase.from('planos_acao').select('titulo, company').eq('id', req.params.id).single();
 
-  // Remove tarefas vinculadas às ações do plano
+  // Remove tarefas vinculadas às ações do plano. `tarefa_id` aponta para
+  // UMA tarefa; a rotina e a medição do C têm várias, que só se acham pelo
+  // vínculo. Apagar só pela referência deixava as outras na lista das
+  // pessoas, de um plano que não existe mais.
   const { data: acoes } = await supabase.from('acoes_pdca').select('tarefa_id').eq('plano_id', req.params.id).not('tarefa_id', 'is', null);
   const tarefaIds = (acoes || []).map(a => a.tarefa_id).filter(Boolean);
   if (tarefaIds.length > 0) {
     await supabase.from('tarefas').delete().in('id', tarefaIds);
   }
+  await supabase.from('tarefas').delete().eq('pdca_context->>plano_id', req.params.id);
 
   await supabase.from('acoes_pdca').delete().eq('plano_id', req.params.id);
   const { error } = await supabase.from('planos_acao').delete().eq('id', req.params.id);
@@ -506,8 +472,22 @@ router.put('/acoes/:id', async (req, res) => {
     depois: updates,
   });
 
-  // Sync tarefa vinculada quando concluida muda
-  if (concluida !== undefined && acaoAtual.tarefa_id) {
+  // Sync tarefa vinculada quando concluida muda.
+  //
+  // Ação que SE REPETE é diferente: `tarefa_id` costuma apontar para a
+  // PRIMEIRA ocorrência, de semanas atrás. Desmarcar reabria essa tarefa
+  // velha (que aparecia como atrasada) e não trazia a de hoje. Agora:
+  // concluir a ação fecha o que está em aberto dela e encerra a rotina;
+  // desmarcar devolve a próxima data que a rotina manda.
+  const repeteAcao = (acaoAtual.recorrencia && acaoAtual.recorrencia !== 'nenhuma') && !(acaoAtual.datas_medicao || []).length;
+  if (concluida !== undefined && repeteAcao) {
+    if (concluida) {
+      await supabase.from('tarefas').update({ status: 'concluida', updated_at: new Date().toISOString() })
+        .eq('pdca_context->>acao_id', req.params.id).neq('status', 'concluida');
+    } else {
+      await garantirProximaTarefa(req.params.id, { plano: acaoAtual.plano }).catch(() => null);
+    }
+  } else if (concluida !== undefined && acaoAtual.tarefa_id) {
     supabase.from('tarefas').update({
       status: concluida ? 'concluida' : 'pendente',
     }).eq('id', acaoAtual.tarefa_id).then(() => {}).catch(() => {});

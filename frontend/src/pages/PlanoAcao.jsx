@@ -612,6 +612,13 @@ export default function PlanoAcao({ userId, profile }) {
   };
 
   const toggleAcao = async (acao) => {
+    // Ação que se repete: marcar como feita ENCERRA a rotina — as tarefas
+    // das próximas datas deixam de nascer. Quem marca pensando "fiz a de
+    // hoje" precisa saber disso antes, não descobrir amanhã.
+    const repete = acao.recorrencia && acao.recorrencia !== 'nenhuma' && !(acao.datas_medicao || []).length;
+    if (repete && !acao.concluida && !window.confirm(
+      `Esta ação se repete até ${formatDate(acao.prazo)}.\n\nMarcar como feita encerra a rotina: as tarefas das próximas datas deixam de ser criadas.\n\nPara registrar só o dia de hoje, conclua a tarefa na tela de Tarefas.\n\nEncerrar a rotina?`
+    )) return;
     try {
       const { data } = await api.put(`/pdca/acoes/${acao.id}`, { requester_id: userId, concluida: !acao.concluida });
       setAcoes(as => as.map(a => a.id === data.id ? data : a));
