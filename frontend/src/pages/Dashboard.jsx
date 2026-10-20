@@ -416,25 +416,31 @@ export default function Dashboard({ setPage, profile: propProfile }) {
           }
         </div>
 
-        {/* Minhas tarefas */}
+        {/* TAREFAS DE HOJE. Antes era "as 5 primeiras em aberto, de qualquer
+            data" — com a rotina do plano virando uma tarefa por data, a lista
+            se encheu de datas futuras e o dia sumia. Agora é o mesmo conjunto
+            do cartão "Tarefas para hoje": os dois números sempre batem. */}
         <div className="card">
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
             <div style={{ fontWeight:700, fontSize:14, display:'flex', alignItems:'center', gap:8 }}>
-              <CheckSquare size={15} color="#6366f1"/> Minhas tarefas
+              <CheckSquare size={15} color="#6366f1"/> Tarefas de hoje
             </div>
             <button className="btn-icon" style={{ fontSize:12, color:'var(--primary)' }} onClick={() => setPage('tarefas')}>
               Ver tudo
             </button>
           </div>
-          {tarefas.length === 0
-            ? <p style={{ color:'var(--text-muted)', fontSize:13 }}>Nenhuma tarefa atribuída.</p>
+          {tarefasHoje.length === 0
+            ? <p style={{ color:'var(--text-muted)', fontSize:13 }}>
+                {tarefasAtrasadas.length ? 'Nenhuma tarefa para hoje.' : 'Nenhuma tarefa para hoje. Tudo em dia.'}
+              </p>
             : <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
-                {[...tarefas]
-                  .filter(t => t.status !== 'concluida' && t.status !== 'nao_realizada')
-                  .sort((a,b) => {
+                {[...tarefasHoje]
+                  // Em andamento primeiro; depois as que têm horário, da mais
+                  // cedo para a mais tarde; as sem horário no fim.
+                  .sort((a, b) => {
                     if (a.status === 'em_andamento' && b.status !== 'em_andamento') return -1;
                     if (b.status === 'em_andamento' && a.status !== 'em_andamento') return 1;
-                    return 0;
+                    return (a.due_time || '99:99').localeCompare(b.due_time || '99:99');
                   })
                   .slice(0,5)
                   .map(t => {
@@ -461,7 +467,8 @@ export default function Dashboard({ setPage, profile: propProfile }) {
                             {t.due_date && (
                               <span style={{ color: atrasada ? '#ef4444' : 'var(--text-muted)', fontWeight: atrasada ? 700 : 400 }}>
                                 {atrasada ? '⚠ vencida: ' : '📅 '}
-                                {rotinaDeHoje ? 'hoje' : new Date(t.due_date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                {rotinaDeHoje || t.due_date === hojeYMD ? 'hoje' : new Date(t.due_date + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                {t.due_time ? ` às ${t.due_time.slice(0, 5)}` : ''}
                               </span>
                             )}
                           </div>
@@ -478,6 +485,22 @@ export default function Dashboard({ setPage, profile: propProfile }) {
                   })}
               </div>
           }
+          {/* O que não coube e o que está atrasado: uma linha cada, levando
+              para a tela de Tarefas. */}
+          {(tarefasHoje.length > 5 || tarefasAtrasadas.length > 0) && (
+            <div style={{ display:'flex', gap:14, flexWrap:'wrap', marginTop:10, fontSize:12.5 }}>
+              {tarefasHoje.length > 5 && (
+                <button className="btn-icon" style={{ fontSize:12.5, color:'var(--primary)', fontWeight:600 }} onClick={() => setPage('tarefas')}>
+                  e mais {tarefasHoje.length - 5} hoje
+                </button>
+              )}
+              {tarefasAtrasadas.length > 0 && (
+                <button className="btn-icon" style={{ fontSize:12.5, color:'var(--selo-atraso-fg)', fontWeight:700 }} onClick={() => setPage('tarefas')}>
+                  ⚠ {tarefasAtrasadas.length} atrasada{tarefasAtrasadas.length > 1 ? 's' : ''} · ver
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Diário de bordo — o que a loja registrou hoje.
