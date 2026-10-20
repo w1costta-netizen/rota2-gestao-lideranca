@@ -1,4 +1,4 @@
-import { caiNoDia, estaAtrasada } from '../lib/recorrencia';
+import { caiNoDia, estaAtrasada, encerrada } from '../lib/recorrencia';
 import React, { useEffect, useState } from 'react';
 import {
   Megaphone, CheckSquare, CalendarDays, ListChecks, StickyNote, Pin,
@@ -33,15 +33,16 @@ function getCurrentWeekStart() {
   return d.toISOString().split('T')[0];
 }
 
-function StatCard({ icon: Icon, color, bg, value, label, onClick }) {
+function StatCard({ icon: Icon, color, bg, value, label, onClick, selo }) {
   return (
     <div className="stat-card" style={{ cursor: onClick ? 'pointer' : 'default' }} onClick={onClick}>
       <div className="stat-icon" style={{ background: bg }}>
         <Icon size={20} color={color} />
       </div>
-      <div>
+      <div style={{ minWidth: 0 }}>
         <div className="stat-value">{value}</div>
         <div className="stat-label">{label}</div>
+        {selo}
       </div>
     </div>
   );
@@ -195,6 +196,9 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   // anda quando alguém conclui, então a rotina de hoje fica com data antiga
   // de propósito. Não reescreva a regra; importe.
   const tarefasAtrasadas   = tarefas.filter(t => estaAtrasada(t, hojeYMD));
+  // HOJE: a mesma regra da aba "Hoje" da tela de Tarefas — aberta, com data
+  // de hoje ou rotina que cai hoje. O número do painel e o da aba são o mesmo.
+  const tarefasHoje        = tarefas.filter(t => !encerrada(t.status) && (t.due_date === hojeYMD || caiNoDia(t, hojeYMD)));
   const tarefasEmAndamento = tarefas.filter(t => t.status === 'em_andamento');
 
   // Comunicados não lidos
@@ -325,8 +329,15 @@ export default function Dashboard({ setPage, profile: propProfile }) {
 
       {/* Stats */}
       <div className="stats-grid">
+        {/* O cartão diz o que tem para HOJE e, no mesmo lugar, o que está
+            atrasado — antes só mostrava o atraso, e quem abria o painel não
+            sabia o que tinha para fazer no dia. */}
         <StatCard icon={CheckSquare} color="#6366f1" bg="#6366f115"
-          value={tarefasAtrasadas.length} label="Tarefas atrasadas"
+          value={tarefasHoje.length}
+          label={tarefasHoje.length === 1 ? 'Tarefa para hoje' : 'Tarefas para hoje'}
+          selo={tarefasAtrasadas.length > 0
+            ? <span className="stat-selo atraso">⚠ {tarefasAtrasadas.length} atrasada{tarefasAtrasadas.length > 1 ? 's' : ''}</span>
+            : <span className="stat-selo ok">✓ Nada atrasado</span>}
           onClick={() => setPage('tarefas')}/>
         <StatCard icon={Clock} color="#f59e0b" bg="#f59e0b15"
           value={tarefasEmAndamento.length} label="Em andamento"
