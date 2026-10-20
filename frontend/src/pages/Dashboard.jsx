@@ -335,12 +335,17 @@ export default function Dashboard({ setPage, profile: propProfile }) {
         <StatCard icon={CheckSquare} color="#6366f1" bg="#6366f115"
           value={tarefasHoje.length}
           label={tarefasHoje.length === 1 ? 'Tarefa para hoje' : 'Tarefas para hoje'}
-          selo={tarefasAtrasadas.length > 0
-            ? <span className="stat-selo atraso">⚠ {tarefasAtrasadas.length} atrasada{tarefasAtrasadas.length > 1 ? 's' : ''}</span>
-            : <span className="stat-selo ok">✓ Nada atrasado</span>}
-          onClick={() => setPage('tarefas')}/>
-        <StatCard icon={Clock} color="#f59e0b" bg="#f59e0b15"
-          value={tarefasEmAndamento.length} label="Em andamento"
+          selo={
+            <div className="stat-selos">
+              {tarefasAtrasadas.length > 0
+                ? <span className="stat-selo atraso">⚠ {tarefasAtrasadas.length} atrasada{tarefasAtrasadas.length > 1 ? 's' : ''}</span>
+                : <span className="stat-selo ok">✓ Nada atrasado</span>}
+              {/* "Em andamento" virou selo aqui (pedido do usuário, 20/10):
+                  o cartão próprio passava o dia mostrando zero. */}
+              {tarefasEmAndamento.length > 0 && (
+                <span className="stat-selo andamento">⏱ {tarefasEmAndamento.length} em andamento</span>
+              )}
+            </div>}
           onClick={() => setPage('tarefas')}/>
         <StatCard icon={Megaphone} color="#E8681A" bg="#E8681A15"
           value={naoLidos.length} label="Comunicados não lidos"
