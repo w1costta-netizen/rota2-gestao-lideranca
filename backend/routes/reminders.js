@@ -35,7 +35,7 @@ router.post('/check', async (req, res) => {
     .eq('company', company)
     .not('lembrete_minutos', 'is', null)
     .eq('lembrete_enviado', false)
-    .neq('status', 'concluida')
+    .not('status', 'in', '(concluida,nao_realizada)')
     .eq('due_date', todayStr);
 
   const tarefasFired = [];

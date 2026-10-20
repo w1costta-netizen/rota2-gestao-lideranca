@@ -1769,6 +1769,18 @@ function AcaoCard({ acao, grupo, color, canManage, formatDate, onToggle, onToggl
                 🔁 {(RECORRENCIAS.find(r => r.key === acao.recorrencia)?.label || acao.recorrencia)}
               </span>
             )}
+            {/* Rotina: uma tarefa por data. O gestor lê aqui se ela está
+                andando — quantas feitas, quantas passaram sem ser feitas e
+                qual a próxima. */}
+            {acao.rotina && (
+              <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 5,
+                background: acao.rotina.nao_realizadas ? '#94a3b822' : '#10b98122',
+                color: acao.rotina.nao_realizadas ? 'var(--text-muted)' : '#10b981' }}>
+                ✔ {acao.rotina.feitas} feita{acao.rotina.feitas === 1 ? '' : 's'}
+                {acao.rotina.nao_realizadas ? ` · ${acao.rotina.nao_realizadas} não realizada${acao.rotina.nao_realizadas === 1 ? '' : 's'}` : ''}
+                {acao.rotina.proxima ? ` · próxima ${acao.rotina.proxima.split('-').reverse().join('/')}` : ''}
+              </span>
+            )}
             {acao.inicio && acao.inicio !== acao.prazo && (
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
                 a partir de {formatDate(acao.inicio)}

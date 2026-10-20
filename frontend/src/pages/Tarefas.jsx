@@ -1,6 +1,6 @@
-import { caiNoDia } from '../lib/recorrencia';
+import { caiNoDia, encerrada } from '../lib/recorrencia';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Pencil, Trash2, CheckCircle, Circle, Clock, ClipboardList, MessageSquare, Send, ChevronDown, ChevronUp, RefreshCw, Tag, CalendarDays, List, ChevronLeft, ChevronRight, CalendarClock } from 'lucide-react';
+import { Plus, Pencil, Trash2, CheckCircle, Circle, Clock, XCircle, ClipboardList, MessageSquare, Send, ChevronDown, ChevronUp, RefreshCw, Tag, CalendarDays, List, ChevronLeft, ChevronRight, CalendarClock } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -8,8 +8,8 @@ import Avatar from '../components/Avatar';
 
 const EMPTY = { title: '', description: '', assigned_to: '', due_date: '', due_time: '', priority: 'normal', recorrencia: 'nenhuma', tags: [], lembrete_minutos: null };
 
-const STATUS_LABEL = { pendente: 'Pendente', em_andamento: 'Em andamento', concluida: 'Concluída' };
-const STATUS_COLOR = { pendente: '#f59e0b', em_andamento: '#6366f1', concluida: '#10b981' };
+const STATUS_LABEL = { pendente: 'Pendente', em_andamento: 'Em andamento', concluida: 'Concluída', nao_realizada: 'Não realizada' };
+const STATUS_COLOR = { pendente: '#f59e0b', em_andamento: '#6366f1', concluida: '#10b981', nao_realizada: '#94a3b8' };
 const PRIORITY_LABEL = { baixa: 'Baixa', normal: 'Normal', alta: 'Alta' };
 const PRIORITY_COLOR = { baixa: '#6b7280', normal: '#6366f1', alta: '#ef4444' };
 const RECORRENCIA_LABEL = { nenhuma: 'Não repete', diaria: 'Diária', dias_semana: 'Dias escolhidos', semanal: 'Semanal', quinzenal: 'Quinzenal', mensal: 'Mensal' };
@@ -56,7 +56,7 @@ function formatDate(d) {
   return `${day}/${m}/${y}`;
 }
 function isOverdue(due_date, due_time, status) {
-  if (!due_date || status === 'concluida') return false;
+  if (!due_date || encerrada(status)) return false;
   const now = new Date();
   const [y, mo, d] = due_date.split('-').map(Number);
   if (due_time) {
@@ -100,7 +100,7 @@ function BlocoPrazo({ t, userId, onMudou }) {
   const pedido = t.prazo_pendente;
   const souDono   = t.created_by === userId;      // quem criou decide
   const souQuemFaz = t.assigned_to === userId;
-  const concluida = t.status === 'concluida';
+  const concluida = encerrada(t.status);
 
   const dia = (d) => (d ? String(d).split('-').reverse().join('/') : 'sem data');
 
@@ -492,9 +492,9 @@ export default function Tarefas({ userId, profile, setPage }) {
     // Quem manda na rotina é o plano — dizer isso antes evita a surpresa
     // de a tarefa "voltar" amanhã, e diz onde se encerra de verdade.
     const t = list.find(x => x.id === id);
-    const doPlano = t?.pdca_context?.acao_id && !t.pdca_context.medicao && t.recorrencia && t.recorrencia !== 'nenhuma';
+    const doPlano = t?.pdca_context?.rotina;
     const pergunta = doPlano
-      ? `Excluir a tarefa de ${formatDate(t.due_date)}?\n\nEla faz parte do plano "${t.pdca_context.plano_titulo || ''}" e se repete. As próximas datas continuam até ${formatDate(t.pdca_context.repetir_ate)}.\n\nPara encerrar a rotina, conclua ou exclua a ação no Plano de Ação.`
+      ? `Excluir só a tarefa de ${formatDate(t.due_date)}?\n\nEla é uma das datas da rotina do plano "${t.pdca_context.plano_titulo || ''}". As outras datas continuam${t.pdca_context.repetir_ate ? ` até ${formatDate(t.pdca_context.repetir_ate)}` : ''}.\n\nPara encerrar a rotina inteira, conclua ou exclua a ação no Plano de Ação.`
       : 'Excluir esta tarefa?';
     if (!window.confirm(pergunta)) return;
     let resp;
@@ -502,12 +502,7 @@ export default function Tarefas({ userId, profile, setPage }) {
       ({ data: resp } = await api.delete(`/tarefas/${id}?requester_id=${userId}`));
     } catch { toast('Erro ao remover'); return; }
     setList(l => l.filter(x => x.id !== id));
-    if (resp?.proxima) {
-      toast(`Tarefa removida. A próxima do plano fica para ${formatDate(resp.proxima.due_date)}.`);
-      load(true);
-    } else {
-      toast('Tarefa removida');
-    }
+    toast(doPlano && resp?.ok ? 'Data removida. As outras datas da rotina continuam.' : 'Tarefa removida');
   };
 
   const updateStatus = async (t, status) => {
@@ -564,17 +559,20 @@ export default function Tarefas({ userId, profile, setPage }) {
   // Rotina que se repete HOJE é tarefa de hoje, não atraso: o que passou de
   // uma rotina diária não volta, e deixá-la em Atrasadas tirava da fila do
   // dia justamente o trabalho que é para hoje.
-  const repeteHoje = t => t.status !== 'concluida' && caiNoDia(t, todayYMDList);
-  const ehAtrasada = t => t.status !== 'concluida' && !!t.due_date && t.due_date < todayYMDList && !repeteHoje(t);
-  const ehHoje     = t => t.status !== 'concluida' && (t.due_date === todayYMDList || repeteHoje(t));
-  const ehProxima  = t => t.status !== 'concluida' && !ehAtrasada(t) && !ehHoje(t);
+  // "Não realizada" (data da rotina do plano que passou) é encerrada como
+  // a concluída: sai de Atrasadas/Hoje/Próximas e fica em Concluídas, com
+  // selo próprio — some da fila do líder sem sumir do histórico.
+  const repeteHoje = t => !encerrada(t.status) && caiNoDia(t, todayYMDList);
+  const ehAtrasada = t => !encerrada(t.status) && !!t.due_date && t.due_date < todayYMDList && !repeteHoje(t);
+  const ehHoje     = t => !encerrada(t.status) && (t.due_date === todayYMDList || repeteHoje(t));
+  const ehProxima  = t => !encerrada(t.status) && !ehAtrasada(t) && !ehHoje(t);
 
   let filtered = list.filter(t => {
     if (filter === 'agora')        return ehHoje(t);
     if (filter === 'atrasada')     return ehAtrasada(t);
     if (filter === 'proximas')     return ehProxima(t);
     if (filter === 'em_andamento') return t.status === 'em_andamento';
-    if (filter === 'concluida')    return t.status === 'concluida';
+    if (filter === 'concluida')    return encerrada(t.status);
     return true;
   });
   if (filterResp) filtered = filtered.filter(t => t.assigned_to === filterResp);
@@ -583,7 +581,7 @@ export default function Tarefas({ userId, profile, setPage }) {
     const oA = isOverdue(a.due_date, a.due_time, a.status) ? 0 : 1;
     const oB = isOverdue(b.due_date, b.due_time, b.status) ? 0 : 1;
     if (oA !== oB) return oA - oB;
-    const ord = { pendente:0, em_andamento:1, concluida:2 };
+    const ord = { pendente:0, em_andamento:1, concluida:2, nao_realizada:3 };
     return (ord[a.status]??1) - (ord[b.status]??1);
   });
 
@@ -592,7 +590,7 @@ export default function Tarefas({ userId, profile, setPage }) {
     atrasada: list.filter(ehAtrasada).length,
     proximas: list.filter(ehProxima).length,
     em_andamento: list.filter(t => t.status === 'em_andamento').length,
-    concluida: list.filter(t => t.status === 'concluida').length,
+    concluida: list.filter(t => encerrada(t.status)).length,
   };
 
   // ── Visão Calendário ─────────────────────────────────
@@ -614,7 +612,7 @@ export default function Tarefas({ userId, profile, setPage }) {
 
   const todayDate = new Date(); todayDate.setHours(0,0,0,0);
   const overdueList  = calList.filter(t => isOverdue(t.due_date, t.due_time, t.status));
-  const noDueList    = calList.filter(t => !t.due_date && t.status !== 'concluida');
+  const noDueList    = calList.filter(t => !t.due_date && !encerrada(t.status));
   const byDate = {};
   calList.filter(t => t.due_date && new Date(t.due_date) >= todayDate).forEach(t => {
     if (!byDate[t.due_date]) byDate[t.due_date] = [];
@@ -638,9 +636,9 @@ export default function Tarefas({ userId, profile, setPage }) {
     // então uma diária aberta fica parada em 03/10 — mas o que a pessoa
     // precisa fazer é a de HOJE. Mostrar "vencida 03/10" nela, dentro da
     // aba Hoje, é o app se contradizendo na mesma tela.
-    const rotinaDeHoje = t.status !== 'concluida' && t.due_date !== todayYMDList && caiNoDia(t, todayYMDList);
+    const rotinaDeHoje = !encerrada(t.status) && t.due_date !== todayYMDList && caiNoDia(t, todayYMDList);
     const overdue   = !rotinaDeHoje && isOverdue(t.due_date, t.due_time, t.status);
-    const concluida = t.status === 'concluida';
+    const concluida = encerrada(t.status);
     const borderColor = asRecurring ? '#6366f1' : PRIORITY_COLOR[t.priority] || 'var(--border)';
     const recorre   = t.recorrencia && t.recorrencia !== 'nenhuma';
     return (
@@ -652,9 +650,12 @@ export default function Tarefas({ userId, profile, setPage }) {
       }}>
         <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
           <button onClick={() => updateStatus(t, nextStatus(t.status))}
-            title={t.status === 'concluida' ? 'Concluída — clique para reabrir' : 'Clique para concluir'}
+            title={t.status === 'concluida' ? 'Concluída — clique para reabrir'
+              : t.status === 'nao_realizada' ? 'Não realizada no dia — clique se foi feita'
+              : 'Clique para concluir'}
             style={{ background:'none', border:'none', cursor:'pointer', padding:0, marginTop:2, flexShrink:0 }}>
             {t.status==='concluida' ? <CheckCircle size={20} style={{ color:'#10b981' }}/>
+              : t.status==='nao_realizada' ? <XCircle size={20} style={{ color:'#94a3b8' }}/>
               : t.status==='em_andamento' ? <Clock size={20} style={{ color:'#6366f1' }}/>
               : <Circle size={20} style={{ color:'#f59e0b' }}/>}
           </button>
@@ -1088,7 +1089,7 @@ export default function Tarefas({ userId, profile, setPage }) {
               // Dias passados sem instância real: não mostra virtual
               if (selectedCalDay < todayYMD) return false;
               // Hoje e futuro: mostra pendente e em_andamento (concluída não, pois backend já criou próxima)
-              if (t.status === 'concluida' || !t.due_date) return false;
+              if (encerrada(t.status) || !t.due_date) return false;
               if (selectedCalDay < t.due_date) return false;
               return caiNoDia(t, selectedCalDay);
             });

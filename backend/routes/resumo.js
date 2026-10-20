@@ -3,6 +3,7 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { registrarLog } = require('../lib/auditLog');
 const { enviarEmail, moldura } = require('../lib/email');
+const { garantirTarefasDaEmpresa } = require('../lib/tarefasDoPlano');
 
 // ─────────────────────────────────────────────────────────────
 // Resumo diário por e-mail: tarefas pendentes e agenda de hoje.
@@ -96,6 +97,15 @@ router.post('/diario', async (req, res) => {
     .or(`ultimo_resumo_email.is.null,ultimo_resumo_email.neq.${hoje.iso}`);
   if (error) return res.status(500).json({ error: error.message });
 
+  // O "relógio" das rotinas do plano anda aqui, para TODAS as empresas com
+  // plano em andamento: a data de ontem vira "Não realizada" e as próximas
+  // são criadas ANTES do e-mail sair. Sem isto, quem não abre as Tarefas
+  // receberia o resumo com a lista de ontem.
+  const { data: comPlano } = await supabase.from('planos_acao').select('company').eq('status', 'andamento');
+  for (const c of new Set((comPlano || []).map(p => p.company).filter(Boolean))) {
+    await garantirTarefasDaEmpresa(c, { forcar: true }).catch(() => {});
+  }
+
   const porEmpresa = {};
   (pessoas || []).forEach(p => (porEmpresa[p.company] = porEmpresa[p.company] || []).push(p));
 
@@ -107,7 +117,7 @@ router.post('/diario', async (req, res) => {
     const [{ data: tarefas }, { data: agendaSemana }] = await Promise.all([
       supabase.from('tarefas')
         .select('id, title, due_date, due_time, assigned_to, status')
-        .eq('company', company).neq('status', 'concluida').lte('due_date', hoje.iso),
+        .eq('company', company).not('status', 'in', '(concluida,nao_realizada)').lte('due_date', hoje.iso),
       supabase.from('agenda_items')
         .select('id, title, time, day_of_week, target_type, target_value, created_by')
         .eq('company', company).eq('day_of_week', hoje.dia)

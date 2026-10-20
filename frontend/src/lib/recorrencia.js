@@ -43,10 +43,14 @@ export function caiNoDia(t, diaYMD) {
   return false;
 }
 
+// Encerrada: concluída, ou data da rotina do plano que passou sem ser
+// feita ("Não realizada"). Nenhuma das duas é pendência de ninguém.
+export const encerrada = (status) => status === 'concluida' || status === 'nao_realizada';
+
 // Está atrasada DE VERDADE: passou da data e não é a rotina de hoje.
-// Concluída nunca está atrasada.
+// Encerrada nunca está atrasada.
 export function estaAtrasada(t, hojeYMD) {
-  if (!t?.due_date || t.status === 'concluida') return false;
+  if (!t?.due_date || encerrada(t.status)) return false;
   if (t.due_date >= hojeYMD) return false;
   return !caiNoDia(t, hojeYMD);
 }

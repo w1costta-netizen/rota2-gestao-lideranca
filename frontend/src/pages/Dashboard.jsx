@@ -414,7 +414,7 @@ export default function Dashboard({ setPage, profile: propProfile }) {
             ? <p style={{ color:'var(--text-muted)', fontSize:13 }}>Nenhuma tarefa atribuída.</p>
             : <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
                 {[...tarefas]
-                  .filter(t => t.status !== 'concluida')
+                  .filter(t => t.status !== 'concluida' && t.status !== 'nao_realizada')
                   .sort((a,b) => {
                     if (a.status === 'em_andamento' && b.status !== 'em_andamento') return -1;
                     if (b.status === 'em_andamento' && a.status !== 'em_andamento') return 1;

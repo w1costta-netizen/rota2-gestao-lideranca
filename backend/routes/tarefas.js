@@ -5,7 +5,7 @@ const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 const { vistosDe, marcarVisto, comentariosPorItem, avisarDesde } = require('../lib/leituras');
 const { proximaOcorrenciaFutura } = require('../lib/recorrencia');
-const { garantirProximaTarefa, garantirTarefasDaEmpresa } = require('../lib/tarefasDoPlano');
+const { garantirTarefasDaEmpresa, ehRotina, ultimaDataDaRotina, FECHADAS } = require('../lib/tarefasDoPlano');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name, created_at').eq('id', id).single();
@@ -180,7 +180,9 @@ router.put('/:id', async (req, res) => {
 
   // A próxima ocorrência de uma rotina, se houver. Calculada aqui em cima
   // porque a sincronia com o plano, logo abaixo, precisa saber.
-  const repete = status === 'concluida' && task?.recorrencia && task.recorrencia !== 'nenhuma';
+  // Tarefa do plano NUNCA cria a próxima: cada data da rotina já existe
+  // por si (lib/tarefasDoPlano.js). Só a tarefa comum que se repete anda.
+  const repete = status === 'concluida' && task?.recorrencia && task.recorrencia !== 'nenhuma' && !task?.pdca_context?.acao_id;
   const proxData = repete ? proximaOcorrenciaFutura(task.due_date, task.recorrencia, task.dias_semana) : null;
   // Tarefa de plano de ação repete só até o prazo da ação. Sem esta
   // trava, uma ação "toda segunda" continuaria nascendo para sempre,
@@ -205,7 +207,14 @@ router.put('/:id', async (req, res) => {
       const { data: irmas } = await supabase.from('tarefas')
         .select('id, status').eq('pdca_context->>acao_id', acaoId);
       const todas = (irmas || []).map(t => (t.id === req.params.id ? { ...t, status } : t));
-      const fechou = !vaiRepetir && todas.length > 0 && todas.every(t => t.status === 'concluida');
+      const { data: acao } = await supabase.from('acoes_pdca')
+        .select('recorrencia, dias_semana, inicio, prazo, datas_medicao').eq('id', acaoId).maybeSingle();
+      // ROTINA (uma tarefa por data): a ação só fecha quando a ÚLTIMA data
+      // do prazo é concluída e não sobra nada aberto. "Não realizada" conta
+      // como encerrada — não foi feita, mas também não está mais aberta.
+      const fechou = ehRotina(acao)
+        ? status === 'concluida' && task.due_date >= ultimaDataDaRotina(acao) && todas.every(t => FECHADAS.includes(t.status))
+        : todas.length > 0 && todas.every(t => t.status === 'concluida');
       await supabase.from('acoes_pdca').update({
         concluida: fechou,
         concluida_em: fechou ? new Date().toISOString() : null,
@@ -313,6 +322,7 @@ router.post('/:id/prazo', async (req, res) => {
   if (!task) return res.status(404).json({ error: 'Tarefa não encontrada' });
   if (task.assigned_to !== requester_id) return res.status(403).json({ error: 'Só quem recebeu a tarefa pode pedir novo prazo.' });
   if (task.status === 'concluida') return res.status(400).json({ error: 'Esta tarefa já está concluída.' });
+  if (task.status === 'nao_realizada') return res.status(400).json({ error: 'Esta data já passou e ficou como não realizada.' });
   if (task.due_date && data_nova <= task.due_date) {
     return res.status(400).json({ error: 'A nova data precisa ser depois do prazo atual.' });
   }
@@ -502,20 +512,21 @@ router.delete('/:id', async (req, res) => {
   }
   logAction({ company: task?.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', antes: { title: task?.title, due_date: task?.due_date, plano: task?.pdca_context?.plano_titulo || undefined } });
 
-  // TAREFA DE UMA AÇÃO DO PLANO QUE SE REPETE: apagar tira ESTA data, não
-  // a rotina inteira.
-  //
-  // A rotina é uma linha só, que anda para a próxima data quando alguém
-  // conclui. Apagar essa linha não deixava nada para andar — as próximas
-  // simplesmente nunca nasciam, nem para o líder nem para quem fazia. Quem
-  // manda na rotina é o plano (início, repetição e prazo); para encerrar
-  // antes, é lá que se conclui ou apaga a ação.
-  let proxima = null;
-  if (task?.pdca_context?.acao_id && !task.pdca_context.medicao) {
-    proxima = await garantirProximaTarefa(task.pdca_context.acao_id, { depoisDe: task.due_date })
-      .catch(e => { logError({ company: task.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: `próxima do plano: ${e.message}` }); return null; });
+  // TAREFA DA ROTINA DO PLANO: apagar tira ESTA data, e só ela. A data
+  // fica guardada na ação para não ser recriada; as outras continuam.
+  // Para encerrar a rotina inteira, conclui-se ou apaga-se a ação no plano.
+  if (task?.pdca_context?.acao_id && !task.pdca_context.medicao && task.due_date) {
+    try {
+      const { data: acao } = await supabase.from('acoes_pdca').select('*').eq('id', task.pdca_context.acao_id).maybeSingle();
+      if (ehRotina(acao)) {
+        const puladas = [...new Set([...(acao.datas_puladas || []), task.due_date])].sort();
+        await supabase.from('acoes_pdca').update({ datas_puladas: puladas }).eq('id', acao.id);
+      }
+    } catch (e) {
+      logError({ company: task.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'acoes_pdca', rota: req.originalUrl, erro_mensagem: `data pulada da rotina: ${e.message}` });
+    }
   }
-  res.json({ ok: true, proxima });
+  res.json({ ok: true });
 });
 
 module.exports = router;

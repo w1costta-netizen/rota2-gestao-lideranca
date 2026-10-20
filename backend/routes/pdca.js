@@ -2,7 +2,7 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
-const { QUADRANTE_LABEL, partirAcao, descricaoDaTarefa, contextoDaAcao, garantirProximaTarefa } = require('../lib/tarefasDoPlano');
+const { QUADRANTE_LABEL, partirAcao, descricaoDaTarefa, contextoDaAcao, ehRotina, sincronizarRotina, encerrarRotina } = require('../lib/tarefasDoPlano');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -245,7 +245,7 @@ router.put('/:id', async (req, res) => {
   if (status === 'andamento') {
     const { data: acoesDoPlano } = await supabase.from('acoes_pdca').select('*').eq('plano_id', req.params.id);
     for (const a of acoesDoPlano || []) {
-      await garantirProximaTarefa(a, { plano: data }).catch(() => null);
+      if (ehRotina(a)) await sincronizarRotina(a, { plano: data, requesterId: requester_id }).catch(() => null);
     }
   }
   res.json(data);
@@ -323,6 +323,24 @@ router.get('/:id/acoes', async (req, res) => {
     }
   }
 
+  // Rotina: quantas datas feitas, não realizadas e qual a próxima. É o que
+  // o gestor lê no cartão para saber se a rotina está andando.
+  const rotinas = (data || []).filter(ehRotina);
+  if (rotinas.length) {
+    const { data: tr } = await supabase.from('tarefas')
+      .select('status, due_date, pdca_context')
+      .in('pdca_context->>acao_id', rotinas.map(a => a.id));
+    const porAcao = {};
+    for (const t of tr || []) {
+      const id = t.pdca_context?.acao_id; if (!id) continue;
+      const r = porAcao[id] = porAcao[id] || { feitas: 0, nao_realizadas: 0, proxima: null };
+      if (t.status === 'concluida') r.feitas++;
+      else if (t.status === 'nao_realizada') r.nao_realizadas++;
+      else if (!r.proxima || t.due_date < r.proxima) r.proxima = t.due_date;
+    }
+    for (const a of rotinas) a.rotina = porAcao[a.id] || { feitas: 0, nao_realizadas: 0, proxima: null };
+  }
+
   res.json(data || []);
 });
 
@@ -392,6 +410,14 @@ router.post('/:id/acoes', async (req, res) => {
       } catch (e) {
         registrarLog('criar_acao_pdca', 'acoes_pdca', 'erro', { company: plano.company, user_id: requester_id, rota: req.originalUrl, erro: e.message });
         acao.aviso = 'A ação foi salva, mas as tarefas de medição não foram criadas. Abra a ação e salve de novo.';
+      }
+    } else if (ehRotina(acao)) {
+      // Rotina: uma tarefa por data (lib/tarefasDoPlano.js).
+      try {
+        await sincronizarRotina(acao, { plano, requesterId: requester_id });
+      } catch (e) {
+        registrarLog('criar_acao_pdca', 'acoes_pdca', 'erro', { company: plano.company, user_id: requester_id, rota: req.originalUrl, erro: `rotina: ${e.message}` });
+        acao.aviso = 'A ação foi salva, mas as tarefas das datas não foram criadas. Abra a ação e salve de novo.';
       }
     } else {
       const { data: tarefa } = await supabase.from('tarefas').insert({
@@ -481,11 +507,12 @@ router.put('/acoes/:id', async (req, res) => {
   // desmarcar devolve a próxima data que a rotina manda.
   const repeteAcao = (acaoAtual.recorrencia && acaoAtual.recorrencia !== 'nenhuma') && !(acaoAtual.datas_medicao || []).length;
   if (concluida !== undefined && repeteAcao) {
+    // Concluir a ação encerra a rotina: saem as datas depois de hoje que
+    // ainda não foram feitas. Desmarcar devolve as datas que faltam.
     if (concluida) {
-      await supabase.from('tarefas').update({ status: 'concluida', updated_at: new Date().toISOString() })
-        .eq('pdca_context->>acao_id', req.params.id).neq('status', 'concluida');
+      await encerrarRotina(req.params.id).catch(() => null);
     } else {
-      await garantirProximaTarefa(req.params.id, { plano: acaoAtual.plano }).catch(() => null);
+      await sincronizarRotina({ ...acaoAtual, ...updates, id: req.params.id }, { plano: acaoAtual.plano, requesterId: requester_id }).catch(() => null);
     }
   } else if (concluida !== undefined && acaoAtual.tarefa_id) {
     supabase.from('tarefas').update({
@@ -513,7 +540,18 @@ router.put('/acoes/:id', async (req, res) => {
   // A tarefa da ação acompanha a edição: atualiza o que existe, adota a
   // órfã e cria se não houver nenhuma viva. Mesma função usada para as
   // outras pessoas do grupo, mais abaixo.
-  if (!datasFinais.length && (inicio !== undefined || prazo !== undefined || recorrencia !== undefined || descricao !== undefined || detalhe !== undefined || criar_tarefa !== undefined)) {
+  const mexeuNaTarefa = inicio !== undefined || prazo !== undefined || recorrencia !== undefined || dias_semana !== undefined
+    || descricao !== undefined || detalhe !== undefined || criar_tarefa !== undefined || responsavel_id !== undefined;
+  const acaoFinal = { ...acaoAtual, ...updates, id: req.params.id };
+  if (!datasFinais.length && mexeuNaTarefa && ehRotina(acaoFinal)) {
+    // Rotina: refaz só as datas futuras não feitas; o passado é registro.
+    try {
+      await sincronizarRotina(acaoFinal, { plano, requesterId: requester_id });
+    } catch (e) {
+      registrarLog('editar_acao_pdca', 'acoes_pdca', 'erro', { company: plano?.company, user_id: requester_id, rota: req.originalUrl, erro: `rotina: ${e.message}` });
+      data.aviso = 'A ação foi salva, mas as tarefas das datas não foram atualizadas. Tente salvar de novo.';
+    }
+  } else if (!datasFinais.length && mexeuNaTarefa) {
     const novaId = await porTarefaEmDia({
       acao: { ...acaoAtual, id: req.params.id, responsavel_id: finalResponsavel },
       plano,
@@ -596,6 +634,11 @@ router.put('/acoes/:id', async (req, res) => {
       // líder, deixava a da outra no formato antigo e uma terceira sem
       // tarefa nenhuma.
       for (const irma of (irmas || [])) {
+        const irmaFinal = { ...acaoAtual, ...doGrupo, id: irma.id, detalhe: irma.detalhe, responsavel_id: irma.responsavel_id, grupo_id: acaoAtual.grupo_id };
+        if (ehRotina(irmaFinal)) {
+          await sincronizarRotina(irmaFinal, { plano, requesterId: requester_id }).catch(() => null);
+          continue;
+        }
         await porTarefaEmDia({
           acao: { ...irma, plano_id: acaoAtual.plano_id, quadrante: acaoAtual.quadrante },
           plano,
