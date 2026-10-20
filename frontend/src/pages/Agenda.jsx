@@ -57,6 +57,9 @@ export default function Agenda({ userId, profile }) {
   // ou o que ela mesma criou — ninguém vê a agenda de outra pessoa automaticamente.
   const canManage = ['admin', 'supervisor', 'lider', 'master'].includes(profile?.access_level);
   const isAdmin   = canManage;
+  // Qualquer pessoa planeja o próprio dia: cria item "Só para mim" e mexe
+  // no que ela mesma criou. A liderança, além disso, agenda para os outros.
+  const podeEditar = (item) => item.origem !== 'google' && (canManage || item.created_by === userId);
   const [week, setWeek]         = useState(getWeekStart());
   const [items, setItems]       = useState([]);
   const [leaders, setLeaders]   = useState([]);
@@ -184,7 +187,7 @@ export default function Agenda({ userId, profile }) {
   const prevWeek = () => setWeek(addDays(week, -7));
   const nextWeek = () => setWeek(addDays(week, 7));
 
-  const openNew  = (day) => { setEditing(null); setForm({ ...EMPTY_ITEM, day_of_week: day || 'segunda' }); setModal(true); };
+  const openNew  = (day) => { setEditing(null); setForm({ ...EMPTY_ITEM, day_of_week: day || 'segunda', target_type: canManage ? '' : 'pessoal' }); setModal(true); };
   const openEdit = (item) => { setEditing(item.id); setForm({ ...item, escopo: item.serie_id ? 'futuros' : 'este' }); setModal(true); };
   const [removendo, setRemovendo] = useState(null); // item de série aguardando escolha do escopo
 
@@ -444,10 +447,10 @@ export default function Agenda({ userId, profile }) {
           <button className="btn btn-ghost btn-sm" onClick={printWeekPDF} title="Imprimir / Baixar PDF da semana">
             <Printer size={15} />{!isMobile && ' PDF'}
           </button>
-          {isAdmin && <>
+          {isAdmin && (
             <button className="btn btn-ghost btn-sm" onClick={openSendAllModal} title="Enviar para líderes"><Send size={15} /> Enviar</button>
-            <button className="btn btn-primary btn-sm" onClick={() => openNew()}><Plus size={15} /> Novo item</button>
-          </>}
+          )}
+          <button className="btn btn-primary btn-sm" onClick={() => openNew()}><Plus size={15} /> Novo item</button>
         </div>
       </div>
 
@@ -548,12 +551,10 @@ export default function Agenda({ userId, profile }) {
           <div className="agenda-day-col" key={day}>
             <div className="agenda-day-title">
               <span>{DAY_LABELS[day]}</span>
-              {canManage && (
-                <button
-                  style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 6, padding: '2px 8px', color: 'white', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
-                  onClick={() => openNew(day)} title="Adicionar item"
-                >+</button>
-              )}
+              <button
+                style={{ background: 'rgba(255,255,255,.15)', border: 'none', borderRadius: 6, padding: '2px 8px', color: 'white', cursor: 'pointer', fontSize: 18, lineHeight: 1 }}
+                onClick={() => openNew(day)} title="Adicionar item"
+              >+</button>
             </div>
             {byDay[day].length === 0 ? (
               <div style={{ padding: '20px 16px', color: 'var(--text-muted)', fontSize: 12, textAlign: 'center' }}>Nenhum item</div>
@@ -585,7 +586,7 @@ export default function Agenda({ userId, profile }) {
                         </div>
                         {/* Compromisso do Google não se edita aqui: a próxima
                             sincronização desfaria a mudança. */}
-                        {canManage && item.origem !== 'google' && (
+                        {podeEditar(item) && (
                           <div className="agenda-item-actions" style={{ flexShrink: 0 }}>
                             <button className="btn-icon" style={{ padding: 4 }} onClick={() => openEdit(item)}><Pencil size={12} /></button>
                             <button className="btn-icon danger" style={{ padding: 4 }} onClick={() => remove(item)}><Trash2 size={12} /></button>
@@ -602,7 +603,7 @@ export default function Agenda({ userId, profile }) {
       </div>
 
       {/* FAB mobile */}
-      {canManage && (
+      {(
         <button onClick={() => openNew(isMobile ? selectedDay : 'segunda')} style={{
           position:'fixed', bottom:24, right:20, zIndex:500,
           width:52, height:52, borderRadius:'50%',
@@ -803,12 +804,19 @@ export default function Agenda({ userId, profile }) {
         </div>
         <div className="form-group">
           <label className="form-label">Destino *</label>
-          <select className="select" value={form.target_type} onChange={e => setForm(f => ({ ...f, target_type: e.target.value, target_value: '' }))}>
-            <option value="">Selecionar destino...</option>
-            <option value="geral">Geral (todos os líderes)</option>
-            <option value="setor">Por setor</option>
-            <option value="lider">Líder específico</option>
-          </select>
+          {canManage ? (
+            <select className="select" value={form.target_type} onChange={e => setForm(f => ({ ...f, target_type: e.target.value, target_value: '' }))}>
+              <option value="">Selecionar destino...</option>
+              <option value="pessoal">Só para mim (minha agenda)</option>
+              <option value="geral">Geral (todos os líderes)</option>
+              <option value="setor">Por setor</option>
+              <option value="lider">Líder específico</option>
+            </select>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '8px 0' }}>
+              Só para mim: fica na sua agenda e só você vê.
+            </div>
+          )}
         </div>
         {form.target_type === 'setor' && (
           <div className="form-group">

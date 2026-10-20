@@ -10,7 +10,12 @@ const { perfilDe, lojaPermitida } = require('../lib/lojaPermitida');
 // até out/2026 a agenda buscava sem empresa e mostrava os compromissos
 // "gerais" de TODAS as empresas para qualquer usuário.
 const getProfile = perfilDe;
+// Liderança agenda PARA OS OUTROS (loja, setor, líderes). Qualquer pessoa
+// agenda PARA SI: item "pessoal", que só quem criou vê. Antes só a
+// liderança criava qualquer coisa, e quem não era líder não tinha como
+// planejar o próprio dia — numa ferramenta de gestão do tempo (20/10/2026).
 const canManage = p => p && ['admin', 'supervisor', 'lider', 'master'].includes(p.access_level);
+const podeMexer = (p, item) => canManage(p) || (!!item?.created_by && item.created_by === p?.id);
 
 // Cor escolhida pela pessoa (opcional). Sem cor, a tela usa a do destino
 // (geral/setor/pessoas), como sempre foi.
@@ -54,6 +59,9 @@ const DIA_POR_EXTENSO = {
 // usada na tela e nos lembretes: para toda a loja, para um setor, ou para
 // pessoas específicas.
 async function destinatarios(target_type, target_value, company) {
+  // Pessoal é só de quem criou: ninguém é avisado. Sem esta linha, caía na
+  // consulta de baixo e o aviso ia para a loja inteira.
+  if (target_type === 'pessoal') return [];
   if (target_type === 'lider') {
     return String(target_value || '').split(',').map(s => s.trim()).filter(Boolean);
   }
@@ -151,10 +159,16 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'Campos obrigatórios: title, week_start, target_type, day_of_week' });
   if (!created_by) return res.status(401).json({ error: 'created_by obrigatório' });
   const meCreate = await getProfile(created_by);
-  if (!meCreate || !canManage(meCreate)) return res.status(403).json({ error: 'Acesso negado' });
+  if (!meCreate) return res.status(403).json({ error: 'Acesso negado' });
+  // Quem não é da liderança só cria para si.
+  const lideranca = canManage(meCreate);
+  if (!lideranca && target_type !== 'pessoal') {
+    return res.status(403).json({ error: 'Você pode criar compromissos só na sua agenda pessoal.' });
+  }
 
-  // Determina company: usa a passada no body, ou busca do criador
-  let company = req.body.company || null;
+  // Determina company: usa a passada no body, ou busca do criador. Fora da
+  // liderança vale sempre a loja da própria pessoa.
+  let company = lideranca ? (req.body.company || null) : (meCreate.company || null);
   if (!company && created_by) {
     const { data: me } = await supabase.from('profiles').select('company').eq('id', created_by).single();
     company = me?.company || null;
@@ -196,7 +210,7 @@ router.put('/:id', async (req, res) => {
   const { title, description, week_start, target_type, target_value, day_of_week, time, hora_fim, dia_todo, updated_by, lembrete_minutos, cor } = req.body;
   if (!updated_by) return res.status(401).json({ error: 'updated_by obrigatório' });
   const meUpdate = await getProfile(updated_by);
-  if (!meUpdate || !canManage(meUpdate)) return res.status(403).json({ error: 'Acesso negado' });
+  if (!meUpdate) return res.status(403).json({ error: 'Acesso negado' });
 
   let company = null;
   if (updated_by) {
@@ -210,7 +224,10 @@ router.put('/:id', async (req, res) => {
   // seguintes da mesma série (cada uma mantém a própria week_start). Sem
   // escopo, ou 'este', mexe só nesta semana — e ela sai da série, para não
   // ser sobrescrita numa edição futura "deste e dos próximos".
-  const { data: atual } = await supabase.from('agenda_items').select('serie_id, week_start, company, origem').eq('id', req.params.id).maybeSingle();
+  const { data: atual } = await supabase.from('agenda_items').select('serie_id, week_start, company, origem, created_by').eq('id', req.params.id).maybeSingle();
+  // Fora da liderança: só o que a própria pessoa criou, e continua pessoal.
+  if (atual && !podeMexer(meUpdate, atual)) return res.status(403).json({ error: 'Você só pode alterar os compromissos que você criou.' });
+  if (!canManage(meUpdate) && target_type !== 'pessoal') return res.status(403).json({ error: 'Seus compromissos ficam na sua agenda pessoal.' });
   // Item de outra loja responde como inexistente: sem esta trava, bastava
   // o id para editar o compromisso de outra empresa.
   if (!atual || atual.company !== await lojaPermitida(meUpdate, atual.company)) {
@@ -259,12 +276,13 @@ router.delete('/:id', async (req, res) => {
   const { requester_id } = req.query;
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
-  if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
+  if (!me) return res.status(403).json({ error: 'Acesso negado' });
 
-  const { data: item } = await supabase.from('agenda_items').select('title, company, serie_id, week_start, origem').eq('id', req.params.id).single();
+  const { data: item } = await supabase.from('agenda_items').select('title, company, serie_id, week_start, origem, created_by').eq('id', req.params.id).single();
   if (!item || item.company !== await lojaPermitida(me, item.company)) {
     return res.status(404).json({ error: 'Item não encontrado' });
   }
+  if (!podeMexer(me, item)) return res.status(403).json({ error: 'Você só pode apagar os compromissos que você criou.' });
   // Apagado aqui, voltaria na próxima sincronização.
   if (item.origem === 'google') {
     return res.status(400).json({ error: 'Este compromisso vem do Google Agenda. Para tirar daqui, apague ou recuse por lá.' });
