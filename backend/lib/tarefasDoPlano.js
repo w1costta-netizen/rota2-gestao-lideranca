@@ -257,8 +257,31 @@ async function garantirTarefasDaEmpresa(company, { forcar = false } = {}) {
     const { data: acoes } = await supabase.from('acoes_pdca').select('*')
       .in('plano_id', planos.map(p => p.id)).neq('recorrencia', 'nenhuma');
     const hoje = hojeBR();
+    const rotinas = (acoes || []).filter(ehRotina);
+    if (!rotinas.length) return 0;
+
+    // UMA leitura para saber quais ações estão em dia. Antes, cada ação
+    // passava pela sincronização completa (~10 consultas em fila), toda vez
+    // — numa loja com 8 rotinas eram ~80 idas ao banco a cada abertura das
+    // Tarefas (lentidão relatada em 22/10/2026). Em dia = todas as datas da
+    // janela existem e nenhuma tarefa está no formato antigo.
+    const ids = rotinas.map(a => a.id);
+    const [{ data: daJanela }, { data: antigas }] = await Promise.all([
+      supabase.from('tarefas').select('due_date, pdca_context').in('pdca_context->>acao_id', ids).gte('due_date', hoje),
+      supabase.from('tarefas').select('pdca_context').in('pdca_context->>acao_id', ids)
+        .or('recorrencia.neq.nenhuma,pdca_context->>rotina.is.null').limit(500),
+    ]);
+    const temData = new Set((daJanela || []).map(t => `${t.pdca_context?.acao_id}|${t.due_date}`));
+    const comAntiga = new Set((antigas || []).map(t => t.pdca_context?.acao_id));
+    const janelaAte = somaDias(hoje, JANELA_DIAS);
+    const emDia = (acao) => {
+      if (comAntiga.has(acao.id)) return false;
+      const puladas = new Set(acao.datas_puladas || []);
+      return datasDaRotina(acao, hoje, janelaAte).every(d => puladas.has(d) || temData.has(`${acao.id}|${d}`));
+    };
+
     let criadas = 0;
-    for (const acao of (acoes || []).filter(ehRotina)) {
+    for (const acao of rotinas) {
       try {
         // Prazo passado: a rotina acabou e a ação fecha no plano.
         if (acao.prazo && acao.prazo < hoje) {
@@ -273,6 +296,7 @@ async function garantirTarefasDaEmpresa(company, { forcar = false } = {}) {
           acao.concluida = false;
         }
         if (!rotinaAtiva(acao, porId[acao.plano_id])) continue;
+        if (emDia(acao)) continue;
         criadas += (await sincronizarRotina(acao, { plano: porId[acao.plano_id] })).criadas;
       } catch (e) {
         console.error('[plano] rotina da ação', acao.id, e.message);

@@ -48,7 +48,10 @@ router.get('/', async (req, res) => {
     // dela aqui, ANTES da leitura — assim ela já aparece nesta resposta.
     // Roda no máximo a cada poucos minutos por empresa; erro aqui nunca
     // impede a lista de carregar.
-    await garantirTarefasDaEmpresa(targetCompany).catch(() => {});
+    // Em segundo plano: a lista responde na hora. O grosso (virar o dia e
+    // criar as datas) já é feito às 6h pelo agendamento; aqui é só a rede
+    // de segurança, e o que ela consertar aparece na próxima abertura.
+    garantirTarefasDaEmpresa(targetCompany).catch(() => {});
 
     // Privacidade: cada pessoa só vê tarefas que ela mesma criou/delegou
     // (created_by) ou que estão atribuídas a ela (assigned_to) — mesmo
