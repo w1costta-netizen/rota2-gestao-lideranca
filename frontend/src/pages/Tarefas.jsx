@@ -505,8 +505,16 @@ export default function Tarefas({ userId, profile, setPage }) {
     toast(doPlano && resp?.ok ? 'Data removida. As outras datas da rotina continuam.' : 'Tarefa removida');
   };
 
+  // Tarefa do plano com data futura: não se conclui antes do dia. O servidor
+  // recusa; a tela avisa antes, sem nem tentar.
+  const antesDoDia = (t) => !!t.pdca_context?.acao_id && !!t.due_date && t.due_date > toYMD(new Date());
   const updateStatus = async (t, status) => {
-    const updated = await api.put(`/tarefas/${t.id}`, { requester_id: userId, status }).catch(() => null);
+    if (status === 'concluida' && antesDoDia(t)) {
+      toast(`Esta tarefa é do dia ${formatDate(t.due_date)}. Ela só pode ser concluída no próprio dia.`, 'error');
+      return;
+    }
+    const updated = await api.put(`/tarefas/${t.id}`, { requester_id: userId, status })
+      .catch(e => { toast(e?.response?.data?.error || 'Não foi possível atualizar a tarefa.', 'error'); return null; });
     if (updated) {
       // A linha já muda aqui, na hora. A rebusca vem depois e em silêncio,
       // só para a próxima ocorrência aparecer sozinha.
@@ -654,10 +662,13 @@ export default function Tarefas({ userId, profile, setPage }) {
       }}>
         <div style={{ display:'flex', alignItems:'flex-start', gap:12 }}>
           <button onClick={() => updateStatus(t, nextStatus(t.status))}
+            aria-disabled={!encerrada(t.status) && antesDoDia(t) ? 'true' : undefined}
             title={t.status === 'concluida' ? 'Concluída — clique para reabrir'
               : t.status === 'nao_realizada' ? 'Não realizada no dia — clique se foi feita'
+              : antesDoDia(t) ? `É do dia ${formatDate(t.due_date)}: só pode ser concluída no próprio dia`
               : 'Clique para concluir'}
-            style={{ background:'none', border:'none', cursor:'pointer', padding:0, marginTop:2, flexShrink:0 }}>
+            style={{ background:'none', border:'none', cursor: !encerrada(t.status) && antesDoDia(t) ? 'not-allowed' : 'pointer',
+              padding:0, marginTop:2, flexShrink:0, opacity: !encerrada(t.status) && antesDoDia(t) ? 0.35 : 1 }}>
             {t.status==='concluida' ? <CheckCircle size={20} style={{ color:'#10b981' }}/>
               : t.status==='nao_realizada' ? <XCircle size={20} style={{ color:'#94a3b8' }}/>
               : t.status==='em_andamento' ? <Clock size={20} style={{ color:'#6366f1' }}/>

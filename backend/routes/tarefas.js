@@ -4,7 +4,7 @@ const supabase = require('../supabase');
 const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 const { vistosDe, marcarVisto, comentariosPorItem, avisarDesde } = require('../lib/leituras');
-const { proximaOcorrenciaFutura } = require('../lib/recorrencia');
+const { proximaOcorrenciaFutura, hojeBR } = require('../lib/recorrencia');
 const { garantirTarefasDaEmpresa, ehRotina, ultimaDataDaRotina, FECHADAS } = require('../lib/tarefasDoPlano');
 
 async function getProfile(id) {
@@ -177,6 +177,15 @@ router.put('/:id', async (req, res) => {
   }
   if (isManager(me) && assigned_to) updates.assigned_to = assigned_to;
   if (status) updates.status = status;
+
+  // TAREFA DO PLANO NÃO SE CONCLUI ANTES DO DIA (pedido do usuário,
+  // 22/10/2026): marcar a rotina de amanhã hoje é informar que fez sem ter
+  // feito, e o plano passa a medir uma coisa que não aconteceu. Vale para a
+  // rotina e para a medição do C. Tarefa comum pode ser adiantada à vontade.
+  if (status === 'concluida' && task?.pdca_context?.acao_id && task.due_date && task.due_date > hojeBR()) {
+    const [a, m, d] = task.due_date.split('-');
+    return res.status(400).json({ error: `Esta tarefa é do dia ${d}/${m}. Ela só pode ser concluída no próprio dia.`, codigo: 'antes_do_dia' });
+  }
 
   // A próxima ocorrência de uma rotina, se houver. Calculada aqui em cima
   // porque a sincronia com o plano, logo abaixo, precisa saber.
