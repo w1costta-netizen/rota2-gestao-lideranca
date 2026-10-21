@@ -612,13 +612,19 @@ export default function PlanoAcao({ userId, profile }) {
   };
 
   const toggleAcao = async (acao) => {
-    // Ação que se repete: marcar como feita ENCERRA a rotina — as tarefas
-    // das próximas datas deixam de nascer. Quem marca pensando "fiz a de
-    // hoje" precisa saber disso antes, não descobrir amanhã.
-    const repete = acao.recorrencia && acao.recorrencia !== 'nenhuma' && !(acao.datas_medicao || []).length;
-    if (repete && !acao.concluida && !window.confirm(
-      `Esta ação se repete até ${formatDate(acao.prazo)}.\n\nMarcar como feita encerra a rotina: as tarefas das próximas datas deixam de ser criadas.\n\nPara registrar só o dia de hoje, conclua a tarefa na tela de Tarefas.\n\nEncerrar a rotina?`
-    )) return;
+    // ROTINA: o círculo é "a tarefa de hoje". Marcar conclui a de hoje,
+    // desmarcar reabre — a rotina continua até o prazo. Antes ele encerrava
+    // a rotina inteira, e era usado justamente para dizer "fiz hoje".
+    if (acao.rotina) {
+      if (!acao.rotina.hoje || acao.rotina.hoje === 'nao_realizada') { toast('Hoje não é dia desta rotina.'); return; }
+      const feita = acao.rotina.hoje === 'concluida';
+      try {
+        await api.put(`/pdca/acoes/${acao.id}`, { requester_id: userId, hoje_feita: !feita });
+        toast(feita ? 'Tarefa de hoje reaberta.' : 'Tarefa de hoje concluída.');
+        fetchAcoes(selectedPlan.id);
+      } catch { toast('Erro ao atualizar a tarefa de hoje'); }
+      return;
+    }
     try {
       const { data } = await api.put(`/pdca/acoes/${acao.id}`, { requester_id: userId, concluida: !acao.concluida });
       setAcoes(as => as.map(a => a.id === data.id ? data : a));
@@ -1657,12 +1663,22 @@ function AcaoFormAgir({ form, setForm, membros, saving, hasTask, onSave, isNovo,
 // Delegar a mesma ação a 5 líderes criava 5 cartões com o mesmo texto
 // longo repetido — o plano virava um paredão. Aqui o texto aparece uma
 // vez e cada responsável tem a sua linha, com o próprio "concluí".
+// Rotina: o círculo diz se a tarefa de HOJE foi feita; nos outros casos,
+// se a ação foi concluída.
+const marcada = (a) => (a.rotina ? a.rotina.hoje === 'concluida' : a.concluida);
+const dicaDoCirculo = (a) => !a.rotina
+  ? (a.concluida ? 'Marcar como não feita' : 'Marcar como feita')
+  : !a.rotina.hoje || a.rotina.hoje === 'nao_realizada' ? 'Hoje não é dia desta rotina'
+  : a.rotina.hoje === 'concluida' ? 'Tarefa de hoje feita: toque para reabrir' : 'Concluir a tarefa de hoje';
+
 function AcaoCard({ acao, grupo, color, canManage, formatDate, onToggle, onToggleDe, onEdit, onDelete }) {
   const linhas = (grupo && grupo.length ? grupo : [acao]).filter(a => a.responsavel);
   const varias = linhas.length > 1;
   // Com várias pessoas, o cartão só fica "feito" quando todas concluíram.
-  const feitas = (grupo || [acao]).filter(a => a.concluida).length;
-  const todasFeitas = feitas === (grupo || [acao]).length;
+  // Rotina: conta quem fez a tarefa de HOJE, e o cartão não é riscado (a
+  // rotina continua). Fora disso, conta quem concluiu a ação.
+  const feitas = (grupo || [acao]).filter(marcada).length;
+  const todasFeitas = !acao.rotina && feitas === (grupo || [acao]).length;
 
   return (
     <div style={{ background: 'var(--bg, #0F1116)', borderRadius: 10, padding: '12px 14px',
@@ -1672,9 +1688,10 @@ function AcaoCard({ acao, grupo, color, canManage, formatDate, onToggle, onToggl
         {/* Com um responsável só, o círculo continua ao lado do texto. Com
             vários, ele some daqui e vai para a linha de cada pessoa. */}
         {!varias && (
-          <button onClick={onToggle}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 1, flexShrink: 0 }}>
-            {acao.concluida
+          <button onClick={onToggle} title={dicaDoCirculo(acao)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 1, flexShrink: 0,
+              opacity: acao.rotina && (!acao.rotina.hoje || acao.rotina.hoje === 'nao_realizada') ? 0.35 : 1 }}>
+            {marcada(acao)
               ? <CheckCircle2 size={18} style={{ color }}/>
               : <Circle size={18} style={{ color: 'var(--text-muted)' }}/>}
           </button>
@@ -1690,15 +1707,16 @@ function AcaoCard({ acao, grupo, color, canManage, formatDate, onToggle, onToggl
           {varias && (
             <div style={{ marginBottom: 8 }}>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 4 }}>
-                Responsáveis · {feitas}/{linhas.length} concluíram
+                Responsáveis · {feitas}/{linhas.length} {acao.rotina ? 'fizeram a de hoje' : 'concluíram'}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {linhas.map(a => (
                   <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     <button onClick={() => onToggleDe?.(a)}
-                      title={a.concluida ? 'Marcar como não feita' : 'Marcar como feita'}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, lineHeight: 0 }}>
-                      {a.concluida
+                      title={dicaDoCirculo(a)}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0, lineHeight: 0,
+                        opacity: a.rotina && (!a.rotina.hoje || a.rotina.hoje === 'nao_realizada') ? 0.35 : 1 }}>
+                      {marcada(a)
                         ? <CheckCircle2 size={16} style={{ color }}/>
                         : <Circle size={16} style={{ color: 'var(--text-muted)' }}/>}
                     </button>

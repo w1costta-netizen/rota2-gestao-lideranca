@@ -2,7 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const supabase = require('../supabase');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
-const { QUADRANTE_LABEL, partirAcao, descricaoDaTarefa, contextoDaAcao, ehRotina, sincronizarRotina, encerrarRotina } = require('../lib/tarefasDoPlano');
+const { QUADRANTE_LABEL, partirAcao, descricaoDaTarefa, contextoDaAcao, ehRotina, sincronizarRotina } = require('../lib/tarefasDoPlano');
+const { hojeBR } = require('../lib/recorrencia');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -331,14 +332,17 @@ router.get('/:id/acoes', async (req, res) => {
       .select('status, due_date, pdca_context')
       .in('pdca_context->>acao_id', rotinas.map(a => a.id));
     const porAcao = {};
+    const hoje = hojeBR();
     for (const t of tr || []) {
       const id = t.pdca_context?.acao_id; if (!id) continue;
-      const r = porAcao[id] = porAcao[id] || { feitas: 0, nao_realizadas: 0, proxima: null };
+      const r = porAcao[id] = porAcao[id] || { feitas: 0, nao_realizadas: 0, proxima: null, hoje: null };
+      // O círculo do cartão de uma rotina é "a tarefa de HOJE".
+      if (t.due_date === hoje) r.hoje = t.status;
       if (t.status === 'concluida') r.feitas++;
       else if (t.status === 'nao_realizada') r.nao_realizadas++;
       else if (!r.proxima || t.due_date < r.proxima) r.proxima = t.due_date;
     }
-    for (const a of rotinas) a.rotina = porAcao[a.id] || { feitas: 0, nao_realizadas: 0, proxima: null };
+    for (const a of rotinas) a.rotina = porAcao[a.id] || { feitas: 0, nao_realizadas: 0, proxima: null, hoje: null };
   }
 
   res.json(data || []);
@@ -481,7 +485,17 @@ router.put('/acoes/:id', async (req, res) => {
   // mais gente na edição: sem receber o grupo aqui, as ações novas nasceriam
   // soltas e a tela mostraria dois cartões para a mesma ação.
   if (grupo_id !== undefined) updates.grupo_id = grupo_id || null;
-  if (concluida !== undefined) {
+  // ROTINA: o círculo do cartão é "a tarefa de HOJE" (decisão de 21/10/2026).
+  // Ele encerrava a rotina inteira — e era usado justamente para registrar
+  // "fiz a de hoje": três ações de líderes pararam assim. Agora marcar só
+  // conclui (ou reabre) a tarefa de hoje; a ação continua aberta. Vale também
+  // para quem ainda está com a tela antiga, que manda `concluida`. Encerrar
+  // antes do prazo é mudar o prazo ou apagar a ação.
+  const rotinaAtual = ehRotina(acaoAtual);
+  const marcarHoje = rotinaAtual ? (req.body.hoje_feita !== undefined ? !!req.body.hoje_feita : concluida) : undefined;
+  if (rotinaAtual) {
+    if (acaoAtual.concluida && acaoAtual.prazo >= hojeBR()) { updates.concluida = false; updates.concluida_em = null; }
+  } else if (concluida !== undefined) {
     updates.concluida    = concluida;
     updates.concluida_em = concluida ? new Date().toISOString() : null;
   }
@@ -505,13 +519,18 @@ router.put('/acoes/:id', async (req, res) => {
   // velha (que aparecia como atrasada) e não trazia a de hoje. Agora:
   // concluir a ação fecha o que está em aberto dela e encerra a rotina;
   // desmarcar devolve a próxima data que a rotina manda.
-  const repeteAcao = (acaoAtual.recorrencia && acaoAtual.recorrencia !== 'nenhuma') && !(acaoAtual.datas_medicao || []).length;
-  if (concluida !== undefined && repeteAcao) {
-    // Concluir a ação encerra a rotina: saem as datas depois de hoje que
-    // ainda não foram feitas. Desmarcar devolve as datas que faltam.
-    if (concluida) {
-      await encerrarRotina(req.params.id).catch(() => null);
-    } else {
+  if (rotinaAtual && marcarHoje !== undefined) {
+    const { data: deHoje } = await supabase.from('tarefas').select('id, status')
+      .eq('pdca_context->>acao_id', req.params.id).eq('due_date', hojeBR()).maybeSingle();
+    if (deHoje) {
+      await supabase.from('tarefas').update({ status: marcarHoje ? 'concluida' : 'pendente', updated_at: new Date().toISOString() }).eq('id', deHoje.id);
+      registrarLog(marcarHoje ? 'concluir_tarefa_pelo_plano' : 'reabrir_tarefa_pelo_plano', 'tarefas', 'sucesso', {
+        company: acaoAtual.plano?.company, user_id: requester_id, depois: { tarefa_id: deHoje.id, acao_id: req.params.id },
+      });
+    }
+    data.rotina_hoje = deHoje ? (marcarHoje ? 'concluida' : 'pendente') : null;
+    // Ação que estava encerrada por engano volta a gerar as datas.
+    if (updates.concluida === false) {
       await sincronizarRotina({ ...acaoAtual, ...updates, id: req.params.id }, { plano: acaoAtual.plano, requesterId: requester_id }).catch(() => null);
     }
   } else if (concluida !== undefined && acaoAtual.tarefa_id) {

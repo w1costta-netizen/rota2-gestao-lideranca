@@ -265,6 +265,13 @@ async function garantirTarefasDaEmpresa(company, { forcar = false } = {}) {
           if (!acao.concluida) await supabase.from('acoes_pdca').update({ concluida: true, concluida_em: new Date().toISOString() }).eq('id', acao.id);
           continue;
         }
+        // "Concluída" com datas ainda pela frente é engano (o círculo do
+        // plano encerrava a rotina até 21/10/2026): reabre e segue. Uma
+        // rotina só fecha na última data ou quando o prazo passa.
+        if (acao.concluida && (ultimaDataDaRotina(acao) || '') > hoje) {
+          await supabase.from('acoes_pdca').update({ concluida: false, concluida_em: null }).eq('id', acao.id);
+          acao.concluida = false;
+        }
         if (!rotinaAtiva(acao, porId[acao.plano_id])) continue;
         criadas += (await sincronizarRotina(acao, { plano: porId[acao.plano_id] })).criadas;
       } catch (e) {
