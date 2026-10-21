@@ -523,7 +523,11 @@ router.put('/acoes/:id', async (req, res) => {
     const { data: deHoje } = await supabase.from('tarefas').select('id, status')
       .eq('pdca_context->>acao_id', req.params.id).eq('due_date', hojeBR()).maybeSingle();
     if (deHoje) {
-      await supabase.from('tarefas').update({ status: marcarHoje ? 'concluida' : 'pendente', updated_at: new Date().toISOString() }).eq('id', deHoje.id);
+      const agora = new Date().toISOString();
+      await supabase.from('tarefas').update({
+        status: marcarHoje ? 'concluida' : 'pendente', updated_at: agora,
+        concluida_em: marcarHoje ? agora : null, concluida_por: marcarHoje ? requester_id : null,
+      }).eq('id', deHoje.id);
       registrarLog(marcarHoje ? 'concluir_tarefa_pelo_plano' : 'reabrir_tarefa_pelo_plano', 'tarefas', 'sucesso', {
         company: acaoAtual.plano?.company, user_id: requester_id, depois: { tarefa_id: deHoje.id, acao_id: req.params.id },
       });

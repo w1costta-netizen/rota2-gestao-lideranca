@@ -55,6 +55,13 @@ function formatDate(d) {
   const [y, m, day] = d.split('-');
   return `${day}/${m}/${y}`;
 }
+// "21/10 às 07:34", no relógio de Brasília.
+function quandoBR(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (o) => d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', ...o });
+  return `${p({ day: '2-digit', month: '2-digit' })} às ${p({ hour: '2-digit', minute: '2-digit' })}`;
+}
 function isOverdue(due_date, due_time, status) {
   if (!due_date || encerrada(status)) return false;
   const now = new Date();
@@ -589,7 +596,7 @@ export default function Tarefas({ userId, profile, setPage }) {
     // Concluídas: a mais recente em cima (pedido do usuário, 21/10/2026).
     // `updated_at` é a hora em que foi concluída — ou em que passou a "Não
     // realizada" —, que é o que quem confere quer ver primeiro.
-    if (filter === 'concluida') return String(b.updated_at || '').localeCompare(String(a.updated_at || ''));
+    if (filter === 'concluida') return String(b.concluida_em || b.updated_at || '').localeCompare(String(a.concluida_em || a.updated_at || ''));
     const oA = isOverdue(a.due_date, a.due_time, a.status) ? 0 : 1;
     const oB = isOverdue(b.due_date, b.due_time, b.status) ? 0 : 1;
     if (oA !== oB) return oA - oB;
@@ -597,12 +604,15 @@ export default function Tarefas({ userId, profile, setPage }) {
     return (ord[a.status]??1) - (ord[b.status]??1);
   });
 
+  // Os números das abas e do resumo seguem os filtros de pessoa e de tag:
+  // escolhida a Joseane, "Concluídas (N)" é o N dela, não o da loja.
+  const base = list.filter(t => (!filterResp || t.assigned_to === filterResp) && (!filterTag || (t.tags || []).includes(filterTag)));
   const counts = {
-    agora: list.filter(ehHoje).length,
-    atrasada: list.filter(ehAtrasada).length,
-    proximas: list.filter(ehProxima).length,
-    em_andamento: list.filter(t => t.status === 'em_andamento').length,
-    concluida: list.filter(t => encerrada(t.status)).length,
+    agora: base.filter(ehHoje).length,
+    atrasada: base.filter(ehAtrasada).length,
+    proximas: base.filter(ehProxima).length,
+    em_andamento: base.filter(t => t.status === 'em_andamento').length,
+    concluida: base.filter(t => encerrada(t.status)).length,
   };
 
   // ── Visão Calendário ─────────────────────────────────
@@ -803,6 +813,15 @@ export default function Tarefas({ userId, profile, setPage }) {
                 )}
                 {!t.due_date && t.due_time && <span>🕐 {t.due_time}</span>}
                 <span>Por {t.creator?.full_name || '—'}</span>
+                {/* Quando foi feita e por quem — o que o gestor confere. */}
+                {t.status === 'concluida' && (t.concluida_em || t.updated_at) && (
+                  <span style={{ color:'#10b981', fontWeight:600 }}>
+                    ✓ Concluída em {quandoBR(t.concluida_em || t.updated_at)}{t.concluidor?.full_name ? ` por ${t.concluidor.full_name}` : ''}
+                  </span>
+                )}
+                {t.status === 'nao_realizada' && t.due_date && (
+                  <span style={{ color:'var(--text-muted)', fontWeight:600 }}>✕ Não realizada · passou o dia {formatDate(t.due_date)}</span>
+                )}
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <span style={{ fontSize:11, color:'var(--text-muted)' }}>{t.assigned?.full_name || '—'}</span>

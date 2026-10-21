@@ -56,7 +56,7 @@ router.get('/', async (req, res) => {
     // para si mesma. Vale igual pra todo mundo, sem exceção por cargo.
     const { data, error } = await supabase
       .from('tarefas')
-      .select('*, assigned:assigned_to(id,full_name,sector,avatar_url), creator:created_by(full_name,avatar_url)')
+      .select('*, assigned:assigned_to(id,full_name,sector,avatar_url), creator:created_by(full_name,avatar_url), concluidor:concluida_por(full_name)')
       .eq('company', targetCompany)
       .or(`assigned_to.eq.${requester_id},created_by.eq.${requester_id}`)
       .order('created_at', { ascending: false });
@@ -177,6 +177,11 @@ router.put('/:id', async (req, res) => {
   }
   if (isManager(me) && assigned_to) updates.assigned_to = assigned_to;
   if (status) updates.status = status;
+  // QUANDO e QUEM concluiu, guardados à parte (21/10/2026). `updated_at`
+  // muda a cada edição, então não serve para dizer quando a tarefa foi
+  // feita — e o gestor precisa conferir isso, inclusive quem marcou.
+  if (status === 'concluida') { updates.concluida_em = new Date().toISOString(); updates.concluida_por = requester_id; }
+  else if (status) { updates.concluida_em = null; updates.concluida_por = null; }
 
   // TAREFA DO PLANO NÃO SE CONCLUI ANTES DO DIA (pedido do usuário,
   // 22/10/2026): marcar a rotina de amanhã hoje é informar que fez sem ter
@@ -279,7 +284,7 @@ router.put('/:id', async (req, res) => {
   }
 
   const { data, error } = await supabase.from('tarefas').update(updates).eq('id', req.params.id)
-    .select('*, assigned:assigned_to(id,full_name,sector,avatar_url), creator:created_by(full_name,avatar_url)').single();
+    .select('*, assigned:assigned_to(id,full_name,sector,avatar_url), creator:created_by(full_name,avatar_url), concluidor:concluida_por(full_name)').single();
   if (error) {
     logError({ company: task?.company, user_id: requester_id, acao: 'editar_tarefa', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: error.message });
     return res.status(500).json({ error: error.message });
