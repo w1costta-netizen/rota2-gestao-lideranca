@@ -578,6 +578,10 @@ export default function Tarefas({ userId, profile, setPage }) {
   if (filterResp) filtered = filtered.filter(t => t.assigned_to === filterResp);
   if (filterTag)  filtered = filtered.filter(t => (t.tags || []).includes(filterTag));
   filtered = [...filtered].sort((a, b) => {
+    // Concluídas: a mais recente em cima (pedido do usuário, 21/10/2026).
+    // `updated_at` é a hora em que foi concluída — ou em que passou a "Não
+    // realizada" —, que é o que quem confere quer ver primeiro.
+    if (filter === 'concluida') return String(b.updated_at || '').localeCompare(String(a.updated_at || ''));
     const oA = isOverdue(a.due_date, a.due_time, a.status) ? 0 : 1;
     const oB = isOverdue(b.due_date, b.due_time, b.status) ? 0 : 1;
     if (oA !== oB) return oA - oB;
