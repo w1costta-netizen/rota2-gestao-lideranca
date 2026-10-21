@@ -12,6 +12,20 @@ async function getProfile(id) {
   return data;
 }
 const isManager = p => p && ['admin','supervisor','master'].includes(p.access_level);
+const { cadeiaDeSubordinados } = require('../lib/equipe');
+
+// O LÍDER DELEGA PARA O PRÓPRIO TIME (22/10/2026). Antes só admin e
+// supervisor passavam tarefa para outra pessoa — o líder de setor criava
+// só para si, o que não fecha com "monte o organograma e cada líder delega
+// para o seu time". Agora o líder passa tarefa para quem responde a ele no
+// organograma (a cadeia inteira abaixo dele) e para mais ninguém.
+async function podeDelegarPara(me, meId, alvoId) {
+  if (!alvoId || alvoId === meId) return true;
+  if (isManager(me)) return true;
+  if (me?.access_level !== 'lider') return false;
+  const { subordinados } = await cadeiaDeSubordinados(me.company, meId);
+  return subordinados.some(p => p.id === alvoId);
+}
 
 // 0 = domingo ... 6 = sábado, sem repetido e em ordem. Vem da tela, mas a
 // rota não confia: um número fora da faixa faria a tarefa nunca mais se
@@ -108,8 +122,11 @@ router.post('/', async (req, res) => {
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
-  if (!isManager(me) && assigned_to && assigned_to !== requester_id)
-    return res.status(403).json({ error: 'Você só pode criar tarefas para você mesmo' });
+  if (!(await podeDelegarPara(me, requester_id, assigned_to))) {
+    return res.status(403).json({ error: me.access_level === 'lider'
+      ? 'Você só pode passar tarefa para quem responde a você no organograma.'
+      : 'Você só pode criar tarefas para você mesmo.' });
+  }
   if (!title) return res.status(400).json({ error: 'title obrigatório' });
 
   const finalAssignee = assigned_to || requester_id;
@@ -164,7 +181,8 @@ router.put('/:id', async (req, res) => {
     .select('created_by, assigned_to, title, due_date, due_time, recorrencia, dias_semana, tags, company, description, priority, lembrete_minutos, pdca_context')
     .eq('id', req.params.id).single();
 
-  const isOwner = task?.created_by === requester_id && task?.assigned_to === requester_id;
+  // Quem criou a tarefa edita — inclusive o líder nas que passou ao time.
+  const isOwner = task?.created_by === requester_id;
 
   const updates = { updated_at: new Date().toISOString() };
   if (isManager(me) || isOwner) {
@@ -178,7 +196,7 @@ router.put('/:id', async (req, res) => {
     if (tags !== undefined)               updates.tags             = tags;
     if (lembrete_minutos !== undefined) { updates.lembrete_minutos = lembrete_minutos ?? null; updates.lembrete_enviado = false; }
   }
-  if (isManager(me) && assigned_to) updates.assigned_to = assigned_to;
+  if (assigned_to && (isManager(me) || (isOwner && await podeDelegarPara(me, requester_id, assigned_to)))) updates.assigned_to = assigned_to;
   if (status) updates.status = status;
   // QUANDO e QUEM concluiu, guardados à parte (21/10/2026). `updated_at`
   // muda a cada edição, então não serve para dizer quando a tarefa foi
@@ -520,8 +538,8 @@ router.delete('/:id', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Acesso negado' });
   const { data: task } = await supabase.from('tarefas').select('created_by, assigned_to, title, company, due_date, pdca_context').eq('id', req.params.id).single();
-  const isOwner = task?.created_by === requester_id && task?.assigned_to === requester_id;
-  if (!isManager(me) && !isOwner) return res.status(403).json({ error: 'Acesso negado' });
+  const isOwner = task?.created_by === requester_id;
+  if (!isManager(me) && !isOwner) return res.status(403).json({ error: 'Você só pode apagar as tarefas que você criou.' });
   const { error } = await supabase.from('tarefas').delete().eq('id', req.params.id);
   if (error) {
     logError({ company: task?.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: error.message });

@@ -392,7 +392,10 @@ function CommentSection({ taskId, userId, total = 0, novos = 0, aoVer }) {
 // ─── Página principal ─────────────────────────────────
 export default function Tarefas({ userId, profile, setPage }) {
   const toast   = useToast();
-  const isAdmin = ['admin','supervisor','master'].includes(profile?.access_level);
+  // Quem pode passar tarefa para outra pessoa: admin/supervisor/master para
+  // a empresa, e o LÍDER para quem responde a ele no organograma (a lista
+  // de pessoas que o servidor devolve para o líder já é só o time dele).
+  const isAdmin = ['admin','supervisor','master','lider'].includes(profile?.access_level);
   const [list, setList]         = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [loading, setLoading]   = useState(true);
@@ -466,7 +469,9 @@ export default function Tarefas({ userId, profile, setPage }) {
 
   const toggleLider = (id) => setLideresSel(l => l.includes(id) ? l.filter(x => x !== id) : [...l, id]);
 
-  const canEdit = (t) => isAdmin || (t.created_by === userId && t.assigned_to === userId);
+  // Quem criou edita (inclusive o líder nas que passou ao time); admin,
+  // supervisor e master editam todas.
+  const canEdit = (t) => ['admin','supervisor','master'].includes(profile?.access_level) || t.created_by === userId;
 
   const save = async () => {
     if (!form.title.trim()) return toast('Preencha o título');
@@ -490,7 +495,7 @@ export default function Tarefas({ userId, profile, setPage }) {
         toast('Tarefa criada!');
       }
       setModal(false);
-    } catch { toast('Erro ao salvar'); }
+    } catch (e) { toast(e?.response?.data?.error || 'Erro ao salvar', 'error'); }
     finally { setSaving(false); }
   };
 
