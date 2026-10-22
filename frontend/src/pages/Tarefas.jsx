@@ -469,9 +469,10 @@ export default function Tarefas({ userId, profile, setPage }) {
 
   const toggleLider = (id) => setLideresSel(l => l.includes(id) ? l.filter(x => x !== id) : [...l, id]);
 
-  // Quem criou edita (inclusive o líder nas que passou ao time); admin,
-  // supervisor e master editam todas.
-  const canEdit = (t) => ['admin','supervisor','master'].includes(profile?.access_level) || t.created_by === userId;
+  // Lápis e lixeira: quem criou a tarefa, ou admin/master. Supervisor e
+  // líder não alteram nem apagam o que a liderança acima passou (o
+  // servidor confere a mesma regra).
+  const canEdit = (t) => ['admin','master'].includes(profile?.access_level) || t.created_by === userId;
 
   const save = async () => {
     if (!form.title.trim()) return toast('Preencha o título');

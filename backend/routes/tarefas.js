@@ -13,6 +13,22 @@ async function getProfile(id) {
 }
 const isManager = p => p && ['admin','supervisor','master'].includes(p.access_level);
 const { cadeiaDeSubordinados } = require('../lib/equipe');
+const { perfilDe, lojaPermitida } = require('../lib/lojaPermitida');
+
+// QUEM MEXE EM QUÊ (22/10/2026, pedido do usuário: "não deixar os líderes
+// cancelarem tarefas que foram colocadas pela liderança").
+//   • editar e apagar: quem CRIOU a tarefa, ou admin/master da empresa;
+//     supervisor e líder só no que eles mesmos criaram;
+//   • mudar a situação (concluir/reabrir): quem RECEBEU, quem criou, ou
+//     admin/master;
+//   • e sempre na própria empresa — antes bastava o código da tarefa para
+//     apagar a de outra loja.
+const ehAdminOuMaster = (me) => ['admin', 'master'].includes(me?.access_level);
+async function daMinhaEmpresa(requesterId, task) {
+  if (!task) return false;
+  const me = await perfilDe(requesterId);
+  return (await lojaPermitida(me, task.company)) === task.company;
+}
 
 // O LÍDER DELEGA PARA O PRÓPRIO TIME (22/10/2026). Antes só admin e
 // supervisor passavam tarefa para outra pessoa — o líder de setor criava
@@ -181,11 +197,21 @@ router.put('/:id', async (req, res) => {
     .select('created_by, assigned_to, title, due_date, due_time, recorrencia, dias_semana, tags, company, description, priority, lembrete_minutos, pdca_context')
     .eq('id', req.params.id).single();
 
+  if (!task || !(await daMinhaEmpresa(requester_id, task))) return res.status(404).json({ error: 'Tarefa não encontrada' });
   // Quem criou a tarefa edita — inclusive o líder nas que passou ao time.
-  const isOwner = task?.created_by === requester_id;
+  // Supervisor e líder NÃO alteram o que a liderança acima passou.
+  const isOwner = task.created_by === requester_id;
+  const podeEditar = isOwner || ehAdminOuMaster(me);
+  const mexeNoConteudo = [title, description, assigned_to, due_date, due_time, priority, recorrencia, dias_semana, tags, lembrete_minutos].some(v => v !== undefined);
+  if (mexeNoConteudo && !podeEditar) {
+    return res.status(403).json({ error: 'Esta tarefa foi passada por outra pessoa. Só quem a criou pode alterar.' });
+  }
+  if (status && !(podeEditar || task.assigned_to === requester_id)) {
+    return res.status(403).json({ error: 'Só quem recebeu a tarefa, ou quem a criou, pode mudar a situação dela.' });
+  }
 
   const updates = { updated_at: new Date().toISOString() };
-  if (isManager(me) || isOwner) {
+  if (podeEditar) {
     if (title !== undefined)       updates.title       = title.trim();
     if (description !== undefined) updates.description = description?.trim() || '';
     if (due_date !== undefined)    updates.due_date    = due_date || null;
@@ -196,7 +222,7 @@ router.put('/:id', async (req, res) => {
     if (tags !== undefined)               updates.tags             = tags;
     if (lembrete_minutos !== undefined) { updates.lembrete_minutos = lembrete_minutos ?? null; updates.lembrete_enviado = false; }
   }
-  if (assigned_to && (isManager(me) || (isOwner && await podeDelegarPara(me, requester_id, assigned_to)))) updates.assigned_to = assigned_to;
+  if (assigned_to && podeEditar && (ehAdminOuMaster(me) || await podeDelegarPara(me, requester_id, assigned_to))) updates.assigned_to = assigned_to;
   if (status) updates.status = status;
   // QUANDO e QUEM concluiu, guardados à parte (21/10/2026). `updated_at`
   // muda a cada edição, então não serve para dizer quando a tarefa foi
@@ -540,8 +566,12 @@ router.delete('/:id', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Acesso negado' });
   const { data: task } = await supabase.from('tarefas').select('created_by, assigned_to, title, company, due_date, pdca_context').eq('id', req.params.id).single();
-  const isOwner = task?.created_by === requester_id;
-  if (!isManager(me) && !isOwner) return res.status(403).json({ error: 'Você só pode apagar as tarefas que você criou.' });
+  if (!task || !(await daMinhaEmpresa(requester_id, task))) return res.status(404).json({ error: 'Tarefa não encontrada' });
+  // Apaga quem criou, ou admin/master da empresa. Líder e supervisor não
+  // apagam tarefa que a liderança acima passou.
+  if (task.created_by !== requester_id && !ehAdminOuMaster(me)) {
+    return res.status(403).json({ error: 'Esta tarefa foi passada por outra pessoa. Só quem a criou pode apagar.' });
+  }
   const { error } = await supabase.from('tarefas').delete().eq('id', req.params.id);
   if (error) {
     logError({ company: task?.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', rota: req.originalUrl, erro_mensagem: error.message });
