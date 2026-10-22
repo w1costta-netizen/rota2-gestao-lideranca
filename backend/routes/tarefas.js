@@ -5,7 +5,9 @@ const { enviarPush } = require('../lib/notificacoes');
 const { logAction, logError, registrarLog } = require('../lib/auditLog');
 const { vistosDe, marcarVisto, comentariosPorItem, avisarDesde } = require('../lib/leituras');
 const { proximaOcorrenciaFutura, hojeBR } = require('../lib/recorrencia');
-const { garantirTarefasDaEmpresa, ehRotina, ultimaDataDaRotina, FECHADAS } = require('../lib/tarefasDoPlano');
+// Tarefas que nascem do Plano de Ação: a regra delas mora em
+// lib/planoAcao/ — aqui só se chamam os ganchos.
+const planoAcao = require('../lib/planoAcao');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name, created_at').eq('id', id).single();
@@ -81,7 +83,7 @@ router.get('/', async (req, res) => {
     // Em segundo plano: a lista responde na hora. O grosso (virar o dia e
     // criar as datas) já é feito às 6h pelo agendamento; aqui é só a rede
     // de segurança, e o que ela consertar aparece na próxima abertura.
-    garantirTarefasDaEmpresa(targetCompany).catch(() => {});
+    planoAcao.aoAbrirTarefas(targetCompany);
 
     // Privacidade: cada pessoa só vê tarefas que ela mesma criou/delegou
     // (created_by) ou que estão atribuídas a ela (assigned_to) — mesmo
@@ -230,60 +232,20 @@ router.put('/:id', async (req, res) => {
   if (status === 'concluida') { updates.concluida_em = new Date().toISOString(); updates.concluida_por = requester_id; }
   else if (status) { updates.concluida_em = null; updates.concluida_por = null; }
 
-  // DATA MARCADA DO PLANO NÃO SE CONCLUI ANTES DO DIA (pedido do usuário,
-  // 22/10/2026): marcar a rotina ou a medição de amanhã hoje é informar que
-  // fez sem ter feito. Só rotina e medição: a ação de uma vez só ("entregar
-  // até 30/10") pode ser terminada antes do prazo — isso é mérito. Tarefa
-  // comum também pode ser adiantada.
-  const comDataMarcada = task?.pdca_context?.rotina || task?.pdca_context?.medicao;
-  if (status === 'concluida' && comDataMarcada && task.due_date && task.due_date > hojeBR()) {
-    const [a, m, d] = task.due_date.split('-');
-    return res.status(400).json({ error: `Esta tarefa é do dia ${d}/${m}. Ela só pode ser concluída no próprio dia.`, codigo: 'antes_do_dia' });
-  }
+  // Plano de Ação: data marcada não se conclui antes do dia.
+  const recusa = planoAcao.recusaConclusaoAntesDoDia(task, status);
+  if (recusa) return res.status(400).json({ error: recusa, codigo: 'antes_do_dia' });
 
   // A próxima ocorrência de uma rotina, se houver. Calculada aqui em cima
   // porque a sincronia com o plano, logo abaixo, precisa saber.
   // Tarefa do plano NUNCA cria a próxima: cada data da rotina já existe
-  // por si (lib/tarefasDoPlano.js). Só a tarefa comum que se repete anda.
-  const repete = status === 'concluida' && task?.recorrencia && task.recorrencia !== 'nenhuma' && !task?.pdca_context?.acao_id;
+  // por si (lib/planoAcao/). Só a tarefa comum que se repete anda.
+  const repete = status === 'concluida' && task?.recorrencia && task.recorrencia !== 'nenhuma' && planoAcao.repeteSozinha(task);
   const proxData = repete ? proximaOcorrenciaFutura(task.due_date, task.recorrencia, task.dias_semana) : null;
-  // Tarefa de plano de ação repete só até o prazo da ação. Sem esta
-  // trava, uma ação "toda segunda" continuaria nascendo para sempre,
-  // muito depois de o plano ter acabado.
-  const limite = task?.pdca_context?.repetir_ate;
-  const vaiRepetir = !!proxData && !(limite && proxData > limite);
+  const vaiRepetir = !!proxData;
 
-  // Sync ação PDCA quando tarefa é marcada como concluída/pendente.
-  //
-  // Medição do C tem VÁRIAS tarefas (uma por data) com o mesmo acao_id:
-  // concluir a primeira marcava a ação inteira como feita e o progresso do
-  // plano subia com cinco medições ainda por fazer. Com mais de uma tarefa,
-  // a ação só fecha quando todas estiverem concluídas.
-  //
-  // E a ação que SE REPETE só fecha na última vez. Antes, concluir a
-  // tarefa de hoje marcava a ação inteira como concluída no plano: esta
-  // conta lia as tarefas antes de a próxima ocorrência existir, via "todas
-  // concluídas" e fechava — com semanas de rotina ainda pela frente.
-  if (status !== undefined && task?.pdca_context?.acao_id) {
-    (async () => {
-      const acaoId = task.pdca_context.acao_id;
-      const { data: irmas } = await supabase.from('tarefas')
-        .select('id, status').eq('pdca_context->>acao_id', acaoId);
-      const todas = (irmas || []).map(t => (t.id === req.params.id ? { ...t, status } : t));
-      const { data: acao } = await supabase.from('acoes_pdca')
-        .select('recorrencia, dias_semana, inicio, prazo, datas_medicao').eq('id', acaoId).maybeSingle();
-      // ROTINA (uma tarefa por data): a ação só fecha quando a ÚLTIMA data
-      // do prazo é concluída e não sobra nada aberto. "Não realizada" conta
-      // como encerrada — não foi feita, mas também não está mais aberta.
-      const fechou = ehRotina(acao)
-        ? status === 'concluida' && task.due_date >= ultimaDataDaRotina(acao) && todas.every(t => FECHADAS.includes(t.status))
-        : todas.length > 0 && todas.every(t => t.status === 'concluida');
-      await supabase.from('acoes_pdca').update({
-        concluida: fechou,
-        concluida_em: fechou ? new Date().toISOString() : null,
-      }).eq('id', acaoId);
-    })().catch(() => {});
-  }
+  // Plano de Ação: a ação acompanha a situação da tarefa.
+  planoAcao.aoMudarSituacao(task, req.params.id, status).catch(() => {});
 
   // Recorrência: ao concluir, cria próxima instância automaticamente
   if (repete) {
@@ -579,20 +541,10 @@ router.delete('/:id', async (req, res) => {
   }
   logAction({ company: task?.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'tarefas', antes: { title: task?.title, due_date: task?.due_date, plano: task?.pdca_context?.plano_titulo || undefined } });
 
-  // TAREFA DA ROTINA DO PLANO: apagar tira ESTA data, e só ela. A data
-  // fica guardada na ação para não ser recriada; as outras continuam.
-  // Para encerrar a rotina inteira, conclui-se ou apaga-se a ação no plano.
-  if (task?.pdca_context?.acao_id && !task.pdca_context.medicao && task.due_date) {
-    try {
-      const { data: acao } = await supabase.from('acoes_pdca').select('*').eq('id', task.pdca_context.acao_id).maybeSingle();
-      if (ehRotina(acao)) {
-        const puladas = [...new Set([...(acao.datas_puladas || []), task.due_date])].sort();
-        await supabase.from('acoes_pdca').update({ datas_puladas: puladas }).eq('id', acao.id);
-      }
-    } catch (e) {
-      logError({ company: task.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'acoes_pdca', rota: req.originalUrl, erro_mensagem: `data pulada da rotina: ${e.message}` });
-    }
-  }
+  // Plano de Ação: apagar a tarefa de uma rotina tira só aquela data.
+  await planoAcao.aoApagarTarefa(task).catch(e => {
+    logError({ company: task.company, user_id: requester_id, acao: 'excluir_tarefa', tabela: 'acoes_pdca', rota: req.originalUrl, erro_mensagem: `data pulada da rotina: ${e.message}` });
+  });
   res.json({ ok: true });
 });
 

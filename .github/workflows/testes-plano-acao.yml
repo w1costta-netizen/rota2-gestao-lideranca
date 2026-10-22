@@ -1,0 +1,28 @@
+# Testes do módulo do Plano de Ação (backend/lib/planoAcao/).
+# Rodam a cada publicação. Se ficarem vermelhos, uma regra do plano mudou:
+# os casos vêm de problemas reais com líderes (out/2026).
+name: Testes do Plano de Ação
+
+on:
+  push:
+    branches: [master, dev]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/testes-plano-acao.yml'
+  workflow_dispatch:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm test

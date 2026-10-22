@@ -3,7 +3,7 @@ const router  = express.Router();
 const supabase = require('../supabase');
 const { registrarLog } = require('../lib/auditLog');
 const { enviarEmail, moldura } = require('../lib/email');
-const { garantirTarefasDaEmpresa } = require('../lib/tarefasDoPlano');
+const { garantirTarefasDaEmpresa, vigiarEmpresa } = require('../lib/planoAcao');
 
 // ─────────────────────────────────────────────────────────────
 // Resumo diário por e-mail: tarefas pendentes e agenda de hoje.
@@ -104,6 +104,23 @@ router.post('/diario', async (req, res) => {
   const { data: comPlano } = await supabase.from('planos_acao').select('company').eq('status', 'andamento');
   for (const c of new Set((comPlano || []).map(p => p.company).filter(Boolean))) {
     await garantirTarefasDaEmpresa(c, { forcar: true }).catch(() => {});
+    // O VIGIA (lib/planoAcao/vigia.js): depois de virar o dia, confere se as
+    // tarefas do plano estão como o plano manda. Achou algo, vira falha no
+    // Log de Auditoria — e o master é avisado no celular.
+    try {
+      const problemas = await vigiarEmpresa(c);
+      if (problemas.length) {
+        registrarLog('vigia_plano', 'acoes_pdca', 'erro', {
+          company: c,
+          erro: `${problemas.length} problema(s) nas tarefas do plano: ${problemas.slice(0, 4).join(' · ')}${problemas.length > 4 ? ' · …' : ''}`,
+          depois: { problemas },
+        });
+      } else {
+        registrarLog('vigia_plano', 'acoes_pdca', 'sucesso', { company: c, depois: { problemas: 0 } });
+      }
+    } catch (e) {
+      registrarLog('vigia_plano', 'acoes_pdca', 'erro', { company: c, erro: `o vigia falhou: ${e.message}` });
+    }
   }
 
   const porEmpresa = {};

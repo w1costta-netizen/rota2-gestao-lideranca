@@ -19,8 +19,8 @@
 //   • editar a ação refaz só as datas futuras; o passado é registro.
 // Vale para TODAS as empresas: é a regra do produto, não de uma loja.
 // ─────────────────────────────────────────────────────────────
-const supabase = require('../supabase');
-const { nextDueDate, hojeBR } = require('./recorrencia');
+const supabase = require('../../supabase');
+const { nextDueDate, hojeBR } = require('../recorrencia');
 
 const QUADRANTE_LABEL = { P: 'P — Planejar', D: 'D — Fazer', C: 'C — Checar', A: 'A — Agir' };
 
@@ -311,6 +311,6 @@ async function garantirTarefasDaEmpresa(company, { forcar = false } = {}) {
 
 module.exports = {
   QUADRANTE_LABEL, partirAcao, descricaoDaTarefa, contextoDaAcao,
-  FECHADAS, ehRotina, datasDaRotina, ultimaDataDaRotina,
+  FECHADAS, ehRotina, rotinaAtiva, datasDaRotina, ultimaDataDaRotina,
   sincronizarRotina, encerrarRotina, garantirTarefasDaEmpresa,
 };
