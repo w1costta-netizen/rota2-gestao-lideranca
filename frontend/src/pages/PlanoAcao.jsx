@@ -628,7 +628,7 @@ export default function PlanoAcao({ userId, profile }) {
     try {
       const { data } = await api.put(`/pdca/acoes/${acao.id}`, { requester_id: userId, concluida: !acao.concluida });
       setAcoes(as => as.map(a => a.id === data.id ? data : a));
-    } catch { toast('Erro ao atualizar ação'); }
+    } catch (e) { toast(e?.response?.data?.error || 'Erro ao atualizar ação'); }
   };
 
   const deleteAcao = async (acao) => {

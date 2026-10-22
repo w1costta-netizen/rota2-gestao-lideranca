@@ -519,7 +519,7 @@ export default function Tarefas({ userId, profile, setPage }) {
 
   // Tarefa do plano com data futura: não se conclui antes do dia. O servidor
   // recusa; a tela avisa antes, sem nem tentar.
-  const antesDoDia = (t) => !!t.pdca_context?.acao_id && !!t.due_date && t.due_date > toYMD(new Date());
+  const antesDoDia = (t) => !!(t.pdca_context?.rotina || t.pdca_context?.medicao) && !!t.due_date && t.due_date > toYMD(new Date());
   const updateStatus = async (t, status) => {
     if (status === 'concluida' && antesDoDia(t)) {
       toast(`Esta tarefa é do dia ${formatDate(t.due_date)}. Ela só pode ser concluída no próprio dia.`, 'error');

@@ -496,6 +496,18 @@ router.put('/acoes/:id', async (req, res) => {
   if (rotinaAtual) {
     if (acaoAtual.concluida && acaoAtual.prazo >= hojeBR()) { updates.concluida = false; updates.concluida_em = null; }
   } else if (concluida !== undefined) {
+    // Medição do C: a verificação só fecha quando as medições até hoje
+    // foram feitas. Fechar pelo círculo com datas pela frente era o jeito de
+    // "concluir" medições que ainda não aconteceram (caso real, 22/10/2026).
+    if (concluida && (acaoAtual.datas_medicao || []).length) {
+      const { data: futuras } = await supabase.from('tarefas').select('due_date')
+        .eq('pdca_context->>acao_id', req.params.id).in('status', ['pendente', 'em_andamento'])
+        .gt('due_date', hojeBR()).order('due_date', { ascending: true }).limit(1);
+      if (futuras?.length) {
+        const [a, m, d] = futuras[0].due_date.split('-');
+        return res.status(400).json({ error: `Ainda há medições pela frente (a próxima é em ${d}/${m}). Cada medição é concluída no dia dela.`, codigo: 'antes_do_dia' });
+      }
+    }
     updates.concluida    = concluida;
     updates.concluida_em = concluida ? new Date().toISOString() : null;
   }

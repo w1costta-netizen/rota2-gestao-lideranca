@@ -204,11 +204,13 @@ router.put('/:id', async (req, res) => {
   if (status === 'concluida') { updates.concluida_em = new Date().toISOString(); updates.concluida_por = requester_id; }
   else if (status) { updates.concluida_em = null; updates.concluida_por = null; }
 
-  // TAREFA DO PLANO NÃO SE CONCLUI ANTES DO DIA (pedido do usuário,
-  // 22/10/2026): marcar a rotina de amanhã hoje é informar que fez sem ter
-  // feito, e o plano passa a medir uma coisa que não aconteceu. Vale para a
-  // rotina e para a medição do C. Tarefa comum pode ser adiantada à vontade.
-  if (status === 'concluida' && task?.pdca_context?.acao_id && task.due_date && task.due_date > hojeBR()) {
+  // DATA MARCADA DO PLANO NÃO SE CONCLUI ANTES DO DIA (pedido do usuário,
+  // 22/10/2026): marcar a rotina ou a medição de amanhã hoje é informar que
+  // fez sem ter feito. Só rotina e medição: a ação de uma vez só ("entregar
+  // até 30/10") pode ser terminada antes do prazo — isso é mérito. Tarefa
+  // comum também pode ser adiantada.
+  const comDataMarcada = task?.pdca_context?.rotina || task?.pdca_context?.medicao;
+  if (status === 'concluida' && comDataMarcada && task.due_date && task.due_date > hojeBR()) {
     const [a, m, d] = task.due_date.split('-');
     return res.status(400).json({ error: `Esta tarefa é do dia ${d}/${m}. Ela só pode ser concluída no próprio dia.`, codigo: 'antes_do_dia' });
   }
