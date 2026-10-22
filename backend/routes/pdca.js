@@ -10,6 +10,30 @@ async function getProfile(id) {
   return data;
 }
 const canManage = p => p && ['admin', 'supervisor', 'master'].includes(p.access_level);
+const { perfilDe, lojaPermitida } = require('../lib/lojaPermitida');
+
+// QUEM GERE UM PLANO (22/10/2026): quem criou o plano, ou admin/master da
+// empresa. Antes qualquer supervisor editava/apagava qualquer plano — e a
+// edição de AÇÃO não conferia nada: qualquer pessoa, de qualquer empresa,
+// alterava a ação de outra. Foi uma edição feita por outra pessoa que
+// trocou o "dono" das medições da Alice e as tirou da lista do gestor.
+async function podeGerirPlano(requesterId, plano) {
+  if (!plano) return false;
+  const me = await perfilDe(requesterId);
+  if (!me) return false;
+  if ((await lojaPermitida(me, plano.company)) !== plano.company) return false;
+  return me.access_level === 'master' || me.access_level === 'admin' || plano.criado_por === requesterId;
+}
+const NEGADO_PLANO = 'Só quem criou o plano, ou o admin da empresa, pode alterar este plano.';
+
+// Quem passou as tarefas desta ação continua sendo quem passou, mesmo que
+// outra pessoa edite a ação depois. Antes, a tarefa recriada nascia no nome
+// de quem editou — e sumia da lista de quem tinha delegado.
+async function criadorDaAcao(acaoId, plano, reserva) {
+  const { data } = await supabase.from('tarefas').select('created_by')
+    .eq('pdca_context->>acao_id', acaoId).order('created_at', { ascending: true }).limit(1);
+  return data?.[0]?.created_by || plano?.criado_por || reserva;
+}
 
 // As mesmas repetições que as Tarefas entendem — a tarefa da ação é uma
 // tarefa comum, e quem repete é o motor de lá.
@@ -137,7 +161,7 @@ async function porTarefaEmDia({ acao, plano, descricao, detalhe, repete, dias, i
     due_date: novaData,
     priority: 'normal',
     tags: ['plano_acao'],
-    created_by: requesterId,
+    created_by: await criadorDaAcao(acao.id, plano, requesterId),
     status: 'pendente',
   }).select('id').single();
   if (nova) await supabase.from('acoes_pdca').update({ tarefa_id: nova.id }).eq('id', acao.id);
@@ -227,6 +251,8 @@ router.put('/:id', async (req, res) => {
   if (!requester_id) return res.status(401).json({ error: 'requester_id obrigatório' });
   const me = await getProfile(requester_id);
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
+  const { data: planoAtual } = await supabase.from('planos_acao').select('company, criado_por').eq('id', req.params.id).maybeSingle();
+  if (!(await podeGerirPlano(requester_id, planoAtual))) return res.status(403).json({ error: NEGADO_PLANO });
 
   const updates = {};
   if (titulo !== undefined)      updates.titulo      = titulo.trim();
@@ -259,7 +285,8 @@ router.delete('/:id', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
 
-  const { data: plano } = await supabase.from('planos_acao').select('titulo, company').eq('id', req.params.id).single();
+  const { data: plano } = await supabase.from('planos_acao').select('titulo, company, criado_por').eq('id', req.params.id).single();
+  if (!(await podeGerirPlano(requester_id, plano))) return res.status(403).json({ error: NEGADO_PLANO });
 
   // Remove tarefas vinculadas às ações do plano. `tarefa_id` aponta para
   // UMA tarefa; a rotina e a medição do C têm várias, que só se acham pelo
@@ -358,6 +385,7 @@ router.post('/:id/acoes', async (req, res) => {
 
   const { data: plano } = await supabase.from('planos_acao').select('*').eq('id', req.params.id).single();
   if (!plano) return res.status(404).json({ error: 'Plano não encontrado' });
+  if (!(await podeGerirPlano(requester_id, plano))) return res.status(403).json({ error: NEGADO_PLANO });
 
   const { data: acao, error } = await supabase.from('acoes_pdca').insert({
     plano_id: req.params.id,
@@ -464,6 +492,17 @@ router.put('/acoes/:id', async (req, res) => {
     .select('*, plano:plano_id(*)')
     .eq('id', req.params.id).single();
   if (!acaoAtual) return res.status(404).json({ error: 'Ação não encontrada' });
+
+  // Só o círculo de "feito" (concluir/reabrir): também o RESPONSÁVEL pela
+  // ação. Qualquer outra mudança: quem criou o plano, ou admin/master.
+  const soCirculo = Object.keys(req.body).every(k => ['requester_id', 'concluida', 'hoje_feita'].includes(k));
+  const gere = await podeGerirPlano(requester_id, acaoAtual.plano);
+  if (!gere) {
+    const mesmaEmpresa = (await lojaPermitida(await perfilDe(requester_id), acaoAtual.plano?.company)) === acaoAtual.plano?.company;
+    if (!(soCirculo && mesmaEmpresa && acaoAtual.responsavel_id === requester_id)) {
+      return res.status(403).json({ error: NEGADO_PLANO });
+    }
+  }
 
   const updates = {};
   if (descricao !== undefined)    updates.descricao    = descricao.trim();
@@ -634,7 +673,8 @@ router.put('/acoes/:id', async (req, res) => {
       try {
         const primeira = await criarTarefasDeMedicao({
           datas, acao: { descricao: data.descricao }, plano, responsavel_id: respFinal,
-          requester_id, detalhe: detalhe !== undefined ? detalhe : acaoAtual.detalhe, pdcaContext,
+          requester_id: await criadorDaAcao(req.params.id, plano, requester_id),
+          detalhe: detalhe !== undefined ? detalhe : acaoAtual.detalhe, pdcaContext,
         });
         if (primeira) {
           await supabase.from('acoes_pdca').update({ tarefa_id: primeira }).eq('id', req.params.id);
@@ -700,7 +740,8 @@ router.delete('/acoes/:id', async (req, res) => {
   if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
 
   const { data: acao } = await supabase.from('acoes_pdca')
-    .select('tarefa_id, descricao, grupo_id, plano:plano_id(company)').eq('id', req.params.id).single();
+    .select('tarefa_id, descricao, grupo_id, plano:plano_id(company, criado_por)').eq('id', req.params.id).single();
+  if (!(await podeGerirPlano(requester_id, acao?.plano))) return res.status(403).json({ error: NEGADO_PLANO });
 
   // Apagar a ação de várias pessoas de uma vez: é um cartão só na tela, e
   // apagar linha por linha deixaria metade do grupo órfã.
