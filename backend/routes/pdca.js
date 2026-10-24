@@ -10,6 +10,8 @@ const {
   porTarefaEmDia, criadorDaAcao, podeGerirPlano, NEGADO_PLANO, perfilDe, lojaPermitida,
 } = require('../lib/planoAcao');
 const { hojeBR } = require('../lib/recorrencia');
+const Anthropic = require('@anthropic-ai/sdk');
+const Assistente = require('../lib/assistentePlano');
 
 async function getProfile(id) {
   const { data } = await supabase.from('profiles').select('access_level, company, full_name').eq('id', id).single();
@@ -624,6 +626,91 @@ router.delete('/acoes/:id', async (req, res) => {
   }
 
   res.json({ ok: true });
+});
+
+// ── ASSISTENTE (IA) ─────────────────────────────────────────
+// Sugere os 5 porquês, ações para o D ou uma revisão do plano. Só sugere:
+// quem grava é a tela, quando o líder clica em "Usar". Regras do pedido e
+// da resposta em lib/assistentePlano.js.
+const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+// POST /api/pdca/:id/assistente  { modo: 'porques'|'acoes'|'revisar', rascunho? }
+router.post('/:id/assistente', async (req, res) => {
+  const userId = req.usuario?.id;
+  if (!userId) return res.status(401).json({ error: 'Sessão expirada. Entre de novo.' });
+  const { modo, rascunho } = req.body || {};
+  if (!Assistente.MODOS.includes(modo)) return res.status(400).json({ error: 'Pedido inválido.' });
+
+  const me = await perfilDe(userId);
+  if (!me || !canManage(me)) return res.status(403).json({ error: 'Acesso negado' });
+  const { data: plano } = await supabase.from('planos_acao').select('*').eq('id', req.params.id).maybeSingle();
+  if (!plano) return res.status(404).json({ error: 'Plano não encontrado' });
+  if ((await lojaPermitida(me, plano.company)) !== plano.company) return res.status(403).json({ error: 'Acesso negado' });
+
+  const { data: acoes } = await supabase.from('acoes_pdca')
+    .select('id, grupo_id, quadrante, descricao, responsavel_id, prazo, recorrencia, datas_medicao, concluida')
+    .eq('plano_id', plano.id).order('criado_em', { ascending: true });
+
+  const falta = Assistente.faltaParaUsar(modo, plano, acoes, rascunho);
+  if (falta) return res.status(400).json({ error: falta });
+  if (!Assistente.podeUsar(userId)) {
+    return res.status(429).json({ error: `Você chegou ao limite de ${Assistente.USOS_POR_DIA} usos do assistente por hoje.` });
+  }
+
+  const pedido = Assistente.montarPedido(modo, plano, acoes, rascunho);
+  const logBase = { company: plano.company, user_id: userId, rota: req.originalUrl };
+  try {
+    // `fallbacks: 'default'`: se o modelo estiver ocupado ou recusar por
+    // engano, outro modelo responde na mesma chamada.
+    // Esforço baixo: o custo de cada clique fica em centavos.
+    const resposta = await anthropic.beta.messages.create({
+      model: 'claude-opus-5-5',
+      max_tokens: 16000,
+      output_config: { effort: 'low', format: { type: 'json_schema', schema: pedido.schema } },
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      system: pedido.system,
+      messages: [{ role: 'user', content: pedido.mensagem }],
+    });
+
+    if (resposta.stop_reason === 'refusal') {
+      Assistente.devolverUso(userId);
+      registrarLog('assistente_pdca', 'planos_acao', 'erro', { ...logBase, erro: `recusado: ${resposta.stop_details?.category || '?'}` });
+      return res.status(422).json({ error: 'O assistente não conseguiu ajudar com este plano. Tente reescrever o problema.' });
+    }
+    if (resposta.stop_reason === 'max_tokens') {
+      Assistente.devolverUso(userId);
+      registrarLog('assistente_pdca', 'planos_acao', 'erro', { ...logBase, erro: 'resposta cortada (max_tokens)' });
+      return res.status(502).json({ error: 'O assistente não terminou a resposta. Tente de novo.' });
+    }
+
+    const json = resposta.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    let bruto;
+    try { bruto = JSON.parse(json); } catch { bruto = null; }
+    if (!bruto) {
+      Assistente.devolverUso(userId);
+      registrarLog('assistente_pdca', 'planos_acao', 'erro', { ...logBase, erro: 'resposta fora do formato' });
+      return res.status(502).json({ error: 'O assistente respondeu fora do formato. Tente de novo.' });
+    }
+
+    // O conteúdo do plano NÃO vai para o log: só o que foi pedido e o custo.
+    registrarLog('assistente_pdca', 'planos_acao', 'sucesso', {
+      ...logBase,
+      depois: { plano_id: plano.id, modo, modelo: resposta.model, tokens_entrada: resposta.usage?.input_tokens, tokens_saida: resposta.usage?.output_tokens },
+    });
+    res.json({ modo, ...Assistente.arrumarResposta(modo, bruto) });
+  } catch (e) {
+    Assistente.devolverUso(userId);
+    let status = 500;
+    let msg = 'O assistente não respondeu agora. Tente de novo.';
+    if (e instanceof Anthropic.RateLimitError) {
+      status = 429; msg = 'O assistente está ocupado. Tente em um minuto.';
+    } else if (e instanceof Anthropic.APIError) {
+      status = 502; msg = 'O assistente está fora do ar agora. Tente mais tarde.';
+    }
+    registrarLog('assistente_pdca', 'planos_acao', 'erro', { ...logBase, erro: `${e?.status || ''} ${e?.message || e}`.trim() });
+    res.status(status).json({ error: msg });
+  }
 });
 
 module.exports = router;

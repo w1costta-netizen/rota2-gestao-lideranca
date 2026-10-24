@@ -4,6 +4,7 @@ import api from '../api';
 import Avatar from '../components/Avatar';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
+import { useAssistente, BotaoIA, ErroIA, SugestaoPorques, SugestaoAcoes, ModalRevisao } from '../components/AssistentePlano';
 
 const QUADRANTES = [
   { key: 'P', label: 'Planejar', color: '#E8681A' },
@@ -260,6 +261,11 @@ export default function PlanoAcao({ userId, profile }) {
   const [editingAcao, setEditingAcao] = useState(null);
   const [formAcao, setFormAcao]     = useState(EMPTY_ACAO);
   const [savingAcao, setSavingAcao] = useState(false);
+
+  // Revisão do plano pela IA (só sugere, não grava nada).
+  const revisao = useAssistente(selectedPlan?.id);
+  const [revisaoAberta, setRevisaoAberta] = useState(false);
+  const abrirRevisao = () => { setRevisaoAberta(true); revisao.pedir('revisar'); };
 
   // ── Fetch plans ──────────────────────────────────────────
   const fetchPlans = useCallback(async () => {
@@ -718,7 +724,10 @@ export default function PlanoAcao({ userId, profile }) {
             </div>
 
             {canManage && (
-              <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0, flexWrap: 'wrap' }}>
+                <BotaoIA onClick={abrirRevisao} carregando={revisao.carregando && revisaoAberta} style={{ fontSize: 13, alignSelf: 'center' }}>
+                  Revisar meu plano
+                </BotaoIA>
                 <button onClick={() => openEditPlano(selectedPlan)}
                   className="btn-secondary" style={{ fontSize: 13, padding: '6px 12px' }}>
                   <Pencil size={14}/> Editar
@@ -883,6 +892,7 @@ export default function PlanoAcao({ userId, profile }) {
             saving={savingAcao}
             hasTask={!!editingAcao?.tarefa_id}
             onSave={saveAcao}
+            planoId={selectedPlan.id}
             quadrante={addingTo}
             isNovo={!editingAcao}
             // Editando uma ação de várias pessoas: o formulário precisa do
@@ -892,6 +902,9 @@ export default function PlanoAcao({ userId, profile }) {
               : (editingAcao ? [editingAcao] : [])}
           />
         </Modal>
+
+        <ModalRevisao open={revisaoAberta} onClose={() => { setRevisaoAberta(false); revisao.limpar(); }}
+          assistente={revisao} onRefazer={() => revisao.pedir('revisar')}/>
 
         {/* Modal editar plano */}
         <Modal open={modalPlano} onClose={() => { setModalPlano(false); setEditingPlano(null); setFormPlano(EMPTY_PLANO); }}
@@ -1044,10 +1057,20 @@ function AcaoForm(props) {
 
 // P — Planejar: ferramenta de análise (Problema / Causa raiz / Meta),
 // sem responsável/prazo/tarefa — planejamento não é uma tarefa delegável.
-function AcaoFormPlanejar({ form, setForm, saving, onSave }) {
+function AcaoFormPlanejar({ form, setForm, saving, onSave, planoId }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
   const q = QUADRANTES.find(x => x.key === 'P');
   const dica = DICAS.P;
+  const ia = useAssistente(planoId);
+  const sugestao = ia.resultado?.modo === 'porques' ? ia.resultado : null;
+  const usarSugestao = () => {
+    setForm(p => ({
+      ...p,
+      porques: [...sugestao.porques, '', '', '', '', ''].slice(0, 5),
+      meta_smart: sugestao.meta_smart || p.meta_smart,
+    }));
+    ia.limpar();
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1062,6 +1085,12 @@ function AcaoFormPlanejar({ form, setForm, saving, onSave }) {
         <textarea className="input" rows={2} value={form.problema} onChange={f('problema')}
           placeholder='Ex: Ruptura em 12% nas últimas 4 semanas na seção de bebidas' style={{ resize: 'vertical' }}/>
       </div>
+      <BotaoIA carregando={ia.carregando}
+        onClick={() => ia.pedir('porques', { problema: form.problema, porques: form.porques, meta_smart: form.meta_smart })}>
+        Me ajude com os 5 porquês
+      </BotaoIA>
+      <ErroIA erro={ia.erro}/>
+      <SugestaoPorques sugestao={sugestao} onUsar={usarSugestao} onFechar={ia.limpar}/>
       <div className="form-group">
         <label className="form-label">Causa raiz — 5 Porquês</label>
         <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
@@ -1561,11 +1590,17 @@ function AcaoFormChecar({ form, setForm, membros, saving, hasTask, onSave, isNov
 
 // D — Fazer: 5W2H estruturado. "Por quem" e "Quando" já são os campos
 // Responsável e Prazo — aqui ficam O quê, Onde, Como, Por quê e Quanto custa.
-function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave, isNovo, grupo }) {
+function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave, isNovo, grupo, planoId }) {
   const f = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
   const podeToggleTarefa = !hasTask;
   const q = QUADRANTES.find(x => x.key === 'D');
   const dica = DICAS.D;
+  const ia = useAssistente(planoId);
+  const sugeridas = ia.resultado?.modo === 'acoes' ? ia.resultado.acoes : null;
+  const usarAcao = (a) => {
+    setForm(p => ({ ...p, oque: a.oque, onde: a.onde, como: a.como, porque: a.porque, recorrencia: a.recorrencia }));
+    ia.limpar();
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -1574,6 +1609,14 @@ function AcaoFormFazer({ form, setForm, membros, saving, hasTask, onSave, isNovo
         <Lightbulb size={14} style={{ color: q.color, flexShrink: 0, marginTop: 1 }}/>
         <span style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.4 }}>{dica.dicaRapida}</span>
       </div>
+
+      {isNovo && (
+        <>
+          <BotaoIA carregando={ia.carregando} onClick={() => ia.pedir('acoes')}>Sugerir ações para a causa raiz</BotaoIA>
+          <ErroIA erro={ia.erro}/>
+          <SugestaoAcoes acoes={sugeridas} onUsar={usarAcao} onFechar={ia.limpar}/>
+        </>
+      )}
 
       <div className="form-group">
         <label className="form-label">O quê será feito *</label>
