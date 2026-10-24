@@ -629,6 +629,31 @@ tbody td { padding: 12px 14px; font-size: 13.5px; color: var(--text); }
 .stat-selo.atraso { background: var(--selo-atraso-bg); color: var(--selo-atraso-fg); }
 .stat-selo.ok     { background: var(--selo-ok-bg);     color: var(--selo-ok-fg); }
 
+/* ── Leitura guiada (não lidos do painel) ────────────── */
+/* O item da vez: contorno na cor da marca, por fora do cartão para não
+   cobrir a faixa colorida da categoria. */
+.guia-atual { outline: 3px solid var(--primary); outline-offset: 3px; scroll-margin: 90px; }
+.guia-barra {
+  position: fixed; z-index: 400; bottom: 20px;
+  left: calc(50% + 120px); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 10px 10px 18px; border-radius: 999px;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); box-shadow: 0 8px 28px rgba(0,0,0,.22);
+  font-size: 14px; white-space: nowrap; max-width: calc(100vw - 32px);
+}
+.guia-barra.fim { padding: 12px 20px; gap: 8px; font-weight: 700; color: var(--selo-ok-fg); background: var(--selo-ok-bg); }
+.guia-conta strong { font-size: 16px; }
+.guia-proxima { border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; }
+.guia-fechar { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 6px; display: inline-flex; border-radius: 50%; }
+.guia-fechar:hover { background: var(--border); }
+@media (max-width: 900px) and (min-width: 769px) {
+  .guia-barra { left: calc(50% + 30px); }
+}
+@media (max-width: 768px) {
+  .guia-barra { left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); }
+}
+
 /* ── Scale week ──────────────────────────────────────── */
 .scale-grid {
   display: grid;

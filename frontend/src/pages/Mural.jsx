@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import ReacaoBar from '../components/ReacaoBar';
 import Comentarios from '../components/Comentarios';
 import { useVistoNaTela } from '../lib/vistoNaTela';
+import GuiaNaoLidos, { lerPedidoGuia, idDoGuia } from '../components/GuiaNaoLidos';
 
 const CATEGORIES = [
   { key: 'meta',     label: '🎯 Metas',      color: '#6366f1' },
@@ -24,6 +25,8 @@ export default function Mural({ userId, profile }) {
   const canManage = ['admin', 'supervisor', 'master'].includes(profile?.access_level);
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
+  // Veio do cartão do painel: abre na leitura guiada dos não lidos.
+  const [guia] = useState(() => lerPedidoGuia('mural'));
   const [modal, setModal]     = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm]       = useState(EMPTY);
@@ -142,6 +145,9 @@ export default function Mural({ userId, profile }) {
 
   return (
     <div>
+      <GuiaNaoLidos ativo={guia} pronto={!loading}
+        naoLidos={filtered.filter(m => !m.lido).map(m => m.id)}
+        marcar={marcarLido}/>
       <div className="page-header">
         <div>
           <div className="page-title">Mural do Time</div>
@@ -189,7 +195,7 @@ export default function Mural({ userId, profile }) {
         {filtered.map(m => {
           const cat = getCat(m.category);
           return (
-            <div key={m.id} ref={observar(m.id)} onClick={() => !m.lido && marcarLido(m.id)} style={{
+            <div key={m.id} id={idDoGuia(m.id)} ref={observar(m.id)} onClick={() => !m.lido && marcarLido(m.id)} style={{
               background:'var(--surface)', borderRadius:14, padding:'20px',
               border:`1px solid var(--border)`,
               borderTop:`4px solid ${cat.color}`,

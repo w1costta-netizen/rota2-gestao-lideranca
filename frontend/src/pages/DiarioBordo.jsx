@@ -9,6 +9,7 @@ import Comentarios from '../components/Comentarios';
 import { gerarPDF, gerarExcel } from '../lib/exportUtils';
 import { useDitado, vozDisponivel } from '../lib/ditado';
 import { useVistoNaTela } from '../lib/vistoNaTela';
+import GuiaNaoLidos, { lerPedidoGuia, idDoGuia } from '../components/GuiaNaoLidos';
 
 // ─────────────────────────────────────────────────────────────
 // Diário de Bordo — o que aconteceu na loja, dia a dia.
@@ -56,7 +57,11 @@ export default function DiarioBordo({ userId, profile }) {
 
   // Dois modos: o dia (rotina) e o período (análise). Sem o período, comparar
   // um mês inteiro exigiria abrir dia por dia.
-  const [modo, setModo] = useState('dia');
+  // Veio do cartão do painel: abre na leitura guiada. O painel conta os
+  // últimos 30 dias, então o guia abre "Por período" nesses 30 dias — no
+  // "Por dia" só apareceriam os de hoje.
+  const [guia] = useState(() => lerPedidoGuia('diario'));
+  const [modo, setModo] = useState(guia ? 'periodo' : 'dia');
   const [dia, setDia] = useState(hoje());
   const [de, setDe]   = useState(somarDias(hoje(), -30));
   const [ate, setAte] = useState(hoje());
@@ -87,6 +92,14 @@ export default function DiarioBordo({ userId, profile }) {
     jaAvisados.current.add(r.id);
     setRelatos(rs => rs.map(x => x.id === r.id ? { ...x, lido: true } : x));
     if (!jaFoi) api.post(`/diario/${r.id}/visto`, { requester_id: userId }).catch(() => {});
+  };
+
+  // Leitura guiada: "Próxima" marca o relato E os comentários novos dele
+  // (o painel conta os dois). O servidor guarda um "visto" só para ambos.
+  const lerNoGuia = (id) => {
+    jaAvisados.current.add(id);
+    setRelatos(rs => rs.map(x => x.id === id ? { ...x, lido: true, comentarios_novos: 0 } : x));
+    api.post(`/diario/${id}/visto`, { requester_id: userId }).catch(() => {});
   };
 
   // Ficou na tela = leu. O relato inteiro aparece no cartão, então não há
@@ -255,6 +268,9 @@ export default function DiarioBordo({ userId, profile }) {
 
   return (
     <div>
+      <GuiaNaoLidos ativo={guia} pronto={!carregando}
+        naoLidos={relatos.filter(r => !r.lido || r.comentarios_novos > 0).map(r => r.id)}
+        marcar={lerNoGuia}/>
       <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, flexWrap:'wrap', marginBottom:14 }}>
         <div>
           <h1 style={{ fontSize:22, fontWeight:700, display:'flex', alignItems:'center', gap:9 }}>
@@ -406,7 +422,7 @@ export default function DiarioBordo({ userId, profile }) {
               {porDia[d].map(r => {
                 const c = CATEGORIAS[r.categoria] || CATEGORIAS.outro;
                 return (
-                  <div key={r.id} className="card" ref={observar(r.id)} onClick={() => marcarVisto(r)}
+                  <div key={r.id} id={idDoGuia(r.id)} className="card" ref={observar(r.id)} onClick={() => marcarVisto(r)}
                     style={{ borderRadius:'0 12px 12px 0',
                              // A borda colorida da categoria vem por último
                              // de propósito: o contorno de "não lido" não

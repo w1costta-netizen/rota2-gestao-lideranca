@@ -14,6 +14,7 @@ const COR_ANOTACAO = {
   amarelo:'#F5C518', verde:'#2E7D32', azul:'#1565C0', roxo:'#5E35B1', rosa:'#C2185B',
 };
 import api from '../api';
+import { pedirGuia } from '../components/GuiaNaoLidos';
 import { useAuth } from '../contexts/AuthContext';
 import Avatar from '../components/Avatar';
 import { formatDate } from '../utils';
@@ -349,7 +350,7 @@ export default function Dashboard({ setPage, profile: propProfile }) {
           onClick={() => setPage('tarefas')}/>
         <StatCard icon={Megaphone} color="#E8681A" bg="#E8681A15"
           value={naoLidos.length} label="Comunicados não lidos"
-          onClick={() => setPage('comunicados')}/>
+          onClick={() => { pedirGuia('comunicados'); setPage('comunicados'); }}/>
         {/* Junto dos comunicados de propósito: os dois respondem à mesma
             pergunta que a pessoa faz ao abrir o app — o que chegou para mim
             e eu ainda não vi. */}
@@ -359,14 +360,14 @@ export default function Dashboard({ setPage, profile: propProfile }) {
         {company && (
           <StatCard icon={Pin} color="#a855f7" bg="#a855f715"
             value={muralNaoLidos} label="Mural não lidos"
-            onClick={() => setPage('mural')}/>
+            onClick={() => { pedirGuia('mural'); setPage('mural'); }}/>
         )}
         {/* Relatos e comentários juntos: o que importa é saber que tem
             novidade no diário, não de que tipo ela é. */}
         {company && (
           <StatCard icon={BookOpen} color="#f97316" bg="#f9731615"
             value={diarioNovos} label="Diário de bordo não lidos"
-            onClick={() => setPage('diario')}/>
+            onClick={() => { pedirGuia('diario'); setPage('diario'); }}/>
         )}
         {isAdmin
           ? <StatCard icon={Users} color="#10b981" bg="#10b98115"

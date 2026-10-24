@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Plus, Pencil, Trash2, Megaphone } from 'lucide-react';
 import api from '../api';
+import GuiaNaoLidos, { lerPedidoGuia, idDoGuia } from '../components/GuiaNaoLidos';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import ReacaoBar from '../components/ReacaoBar';
@@ -23,6 +24,8 @@ export default function Comunicados({ userId, profile }) {
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState({});
+  // Veio do cartão do painel: abre na leitura guiada dos não lidos.
+  const [guia] = useState(() => lerPedidoGuia('comunicados'));
   const [leituras, setLeituras] = useState({});   // { [id]: { leram, nao_leram } }
   const [leiturasOpen, setLeiturasOpen] = useState({});
   const [leiturasLoading, setLeiturasLoading] = useState({});
@@ -133,6 +136,10 @@ export default function Comunicados({ userId, profile }) {
 
   return (
     <div>
+      <GuiaNaoLidos ativo={guia} pronto={!loading}
+        naoLidos={list.filter(c => !c.lido).map(c => c.id)}
+        marcar={marcarLido}
+        aoMostrar={(id) => setExpanded(e => ({ ...e, [id]: true }))}/>
       <div className="page-header">
         <div>
           <div className="page-title" style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -164,7 +171,7 @@ export default function Comunicados({ userId, profile }) {
 
       <div style={{ display:'flex', flexDirection:'column', gap:12, marginTop:8 }}>
         {list.map(c => (
-          <div key={c.id}
+          <div key={c.id} id={idDoGuia(c.id)}
             onClick={() => !c.lido && marcarLido(c.id)}
             style={{
               background: 'var(--surface)',
