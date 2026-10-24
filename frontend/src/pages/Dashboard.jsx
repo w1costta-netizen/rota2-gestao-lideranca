@@ -16,6 +16,7 @@ const COR_ANOTACAO = {
 import api from '../api';
 import { pedirGuia } from '../components/GuiaNaoLidos';
 import { pedirTour } from '../lib/pedidoTour';
+import SeuDia, { periodoAgora } from '../components/SeuDia';
 import { hasPermission } from '../lib/permissions';
 import { useAuth } from '../contexts/AuthContext';
 import Avatar from '../components/Avatar';
@@ -112,6 +113,8 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   // Só o que é MEU cuidar — o da equipe não entra (decisão do usuário).
   const temTour = !!company && hasPermission(profile, 'relatorios');
   const [tour, setTour]           = useState({ para_mim: 0, primeiro: null, enviados: 0 });
+  // O resumo do dia espera o Tour: sem isto ele seria escrito duas vezes.
+  const [tourPronto, setTourPronto] = useState(false);
 
   useEffect(() => {
     if (!userId) return;
@@ -164,7 +167,8 @@ export default function Dashboard({ setPage, profile: propProfile }) {
     if (!userId || !temTour) return;
     api.get(`/relatorios/pendencias?requester_id=${userId}`)
       .then(r => setTour(r.data || { para_mim: 0, primeiro: null, enviados: 0 }))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setTourPronto(true));
   }, [userId, temTour]);
 
   // Um só para resolver: abre direto nele. Vários: a lista do que está em
@@ -242,6 +246,37 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   // Agenda de hoje
   const agendaHoje = agenda.filter(i => i.day_of_week === todayKey);
 
+  // "Seu dia em 30 segundos": os MESMOS números dos cartões abaixo, para o
+  // parágrafo nunca dizer um número e o cartão outro. Minhas = atribuídas a
+  // mim; da equipe = as que EU passei e estão atrasadas, por pessoa.
+  const minhasAtrasadas = tarefasAtrasadas.filter(t => t.assigned_to === userId);
+  const minhasHoje = tarefasHoje.filter(t => t.assigned_to === userId);
+  const equipeAtrasadas = Object.values(tarefasAtrasadas
+    .filter(t => t.created_by === userId && t.assigned_to && t.assigned_to !== userId)
+    .reduce((acc, t) => {
+      const nome = t.assigned?.full_name || 'Alguém';
+      acc[t.assigned_to] = { pessoa: nome, qtd: (acc[t.assigned_to]?.qtd || 0) + 1 };
+      return acc;
+    }, {}))
+    .sort((a, b) => b.qtd - a.qtd);
+  const fatosDoDia = {
+    periodo: periodoAgora(),
+    total_atrasadas: minhasAtrasadas.length,
+    minhas_atrasadas: minhasAtrasadas.slice(0, 3).map(t => t.title),
+    total_hoje: minhasHoje.length,
+    minhas_hoje: minhasHoje.slice(0, 3).map(t => t.title),
+    equipe_atrasadas: equipeAtrasadas,
+    agenda: [...agendaHoje].sort((a, b) => (a.time || '').localeCompare(b.time || '')).slice(0, 4)
+      .map(a => ({ hora: (a.time || '').slice(0, 5), titulo: a.title })),
+    comunicados: naoLidos.length,
+    urgentes: urgentes.length,
+    mural: muralNaoLidos,
+    diario: diarioNovos,
+    tour_para_mim: tour.para_mim || 0,
+    tour_enviados: tour.enviados || 0,
+    chat: naoLidasChat,
+  };
+
   if (loading) return (
     <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'60vh', color:'var(--text-muted)' }}>
       Carregando...
@@ -259,6 +294,8 @@ export default function Dashboard({ setPage, profile: propProfile }) {
           </div>
         </div>
       </div>
+
+      {(!temTour || tourPronto) && <SeuDia nome={profile?.full_name} fatos={fatosDoDia}/>}
 
       <ConviteAvaliacao userId={userId} setPage={setPage}/>
 

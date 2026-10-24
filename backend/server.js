@@ -37,6 +37,7 @@ app.use('/api/conferencia',  require('./routes/conferencia'));
 app.use('/api/hotmart',      require('./routes/hotmart'));
 app.use('/api/notificacoes', require('./routes/notificacoes'));
 app.use('/api/resumo',       require('./routes/resumo'));
+app.use('/api/seu-dia',      require('./routes/seuDia'));
 app.use('/api/pdca',         require('./routes/pdca'));
 app.use('/api/metas',        require('./routes/metas'));
 app.use('/api/avaliacoes',   require('./routes/avaliacoes'));
