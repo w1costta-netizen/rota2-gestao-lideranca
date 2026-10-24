@@ -1085,8 +1085,23 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
       {loading
         ? <div style={{ textAlign:'center', padding:32, color:'var(--text-muted)' }}>Carregando fotos...</div>
         : (
+        <>
+        {/* O QUE FALTA VEM PRIMEIRO (pedido do usuário, 24/10/2026): ponto sem
+            conclusão sobe para o topo; o concluído desce. Só a ordem da
+            tela muda — PDF e compartilhamento seguem a ordem do tour. */}
+        {(() => {
+          const faltam = fotos.filter(f => !(f.evidencia_url || f.evidencia_comentario)).length;
+          return fotos.length > 0 && (
+            <div style={{ fontSize:13, fontWeight:600, marginBottom:10,
+              color: faltam ? 'var(--selo-atraso-fg)' : 'var(--selo-ok-fg)' }}>
+              {faltam
+                ? `Faltam ${faltam} de ${fotos.length} ponto${fotos.length !== 1 ? 's' : ''} — os pendentes aparecem primeiro`
+                : `✓ Todos os ${fotos.length} pontos concluídos`}
+            </div>
+          );
+        })()}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:12, marginBottom:16 }}>
-          {fotos.map(foto => (
+          {[...fotos].sort((x, y) => !!(x.evidencia_url || x.evidencia_comentario) - !!(y.evidencia_url || y.evidencia_comentario)).map(foto => (
             <div key={foto.id} style={{ background:'var(--surface)', borderRadius:10, overflow:'hidden',
               border:'1px solid var(--border)', display:'flex', flexDirection:'column' }}>
               <div style={{ position:'relative', paddingTop:'75%', background:'#111' }}>
@@ -1178,6 +1193,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
             <span style={{ fontSize:12 }}>{uploading ? 'Enviando...' : 'Adicionar foto'}</span>
           </div>
         </div>
+        </>
       )}
 
       {/* Sem "capture" — combinado com multiple é inconsistente no Android e corrompe fotos.
