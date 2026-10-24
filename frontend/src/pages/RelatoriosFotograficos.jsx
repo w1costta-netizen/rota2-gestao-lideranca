@@ -121,7 +121,7 @@ async function gerarPDF(rel, fotos, creatorName) {
   let infoY = 24;
   const LABEL_W = 38;
   const infoRows = [
-    ['Clube',            meta.clube        || '—'],
+    ['Empresa',          meta.clube        || '—'],
     ['Elaborado por',    creatorName],
     ['Destinado a',      meta.destinatario || '—'],
     ['Departamento',     meta.departamento || '—'],
@@ -1062,7 +1062,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
         border:'1px solid var(--border)', marginBottom:16, display:'grid',
         gridTemplateColumns:'1fr 1fr', gap:'6px 16px', fontSize:12 }}>
         {[
-          ['Clube',        meta.clube],
+          ['Empresa',      meta.clube],
           ['Elaborado por',rel.creator?.full_name],
           ['Destinado a',  meta.destinatario],
           ['Departamento', meta.departamento],
@@ -1273,8 +1273,10 @@ function ModalCriar({ open, onClose, onCreated, userId }) {
     <Modal open={open} onClose={onClose} title="Novo Tour 4x4">
       <CampoTexto label="Título do Tour" value={title} onChange={setTitle}
         placeholder="Ex.: Tour Setor de Padaria" required/>
-      <CampoTexto label="Nome do Clube" value={clube} onChange={setClube}
-        placeholder="Ex.: Clube Rota Norte"/>
+      {/* "Empresa" no lugar de "Clube" (24/10/2026): o app é para qualquer
+          empresa. O dado continua guardado como `clube` para os tours antigos. */}
+      <CampoTexto label="Empresa" value={clube} onChange={setClube}
+        placeholder="Ex.: Loja Centro"/>
       <CampoTexto label="A quem se destina" value={destinatario} onChange={setDestinatario}
         placeholder="Ex.: Gerente de Loja / Equipe de Gondola"/>
       <CampoTexto label="Departamento" value={departamento} onChange={setDepartamento}
