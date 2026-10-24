@@ -2,7 +2,7 @@ import { caiNoDia, estaAtrasada, encerrada } from '../lib/recorrencia';
 import React, { useEffect, useState } from 'react';
 import {
   Megaphone, CheckSquare, CalendarDays, ListChecks, StickyNote, Pin,
-  AlertTriangle, Clock, Users, MessageCircle, BookOpen, UserCog
+  AlertTriangle, Clock, Users, MessageCircle, BookOpen, UserCog, Camera
 } from 'lucide-react';
 
 // As mesmas cores da tela de Anotações. Repetidas aqui de propósito: o
@@ -15,6 +15,8 @@ const COR_ANOTACAO = {
 };
 import api from '../api';
 import { pedirGuia } from '../components/GuiaNaoLidos';
+import { pedirTour } from '../lib/pedidoTour';
+import { hasPermission } from '../lib/permissions';
 import { useAuth } from '../contexts/AuthContext';
 import Avatar from '../components/Avatar';
 import { formatDate } from '../utils';
@@ -106,6 +108,10 @@ export default function Dashboard({ setPage, profile: propProfile }) {
   const [anotacoes, setAnotacoes] = useState([]);
   const [agenda, setAgenda]       = useState([]);
   const [loading, setLoading]     = useState(true);
+  // Tour 4x4: o que chegou para eu resolver e o que eu mandei em aberto.
+  // Só o que é MEU cuidar — o da equipe não entra (decisão do usuário).
+  const temTour = !!company && hasPermission(profile, 'relatorios');
+  const [tour, setTour]           = useState({ para_mim: 0, primeiro: null, enviados: 0 });
 
   useEffect(() => {
     if (!userId) return;
@@ -152,6 +158,23 @@ export default function Dashboard({ setPage, profile: propProfile }) {
       setConversas(Array.isArray(convs.data) ? convs.data : []);
     }).finally(() => setLoading(false));
   }, [userId, company]);
+
+  // Busca própria: o cartão do Tour não pode segurar o resto do painel.
+  useEffect(() => {
+    if (!userId || !temTour) return;
+    api.get(`/relatorios/pendencias?requester_id=${userId}`)
+      .then(r => setTour(r.data || { para_mim: 0, primeiro: null, enviados: 0 }))
+      .catch(() => {});
+  }, [userId, temTour]);
+
+  // Um só para resolver: abre direto nele. Vários: a lista do que está em
+  // aberto para mim. Nada para mim, mas enviados em aberto: a lista deles.
+  const abrirTour = () => {
+    if (tour.para_mim === 1 && tour.primeiro) pedirTour({ id: tour.primeiro });
+    else if (tour.para_mim > 1) pedirTour({ lista: 'para_mim' });
+    else if (tour.enviados > 0) pedirTour({ lista: 'enviados' });
+    setPage('relatorios');
+  };
 
   // O nível vem numa busca própria, fora do Promise.all: ele varre o
   // histórico inteiro da pessoa e pode demorar mais que o resto. Junto,
@@ -368,6 +391,16 @@ export default function Dashboard({ setPage, profile: propProfile }) {
           <StatCard icon={BookOpen} color="#f97316" bg="#f9731615"
             value={diarioNovos} label="Diário de bordo não lidos"
             onClick={() => { pedirGuia('diario'); setPage('diario'); }}/>
+        )}
+        {temTour && (
+          <StatCard icon={Camera} color="#6366f1" bg="#6366f115"
+            value={tour.para_mim} label="Tours para resolver"
+            selo={tour.enviados > 0 && (
+              <div className="stat-selos">
+                <span className="stat-selo andamento">📤 {tour.enviados} enviado{tour.enviados > 1 ? 's' : ''} por você em aberto</span>
+              </div>
+            )}
+            onClick={abrirTour}/>
         )}
         {isAdmin
           ? <StatCard icon={Users} color="#10b981" bg="#10b98115"

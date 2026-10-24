@@ -46,6 +46,7 @@ const PAGINA_POR_TIPO = {
   agenda:     'agenda',
   mural:      'mural',
   diario:     'diario',
+  tour:       'relatorios',
   comunicado: 'comunicados',
   ata:        'atas',
   chat:       'chat',

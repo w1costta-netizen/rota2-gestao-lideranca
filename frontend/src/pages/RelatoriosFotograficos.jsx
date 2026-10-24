@@ -7,6 +7,8 @@ import { caminhoDaLoja } from '../lib/arquivos';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
 import FotoEditor from '../components/FotoEditor';
+import SeletorDestino, { DESTINOS, ModalAcrescentar } from '../components/SeletorDestinoTour';
+import { lerPedidoTour } from '../lib/pedidoTour';
 
 function formatDate(d) {
   if (!d) return '';
@@ -123,7 +125,7 @@ async function gerarPDF(rel, fotos, creatorName) {
   const infoRows = [
     ['Empresa',          meta.clube        || '—'],
     ['Elaborado por',    creatorName],
-    ['Destinado a',      meta.destinatario || '—'],
+    ['Destinado a',      rel.destino_texto || meta.destinatario || '—'],
     ['Departamento',     meta.departamento || '—'],
     ['Prazo',            meta.prazo        || '—'],
     ['Data',             formatDate(rel.created_at)],
@@ -299,6 +301,7 @@ function PainelCompartilhar({ rel, fotos, creatorName, userId }) {
       // O arquivo mora na pasta da loja, e o que vai para o banco é o
       // CAMINHO. O link de ver vem do servidor, que só o emite depois de
       // conferir a empresa de quem pediu.
+      if (rel.pode && !rel.pode.editar) { toast('PDF gerado!'); return; }
       const path = caminhoDaLoja(rel.company, `relatorios/pdfs/${rel.id}.pdf`);
       const { error: upErr } = await supabase.storage.from('evidencias')
         .upload(path, blob, { contentType: 'application/pdf', upsert: true });
@@ -330,7 +333,7 @@ function PainelCompartilhar({ rel, fotos, creatorName, userId }) {
     if (!pdfUrl && !pdfBlob) { toast('Gere o PDF primeiro', 'error'); return; }
 
     const meta = decodeDesc(rel.description);
-    const destinatario = (meta.destinatario || '').trim();
+    const destinatario = (rel.para_tipo === 'pessoas' ? rel.destino_texto : meta.destinatario || '').trim();
     const safeName = `${rel.title}${destinatario ? '_' + destinatario : ''}`
       .replace(/[^a-zA-Z0-9À-ÿ\s_-]/g, '')
       .replace(/\s+/g, '_')
@@ -543,12 +546,24 @@ function FiltroSetores({ setores, selecionados, onChange }) {
   );
 }
 
-function RelatorioLista({ userId, profile, onOpen, onCreate }) {
+function RelatorioLista({ userId, profile, onOpen, onCreate, focoInicial }) {
   const [list, setList]             = useState([]);
   const [loading, setLoading]       = useState(true);
-  const [aba, setAba]               = useState(null);
+  // Vindo do cartão do painel, a lista já abre no que está em aberto.
+  const [aba, setAba]               = useState(focoInicial ? 'parcial' : null);
   const [setoresSel, setSetoresSel] = useState([]);
+  // foco: 'para_mim' (o que chegou para eu resolver) ou 'enviados' (o que
+  // eu mandei e ainda não fecharam). pessoa: filtro de quem lidera.
+  const [foco, setFoco]             = useState(focoInicial || '');
+  const [pessoa, setPessoa]         = useState('');
+  const [equipe, setEquipe]         = useState([]);
   const toast = useToast();
+
+  useEffect(() => {
+    api.get(`/relatorios/pessoas?requester_id=${userId}`)
+      .then(r => setEquipe(r.data?.equipe || []))
+      .catch(() => {});
+  }, [userId]);
 
   const load = () => {
     setLoading(true);
@@ -578,12 +593,22 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
   )].sort();
 
   // Filtra por setores selecionados
-  const listFiltrada = setoresSel.length === 0
+  const porSetor = setoresSel.length === 0
     ? list
     : list.filter(r => {
         const dep = decodeDesc(r.description).departamento || '';
         return setoresSel.includes(dep);
       });
+  // Por pessoa: o que ela criou ou recebeu. É como o gestor acompanha o
+  // que cada líder está delegando e resolvendo.
+  const porPessoa = !pessoa ? porSetor
+    : porSetor.filter(r => r.created_by === pessoa || (r.destinatarios || []).includes(pessoa));
+  const listFiltrada = foco === 'para_mim' ? porPessoa.filter(r => r.para_mim)
+    : foco === 'enviados' ? porPessoa.filter(r => r.enviado_em_aberto)
+    : porPessoa;
+  const nParaMim = list.filter(r => r.para_mim).length;
+  const nEnviados = list.filter(r => r.enviado_em_aberto).length;
+  const filtrando = setoresSel.length > 0 || !!pessoa || !!foco;
 
   // Agrupa tours por aba (usando lista já filtrada)
   const grupos = { rascunho: [], parcial: [], concluido: [] };
@@ -601,12 +626,20 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
             Reporte e resolva: fotografe o que precisa melhorar, defina prazo e acompanhe até fechar.
           </div>
           <div className="page-subtitle" style={{ marginTop: 2 }}>
-            {setoresSel.length > 0
+            {filtrando
               ? `${listFiltrada.length} de ${list.length} tour${list.length !== 1 ? 's' : ''}`
               : `${list.length} tour${list.length !== 1 ? 's' : ''}`}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          {equipe.length > 1 && (
+            <select className="input tour-filtro-pessoa" value={pessoa}
+              onChange={e => { setPessoa(e.target.value); setAba(null); }}
+              aria-label="Filtrar por pessoa">
+              <option value="">Todas as pessoas</option>
+              {equipe.map(p => <option key={p.id} value={p.id}>{p.id === userId ? `${p.full_name} (eu)` : p.full_name}</option>)}
+            </select>
+          )}
           {setoresDisponiveis.length > 0 && (
             <FiltroSetores
               setores={setoresDisponiveis}
@@ -622,6 +655,23 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
 
       {loading && <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)' }}>Carregando...</div>}
 
+      {!loading && (nParaMim > 0 || nEnviados > 0 || foco) && (
+        <div className="tour-atalhos">
+          {(nParaMim > 0 || foco === 'para_mim') && (
+            <button className={`tour-atalho${foco === 'para_mim' ? ' ativo' : ''}`}
+              onClick={() => { const f = foco === 'para_mim' ? '' : 'para_mim'; setFoco(f); setAba(f ? 'parcial' : null); }}>
+              📥 Para eu resolver <span>{nParaMim}</span>
+            </button>
+          )}
+          {(nEnviados > 0 || foco === 'enviados') && (
+            <button className={`tour-atalho${foco === 'enviados' ? ' ativo' : ''}`}
+              onClick={() => { const f = foco === 'enviados' ? '' : 'enviados'; setFoco(f); setAba(f ? 'parcial' : null); }}>
+              📤 Enviados por mim em aberto <span>{nEnviados}</span>
+            </button>
+          )}
+        </div>
+      )}
+
       {!loading && list.length === 0 && (
         <div style={{ textAlign:'center', padding:60, color:'var(--text-muted)' }}>
           <Camera size={40} style={{ opacity:.3, marginBottom:12 }}/>
@@ -635,7 +685,7 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
       {/* Tela inicial — cards de resumo por categoria */}
       {!loading && list.length > 0 && aba === null && listFiltrada.length === 0 && (
         <div style={{ textAlign:'center', padding:40, color:'var(--text-muted)', fontSize:13 }}>
-          Nenhum tour encontrado para {setoresSel.length === 1 ? 'o setor selecionado' : 'os setores selecionados'}.
+          Nenhum tour encontrado com esses filtros.
         </div>
       )}
       {!loading && list.length > 0 && aba === null && listFiltrada.length > 0 && (
@@ -687,7 +737,7 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
         <>
           {/* Navegação de volta + abas */}
           <div style={{ display:'flex', gap:8, marginBottom:16, overflowX:'auto', paddingBottom:2, alignItems:'center' }}>
-            <button onClick={() => setAba(null)}
+            <button onClick={() => { setAba(null); setFoco(''); }}
               style={{ background:'none', border:'1px solid var(--border)', borderRadius:20,
                 padding:'7px 14px', fontSize:13, fontWeight:700, cursor:'pointer', color:'var(--text-muted)',
                 whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:4 }}>
@@ -746,6 +796,7 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
                   overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.title}</div>
                 <div style={{ fontSize:12, color:'var(--text-muted)', marginBottom:4 }}>
                   {r.creator?.full_name} · {formatDate(r.created_at)}
+                  {r.destino_texto && <> · Para: {r.destino_texto}</>}
                 </div>
                 <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                   <span style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:20,
@@ -766,10 +817,12 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
                 </div>
               </div>
               <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-                <button onClick={e => remove(r.id, e)}
-                  style={{ background:'none', border:'none', cursor:'pointer', color:'#ef4444', padding:4 }}>
-                  <Trash2 size={15}/>
-                </button>
+                {r.pode?.editar !== false && (
+                  <button onClick={e => remove(r.id, e)}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'#ef4444', padding:4 }}>
+                    <Trash2 size={15}/>
+                  </button>
+                )}
                 <ChevronRight size={18} style={{ color:'var(--text-muted)' }}/>
               </div>
             </div>
@@ -783,7 +836,7 @@ function RelatorioLista({ userId, profile, onOpen, onCreate }) {
 }
 
 // ─── Modal de evidência de conclusão ─────────────────────────────────────────
-function ModalEvidencia({ foto, company, userId, onSave, onClose }) {
+function ModalEvidencia({ foto, company, userId, onSave, onClose, somenteVer }) {
   const toast = useToast();
   const fileRef = useRef();
   const ignorarBackdrop = useRef(false);
@@ -823,7 +876,7 @@ function ModalEvidencia({ foto, company, userId, onSave, onClose }) {
       }
       await onSave({ foto, evidUrl, comentario });
     } catch (e) {
-      toast('Erro ao salvar: ' + e.message, 'error');
+      toast('Erro ao salvar: ' + (e?.response?.data?.error || e.message), 'error');
     } finally {
       setUploading(false);
     }
@@ -840,7 +893,7 @@ function ModalEvidencia({ foto, company, userId, onSave, onClose }) {
         boxShadow:'0 24px 64px rgba(0,0,0,.3)', color:'var(--text)', maxHeight:'90vh', overflowY:'auto',
       }}>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
-          <div style={{ fontWeight:800, fontSize:14 }}>Registrar conclusão</div>
+          <div style={{ fontWeight:800, fontSize:14 }}>{somenteVer ? 'Conclusão' : 'Registrar conclusão'}</div>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-muted)' }}>
             <X size={16}/>
           </button>
@@ -859,13 +912,13 @@ function ModalEvidencia({ foto, company, userId, onSave, onClose }) {
           </div>
         )}
 
-        <button onClick={() => fileRef.current?.click()}
+        {!somenteVer && <button onClick={() => fileRef.current?.click()}
           style={{ width:'100%', padding:'10px', borderRadius:8, border:'2px dashed var(--border)',
             background:'var(--bg)', cursor:'pointer', color:'var(--text-muted)', fontSize:13, marginBottom:12,
             display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
           <Camera size={16}/>
           {currentImg ? 'Trocar foto de evidência' : 'Adicionar foto de evidência (opcional)'}
-        </button>
+        </button>}
         {/* Sem "capture" — deixa o próprio SO oferecer Câmera ou Galeria,
             importante pra quem tem pouco espaço/memória e precisa reaproveitar uma foto já tirada. */}
         <input ref={fileRef} type="file" accept="image/*"
@@ -876,18 +929,18 @@ function ModalEvidencia({ foto, company, userId, onSave, onClose }) {
           <textarea className="input" rows={3}
             placeholder="Descreva como o ponto foi resolvido..."
             value={comentario} onChange={e => setComentario(e.target.value)}
-            style={{ resize:'vertical' }}/>
+            readOnly={somenteVer} style={{ resize:'vertical' }}/>
         </div>
 
         <div style={{ display:'flex', gap:10, marginTop:8 }}>
           <button className="btn btn-ghost" style={{ flex:1, justifyContent:'center' }} onClick={onClose}>
-            Cancelar
+            {somenteVer ? 'Fechar' : 'Cancelar'}
           </button>
-          <button className="btn btn-primary" style={{ flex:1, justifyContent:'center' }}
+          {!somenteVer && <button className="btn btn-primary" style={{ flex:1, justifyContent:'center' }}
             onClick={handleSave}
             disabled={uploading || (!imgFile && !comentario.trim() && !foto.evidencia_url)}>
             {uploading ? 'Salvando...' : <><Check size={14}/> Confirmar</>}
-          </button>
+          </button>}
         </div>
       </div>
     </>
@@ -908,6 +961,10 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
   const [captionPrazo, setCaptionPrazo]       = useState('');
   const [evidenciando, setEvidenciando]       = useState(null);
   const evidFileRef = useRef();
+  const [addPessoas, setAddPessoas] = useState(false);
+  // O que EU posso fazer neste tour (o servidor decide e confere de novo).
+  // Sem a informação (resposta antiga), vale o comportamento de antes.
+  const pode = rel.pode || { editar: true, concluir: true };
 
   const loadFotos = () => {
     api.get(`/relatorios/${rel.id}?requester_id=${userId}`)
@@ -1001,6 +1058,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
       evidencia_by:         userId,
     });
     // O que se manda é o caminho; o que se mostra é o link que volta.
+    // (Se o servidor recusar, o erro sobe para o modal, que mostra o motivo.)
     setFotos(f => f.map(x => x.id === foto.id
       ? { ...x, evidencia_url: r.data?.evidencia_url || null, evidencia_comentario: comentario, evidencia_at: new Date().toISOString() }
       : x));
@@ -1010,9 +1068,28 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
 
   const finalizarRelatorio = async () => {
     if (fotos.length === 0) { toast('Adicione ao menos uma foto antes de finalizar', 'error'); return; }
-    await api.put(`/relatorios/${rel.id}`, { requester_id: userId, status: 'finalizado' });
-    setRel(r => ({ ...r, status: 'finalizado' }));
-    toast('Relatório finalizado!');
+    try {
+      await api.put(`/relatorios/${rel.id}`, { requester_id: userId, status: 'finalizado' });
+      setRel(r => ({ ...r, status: 'finalizado' }));
+      toast(['pessoas', 'todos'].includes(rel.para_tipo) ? 'Tour finalizado e enviado!' : 'Relatório finalizado!');
+    } catch (e) { toast(e?.response?.data?.error || 'Erro ao finalizar', 'error'); }
+  };
+
+  // Pessoas do tour: acrescentar (quem está envolvido) e tirar (quem criou).
+  const acrescentar = async (ids) => {
+    try {
+      const r = await api.post(`/relatorios/${rel.id}/pessoas`, { requester_id: userId, ids });
+      setRel(prev => ({ ...prev, ...r.data, fotos: prev.fotos }));
+      setAddPessoas(false);
+      toast(rel.status === 'finalizado' ? 'Pessoas acrescentadas e avisadas!' : 'Pessoas acrescentadas!');
+    } catch (e) { toast(e?.response?.data?.error || 'Erro ao acrescentar', 'error'); }
+  };
+  const tirarPessoa = async (p) => {
+    if (!window.confirm(`Tirar ${p.full_name} deste tour?`)) return;
+    try {
+      const r = await api.delete(`/relatorios/${rel.id}/pessoas/${p.id}?requester_id=${userId}`);
+      setRel(prev => ({ ...prev, ...r.data, fotos: prev.fotos }));
+    } catch (e) { toast(e?.response?.data?.error || 'Erro ao tirar', 'error'); }
   };
 
   // Editor de anotações aberto
@@ -1064,7 +1141,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
         {[
           ['Empresa',      meta.clube],
           ['Elaborado por',rel.creator?.full_name],
-          ['Destinado a',  meta.destinatario],
+          ['Destinado a',  rel.para_tipo === 'pessoas' ? null : (rel.destino_texto || meta.destinatario)],
           ['Departamento', meta.departamento],
           ['Prazo',        meta.prazo],
           ['Data',         formatDate(rel.created_at)],
@@ -1074,6 +1151,24 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
             <span style={{ fontWeight:600, color:'var(--text)' }}>{valor}</span>
           </div>
         ) : null)}
+        {rel.para_tipo === 'pessoas' && (
+          <div style={{ gridColumn:'1/-1', display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
+            <span style={{ color:'var(--text-muted)', fontSize:11 }}>Destinado a: </span>
+            {(rel.destinatarios_info || []).map(p => (
+              <span key={p.id} className="tour-pessoa">
+                {p.full_name}
+                {pode.remover_pessoas && (rel.destinatarios_info || []).length > 1 && (
+                  <button onClick={() => tirarPessoa(p)} aria-label={`Tirar ${p.full_name}`}><X size={11}/></button>
+                )}
+              </span>
+            ))}
+            {pode.adicionar_pessoas && (
+              <button className="tour-pessoa mais" onClick={() => setAddPessoas(true)}>
+                <Plus size={12}/> Pessoas
+              </button>
+            )}
+          </div>
+        )}
         {meta.texto && (
           <div style={{ gridColumn:'1/-1', color:'var(--text-muted)', fontStyle:'italic', marginTop:4 }}>
             {meta.texto}
@@ -1106,7 +1201,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
               border:'1px solid var(--border)', display:'flex', flexDirection:'column' }}>
               <div style={{ position:'relative', paddingTop:'75%', background:'#111' }}>
                 <img src={foto.photo_url} alt="" style={{ position:'absolute', inset:0, width:'100%', height:'100%', objectFit:'cover' }}/>
-                <div style={{ position:'absolute', top:6, right:6, display:'flex', gap:4 }}>
+                {pode.editar && <div style={{ position:'absolute', top:6, right:6, display:'flex', gap:4 }}>
                   <button title="Anotar" onClick={() => setEditandoFoto(foto)}
                     style={{ background:'rgba(0,0,0,.65)', border:'none', borderRadius:6, padding:'4px 6px', cursor:'pointer', color:'#fff' }}>
                     <Edit3 size={13}/>
@@ -1115,7 +1210,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
                     style={{ background:'rgba(239,68,68,.8)', border:'none', borderRadius:6, padding:'4px 6px', cursor:'pointer', color:'#fff' }}>
                     <Trash2 size={13}/>
                   </button>
-                </div>
+                </div>}
                 {foto.annotations?.shapes?.length > 0 && (
                   <div style={{ position:'absolute', bottom:6, left:6, background:'rgba(0,0,0,.65)',
                     borderRadius:4, padding:'2px 6px', fontSize:10, color:'#fff' }}>
@@ -1154,10 +1249,10 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
                 ) : (() => {
                   const c = decodeCaption(foto.caption);
                   return (
-                    <div onClick={() => abrirCaption(foto)} style={{ cursor:'pointer' }}>
+                    <div onClick={() => pode.editar && abrirCaption(foto)} style={{ cursor: pode.editar ? 'pointer' : 'default' }}>
                       <div style={{ fontSize:12, color: c.texto ? 'var(--text)' : 'var(--text-muted)',
                         fontStyle: c.texto ? 'normal' : 'italic', minHeight:18 }}>
-                        {c.texto || 'Adicionar descrição e prazo...'}
+                        {c.texto || (pode.editar ? 'Adicionar descrição e prazo...' : 'Sem descrição')}
                       </div>
                       {c.prazo && (
                         <div style={{ fontSize:11, color:'var(--primary)', fontWeight:600, marginTop:3 }}>
@@ -1168,8 +1263,13 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
                   );
                 })()}
 
-                {/* Botão de evidência de conclusão */}
-                <button
+                {/* Botão de evidência de conclusão. Só quem criou e quem
+                    recebeu registram; os demais só veem o que já foi feito. */}
+                {!pode.concluir && !(foto.evidencia_url || foto.evidencia_comentario) ? (
+                  <div style={{ fontSize:11, color:'var(--text-muted)', textAlign:'center', padding:'5px 0' }}>
+                    Aguardando conclusão
+                  </div>
+                ) : <button
                   onClick={() => setEvidenciando(foto)}
                   style={{
                     width:'100%', padding:'5px 0', borderRadius:6, fontSize:11, fontWeight:600,
@@ -1177,21 +1277,23 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
                     background: (foto.evidencia_url || foto.evidencia_comentario) ? '#10b98120' : '#f1f5f9',
                     color: (foto.evidencia_url || foto.evidencia_comentario) ? '#10b981' : 'var(--text-muted)',
                   }}>
-                  {(foto.evidencia_url || foto.evidencia_comentario) ? '✓ Ver / editar conclusão' : '+ Registrar conclusão'}
-                </button>
+                  {(foto.evidencia_url || foto.evidencia_comentario)
+                    ? (pode.concluir ? '✓ Ver / editar conclusão' : '✓ Ver conclusão')
+                    : '+ Registrar conclusão'}
+                </button>}
               </div>
             </div>
           ))}
 
           {/* Botão adicionar foto */}
-          <div onClick={() => !uploading && fileRef.current?.click()}
+          {pode.editar && <div onClick={() => !uploading && fileRef.current?.click()}
             style={{ minHeight:140, background:'var(--bg)', borderRadius:10,
               border:'2px dashed var(--border)', cursor: uploading ? 'wait' : 'pointer',
               display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8,
               color:'var(--text-muted)', opacity: uploading ? 0.5 : 1 }}>
             {uploading ? <Loader size={24} style={{ animation:'spin 1s linear infinite' }}/> : <Camera size={24}/>}
             <span style={{ fontSize:12 }}>{uploading ? 'Enviando...' : 'Adicionar foto'}</span>
-          </div>
+          </div>}
         </div>
         </>
       )}
@@ -1202,7 +1304,7 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
         style={{ display:'none' }} onChange={e => { handleFilesSelected(Array.from(e.target.files)); e.target.value = ''; }}/>
 
       {/* Botão finalizar (só se rascunho) */}
-      {rel.status !== 'finalizado' && fotos.length > 0 && (
+      {rel.status !== 'finalizado' && fotos.length > 0 && pode.editar && (
         <button className="btn btn-primary" style={{ width:'100%', justifyContent:'center', marginBottom:8 }}
           onClick={finalizarRelatorio}>
           <Check size={15}/> Finalizar Tour
@@ -1226,7 +1328,13 @@ function RelatorioDetalhe({ relatorio: initialRel, userId, profile, onBack }) {
           userId={userId}
           onSave={saveEvidencia}
           onClose={() => setEvidenciando(null)}
+          somenteVer={!pode.concluir}
         />
+      )}
+
+      {addPessoas && (
+        <ModalAcrescentar userId={userId} jaEstao={[rel.created_by, ...(rel.destinatarios || [])]}
+          onConfirmar={acrescentar} onClose={() => setAddPessoas(false)}/>
       )}
     </div>
   );
@@ -1248,24 +1356,31 @@ function ModalCriar({ open, onClose, onCreated, userId }) {
   const toast = useToast();
   const [title,        setTitle]        = useState('');
   const [clube,        setClube]        = useState('');
-  const [destinatario, setDestinatario] = useState('');
+  const [destino,      setDestino]      = useState({ tipo: '', ids: [] });
   const [departamento, setDepartamento] = useState('');
   const [prazo,        setPrazo]        = useState('');
   const [texto,        setTexto]        = useState('');
   const [saving,       setSaving]       = useState(false);
 
-  const reset = () => { setTitle(''); setClube(''); setDestinatario(''); setDepartamento(''); setPrazo(''); setTexto(''); };
+  const reset = () => { setTitle(''); setClube(''); setDestino({ tipo: '', ids: [] }); setDepartamento(''); setPrazo(''); setTexto(''); };
 
   const handleCreate = async () => {
     if (!title.trim()) return toast('Digite um título para o Tour', 'error');
+    if (!destino.tipo) return toast('Escolha para quem é o tour', 'error');
+    if (destino.tipo === 'pessoas' && !destino.ids.length) return toast('Escolha ao menos uma pessoa', 'error');
     setSaving(true);
     try {
+      // O "a quem se destina" em texto continua no description para os
+      // tours antigos; nos novos, quem manda são para_tipo/destinatarios.
+      const destinatario = DESTINOS.find(d => d.id === destino.tipo)?.rotulo || '';
       const description = encodeDesc({ texto, clube, destinatario, departamento, prazo });
-      const { data } = await api.post('/relatorios', { requester_id: userId, title, description });
+      const { data } = await api.post('/relatorios', {
+        requester_id: userId, title, description, para_tipo: destino.tipo, destinatarios: destino.ids,
+      });
       toast('Tour 4x4 criado!');
       reset();
       onCreated(data);
-    } catch { toast('Erro ao criar Tour 4x4', 'error'); }
+    } catch (e) { toast(e?.response?.data?.error || 'Erro ao criar Tour 4x4', 'error'); }
     finally { setSaving(false); }
   };
 
@@ -1277,8 +1392,7 @@ function ModalCriar({ open, onClose, onCreated, userId }) {
           empresa. O dado continua guardado como `clube` para os tours antigos. */}
       <CampoTexto label="Empresa" value={clube} onChange={setClube}
         placeholder="Ex.: Loja Centro"/>
-      <CampoTexto label="A quem se destina" value={destinatario} onChange={setDestinatario}
-        placeholder="Ex.: Gerente de Loja / Equipe de Gondola"/>
+      <SeletorDestino userId={userId} valor={destino} onChange={setDestino} aberto={open}/>
       <CampoTexto label="Departamento" value={departamento} onChange={setDepartamento}
         placeholder="Ex.: Mercearia, Perecíveis..."/>
       <CampoTexto label="Prazo para realização" value={prazo} onChange={setPrazo}
@@ -1300,6 +1414,9 @@ function ModalCriar({ open, onClose, onCreated, userId }) {
 
 // ─── Componente raiz ──────────────────────────────────────────────────────────
 export default function RelatoriosFotograficos({ userId, profile }) {
+  // Pedido do painel: { id } abre aquele tour; { lista } abre a lista no
+  // que está em aberto. Lido uma vez só.
+  const [pedido] = useState(() => lerPedidoTour());
   const [tela, setTela]             = useState('lista');
   const [relAtual, setRelAtual]     = useState(null);
   const [modalCriar, setModalCriar] = useState(false);
@@ -1307,12 +1424,20 @@ export default function RelatoriosFotograficos({ userId, profile }) {
 
   const abrirRelatorio = (rel) => { setRelAtual(rel); setTela('detalhe'); };
 
+  useEffect(() => {
+    if (!pedido?.id) return;
+    api.get(`/relatorios/${pedido.id}?requester_id=${userId}`)
+      .then(r => abrirRelatorio(r.data))
+      .catch(() => {});
+  }, [pedido, userId]);
+
   return (
     <div>
       {tela === 'lista' && (
         <RelatorioLista
           key={refreshKey}
           userId={userId} profile={profile}
+          focoInicial={refreshKey === 0 ? pedido?.lista : undefined}
           onOpen={abrirRelatorio}
           onCreate={() => setModalCriar(true)}
         />
