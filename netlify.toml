@@ -9,6 +9,14 @@
   status = 200
   force  = true
 
+# O banco (Supabase) pelo nosso domínio: rede de empresa que bloqueia
+# supabase.co deixa passar rotalider.com.br. Ver frontend/src/lib/supabase.js.
+[[redirects]]
+  from   = "/sb/*"
+  to     = "https://urfnkgvdjtfeoedkrrqh.supabase.co/:splat"
+  status = 200
+  force  = true
+
 [[redirects]]
   from   = "/*"
   to     = "/index.html"

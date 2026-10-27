@@ -40,6 +40,12 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'https://rota2-gestao-lideranca.onrender.com',
+      // O mesmo repasse do banco que a Netlify faz em produção.
+      '/sb': {
+        target: 'https://urfnkgvdjtfeoedkrrqh.supabase.co',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/sb/, ''),
+      },
     },
   },
   build: {

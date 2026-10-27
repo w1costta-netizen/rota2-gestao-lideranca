@@ -404,12 +404,36 @@ function AppContent() {
     if (page !== 'logs' && page !== 'profile') setPage('logs');
   }, [profile?.access_level, page, setPage]);
 
+  const carregandoInicio = session === undefined || (session && profile === undefined);
+  const [demorouCarregar, setDemorouCarregar] = useState(false);
+  useEffect(() => {
+    if (!carregandoInicio) { setDemorouCarregar(false); return; }
+    const t = setTimeout(() => setDemorouCarregar(true), 15000);
+    return () => clearTimeout(t);
+  }, [carregandoInicio]);
+
   // Espera o perfil antes de montar a tela. Sem isto o app decide permissão
   // com o perfil ainda vazio: todo módulo aparecia como "Acesso restrito" por
   // um instante e liberava sozinho logo depois, sem a pessoa fazer nada.
-  if (session === undefined || (session && profile === undefined)) return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#0D0D0D' }}>
+  if (carregandoInicio) return (
+    <div style={{ minHeight:'100vh', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                  gap:14, padding:24, textAlign:'center', background:'#0D0D0D' }}>
       <div style={{ color:'var(--primary)', fontSize:18, fontWeight:700 }}>Carregando...</div>
+      {/* Rede que não responde fazia esta tela ficar para sempre, sem a
+          pessoa ter o que fazer (PC da loja, out/2026). Depois de um tempo,
+          aparece a saída. */}
+      {demorouCarregar && (
+        <>
+          <p style={{ color:'#999', fontSize:13.5, maxWidth:340, lineHeight:1.6, margin:0 }}>
+            Está demorando mais que o normal. Verifique a internet deste aparelho e tente de novo.
+            Se estiver na rede da empresa, ela pode estar bloqueando o acesso.
+          </p>
+          <div style={{ display:'flex', gap:10 }}>
+            <button className="btn btn-primary" onClick={() => window.location.reload()}>Tentar de novo</button>
+            <button className="btn btn-ghost" onClick={signOut}>Sair</button>
+          </div>
+        </>
+      )}
     </div>
   );
 

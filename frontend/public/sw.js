@@ -1,4 +1,4 @@
-const CACHE = 'rota2-v22';
+const CACHE = 'rota2-v23';
 const STATIC_ASSETS = ['/manifest.json','/icon-192.png','/icon-512.png'];
 
 // Onde fica o que o service worker precisa para se reinscrever sozinho.
@@ -27,8 +27,10 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // API: sempre vai à rede, sem cache
-  if (url.pathname.startsWith('/api')) return;
+  // API e banco (/sb, o Supabase pelo nosso domínio): sempre à rede, sem
+  // cache — são dados de quem está logado, e em PC compartilhado o cache
+  // poderia entregar a resposta de uma pessoa para a próxima.
+  if (url.pathname.startsWith('/api') || url.pathname.startsWith('/sb/')) return;
 
   // index.html e navegação SPA: network-first (evita servir HTML desatualizado com hashes antigos)
   if (e.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
