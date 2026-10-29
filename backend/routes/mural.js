@@ -11,6 +11,116 @@ async function getProfile(id) {
 }
 const isManager = p => p && ['admin','supervisor','master'].includes(p.access_level);
 
+// ─────────────────────────────────────────────────────────────
+// Tipos de informação do mural.
+//
+// Estes 4 ficam no código: toda empresa nasce com eles. O resto é da própria
+// empresa (tabela mural_categorias), na linguagem dela. Só o administrador
+// — o líder que comprou o acesso — ou o master cria, renomeia e remove;
+// os demais só escolhem entre os que existem.
+// ─────────────────────────────────────────────────────────────
+const TIPOS_BASE = ['meta', 'regra', 'lembrete', 'geral'];
+const podeGerirTipos = p => p && ['admin', 'master'].includes(p.access_level);
+
+// Mesmo critério do Diário: "Segurança" e "seguranca" viram uma coisa só.
+function paraChave(nome) {
+  return String(nome || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().trim()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 40);
+}
+
+async function tipoValido(company, chave) {
+  if (TIPOS_BASE.includes(chave)) return true;
+  const { data } = await supabase.from('mural_categorias')
+    .select('id').eq('company', company).eq('chave', chave).maybeSingle();
+  return !!data;
+}
+
+// GET /api/mural/categorias?requester_id=&company= — os que esta empresa criou
+router.get('/categorias', async (req, res) => {
+  const me = await getProfile(req.query.requester_id);
+  if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
+  const company = me.access_level === 'master' ? req.query.company : me.company;
+  if (!company) return res.json([]);
+  const { data, error } = await supabase.from('mural_categorias')
+    .select('id, chave, nome, cor').eq('company', company).order('nome');
+  if (error) return res.status(500).json({ error: 'Erro ao carregar os tipos.' });
+  res.json(data || []);
+});
+
+// POST /api/mural/categorias { requester_id, nome, cor, company? }
+router.post('/categorias', async (req, res) => {
+  const { requester_id, nome, cor, company: bodyCompany } = req.body || {};
+  const me = await getProfile(requester_id);
+  if (!podeGerirTipos(me)) return res.status(403).json({ error: 'Só o administrador da empresa cria tipos.' });
+  const company = me.access_level === 'master' ? bodyCompany : me.company;
+  if (!company) return res.status(400).json({ error: 'Escolha a empresa.' });
+  if (!nome?.trim()) return res.status(400).json({ error: 'Dê um nome ao tipo.' });
+
+  const chave = paraChave(nome);
+  if (!chave) return res.status(400).json({ error: 'Use letras ou números no nome.' });
+  if (TIPOS_BASE.includes(chave)) return res.status(409).json({ error: 'Esse tipo já existe.' });
+
+  const { data, error } = await supabase.from('mural_categorias')
+    .insert({ company, chave, nome: nome.trim().slice(0, 40), cor: cor || '#5F5E5A', created_by: requester_id })
+    .select('id, chave, nome, cor').single();
+  if (error) {
+    const jaExiste = String(error.message || '').includes('duplicate') || error.code === '23505';
+    if (jaExiste) return res.status(409).json({ error: 'Esse tipo já existe nesta empresa.' });
+    logError({ company, user_id: requester_id, acao: 'criar_tipo_mural', tabela: 'mural_categorias', rota: req.originalUrl, erro_mensagem: error.message });
+    return res.status(500).json({ error: 'Erro ao criar o tipo.' });
+  }
+  logAction({ company, user_id: requester_id, acao: 'criar_tipo_mural', tabela: 'mural_categorias', depois: { nome: data.nome } });
+  res.json(data);
+});
+
+// PUT /api/mural/categorias/:id { requester_id, nome?, cor? } — a chave não muda
+router.put('/categorias/:id', async (req, res) => {
+  const { requester_id, nome, cor } = req.body || {};
+  const me = await getProfile(requester_id);
+  if (!podeGerirTipos(me)) return res.status(403).json({ error: 'Só o administrador da empresa altera tipos.' });
+  const { data: tipo } = await supabase.from('mural_categorias')
+    .select('company, nome').eq('id', req.params.id).maybeSingle();
+  if (!tipo) return res.status(404).json({ error: 'Tipo não encontrado' });
+  if (me.access_level !== 'master' && tipo.company !== me.company) return res.status(403).json({ error: 'Acesso negado' });
+
+  const updates = {};
+  if (nome !== undefined) {
+    if (!nome.trim()) return res.status(400).json({ error: 'Dê um nome ao tipo.' });
+    updates.nome = nome.trim().slice(0, 40);
+  }
+  if (cor) updates.cor = cor;
+  const { data, error } = await supabase.from('mural_categorias').update(updates)
+    .eq('id', req.params.id).select('id, chave, nome, cor').single();
+  if (error) return res.status(500).json({ error: 'Erro ao salvar o tipo.' });
+  logAction({ company: tipo.company, user_id: requester_id, acao: 'editar_tipo_mural', tabela: 'mural_categorias', antes: { nome: tipo.nome }, depois: updates });
+  res.json(data);
+});
+
+// DELETE /api/mural/categorias/:id?requester_id=
+router.delete('/categorias/:id', async (req, res) => {
+  const me = await getProfile(req.query.requester_id);
+  if (!podeGerirTipos(me)) return res.status(403).json({ error: 'Só o administrador da empresa remove tipos.' });
+  const { data: tipo } = await supabase.from('mural_categorias')
+    .select('company, chave, nome').eq('id', req.params.id).maybeSingle();
+  if (!tipo) return res.status(404).json({ error: 'Tipo não encontrado' });
+  if (me.access_level !== 'master' && tipo.company !== me.company) return res.status(403).json({ error: 'Acesso negado' });
+
+  // Card que perde o tipo ficaria sem rótulo no mural.
+  const { count } = await supabase.from('mural').select('id', { count: 'exact', head: true })
+    .eq('company', tipo.company).eq('category', tipo.chave);
+  if (count) {
+    return res.status(409).json({ error: `${count} card(s) usam "${tipo.nome}". Mude o tipo deles antes de remover.` });
+  }
+  const { error } = await supabase.from('mural_categorias').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: 'Erro ao remover o tipo.' });
+  logAction({ company: tipo.company, user_id: req.query.requester_id, acao: 'excluir_tipo_mural', tabela: 'mural_categorias', antes: { nome: tipo.nome } });
+  res.json({ ok: true });
+});
+
 // GET /api/mural?requester_id=&company=
 router.get('/', async (req, res) => {
   const { requester_id, company: queryCompany } = req.query;
@@ -61,6 +171,8 @@ router.post('/', async (req, res) => {
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
   if (!title || !content) return res.status(400).json({ error: 'title e content obrigatórios' });
   const targetCompany = me.access_level === 'master' ? bodyCompany : me.company;
+  if (category && !(await tipoValido(targetCompany, category)))
+    return res.status(400).json({ error: 'Esse tipo não existe mais. Escolha outro.' });
 
   const { data, error } = await supabase.from('mural').insert({
     company: targetCompany,
@@ -98,10 +210,12 @@ router.put('/:id', async (req, res) => {
   const me = await getProfile(requester_id);
   if (!me) return res.status(403).json({ error: 'Usuário não encontrado' });
 
-  const { data: existente } = await supabase.from('mural').select('created_by').eq('id', req.params.id).single();
+  const { data: existente } = await supabase.from('mural').select('created_by, company, category').eq('id', req.params.id).single();
   const isOwner = existente?.created_by === requester_id;
   if (!isOwner && !isManager(me))
     return res.status(403).json({ error: 'Acesso negado — só quem criou ou um gestor pode editar' });
+  if (category !== undefined && category !== existente?.category && !(await tipoValido(existente?.company, category)))
+    return res.status(400).json({ error: 'Esse tipo não existe mais. Escolha outro.' });
 
   const updates = { updated_at: new Date().toISOString() };
   if (title !== undefined)      updates.title      = title.trim();

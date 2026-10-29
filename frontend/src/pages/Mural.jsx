@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { Plus, Pencil, Trash2, LayoutList } from 'lucide-react';
+import { Plus, Pencil, Trash2, LayoutList, Tags } from 'lucide-react';
 import api from '../api';
 import Modal from '../components/Modal';
 import { useToast } from '../components/Toast';
@@ -15,14 +15,59 @@ const CATEGORIES = [
   { key: 'geral',    label: '📋 Geral',       color: '#10b981' },
 ];
 
+// Cores para os tipos que a empresa cria. Tons médios: leem no claro e no escuro.
+const CORES_TIPO = ['#534AB7', '#0F6E56', '#993556', '#185FA5', '#854F0B', '#5F5E5A'];
+
 const EMPTY = { title: '', content: '', category: 'geral' };
 
-function getCat(key) { return CATEGORIES.find(c => c.key === key) || CATEGORIES[3]; }
+// Criar e editar tipo. `inicial` presente = renomear (a chave não muda).
+function FormTipo({ inicial, onSalvar, onCancelar }) {
+  const [nome, setNome] = useState(inicial?.nome || '');
+  const [cor, setCor]   = useState(inicial?.cor || CORES_TIPO[0]);
+  const [salvando, setSalvando] = useState(false);
+  const salvar = async () => {
+    if (!nome.trim()) return;
+    setSalvando(true);
+    try { await onSalvar({ nome: nome.trim(), cor }); } finally { setSalvando(false); }
+  };
+  return (
+    <div style={{ background:'var(--surface-2)', border:'1px solid var(--border)', borderRadius:10, padding:12, marginTop:8 }}>
+      <label className="form-label">Nome do tipo</label>
+      <input className="input" value={nome} maxLength={40} autoFocus
+        onChange={e => setNome(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') salvar(); }}
+        placeholder="Ex: Segurança, Qualidade, Campanha do mês"/>
+      <label className="form-label" style={{ marginTop:10 }}>Cor</label>
+      <div style={{ display:'flex', gap:8 }}>
+        {CORES_TIPO.map(c => (
+          <button key={c} type="button" onClick={() => setCor(c)} aria-label={`Cor ${c}`} style={{
+            width:26, height:26, borderRadius:'50%', background:c, cursor:'pointer',
+            border: cor === c ? '3px solid var(--text)' : '2px solid transparent',
+          }}/>
+        ))}
+      </div>
+      <div style={{ display:'flex', gap:8, marginTop:12 }}>
+        <button className="btn btn-ghost" style={{ flex:1, justifyContent:'center' }} onClick={onCancelar}>Cancelar</button>
+        <button className="btn btn-primary" style={{ flex:1, justifyContent:'center' }} onClick={salvar} disabled={salvando || !nome.trim()}>
+          {salvando ? 'Salvando...' : inicial ? 'Salvar' : 'Criar tipo'}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function Mural({ userId, profile }) {
   const toast = useToast();
   const isAdmin = true; // todos podem criar cards no mural
   const canManage = ['admin', 'supervisor', 'master'].includes(profile?.access_level);
+  // Tipos próprios: só o administrador (quem comprou o acesso) e o master.
+  const podeGerirTipos = ['admin', 'master'].includes(profile?.access_level);
+  const [tipos, setTipos]           = useState([]);
+  const [novoTipo, setNovoTipo]     = useState(false);
+  const [modalTipos, setModalTipos] = useState(false);
+  const [editandoTipo, setEditandoTipo] = useState(null);
+  const cats = [...CATEGORIES, ...tipos.map(t => ({ key: t.chave, label: t.nome, color: t.cor, id: t.id, nome: t.nome, cor: t.cor }))];
+  const getCat = key => cats.find(c => c.key === key) || CATEGORIES[3];
   const [list, setList]       = useState([]);
   const [loading, setLoading] = useState(true);
   // Veio do cartão do painel: abre na leitura guiada dos não lidos.
@@ -58,8 +103,45 @@ export default function Mural({ userId, profile }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const openNew  = () => { setEditing(null); setForm(EMPTY); setModal(true); };
-  const openEdit = (m) => { setEditing(m.id); setForm({ title:m.title, content:m.content, category:m.category }); setModal(true); };
+  useEffect(() => {
+    const q = company ? `&company=${encodeURIComponent(company)}` : '';
+    api.get(`/mural/categorias?requester_id=${userId}${q}`)
+      .then(r => setTipos(r.data || []))
+      .catch(() => {}); // sem os tipos próprios, o mural segue com os 4 de sempre
+  }, [userId, company]);
+
+  const erroDe = (e, padrao) => e?.response?.data?.error || padrao;
+
+  const criarTipo = async ({ nome, cor }) => {
+    try {
+      const r = await api.post('/mural/categorias', { requester_id: userId, nome, cor, company: company || undefined });
+      setTipos(t => [...t, r.data].sort((a, b) => a.nome.localeCompare(b.nome)));
+      setNovoTipo(false);
+      return r.data;
+    } catch (e) { toast(erroDe(e, 'Erro ao criar o tipo')); }
+  };
+
+  const renomearTipo = async (id, campos) => {
+    try {
+      const r = await api.put(`/mural/categorias/${id}`, { requester_id: userId, ...campos });
+      setTipos(t => t.map(x => x.id === id ? r.data : x));
+      setEditandoTipo(null);
+      toast('Tipo atualizado');
+    } catch (e) { toast(erroDe(e, 'Erro ao salvar o tipo')); }
+  };
+
+  const removerTipo = async (tipo) => {
+    if (!window.confirm(`Remover o tipo "${tipo.nome}"?`)) return;
+    try {
+      await api.delete(`/mural/categorias/${tipo.id}?requester_id=${userId}`);
+      setTipos(t => t.filter(x => x.id !== tipo.id));
+      if (filter === tipo.chave) setFilter('todas');
+      toast('Tipo removido');
+    } catch (e) { toast(erroDe(e, 'Erro ao remover o tipo')); }
+  };
+
+  const openNew  = () => { setEditing(null); setForm(EMPTY); setNovoTipo(false); setModal(true); };
+  const openEdit = (m) => { setEditing(m.id); setForm({ title:m.title, content:m.content, category:m.category }); setNovoTipo(false); setModal(true); };
 
   const save = async () => {
     if (!form.title.trim() || !form.content.trim()) return toast('Preencha título e conteúdo');
@@ -153,11 +235,18 @@ export default function Mural({ userId, profile }) {
           <div className="page-title">Mural do Time</div>
           <div className="page-subtitle">Metas, regras e lembretes permanentes</div>
         </div>
-        {isAdmin && (
-          <button className="btn btn-primary" onClick={openNew}>
-            <Plus size={15}/> Novo card
-          </button>
-        )}
+        <div style={{ display:'flex', gap:8 }}>
+          {podeGerirTipos && (
+            <button className="btn btn-ghost" onClick={() => { setEditandoTipo(null); setNovoTipo(false); setModalTipos(true); }}>
+              <Tags size={15}/> Tipos
+            </button>
+          )}
+          {isAdmin && (
+            <button className="btn btn-primary" onClick={openNew}>
+              <Plus size={15}/> Novo card
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filtro por categoria */}
@@ -168,7 +257,7 @@ export default function Mural({ userId, profile }) {
           color: filter === 'todas' ? '#fff' : 'var(--text-muted)',
           border: `1px solid ${filter === 'todas' ? 'transparent' : 'var(--border)'}`,
         }}>Todas ({list.length})</button>
-        {CATEGORIES.map(c => {
+        {cats.map(c => {
           const count = list.filter(m => m.category === c.key).length;
           if (count === 0) return null;
           return (
@@ -350,7 +439,7 @@ export default function Mural({ userId, profile }) {
         <div className="form-group">
           <label className="form-label">Categoria</label>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-            {CATEGORIES.map(c => (
+            {cats.map(c => (
               <button key={c.key} onClick={() => setForm(f=>({...f,category:c.key}))}
                 style={{
                   padding:'10px', borderRadius:8, fontWeight:600, fontSize:13, cursor:'pointer',
@@ -361,7 +450,23 @@ export default function Mural({ userId, profile }) {
                 {c.label}
               </button>
             ))}
+            {podeGerirTipos && !novoTipo && (
+              <button onClick={() => setNovoTipo(true)} style={{
+                gridColumn:'span 2', padding:'10px', borderRadius:8, fontWeight:600, fontSize:13, cursor:'pointer',
+                border:'2px dashed var(--border)', background:'transparent', color:'var(--text-muted)',
+                display:'flex', alignItems:'center', justifyContent:'center', gap:6,
+              }}>
+                <Plus size={14}/> Novo tipo
+              </button>
+            )}
           </div>
+          {podeGerirTipos && novoTipo && (
+            <FormTipo onCancelar={() => setNovoTipo(false)}
+              onSalvar={async campos => {
+                const t = await criarTipo(campos);
+                if (t) setForm(f => ({ ...f, category: t.chave }));
+              }}/>
+          )}
         </div>
         <div className="form-group">
           <label className="form-label">Título *</label>
@@ -378,6 +483,44 @@ export default function Mural({ userId, profile }) {
             {saving ? 'Salvando...' : editing ? 'Salvar' : 'Adicionar'}
           </button>
         </div>
+      </Modal>
+
+      <Modal open={modalTipos} onClose={() => setModalTipos(false)} title="Tipos de informação">
+        <p style={{ fontSize:13, color:'var(--text-muted)', marginTop:0, lineHeight:1.6 }}>
+          Crie os tipos com os nomes que a sua empresa usa. Toda a equipe vê e escolhe entre eles ao publicar no mural.
+        </p>
+        <div style={{ fontSize:12, fontWeight:700, color:'var(--text-muted)', marginBottom:6 }}>Padrão do Rota</div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:16 }}>
+          {CATEGORIES.map(c => (
+            <span key={c.key} style={{ fontSize:12, fontWeight:600, padding:'4px 10px', borderRadius:20, border:'1px solid var(--border)', color:c.color }}>{c.label}</span>
+          ))}
+        </div>
+        <div style={{ fontSize:12, fontWeight:700, color:'var(--text-muted)', marginBottom:6 }}>Da sua empresa</div>
+        {tipos.length === 0 && !novoTipo && (
+          <div style={{ fontSize:13, color:'var(--text-muted)', marginBottom:8 }}>Nenhum ainda.</div>
+        )}
+        {tipos.map(t => editandoTipo === t.id ? (
+          <FormTipo key={t.id} inicial={t} onCancelar={() => setEditandoTipo(null)}
+            onSalvar={campos => renomearTipo(t.id, campos)}/>
+        ) : (
+          <div key={t.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'1px solid var(--border)' }}>
+            <span style={{ width:12, height:12, borderRadius:'50%', background:t.cor, flexShrink:0 }}/>
+            <span style={{ flex:1, fontSize:14, fontWeight:600 }}>{t.nome}</span>
+            <span style={{ fontSize:12, color:'var(--text-muted)' }}>
+              {list.filter(m => m.category === t.chave).length} card(s)
+            </span>
+            <button className="btn-icon" aria-label={`Renomear ${t.nome}`} onClick={() => { setNovoTipo(false); setEditandoTipo(t.id); }}><Pencil size={13}/></button>
+            <button className="btn-icon" aria-label={`Remover ${t.nome}`} onClick={() => removerTipo(t)} style={{ color:'#ef4444' }}><Trash2 size={13}/></button>
+          </div>
+        ))}
+        {novoTipo ? (
+          <FormTipo onCancelar={() => setNovoTipo(false)} onSalvar={criarTipo}/>
+        ) : (
+          <button className="btn btn-ghost" style={{ marginTop:12, width:'100%', justifyContent:'center' }}
+            onClick={() => { setEditandoTipo(null); setNovoTipo(true); }}>
+            <Plus size={14}/> Novo tipo
+          </button>
+        )}
       </Modal>
     </div>
   );
