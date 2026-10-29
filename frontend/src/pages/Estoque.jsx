@@ -300,6 +300,7 @@ function TabRuptura({ d }) {
   const COLS_RUPTURA = [
     { key: 'CD_PRODUTO',               label: 'Cód.' },
     { key: 'DESCRICAO_PRODUTO',         label: 'Produto', maxW: 220, wrap: true },
+    { key: 'NOME_FORNECEDOR', label: 'Fornecedor', maxW: 170, wrap: true },
     { key: 'DESCRICAO_SECAO',           label: 'Seção' },
     { key: 'DESCRICAO_DEPARTAMENTO',    label: 'Depto' },
     { key: 'sum_QTD_VENDAS_MES_ATUAL',  label: 'Sinal de venda', right: false,
@@ -314,6 +315,7 @@ function TabRuptura({ d }) {
   const COLS_ZERO = [
     { key: 'CD_PRODUTO',                   label: 'Cód.' },
     { key: 'DESCRICAO_PRODUTO',             label: 'Produto', maxW: 220, wrap: true },
+    { key: 'NOME_FORNECEDOR', label: 'Fornecedor', maxW: 170, wrap: true },
     { key: 'DESCRICAO_SECAO',               label: 'Seção' },
     { key: 'DESCRICAO_DEPARTAMENTO',        label: 'Depto' },
     { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD',  label: 'Estoque', right: true, fmt: v => n1(v), cor: () => '#6b7280' },
@@ -406,6 +408,7 @@ function TabUrgente({ d }) {
       <SecaoTable rows={d.urgente_top} colunas={[
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
+        { key: 'NOME_FORNECEDOR', label: 'Fornecedor', maxW: 170, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Estoque', right: true, fmt: v => n1(v) },
         { key: 'dias_cobertura', label: 'Cobertura', right: true,
@@ -444,6 +447,7 @@ function TabAging({ d }) {
       <SecaoTable rows={d.aging_top} colunas={[
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
+        { key: 'NOME_FORNECEDOR', label: 'Fornecedor', maxW: 170, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'DATA_ULTIMA_ENTRADA', label: 'Última entrada', right: true, fmt: fmtData, cor: () => '#6366f1' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
@@ -470,6 +474,7 @@ function TabSem4s({ d }) {
       <SecaoTable rows={d.sem4s_top} colunas={[
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
+        { key: 'NOME_FORNECEDOR', label: 'Fornecedor', maxW: 170, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
         { key: 'DATA_ULTIMA_ENTRADA', label: 'Última entrada', right: true, fmt: fmtData, cor: () => '#8b5cf6' },
@@ -496,6 +501,7 @@ function TabGiroLento({ d }) {
       <SecaoTable rows={d.giro_lento_top} colunas={[
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
+        { key: 'NOME_FORNECEDOR', label: 'Fornecedor', maxW: 170, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd estoque', right: true, fmt: v => n1(v) },
         { key: 'dias_cobertura', label: 'Cobertura', right: true, fmt: v => v != null ? `${n1(v)}d` : '—', cor: () => '#f59e0b' },
@@ -516,6 +522,7 @@ function TabNegativo({ d }) {
       <SecaoTable rows={d.estq_neg_top} colunas={[
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
+        { key: 'NOME_FORNECEDOR', label: 'Fornecedor', maxW: 170, wrap: true },
         { key: 'DESCRICAO_SECAO', label: 'Seção' },
         { key: 'sum_ESTOQUE_ON_HAND_LOJA_QTD', label: 'Qtd', right: true,
           fmt: v => n1(v), cor: () => '#ef4444' },
@@ -543,7 +550,8 @@ function TabSuspensos({ d }) {
       <SecaoTable rows={d.suspensos_top} colunas={[
         { key: 'CD_PRODUTO', label: 'Cód.' },
         { key: 'DESCRICAO_PRODUTO', label: 'Produto', maxW: 200, wrap: true },
-        { key: 'DESC_MOTIVO_SUSPENCAO', label: 'Motivo' },
+        { key: 'NOME_FORNECEDOR', label: 'Fornecedor', maxW: 170, wrap: true },
+        { key: 'MOTIVO_SUSPENSAO', label: 'Motivo', fmt: (v, r) => v || r.DESC_MOTIVO_SUSPENCAO || '—' },
         { key: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO', label: 'Custo', right: true, fmt: v => brl(v) },
       ]} />
     </>
@@ -744,6 +752,7 @@ export default function Estoque({ profile }) {
           colunas: [
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Fornecedor', dataKey: 'NOME_FORNECEDOR' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
             { header: 'Departamento', dataKey: 'DESCRICAO_DEPARTAMENTO' },
             { header: 'Venda mês (un)', dataKey: 'sum_QTD_VENDAS_MES_ATUAL' },
@@ -759,6 +768,7 @@ export default function Estoque({ profile }) {
           colunas: [
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Fornecedor', dataKey: 'NOME_FORNECEDOR' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
             { header: 'Estoque', dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
             { header: 'Cobertura (d)', dataKey: 'dias_cobertura' },
@@ -777,6 +787,7 @@ export default function Estoque({ profile }) {
           colunas: [
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Fornecedor', dataKey: 'NOME_FORNECEDOR' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
             { header: 'Última entrada', dataKey: 'ultima_entrada_fmt' },
             { header: 'Qtd estoque', dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
@@ -789,6 +800,7 @@ export default function Estoque({ profile }) {
           colunas: [
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Fornecedor', dataKey: 'NOME_FORNECEDOR' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
             { header: 'Última entrada', dataKey: 'ultima_entrada_fmt' },
             { header: 'Qtd estoque', dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
@@ -801,6 +813,7 @@ export default function Estoque({ profile }) {
           colunas: [
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Fornecedor', dataKey: 'NOME_FORNECEDOR' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
             { header: 'Qtd estoque', dataKey: 'sum_ESTOQUE_ON_HAND_LOJA_QTD' },
             { header: 'Cobertura (d)', dataKey: 'dias_cobertura' },
@@ -813,8 +826,9 @@ export default function Estoque({ profile }) {
           colunas: [
             { header: 'Cód.', dataKey: 'CD_PRODUTO' },
             { header: 'Produto', dataKey: 'DESCRICAO_PRODUTO' },
+            { header: 'Fornecedor', dataKey: 'NOME_FORNECEDOR' },
             { header: 'Seção', dataKey: 'DESCRICAO_SECAO' },
-            { header: 'Motivo', dataKey: 'DESC_MOTIVO_SUSPENCAO' },
+            { header: 'Motivo', dataKey: 'MOTIVO_SUSPENSAO' },
             { header: 'Custo R$', dataKey: 'sum_VALOR_ESTOQUE_LOJA_A_CUSTO' },
           ],
           rows: (d.suspensos_top || []).slice(0, 30),
@@ -835,7 +849,15 @@ export default function Estoque({ profile }) {
       if (!LC?.[chave]) return null;
       return LC[chave].filter(l => secaoOk(LC.dic.s[l[0][2]]));
     };
-    const B = l => [l[0][0], l[0][1], LC.dic.s[l[0][2]]];   // cód, produto, seção
+    // Fornecedor: relatório importado a partir de out/2026 traz em todos os
+    // itens (dic.f). Os mais antigos não têm — aí sai o que as listas "top"
+    // salvas conhecem, e reimportar a extração completa o resto.
+    const fornDeTop = new Map();
+    Object.entries(dados || {}).forEach(([k, v]) => {
+      if (k.endsWith('_top') && Array.isArray(v)) v.forEach(r => r?.NOME_FORNECEDOR && fornDeTop.set(r.CD_PRODUTO, r.NOME_FORNECEDOR));
+    });
+    const forn = l => (LC.dic.f ? LC.dic.f[l[0][3]] : fornDeTop.get(l[0][0])) || '';
+    const B = l => [l[0][0], l[0][1], forn(l), LC.dic.s[l[0][2]]];   // cód, produto, fornecedor, seção
     const crit = c => c === 'critico' ? 'Crítico' : c === 'urgente' ? 'Urgente' : 'Atenção';
     const linhas = {
       ruptura:    completa('ruptura')?.map(l => [...B(l), LC.dic.d[l[1]], l[2], l[3], l[4], l[5], l[6]]),
@@ -864,9 +886,9 @@ export default function Estoque({ profile }) {
         },
         {
           nome: 'Ruptura',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Departamento', 'Venda mês (un)', 'Venda mês R$', 'CD (cx)', 'Separ. CD', 'Trânsito Loja'],
+          colunas: ['Cód.', 'Produto', 'Fornecedor', 'Seção', 'Departamento', 'Venda mês (un)', 'Venda mês R$', 'CD (cx)', 'Separ. CD', 'Trânsito Loja'],
           rows: linhas.ruptura || (d.ruptura_top || []).map(r => [
-            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.NOME_FORNECEDOR || '', r.DESCRICAO_SECAO,
             r.DESCRICAO_DEPARTAMENTO, r.sum_QTD_VENDAS_MES_ATUAL,
             r.venda_mes_vlr, r.estoque_cd_cxs || 0,
             r.estoque_separado_cd || 0, r.estoque_transito_loja || 0,
@@ -874,9 +896,9 @@ export default function Estoque({ profile }) {
         },
         {
           nome: 'Urgente',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Estoque', 'Cobertura (dias)', 'Status', 'CD (cx)', 'Separ. CD', 'Trânsito Loja'],
+          colunas: ['Cód.', 'Produto', 'Fornecedor', 'Seção', 'Estoque', 'Cobertura (dias)', 'Status', 'CD (cx)', 'Separ. CD', 'Trânsito Loja'],
           rows: linhas.urgente || (d.urgente_top || []).map(r => [
-            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.NOME_FORNECEDOR || '', r.DESCRICAO_SECAO,
             r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.dias_cobertura,
             r.criticidade === 'critico' ? 'Crítico' : r.criticidade === 'urgente' ? 'Urgente' : 'Atenção',
             r.estoque_cd_cxs || 0,
@@ -885,42 +907,42 @@ export default function Estoque({ profile }) {
         },
         {
           nome: 'Aging',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Última entrada', 'Qtd estoque', 'Custo R$'],
+          colunas: ['Cód.', 'Produto', 'Fornecedor', 'Seção', 'Última entrada', 'Qtd estoque', 'Custo R$'],
           rows: linhas.aging || (d.aging_top || []).map(r => [
-            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.NOME_FORNECEDOR || '', r.DESCRICAO_SECAO,
             fmtData(r.DATA_ULTIMA_ENTRADA), r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
         },
         {
           nome: 'Sem venda 5s',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Última entrada', 'Qtd estoque', 'Custo R$'],
+          colunas: ['Cód.', 'Produto', 'Fornecedor', 'Seção', 'Última entrada', 'Qtd estoque', 'Custo R$'],
           rows: linhas.sem4s || (d.sem4s_top || []).map(r => [
-            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.NOME_FORNECEDOR || '', r.DESCRICAO_SECAO,
             fmtData(r.DATA_ULTIMA_ENTRADA), r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
         },
         {
           nome: 'Giro Lento',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Qtd estoque', 'Cobertura (dias)', 'Custo R$'],
+          colunas: ['Cód.', 'Produto', 'Fornecedor', 'Seção', 'Qtd estoque', 'Cobertura (dias)', 'Custo R$'],
           rows: linhas.giro_lento || (d.giro_lento_top || []).map(r => [
-            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.NOME_FORNECEDOR || '', r.DESCRICAO_SECAO,
             r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.dias_cobertura, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
         },
         {
           nome: 'Est. Negativo',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Qtd', 'Dias sem NF'],
+          colunas: ['Cód.', 'Produto', 'Fornecedor', 'Seção', 'Qtd', 'Dias sem NF'],
           rows: linhas.estq_neg || (d.estq_neg_top || []).map(r => [
-            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.NOME_FORNECEDOR || '', r.DESCRICAO_SECAO,
             r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.IDADE_ULTIMA_NF,
           ]),
         },
         {
           nome: 'Suspensos',
-          colunas: ['Cód.', 'Produto', 'Seção', 'Motivo', 'Qtd estoque', 'Custo R$'],
+          colunas: ['Cód.', 'Produto', 'Fornecedor', 'Seção', 'Motivo', 'Qtd estoque', 'Custo R$'],
           rows: linhas.suspensos || (d.suspensos_top || []).map(r => [
-            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.DESCRICAO_SECAO,
-            r.DESC_MOTIVO_SUSPENCAO, r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
+            r.CD_PRODUTO, r.DESCRICAO_PRODUTO, r.NOME_FORNECEDOR || '', r.DESCRICAO_SECAO,
+            r.MOTIVO_SUSPENSAO || r.DESC_MOTIVO_SUSPENCAO || '', r.sum_ESTOQUE_ON_HAND_LOJA_QTD, r.sum_VALOR_ESTOQUE_LOJA_A_CUSTO,
           ]),
         },
       ],
