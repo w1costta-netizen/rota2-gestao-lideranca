@@ -1175,16 +1175,8 @@ export default function Tarefas({ userId, profile, setPage }) {
         </div>
       )}
 
-      {/* ── FAB mobile ─────────────────────────────────── */}
-      <button onClick={openNew} style={{
-        position:'fixed', bottom:24, right:20, zIndex:500,
-        width:52, height:52, borderRadius:'50%',
-        background:'var(--primary)', color:'#fff', border:'none',
-        display:'flex', alignItems:'center', justifyContent:'center',
-        boxShadow:'0 4px 16px rgba(232,98,42,.5)', cursor:'pointer',
-      }} aria-label="Nova tarefa">
-        <Plus size={24}/>
-      </button>
+      {/* Sem botão flutuante "+": ficava por cima do campo de mensagem dos
+          comentários. Criar tarefa é pelo "Nova tarefa" do topo. */}
 
       {/* ── Modal ──────────────────────────────────────── */}
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Editar tarefa' : 'Nova tarefa'}>
